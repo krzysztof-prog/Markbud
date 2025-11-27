@@ -23,8 +23,8 @@ export default function ZestawieniaPage() {
 
   if (ordersError) {
     toast({
-      title: 'BBd Badowania danych',
-      description: 'Nie udaBo si zaBadowa zestawieD',
+      title: 'Błąd wczytywania danych',
+      description: 'Nie udało się załadować zestawień',
       variant: 'destructive',
     });
   }
@@ -43,7 +43,7 @@ export default function ZestawieniaPage() {
     try {
       if (!orders) return;
 
-      const headers = ['Nr zlecenia', 'Data', 'Klient', 'Projekt', 'System', 'Okna', 'Warto[ PLN', 'Warto[ EUR', 'Status'];
+      const headers = ['Nr zlecenia', 'Data', 'Klient', 'Projekt', 'System', 'Okna', 'Wartość PLN', 'Wartość EUR', 'Status'];
       const rows = orders.map((order: any) => [
         order.orderNumber,
         formatDate(order.createdAt),
@@ -68,15 +68,15 @@ export default function ZestawieniaPage() {
       link.click();
 
       toast({
-        title: 'Eksport pomy[lny',
-        description: 'Plik CSV zostaB pobrany',
+        title: 'Eksport pomyślny',
+        description: 'Plik CSV został pobrany',
         variant: 'success',
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Nie udaBo si wyeksportowa pliku';
+      const message = error instanceof Error ? error.message : 'Nie udało się wyeksportować pliku';
       setExportError(message);
       toast({
-        title: 'BBd eksportu',
+        title: 'Błąd eksportu',
         description: message,
         variant: 'destructive',
       });
@@ -107,28 +107,28 @@ export default function ZestawieniaPage() {
             <CardContent>
               <div className="text-3xl font-bold">{stats.totalOrders}</div>
               <p className="text-xs text-slate-500 mt-1">
-                {stats.completedOrders} ukoDczonych, {stats.activeOrders} aktywnych
+                {stats.completedOrders} ukończonych, {stats.activeOrders} aktywnych
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-slate-600">Warto[ PLN</CardTitle>
+              <CardTitle className="text-sm font-medium text-slate-600">Wartość PLN</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{formatCurrency(stats.totalValuePln, 'PLN')}</div>
-              <p className="text-xs text-slate-500 mt-1">Aczna warto[ zleceD</p>
+              <p className="text-xs text-slate-500 mt-1">Ączna wartość zleceń</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-slate-600">Warto[ EUR</CardTitle>
+              <CardTitle className="text-sm font-medium text-slate-600">Wartość EUR</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{formatCurrency(stats.totalValueEur, 'EUR')}</div>
-              <p className="text-xs text-slate-500 mt-1">Aczna warto[ zleceD</p>
+              <p className="text-xs text-slate-500 mt-1">Ączna wartość zleceń</p>
             </CardContent>
           </Card>
 
@@ -138,7 +138,7 @@ export default function ZestawieniaPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{stats.totalWindows}</div>
-              <p className="text-xs text-slate-500 mt-1">Aczna ilo[ okien/drzwi</p>
+              <p className="text-xs text-slate-500 mt-1">Ączna ilość okien/drzwi</p>
             </CardContent>
           </Card>
         </div>
@@ -157,12 +157,12 @@ export default function ZestawieniaPage() {
               <Link href="/zestawienia/zlecenia">
                 <Button variant="outline" className="gap-2">
                   <TrendingUp className="h-4 w-4" />
-                  Szczeg�Bowe zestawienie zleceD
+                  Szczegółowe zestawienie zleceń
                 </Button>
               </Link>
             </div>
             {exportError && (
-              <p className="text-sm text-red-600">BBd: {exportError}</p>
+              <p className="text-sm text-red-600">Błąd: {exportError}</p>
             )}
           </CardContent>
         </Card>
@@ -171,7 +171,7 @@ export default function ZestawieniaPage() {
         <Card className="bg-blue-50 border-blue-200">
           <CardContent className="pt-6">
             <p className="text-sm text-blue-900">
-              <strong>Informacja:</strong> Tutaj znajdziesz podsumowanie wszystkich zleceD, statystyki i mo|liwo[ eksportu danych do pliku CSV.
+              <strong>Informacja:</strong> Tutaj znajdziesz podsumowanie wszystkich zleceń, statystyki i możliwość eksportu danych do pliku CSV.
             </p>
           </CardContent>
         </Card>

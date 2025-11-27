@@ -131,7 +131,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     const rules = await prisma.packingRule.findMany({
       orderBy: { name: 'asc' },
     });
-    return rules;
+    return rules.map(rule => ({ ...rule, ruleConfig: JSON.parse(rule.ruleConfig) }));
   });
 
   // POST /api/settings/packing-rules - dodaj regułę pakowania
@@ -146,10 +146,10 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     const { name, description, isActive, ruleConfig } = request.body;
 
     const rule = await prisma.packingRule.create({
-      data: { name, description, isActive, ruleConfig },
+      data: { name, description, isActive, ruleConfig: JSON.stringify(ruleConfig) },
     });
 
-    return reply.status(201).send(rule);
+    return reply.status(201).send({ ...rule, ruleConfig: JSON.parse(rule.ruleConfig) });
   });
 
   // PUT /api/settings/packing-rules/:id - aktualizuj regułę
@@ -163,14 +163,18 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     };
   }>('/packing-rules/:id', async (request) => {
     const { id } = request.params;
-    const data = request.body;
+    const { ruleConfig, ...data } = request.body;
+
+    const updateData = ruleConfig
+      ? { ...data, ruleConfig: JSON.stringify(ruleConfig) }
+      : data;
 
     const rule = await prisma.packingRule.update({
       where: { id: parseInt(id) },
-      data,
+      data: updateData,
     });
 
-    return rule;
+    return { ...rule, ruleConfig: JSON.parse(rule.ruleConfig) };
   });
 
   // DELETE /api/settings/packing-rules/:id - usuń regułę

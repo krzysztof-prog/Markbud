@@ -90,13 +90,15 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
     // Braki materiałowe
     const shortages = await getShortages();
     for (const shortage of shortages) {
-      alerts.push({
-        type: 'shortage',
-        priority: shortage.priority,
-        message: `Brak profilu ${shortage.profileNumber} w kolorze ${shortage.colorName}`,
-        details: `Brakuje ${shortage.shortage} bel`,
-        data: shortage,
-      });
+      if (shortage) {
+        alerts.push({
+          type: 'shortage',
+          priority: shortage.priority,
+          message: `Brak profilu ${shortage.profileNumber} w kolorze ${shortage.colorName}`,
+          details: `Brakuje ${shortage.shortage} bel`,
+          data: shortage,
+        });
+      }
     }
 
     // Oczekujące importy

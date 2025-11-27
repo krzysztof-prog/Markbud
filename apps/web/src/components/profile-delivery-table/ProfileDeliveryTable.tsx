@@ -311,7 +311,7 @@ export function ProfileDeliveryTable() {
     return saved ? `${saved}px` : defaultWidth;
   };
 
-  const dates = getAllDates().sort(
+  const dates = getAllDates.sort(
     (a, b) => new Date(a.split('.').reverse().join('-')).getTime() - new Date(b.split('.').reverse().join('-')).getTime()
   );
 

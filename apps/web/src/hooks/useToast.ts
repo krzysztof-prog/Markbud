@@ -2,14 +2,14 @@ import * as React from "react"
 
 export type ToastActionElement = React.ReactElement<any>
 
-interface Toast {
+type ToastBase = {
   variant?: "default" | "destructive" | "success" | "info"
 }
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_REMOVE_DELAY = 5000 // 5 seconds auto-dismiss
 
-type ToasterToast = Toast & {
+type ToasterToast = ToastBase & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
@@ -180,7 +180,7 @@ function useToast() {
         listeners.splice(index, 1)
       }
     }
-  }, [state])
+  }, [setState])
 
   return {
     ...state,
