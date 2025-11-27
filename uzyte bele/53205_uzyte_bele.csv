@@ -1,0 +1,19 @@
+﻿Numer zlecenia;Numer art.;Nowych bel;reszta
+53205;18866050;6;4079
+53205;18869050;9;0
+53205;19671050;10;5422
+53205;202609;5;3484
+53205;202623;9;3632
+
+Lista okien i drzwi dla tego zlecenia:
+Lp.;Szerokosc;Wysokosc;Typ profilu;Ilosc sztuk;Referencja
+1;2368;1435;VLAK;1;D3769
+2;2366;1195;VLAK;1;D3721
+3;2281;1195;VLAK;1;D3720
+4;1974;1435;VLAK;1;D3740
+5;1522;1435;VLAK;1;D3740
+6;1438;1435;VLAK;1;D3769
+7;930;1195;VLAK;1;D3721
+Laczna liczba sztuk okien i drzwi:;7
+Laczna liczba skrzydel:;8
+Laczna liczba szyb:;14

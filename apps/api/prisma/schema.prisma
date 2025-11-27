@@ -1,0 +1,365 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== UŻYTKOWNICY (przygotowane na przyszłość) ====================
+
+model User {
+  id           Int       @id @default(autoincrement())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  role         String    @default("user")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  notes                 Note[]
+  warehouseUpdates      WarehouseStock[]   @relation("UpdatedBy")
+  warehouseHistory      WarehouseHistory[] @relation("RecordedBy")
+  warehouseOrdersCreated WarehouseOrder[]  @relation("WarehouseOrderCreatedBy")
+
+  @@map("users")
+}
+
+// ==================== PROFILE ALUMINIOWE ====================
+
+model Profile {
+  id            Int      @id @default(autoincrement())
+  number        String   @unique
+  articleNumber String?  @unique  @map("article_number")
+  name          String
+  description   String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  profileColors     ProfileColor[]
+  orderRequirements OrderRequirement[]
+  warehouseStock    WarehouseStock[]
+  warehouseHistory  WarehouseHistory[]
+  warehouseOrders   WarehouseOrder[]
+
+  @@map("profiles")
+}
+
+// ==================== KOLORY ====================
+
+model Color {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  type      String
+  hexColor  String?  @map("hex_color")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  profileColors     ProfileColor[]
+  orderRequirements OrderRequirement[]
+  warehouseStock    WarehouseStock[]
+  warehouseHistory  WarehouseHistory[]
+  warehouseOrders   WarehouseOrder[]
+
+  @@map("colors")
+}
+
+// ==================== POWIĄZANIE PROFIL-KOLOR ====================
+
+model ProfileColor {
+  id        Int     @id @default(autoincrement())
+  profileId Int     @map("profile_id")
+  colorId   Int     @map("color_id")
+  isVisible Boolean @default(true) @map("is_visible")
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  color   Color   @relation(fields: [colorId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, colorId])
+  @@map("profile_colors")
+}
+
+// ==================== ZLECENIA ====================
+
+model Order {
+  id             Int       @id @default(autoincrement())
+  orderNumber    String    @unique @map("order_number")
+  status         String    @default("new")
+  valuePln       Float?    @map("value_pln")
+  valueEur       Float?    @map("value_eur")
+  invoiceNumber    String?   @map("invoice_number")
+  deliveryDate     DateTime? @map("delivery_date")
+  productionDate   DateTime? @map("production_date")
+  glassDeliveryDate DateTime? @map("glass_delivery_date")
+  notes            String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  archivedAt     DateTime? @map("archived_at")
+
+  // Sumy z importu CSV
+  totalWindows  Int?      @map("total_windows")
+  totalSashes   Int?      @map("total_sashes")
+  totalGlasses  Int?      @map("total_glasses")
+
+  requirements   OrderRequirement[]
+  windows        OrderWindow[]
+  deliveryOrders DeliveryOrder[]
+  orderNotes     Note[]
+
+  @@index([status])
+  @@index([archivedAt])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+// ==================== ZAPOTRZEBOWANIE NA PROFILE ====================
+
+model OrderRequirement {
+  id         Int      @id @default(autoincrement())
+  orderId    Int      @map("order_id")
+  profileId  Int      @map("profile_id")
+  colorId    Int      @map("color_id")
+  beamsCount Int      @map("beams_count")
+  meters     Float
+  restMm     Int      @map("rest_mm")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  profile Profile @relation(fields: [profileId], references: [id])
+  color   Color   @relation(fields: [colorId], references: [id])
+
+  @@unique([orderId, profileId, colorId])
+  @@index([colorId])
+  @@index([profileId])
+  @@index([orderId])
+  @@map("order_requirements")
+}
+
+// ==================== WYMIARY OKIEN (do pakowania) ====================
+
+model OrderWindow {
+  id          Int      @id @default(autoincrement())
+  orderId     Int      @map("order_id")
+  widthMm     Int      @map("width_mm")
+  heightMm    Int      @map("height_mm")
+  profileType String   @map("profile_type")
+  quantity    Int
+  reference   String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_windows")
+}
+
+// ==================== STAN MAGAZYNOWY ====================
+
+model WarehouseStock {
+  id                   Int       @id @default(autoincrement())
+  profileId            Int       @map("profile_id")
+  colorId              Int       @map("color_id")
+  currentStockBeams    Int       @default(0) @map("current_stock_beams")
+  orderedBeams         Int?      @map("ordered_beams")
+  expectedDeliveryDate DateTime? @map("expected_delivery_date")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  updatedById          Int?      @map("updated_by_id")
+
+  profile   Profile @relation(fields: [profileId], references: [id])
+  color     Color   @relation(fields: [colorId], references: [id])
+  updatedBy User?   @relation("UpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([profileId, colorId])
+  @@index([colorId])
+  @@index([profileId])
+  @@map("warehouse_stock")
+}
+
+// ==================== ZAMÓWIENIA MAGAZYNOWE ====================
+
+model WarehouseOrder {
+  id                   Int      @id @default(autoincrement())
+  profileId            Int      @map("profile_id")
+  colorId              Int      @map("color_id")
+  orderedBeams         Int      @map("ordered_beams")
+  expectedDeliveryDate DateTime @map("expected_delivery_date")
+  status               String   @default("pending") // pending, received, cancelled
+  notes                String?
+  createdAt            DateTime @default(now()) @map("created_at")
+  createdById          Int?     @map("created_by_id")
+
+  profile   Profile @relation(fields: [profileId], references: [id])
+  color     Color   @relation(fields: [colorId], references: [id])
+  createdBy User?   @relation("WarehouseOrderCreatedBy", fields: [createdById], references: [id])
+
+  @@index([status])
+  @@index([colorId])
+  @@index([profileId])
+  @@map("warehouse_orders")
+}
+
+// ==================== HISTORIA MAGAZYNU ====================
+
+model WarehouseHistory {
+  id              Int      @id @default(autoincrement())
+  profileId       Int      @map("profile_id")
+  colorId         Int      @map("color_id")
+  calculatedStock Int      @map("calculated_stock")
+  actualStock     Int      @map("actual_stock")
+  difference      Int
+  recordedAt      DateTime @default(now()) @map("recorded_at")
+  recordedById    Int?     @map("recorded_by_id")
+
+  profile    Profile @relation(fields: [profileId], references: [id])
+  color      Color   @relation(fields: [colorId], references: [id])
+  recordedBy User?   @relation("RecordedBy", fields: [recordedById], references: [id])
+
+  @@index([colorId])
+  @@index([profileId])
+  @@index([recordedAt])
+  @@map("warehouse_history")
+}
+
+// ==================== DOSTAWY ====================
+
+model Delivery {
+  id             Int      @id @default(autoincrement())
+  deliveryDate   DateTime @map("delivery_date")
+  deliveryNumber String?  @map("delivery_number") // I, II, III
+  status         String   @default("planned")
+  totalWindows   Int?     @map("total_windows")
+  totalGlass     Int?     @map("total_glass")
+  totalPallets   Int?     @map("total_pallets")
+  totalValue     Float?   @map("total_value")
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  deliveryOrders DeliveryOrder[]
+  deliveryItems  DeliveryItem[]
+
+  @@index([status])
+  @@index([deliveryDate])
+  @@index([createdAt])
+  @@map("deliveries")
+}
+
+// ==================== ZLECENIA W DOSTAWIE ====================
+
+model DeliveryOrder {
+  id         Int @id @default(autoincrement())
+  deliveryId Int @map("delivery_id")
+  orderId    Int @map("order_id")
+  position   Int
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  order    Order    @relation(fields: [orderId], references: [id])
+
+  @@unique([deliveryId, orderId])
+  @@map("delivery_orders")
+}
+
+// ==================== DODATKOWE ARTYKUŁY W DOSTAWIE ====================
+
+model DeliveryItem {
+  id          Int      @id @default(autoincrement())
+  deliveryId  Int      @map("delivery_id")
+  itemType    String   @map("item_type") // glass, sash, frame, other
+  description String
+  quantity    Int
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@map("delivery_items")
+}
+
+// ==================== TYPY PALET ====================
+
+model PalletType {
+  id          Int      @id @default(autoincrement())
+  name        String
+  lengthMm    Int      @map("length_mm")
+  widthMm     Int      @map("width_mm")
+  heightMm    Int      @map("height_mm")
+  loadWidthMm Int      @default(0) @map("load_width_mm")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("pallet_types")
+}
+
+// ==================== REGUŁY PAKOWANIA ====================
+
+model PackingRule {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  ruleConfig  String   @map("rule_config")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("packing_rules")
+}
+
+// ==================== IMPORT PLIKÓW ====================
+
+model FileImport {
+  id           Int       @id @default(autoincrement())
+  filename     String
+  filepath     String
+  fileType     String    @map("file_type")
+  status       String    @default("pending")
+  processedAt  DateTime? @map("processed_at")
+  errorMessage String?   @map("error_message")
+  metadata     String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("file_imports")
+}
+
+// ==================== USTAWIENIA ====================
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+// ==================== NOTATKI ====================
+
+model Note {
+  id          Int      @id @default(autoincrement())
+  orderId     Int?     @map("order_id")
+  content     String
+  createdAt   DateTime @default(now()) @map("created_at")
+  createdById Int?     @map("created_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  order     Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation(fields: [createdById], references: [id])
+
+  @@map("notes")
+}
+
+// ==================== DNI WOLNE OD PRACY ====================
+
+model WorkingDay {
+  id          Int      @id @default(autoincrement())
+  date        DateTime @unique
+  isWorking   Boolean  @default(true) @map("is_working") // false = dzień wolny
+  description String?  // np. "Boże Narodzenie", "Dzień wolny"
+  isHoliday   Boolean  @default(false) @map("is_holiday") // true = święto
+  country     String?  // "PL" lub "DE"
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("working_days")
+}

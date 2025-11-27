@@ -1,0 +1,27 @@
+{
+  "name": "akrobud",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm run --parallel dev",
+    "dev:web": "pnpm --filter @akrobud/web dev",
+    "dev:api": "pnpm --filter @akrobud/api dev",
+    "build": "pnpm run --parallel build",
+    "build:web": "pnpm --filter @akrobud/web build",
+    "build:api": "pnpm --filter @akrobud/api build",
+    "db:generate": "pnpm --filter @akrobud/api db:generate",
+    "db:migrate": "pnpm --filter @akrobud/api db:migrate",
+    "db:push": "pnpm --filter @akrobud/api db:push",
+    "db:seed": "pnpm --filter @akrobud/api db:seed",
+    "db:studio": "pnpm --filter @akrobud/api db:studio",
+    "lint": "pnpm run --parallel lint",
+    "clean": "pnpm run --parallel clean"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
