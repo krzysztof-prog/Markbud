@@ -361,7 +361,18 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
           colorId: parseInt(colorId),
           isVisible: true,
         },
-        include: { profile: true },
+        select: {
+          profileId: true,
+          colorId: true,
+          isVisible: true,
+          profile: {
+            select: {
+              id: true,
+              number: true,
+              name: true,
+            },
+          },
+        },
         orderBy: { profile: { number: 'asc' } },
       });
 
@@ -375,12 +386,28 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
             },
           },
         },
-        include: {
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
           requirements: {
             where: {
               colorId: parseInt(colorId),
             },
-            include: { profile: true },
+            select: {
+              id: true,
+              profileId: true,
+              colorId: true,
+              beamsCount: true,
+              meters: true,
+              profile: {
+                select: {
+                  id: true,
+                  number: true,
+                  name: true,
+                },
+              },
+            },
           },
         },
         orderBy: { orderNumber: 'asc' },

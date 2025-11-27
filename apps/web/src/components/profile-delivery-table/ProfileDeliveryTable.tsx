@@ -28,6 +28,7 @@ interface ProfileRow {
   name: string;
   magValue: number;
   deliveries: DeliveryData[];
+  requirementTotal: number; // Całkowite zapotrzebowanie dla tego profilu w tej grupie kolorów
 }
 
 interface ColorGroup {
@@ -129,6 +130,15 @@ export function ProfileDeliveryTable() {
       // Pogrupuj profile po kodzie koloru
       const groupMap = new Map<string, { colorName: string; profiles: ProfileRow[] }>();
 
+      // Stwórz mapę zapotrzebowań po profileId-colorCode
+      const profileRequirementsMap = new Map<string, number>();
+      if (requirementsTotals && Array.isArray(requirementsTotals)) {
+        requirementsTotals.forEach((req: any) => {
+          const key = `${req.profileId}-${req.colorCode}`;
+          profileRequirementsMap.set(key, req.totalBeams);
+        });
+      }
+
       // Najpierw dodaj profile z zapotrzebowaniem
       if (requirementsTotals && Array.isArray(requirementsTotals)) {
         requirementsTotals.forEach((req: any) => {
@@ -153,9 +163,10 @@ export function ProfileDeliveryTable() {
               id: profile.id.toString(),
               name: profile.number || profile.name,
               magValue: 0,
+              requirementTotal: req.totalBeams,
               deliveries: Array.from(dateMap.values()).map(d => ({
                 ...d,
-                quantity: req.totalBeams, // Ustaw ilość z zapotrzebowania
+                quantity: 0, // Poszczególne dostawy będą edytowalne przez użytkownika
               })),
             });
           }
@@ -185,6 +196,7 @@ export function ProfileDeliveryTable() {
             id: profile.id.toString(),
             name: profile.number || profile.name,
             magValue: 0,
+            requirementTotal: 0,
             deliveries: Array.from(dateMap.values()).map(d => ({
               ...d,
               quantity: 0, // Brak zapotrzebowania
@@ -256,7 +268,7 @@ export function ProfileDeliveryTable() {
                 if (newDeliveries[dateIndex]) {
                   newDeliveries[dateIndex].quantity = parseInt(value) || 0;
                 }
-                return { ...profile, deliveries: newDeliveries };
+                return { ...profile, deliveries: newDeliveries, requirementTotal: profile.requirementTotal };
               }
               return profile;
             }),
@@ -275,7 +287,7 @@ export function ProfileDeliveryTable() {
             ...group,
             profiles: group.profiles.map((profile) => {
               if (profile.id === profileId) {
-                return { ...profile, magValue: parseInt(value) || 0 };
+                return { ...profile, magValue: parseInt(value) || 0, requirementTotal: profile.requirementTotal };
               }
               return profile;
             }),
@@ -507,7 +519,7 @@ export function ProfileDeliveryTable() {
                           />
                         </td>
                         <td className="px-4 py-2 text-center font-semibold border-r">
-                          {getTotalSum(profile.deliveries)}
+                          {profile.requirementTotal}
                         </td>
                         <td className="px-4 py-2 text-center font-semibold border-r bg-orange-50">
                           {getSumForColumns(profile.deliveries, sumColumns)}

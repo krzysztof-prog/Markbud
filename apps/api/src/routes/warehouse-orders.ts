@@ -19,9 +19,30 @@ export const warehouseOrderRoutes: FastifyPluginAsync = async (fastify) => {
 
     const orders = await prisma.warehouseOrder.findMany({
       where,
-      include: {
-        profile: true,
-        color: true,
+      select: {
+        id: true,
+        profileId: true,
+        colorId: true,
+        orderedBeams: true,
+        expectedDeliveryDate: true,
+        status: true,
+        notes: true,
+        createdAt: true,
+        profile: {
+          select: {
+            id: true,
+            number: true,
+            name: true,
+          },
+        },
+        color: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            type: true,
+          },
+        },
       },
       orderBy: {
         expectedDeliveryDate: 'asc',
@@ -37,9 +58,30 @@ export const warehouseOrderRoutes: FastifyPluginAsync = async (fastify) => {
 
     const order = await prisma.warehouseOrder.findUnique({
       where: { id: Number(id) },
-      include: {
-        profile: true,
-        color: true,
+      select: {
+        id: true,
+        profileId: true,
+        colorId: true,
+        orderedBeams: true,
+        expectedDeliveryDate: true,
+        status: true,
+        notes: true,
+        createdAt: true,
+        profile: {
+          select: {
+            id: true,
+            number: true,
+            name: true,
+          },
+        },
+        color: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            type: true,
+          },
+        },
       },
     });
 
@@ -77,9 +119,30 @@ export const warehouseOrderRoutes: FastifyPluginAsync = async (fastify) => {
         notes: notes || null,
         status: 'pending',
       },
-      include: {
-        profile: true,
-        color: true,
+      select: {
+        id: true,
+        profileId: true,
+        colorId: true,
+        orderedBeams: true,
+        expectedDeliveryDate: true,
+        status: true,
+        notes: true,
+        createdAt: true,
+        profile: {
+          select: {
+            id: true,
+            number: true,
+            name: true,
+          },
+        },
+        color: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            type: true,
+          },
+        },
       },
     });
 
@@ -150,9 +213,29 @@ export const warehouseOrderRoutes: FastifyPluginAsync = async (fastify) => {
     const order = await prisma.warehouseOrder.update({
       where: { id: Number(id) },
       data,
-      include: {
-        profile: true,
-        color: true,
+      select: {
+        id: true,
+        profileId: true,
+        colorId: true,
+        orderedBeams: true,
+        expectedDeliveryDate: true,
+        status: true,
+        notes: true,
+        profile: {
+          select: {
+            id: true,
+            number: true,
+            name: true,
+          },
+        },
+        color: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            type: true,
+          },
+        },
       },
     });
 

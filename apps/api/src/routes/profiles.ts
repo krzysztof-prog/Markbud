@@ -15,9 +15,28 @@ export const profileRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params;
     const profile = await prisma.profile.findUnique({
       where: { id: parseInt(id) },
-      include: {
+      select: {
+        id: true,
+        number: true,
+        name: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
         profileColors: {
-          include: { color: true },
+          select: {
+            profileId: true,
+            colorId: true,
+            isVisible: true,
+            color: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                type: true,
+                hexColor: true,
+              },
+            },
+          },
         },
       },
     });

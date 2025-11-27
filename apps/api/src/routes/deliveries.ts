@@ -26,16 +26,26 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
 
     const deliveries = await prisma.delivery.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        deliveryDate: true,
+        deliveryNumber: true,
+        status: true,
+        notes: true,
+        totalPallets: true,
+        createdAt: true,
+        updatedAt: true,
         deliveryOrders: {
-          include: {
+          select: {
+            deliveryId: true,
+            orderId: true,
+            position: true,
             order: {
               select: {
                 id: true,
                 orderNumber: true,
                 valuePln: true,
                 valueEur: true,
-                requirements: true,
               },
             },
           },
@@ -70,9 +80,16 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
           lte: endDate,
         },
       },
-      include: {
+      select: {
+        id: true,
+        deliveryDate: true,
+        deliveryNumber: true,
+        status: true,
+        createdAt: true,
         deliveryOrders: {
-          include: {
+          select: {
+            orderId: true,
+            position: true,
             order: {
               select: {
                 id: true,
@@ -120,19 +137,64 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
 
     const delivery = await prisma.delivery.findUnique({
       where: { id: parseInt(id) },
-      include: {
+      select: {
+        id: true,
+        deliveryDate: true,
+        deliveryNumber: true,
+        status: true,
+        notes: true,
+        totalPallets: true,
+        createdAt: true,
+        updatedAt: true,
         deliveryOrders: {
-          include: {
+          select: {
+            deliveryId: true,
+            orderId: true,
+            position: true,
             order: {
-              include: {
-                windows: true,
-                requirements: true,
+              select: {
+                id: true,
+                orderNumber: true,
+                valuePln: true,
+                valueEur: true,
+                status: true,
+                windows: {
+                  select: {
+                    id: true,
+                    widthMm: true,
+                    heightMm: true,
+                    quantity: true,
+                  },
+                },
+                requirements: {
+                  select: {
+                    id: true,
+                    profileId: true,
+                    colorId: true,
+                    beamsCount: true,
+                    meters: true,
+                    profile: {
+                      select: { id: true, number: true, name: true },
+                    },
+                    color: {
+                      select: { id: true, code: true, name: true },
+                    },
+                  },
+                },
               },
             },
           },
           orderBy: { position: 'asc' },
         },
         deliveryItems: {
+          select: {
+            id: true,
+            deliveryId: true,
+            itemType: true,
+            description: true,
+            quantity: true,
+            createdAt: true,
+          },
           orderBy: { createdAt: 'asc' },
         },
       },
@@ -223,8 +285,18 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
         orderId,
         position: newPosition,
       },
-      include: {
-        order: true,
+      select: {
+        deliveryId: true,
+        orderId: true,
+        position: true,
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            valuePln: true,
+          },
+        },
       },
     });
 
@@ -320,12 +392,25 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
 
     const delivery = await prisma.delivery.findUnique({
       where: { id: parseInt(id) },
-      include: {
+      select: {
+        id: true,
+        deliveryDate: true,
+        totalPallets: true,
         deliveryOrders: {
-          include: {
+          select: {
+            orderId: true,
+            position: true,
             order: {
-              include: {
-                windows: true,
+              select: {
+                id: true,
+                orderNumber: true,
+                valuePln: true,
+                windows: {
+                  select: {
+                    id: true,
+                    quantity: true,
+                  },
+                },
               },
             },
           },
@@ -419,10 +504,11 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
 
     const delivery = await prisma.delivery.findUnique({
       where: { id: parseInt(id) },
-      include: {
+      select: {
+        id: true,
         deliveryOrders: {
-          include: {
-            order: true,
+          select: {
+            orderId: true,
           },
         },
       },

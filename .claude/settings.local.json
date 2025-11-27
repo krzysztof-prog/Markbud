@@ -10,7 +10,17 @@
       "Bash(git add:*)",
       "Bash(git commit -m \"$(cat <<''EOF''\nComplete UX overhaul - 13/13 tasks completed\n\nIMPROVEMENTS:\n✅ Toast notification system (bottom-right, auto-dismiss)\n✅ Real-time form validation with error messages  \n✅ Skeleton loaders replacing generic spinners\n✅ Accessibility improvements (ARIA labels, focus indicators, keyboard navigation)\n✅ User-friendly error handling with toast\n✅ Table enhancements (sorting, filtering, pagination ready)\n✅ Enhanced empty states with CTAs and icons\n✅ Data visualizations (StatCard with trend indicators)\n✅ Breadcrumb navigation on all pages\n✅ Delivery calendar improvements (8 toast notifications)\n✅ Import workflow enhancements (validation + toasts)\n✅ Mobile optimization (hamburger menu, responsive tables)\n✅ Performance optimizations (scroll hints, responsive design)\n\nNEW COMPONENTS:\n- Toast system with 4 variants (success, destructive, info, default)\n- Skeleton loaders (base, table, card, dashboard)\n- Breadcrumb navigation component\n- Empty state component with CTA\n- StatCard for data visualization\n- Mobile scroll hint\n- Progress bar component\n\nENHANCEMENTS:\n- 25+ toast notifications across app\n- Mobile hamburger menu with slide animation\n- Responsive header and navigation\n- Empty states on warehouse pages\n- Skeleton loaders on loading states\n- ARIA labels and keyboard navigation\n- Helper utilities for toasts and accessibility\n\nAll improvements maintain Polish UI text and existing design.\nNo breaking changes. Ready for production.\n\n🤖 Generated with Claude Code\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(iconv:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(powershell -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; ''Procesy wyłączone''\")",
+      "Bash(node add-colors.js:*)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(cmd /c taskkill /FI \"PID eq 3880\" /F)",
+      "Bash(cmd /c \"taskkill /f /im node.exe\")",
+      "Bash(timeout:*)",
+      "Bash(powershell -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; ''Stopped all node processes''\")",
+      "Bash(git remote add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nImplementacja komponenty Profile na dostawy z obsługą zapotrzebowań\n\n- Naprawiono wyświetlanie danych zapotrzebowania w tabeli dostaw\n- Dodano pole requirementTotal do ProfileRow\n- Kolumna SUM pokazuje teraz całkowite zapotrzebowanie z bazy danych\n- Indywidualne kolumny dostaw pozostają edytowalne\n- Stworzono API endpoint /api/orders/requirements/totals\n- Wszystkie 18 kolorów dodane do systemu\n- Dokumentacja przepływu importu CSV\n- Refaktoryzacja logiki grupowania profili po kodzie koloru\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ]
   }
 }
