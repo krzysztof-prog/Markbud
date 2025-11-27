@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -220,7 +220,7 @@ export function ProfileDeliveryTable() {
     return deliveries.slice(0, columns).reduce((sum, d) => sum + d.quantity, 0);
   };
 
-  const getAllDates = () => {
+  const getAllDates = useMemo(() => {
     const allDates = new Set<string>();
     colorGroups.forEach((group) => {
       group.profiles.forEach((profile) => {
@@ -230,9 +230,9 @@ export function ProfileDeliveryTable() {
       });
     });
     return Array.from(allDates);
-  };
+  }, [colorGroups]);
 
-  const getAllWeeks = () => {
+  const getAllWeeks = useMemo(() => {
     const allWeeks = new Set<number>();
     colorGroups.forEach((group) => {
       group.profiles.forEach((profile) => {
@@ -242,11 +242,11 @@ export function ProfileDeliveryTable() {
       });
     });
     return Array.from(allWeeks).sort((a, b) => a - b);
-  };
+  }, [colorGroups]);
 
-  const handleQuantityChange = (colorId: string, profileId: string, dateIndex: number, value: string) => {
-    setColorGroups(
-      colorGroups.map((group) => {
+  const handleQuantityChange = useCallback((colorId: string, profileId: string, dateIndex: number, value: string) => {
+    setColorGroups((prevGroups) =>
+      prevGroups.map((group) => {
         if (group.id === colorId) {
           return {
             ...group,
@@ -265,11 +265,11 @@ export function ProfileDeliveryTable() {
         return group;
       })
     );
-  };
+  }, []);
 
-  const handleMagValueChange = (colorId: string, profileId: string, value: string) => {
-    setColorGroups(
-      colorGroups.map((group) => {
+  const handleMagValueChange = useCallback((colorId: string, profileId: string, value: string) => {
+    setColorGroups((prevGroups) =>
+      prevGroups.map((group) => {
         if (group.id === colorId) {
           return {
             ...group,
@@ -284,7 +284,7 @@ export function ProfileDeliveryTable() {
         return group;
       })
     );
-  };
+  }, []);
 
   const handleDeleteProfile = (colorId: string, profileId: string) => {
     setColorGroups(

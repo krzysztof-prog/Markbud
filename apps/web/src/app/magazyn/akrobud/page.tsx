@@ -7,13 +7,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { EmptyState } from '@/components/ui/empty-state';
+import { MobileScrollHint } from '@/components/ui/mobile-scroll-hint';
 import { colorsApi, ordersApi, warehouseApi, warehouseOrdersApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { showSuccessToast, showErrorToast, getErrorMessage } from '@/lib/toast-helpers';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Package, AlertTriangle, Pencil, Check, X, ChevronDown, ChevronRight, Plus, Trash2, ArrowLeft, Warehouse } from 'lucide-react';
+import { Package, AlertTriangle, Pencil, Check, X, ChevronDown, ChevronRight, Plus, Trash2, ArrowLeft, Warehouse, FileText } from 'lucide-react';
 import { OrderDetailModal } from '@/components/orders/order-detail-modal';
 import Link from 'next/link';
 
@@ -73,9 +75,9 @@ export default function MagazynAkrobudPage() {
         />
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         {/* Sidebar z kolorami */}
-        <div className="w-64 border-r bg-white overflow-y-auto">
+        <div className="w-full md:w-64 border-r border-b md:border-b-0 bg-white overflow-y-auto max-h-48 md:max-h-full">
           <div className="p-4">
             <h3 className="font-semibold text-sm text-slate-500 uppercase tracking-wide mb-3">
               Kolory
@@ -135,32 +137,32 @@ export default function MagazynAkrobudPage() {
           </div>
         </div>
 
-        {/* GB�wna zawarto[ */}
-        <div className="flex-1 overflow-auto p-6">
+        {/* Główna zawartość */}
+        <div className="flex-1 overflow-auto p-4 md:p-6">
           {selectedColor && (
             <>
-              <div className="flex items-center gap-4 mb-6">
+              <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6 flex-wrap">
                 <div
-                  className="w-8 h-8 rounded border-2"
+                  className="w-8 h-8 md:w-10 md:h-10 rounded border-2 flex-shrink-0"
                   style={{ backgroundColor: selectedColor.hexColor || '#ccc' }}
                 />
-                <div>
-                  <h2 className="text-xl font-semibold">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-lg md:text-xl font-semibold truncate">
                     {selectedColor.code} - {selectedColor.name}
                   </h2>
-                  <Badge variant={selectedColor.type === 'typical' ? 'secondary' : 'outline'}>
+                  <Badge variant={selectedColor.type === 'typical' ? 'secondary' : 'outline'} className="mt-1">
                     {selectedColor.type === 'typical' ? 'Typowy' : 'Nietypowy'}
                   </Badge>
                 </div>
               </div>
 
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-                <TabsList>
-                  <TabsTrigger value="zlecenia">Tabela zleceD</TabsTrigger>
-                  <TabsTrigger value="magazyn">Stan magazynowy</TabsTrigger>
+                <TabsList className="w-full md:w-auto">
+                  <TabsTrigger value="zlecenia" className="flex-1 md:flex-none text-xs md:text-sm">Tabela zleceń</TabsTrigger>
+                  <TabsTrigger value="magazyn" className="flex-1 md:flex-none text-xs md:text-sm">Stan magazynowy</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="zlecenia" className="mt-4">
+                <TabsContent value="zlecenia" className="mt-3 md:mt-4">
                   <OrdersTable
                     data={ordersTable}
                     isLoading={ordersLoading}
@@ -170,7 +172,7 @@ export default function MagazynAkrobudPage() {
                   />
                 </TabsContent>
 
-                <TabsContent value="magazyn" className="mt-4">
+                <TabsContent value="magazyn" className="mt-3 md:mt-4">
                   <WarehouseTable data={warehouseData || []} isLoading={warehouseLoading} colorId={selectedColorId!} />
                 </TabsContent>
               </Tabs>
@@ -208,14 +210,12 @@ function OrdersTable({
 
   if (!data?.orders?.length) {
     return (
-      <Card>
-        <CardContent className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <Package className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-            <p className="text-slate-500">Brak zleceD dla tego koloru</p>
-          </div>
-        </CardContent>
-      </Card>
+      <EmptyState
+        icon={<FileText className="h-12 w-12" />}
+        title="Brak zleceń"
+        description="Nie znaleziono żadnych aktywnych zleceń dla tego koloru. Zlecenia pojawią się tutaj po dodaniu zamówień wymagających tego profilu."
+        className="min-h-[300px]"
+      />
     );
   }
 
@@ -224,42 +224,45 @@ function OrdersTable({
   const totals = data.totals || {};
 
   return (
-    <Card>
-      <CardContent className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium text-slate-700 sticky left-0 bg-slate-50">
-                Zlecenie
-              </th>
-              {profiles.map((profile: any) => (
-                <th
-                  key={profile.id}
-                  colSpan={2}
-                  className="px-4 py-3 text-center font-medium text-slate-700 border-l"
-                >
-                  {profile.number}
+    <>
+      <MobileScrollHint />
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto max-w-full">
+          <table className="w-full text-sm min-w-[800px]">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium text-slate-700 sticky left-0 bg-slate-50 z-10">
+                  Zlecenie
                 </th>
-              ))}
-            </tr>
-            <tr className="bg-slate-100 border-b text-xs">
-              <th className="px-4 py-2 text-left text-slate-500 sticky left-0 bg-slate-100"></th>
-              {profiles.map((profile: any) => (
-                <>
-                  <th key={`${profile.id}-bele`} className="px-2 py-2 text-center text-slate-500 border-l">
-                    bele
+                {profiles.map((profile: any) => (
+                  <th
+                    key={profile.id}
+                    colSpan={2}
+                    className="px-4 py-3 text-center font-medium text-slate-700 border-l"
+                  >
+                    {profile.number}
                   </th>
-                  <th key={`${profile.id}-m`} className="px-2 py-2 text-center text-slate-500">
-                    m
-                  </th>
-                </>
-              ))}
-            </tr>
-          </thead>
+                ))}
+              </tr>
+              <tr className="bg-slate-100 border-b text-xs">
+                <th className="px-4 py-2 text-left text-slate-500 sticky left-0 bg-slate-100 z-10"></th>
+                {profiles.map((profile: any) => (
+                  <>
+                    <th key={`${profile.id}-bele`} className="px-2 py-2 text-center text-slate-500 border-l">
+                      bele
+                    </th>
+                    <th key={`${profile.id}-m`} className="px-2 py-2 text-center text-slate-500">
+                      m
+                    </th>
+                  </>
+                ))}
+              </tr>
+            </thead>
           <tbody>
             {orders.map((order: any) => (
               <tr key={order.orderId} className="border-b hover:bg-slate-50">
-                <td className="px-4 py-3 font-mono font-medium sticky left-0 bg-white">
+                <td className="px-4 py-3 font-mono font-medium sticky left-0 bg-white z-10">
                   <button
                     onClick={() => onOrderClick?.(order.orderId, order.orderNumber)}
                     className="text-blue-600 hover:text-blue-800 hover:underline"
@@ -287,7 +290,7 @@ function OrdersTable({
             ))}
             {/* Suma */}
             <tr className="bg-blue-50 font-semibold">
-              <td className="px-4 py-3 sticky left-0 bg-blue-50">SUMA</td>
+              <td className="px-4 py-3 sticky left-0 bg-blue-50 z-10">SUMA</td>
               {profiles.map((profile: any) => {
                 const total = totals[profile.number] || { beams: 0, meters: 0 };
                 return (
@@ -307,8 +310,10 @@ function OrdersTable({
             </tr>
           </tbody>
         </table>
-      </CardContent>
-    </Card>
+          </div>
+        </CardContent>
+      </Card>
+    </>
   );
 }
 
@@ -408,30 +413,34 @@ function WarehouseTable({ data, isLoading, colorId }: { data: any[]; isLoading: 
 
   if (!data?.length) {
     return (
-      <Card>
-        <CardContent className="flex items-center justify-center h-64">
-          <p className="text-slate-500">Brak danych magazynowych</p>
-        </CardContent>
-      </Card>
+      <EmptyState
+        icon={<Package className="h-12 w-12" />}
+        title="Brak danych magazynowych"
+        description="Nie znaleziono informacji o stanach magazynowych dla tego koloru. Dane pojawią się automatycznie po dodaniu profili i zleceń."
+        className="min-h-[300px]"
+      />
     );
   }
 
   return (
-    <Card>
-      <CardContent className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b">
-            <tr>
-              <th className="px-2 py-3 w-8"></th>
-              <th className="px-4 py-3 text-left font-medium text-slate-700">Profil</th>
-              <th className="px-4 py-3 text-center font-medium text-slate-700">Stan magazynu</th>
-              <th className="px-4 py-3 text-center font-medium text-slate-700">Zapotrzebowanie</th>
-              <th className="px-4 py-3 text-center font-medium text-slate-700">Po zapotrzeb.</th>
-              <th className="px-4 py-3 text-center font-medium text-slate-700">Zam�wione</th>
-              <th className="px-4 py-3 text-center font-medium text-slate-700">Najbli|sza dostawa</th>
-              <th className="px-4 py-3 text-center font-medium text-slate-700 w-20">Akcje</th>
-            </tr>
-          </thead>
+    <>
+      <MobileScrollHint />
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto max-w-full">
+          <table className="w-full text-sm min-w-[900px]">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="px-2 py-3 w-8"></th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700 sticky left-0 bg-slate-50 z-10">Profil</th>
+                <th className="px-4 py-3 text-center font-medium text-slate-700">Stan magazynu</th>
+                <th className="px-4 py-3 text-center font-medium text-slate-700">Zapotrzebowanie</th>
+                <th className="px-4 py-3 text-center font-medium text-slate-700">Po zapotrzeb.</th>
+                <th className="px-4 py-3 text-center font-medium text-slate-700">Zamówione</th>
+                <th className="px-4 py-3 text-center font-medium text-slate-700">Najbliższa dostawa</th>
+                <th className="px-4 py-3 text-center font-medium text-slate-700 w-20">Akcje</th>
+              </tr>
+            </thead>
           <tbody>
             {data.map((row: any) => {
               const isExpanded = expandedRows.has(row.profileId);
@@ -682,7 +691,9 @@ function WarehouseTable({ data, isLoading, colorId }: { data: any[]; isLoading: 
             })}
           </tbody>
         </table>
-      </CardContent>
-    </Card>
+          </div>
+        </CardContent>
+      </Card>
+    </>
   );
 }

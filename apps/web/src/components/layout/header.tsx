@@ -24,7 +24,7 @@ export function Header({ title, alertsCount = 0, children }: HeaderProps) {
     enabled: isDropdownOpen,
   });
 
-  // Zamknij dropdown po kliknięciu poza nim
+  // Zamknij dropdown po kliknięciu poza nim lub naciśnięciu ESC
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -32,30 +32,43 @@ export function Header({ title, alertsCount = 0, children }: HeaderProps) {
       }
     }
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && isDropdownOpen) {
+        setIsDropdownOpen(false);
+      }
+    }
+
     if (isDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isDropdownOpen]);
 
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-white px-6">
-      <div className="flex items-center gap-4">
-        <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
-        {children}
+    <header className="flex h-16 items-center justify-between border-b bg-white px-6 md:px-6 pl-16 md:pl-6">
+      <div className="flex items-center gap-4 flex-wrap">
+        <h1 className="text-xl font-semibold text-slate-900 truncate">{title}</h1>
+        <div className="flex items-center gap-2 flex-wrap">
+          {children}
+        </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 md:gap-4">
         {/* Powiadomienia */}
         <div className="relative" ref={dropdownRef}>
           <Button
             variant="ghost"
             size="icon"
-            className="relative"
+            className="relative flex-shrink-0"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            aria-label={isDropdownOpen ? 'Zamknij powiadomienia' : 'Otwórz powiadomienia'}
+            aria-expanded={isDropdownOpen}
+            aria-haspopup="menu"
           >
             <Bell className="h-5 w-5" />
             {alertsCount > 0 && (
@@ -70,9 +83,13 @@ export function Header({ title, alertsCount = 0, children }: HeaderProps) {
 
           {/* Dropdown z alertami */}
           {isDropdownOpen && (
-            <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-lg border z-50 max-h-96 overflow-y-auto">
+            <div
+              className="absolute right-0 mt-2 w-80 md:w-96 bg-white rounded-lg shadow-lg border z-50 max-h-96 overflow-y-auto"
+              role="menu"
+              aria-label="Powiadomienia"
+            >
               <div className="p-4 border-b">
-                <h3 className="font-semibold text-sm">Powiadomienia</h3>
+                <h3 className="font-semibold text-sm" id="notifications-title">Powiadomienia</h3>
               </div>
 
               <div className="divide-y">
@@ -141,9 +158,10 @@ export function Header({ title, alertsCount = 0, children }: HeaderProps) {
 
         {/* Alerty */}
         {alertsCount > 0 && (
-          <div className="flex items-center gap-2 rounded-lg bg-yellow-50 px-3 py-1.5 text-sm text-yellow-700">
+          <div className="hidden sm:flex items-center gap-2 rounded-lg bg-yellow-50 px-3 py-1.5 text-sm text-yellow-700">
             <AlertTriangle className="h-4 w-4" />
-            <span>{alertsCount} alert(ów)</span>
+            <span className="hidden md:inline">{alertsCount} alert(ów)</span>
+            <span className="md:hidden">{alertsCount}</span>
           </div>
         )}
       </div>

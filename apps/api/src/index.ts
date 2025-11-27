@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
+import compress from '@fastify/compress';
 import { config } from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 
@@ -36,6 +37,12 @@ await fastify.register(cors, {
   origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+});
+
+// Compression (gzip, deflate, brotli)
+await fastify.register(compress, {
+  threshold: 1024, // Compress responses > 1KB
+  encodings: ['gzip', 'deflate'],
 });
 
 // Multipart (file uploads)

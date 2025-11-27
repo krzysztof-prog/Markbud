@@ -2,9 +2,9 @@
 
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
-import { Lock, Warehouse } from 'lucide-react';
+import { Lock, Warehouse, Plus } from 'lucide-react';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
@@ -30,15 +30,16 @@ export default function MagazynOkucPage() {
       </div>
 
       <div className="flex-1 overflow-auto p-6">
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center h-96">
-            <Lock className="h-16 w-16 text-slate-300 mb-4" />
-            <h3 className="text-lg font-semibold text-slate-700 mb-2">Magazyn Okuć</h3>
-            <p className="text-slate-500 text-center max-w-md">
-              Ta sekcja jest w trakcie przygotowania. Tutaj będzie można zarządzać okuciami i akcesoriami.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={<Lock className="h-16 w-16" />}
+          title="Magazyn Okuć"
+          description="Ta sekcja jest w trakcie przygotowania. Tutaj będzie można zarządzać okuciami i akcesoriami, monitorować dostępność oraz składać zamówienia."
+          action={{
+            label: 'Dodaj okucie',
+            onClick: () => console.log('Dodawanie okucia'),
+          }}
+          className="min-h-[400px]"
+        />
       </div>
     </div>
   );

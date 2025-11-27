@@ -6,7 +6,6 @@ const nextConfig = {
 
   // Image optimization
   images: {
-    optimized: true,
     formats: ['image/avif', 'image/webp'],
   },
 

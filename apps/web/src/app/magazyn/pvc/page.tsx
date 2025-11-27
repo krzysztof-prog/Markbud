@@ -2,9 +2,9 @@
 
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
-import { Box, Warehouse } from 'lucide-react';
+import { Box, Warehouse, Plus } from 'lucide-react';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
@@ -30,15 +30,16 @@ export default function MagazynPVCPage() {
       </div>
 
       <div className="flex-1 overflow-auto p-6">
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center h-96">
-            <Box className="h-16 w-16 text-slate-300 mb-4" />
-            <h3 className="text-lg font-semibold text-slate-700 mb-2">Magazyn PVC</h3>
-            <p className="text-slate-500 text-center max-w-md">
-              Ta sekcja jest w trakcie przygotowania. Tutaj będzie można zarządzać materiałami PVC.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={<Box className="h-16 w-16" />}
+          title="Magazyn PVC"
+          description="Ta sekcja jest w trakcie przygotowania. Tutaj będzie można zarządzać materiałami PVC, śledzić stany magazynowe i dodawać zamówienia."
+          action={{
+            label: 'Dodaj materiał PVC',
+            onClick: () => console.log('Dodawanie materiału PVC'),
+          }}
+          className="min-h-[400px]"
+        />
       </div>
     </div>
   );
