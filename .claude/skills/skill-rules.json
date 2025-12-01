@@ -1,0 +1,161 @@
+{
+  "version": "1.0.0",
+  "skills": {
+    "backend-dev-guidelines": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "api",
+          "backend",
+          "handler",
+          "service",
+          "route",
+          "endpoint",
+          "database",
+          "prisma",
+          "middleware",
+          "validation",
+          "error handling",
+          "fastify",
+          "websocket",
+          "socket.io",
+          "delivery",
+          "warehouse",
+          "order",
+          "import",
+          "csv",
+          "pdf",
+          "serwer",
+          "baza danych",
+          "obsługa błędów",
+          "walidacja",
+          "dostawca",
+          "magazyn",
+          "zamówienie",
+          "import danych",
+          "eksport",
+          "uwierzytelnianie",
+          "autoryzacja",
+          "token",
+          "sesja",
+          "cache",
+          "buforowanie",
+          "synchronizacja",
+          "zdarzenie",
+          "zapytanie",
+          "odpowiedź",
+          "błąd",
+          "wyjątek",
+          "logowanie",
+          "monitoring",
+          "wydajność",
+          "optymalizacja"
+        ],
+        "intentPatterns": [
+          "creating.*route|adding.*api|building.*service|implementing.*endpoint|new handler",
+          "database.*operation|prisma|repository|data.*access|query",
+          "error.*tracking|exception|logging|sentry",
+          "websocket|real.*time|socket",
+          "csv.*import|file.*upload|parse"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/api/src/**/*.ts",
+          "apps/api/src/**/*.tsx",
+          "apps/api/prisma/**/*.ts"
+        ],
+        "contentPatterns": [
+          "import.*fastify|import.*websocket",
+          "import.*prisma|PrismaClient",
+          "export.*Handler|export.*Service",
+          "fastify.post|fastify.get|fastify.put|fastify.delete",
+          "handler\\.|Handler\\.",
+          "Service\\.|repository\\."
+        ]
+      }
+    },
+    "frontend-dev-guidelines": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "component",
+          "react",
+          "frontend",
+          "ui",
+          "page",
+          "styling",
+          "tailwind",
+          "hook",
+          "state",
+          "data fetching",
+          "form",
+          "table",
+          "dashboard",
+          "delivery",
+          "warehouse",
+          "okuc",
+          "komponent",
+          "interfejs użytkownika",
+          "strona",
+          "stylowanie",
+          "hook",
+          "stan",
+          "pobieranie danych",
+          "formularz",
+          "tabela",
+          "panel",
+          "dostawy",
+          "magazyn",
+          "przycisk",
+          "input",
+          "animacja",
+          "responsywny",
+          "mobilny",
+          "dostępność",
+          "tema",
+          "kolory",
+          "czcionka",
+          "layout",
+          "menu",
+          "nawigacja",
+          "modal",
+          "dialog",
+          "Toast",
+          "powiadomienie",
+          "drag",
+          "drop",
+          "przeciąg",
+          "upuszczenie"
+        ],
+        "intentPatterns": [
+          "creating.*component|building.*page|adding.*feature|new.*component",
+          "styling|tailwind|css|design",
+          "data.*fetch|api.*call|query|mutation",
+          "form|input|validation",
+          "table|grid|list",
+          "dashboard|chart|graph"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/web/src/**/*.tsx",
+          "apps/web/src/**/*.ts",
+          "apps/web/src/components/**/*",
+          "apps/web/src/app/**/*"
+        ],
+        "contentPatterns": [
+          "import.*React|React.FC|export.*function|const.*=.*\\(.*\\)\\s*=>",
+          "tailwindcss|className=",
+          "useSuspenseQuery|useQuery|useState|useCallback|useRef",
+          "form|Form|Input|Table",
+          "@dnd-kit|drag.*drop"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+﻿Numer zlecenia;Numer art.;Nowych bel;reszta
+53506;18866050;2;0
+53506;19016050;1;2622
+53506;19315050;3;4737
+53506;19671050;3;0
+53506;202609;2;2656
+53506;202623;3;2665
+
+Lista okien i drzwi dla tego zlecenia:
+Lp.;Szerokosc;Wysokosc;Typ profilu;Ilosc sztuk;Referencja
+1;2321;1241;BLOK;1;WAVERSVELD
+2;1555;1241;BLOK;1;WAVERSVELD
+Laczna liczba sztuk okien i drzwi:;2
+Laczna liczba skrzydel:;3
+Laczna liczba szyb:;5

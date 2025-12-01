@@ -1,0 +1,9 @@
+
+> akrobud@1.0.0 dev:api C:\Users\Krzysztof\Desktop\AKROBUD
+> pnpm --filter @akrobud/api dev
+
+
+> @akrobud/api@1.0.0 dev C:\Users\Krzysztof\Desktop\AKROBUD\apps\api
+> tsx watch src/index.ts
+
+{"level":50,"time":1764253514140,"pid":22924,"hostname":"Krzysztof","err":{"type":"Error","message":"listen EADDRINUSE: address already in use 0.0.0.0:3001","stack":"Error: listen EADDRINUSE: address already in use 0.0.0.0:3001\n    at Server.setupListenHandle [as _listen2] (node:net:1940:16)\n    at listenInCluster (node:net:1997:12)\n    at node:net:2206:7\n    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)","code":"EADDRINUSE","errno":-4091,"syscall":"listen","address":"0.0.0.0","port":3001},"msg":"listen EADDRINUSE: address already in use 0.0.0.0:3001"}

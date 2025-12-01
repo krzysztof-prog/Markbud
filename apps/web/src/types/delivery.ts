@@ -1,0 +1,129 @@
+import type { ID, Timestamp } from './common';
+import type { Order } from './order';
+import type { Holiday } from './settings';
+
+/**
+ * Dostawa
+ */
+export interface Delivery {
+  id: ID;
+  weekNumber?: number;
+  year?: number;
+  deliveryDate: Timestamp;
+  deliveryNumber: string | null;
+  notes: string | null;
+  colorId?: ID;
+  isUnassigned?: boolean;
+  orders?: Order[];
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+  status?: string;
+  totalWindows?: number | null;
+  totalGlass?: number | null;
+  totalPallets?: number | null;
+  totalValue?: number | null;
+  deliveryOrders: Array<{
+    order: {
+      id: number;
+      orderNumber: string;
+      totalWindows?: number | null;
+      totalSashes?: number | null;
+      totalGlasses?: number | null;
+    };
+  }>;
+  deliveryItems?: Array<{
+    id: number;
+    itemType: string;
+    description: string;
+    quantity: number;
+  }>;
+}
+
+export interface DeliveryWithOrders extends Delivery {
+  orders: Order[];
+}
+
+export interface CreateDeliveryData {
+  deliveryDate: string;
+  deliveryNumber?: string;
+  notes?: string;
+  colorId?: number;
+}
+
+export interface UpdateDeliveryData {
+  deliveryDate?: string;
+  deliveryNumber?: string;
+  notes?: string;
+  colorId?: number;
+}
+
+/**
+ * Kalendarz dostaw
+ */
+export interface DeliveryCalendarData {
+  deliveries: Delivery[];
+  monthsData: MonthData[];
+  holidays?: Holiday[];
+  unassignedOrders?: Order[];
+}
+
+export interface MonthData {
+  month: number;
+  year: number;
+  weeks: WeekData[];
+}
+
+export interface WeekData {
+  weekNumber: number;
+  startDate: string;
+  endDate: string;
+  deliveries: Delivery[];
+}
+
+/**
+ * Drag & Drop types dla dostaw
+ */
+export interface DraggableOrderData {
+  orderId: ID;
+  orderNumber: string;
+  deliveryId?: ID;
+  sourceDeliveryId?: ID;
+}
+
+export interface DroppableDeliveryData {
+  deliveryId: ID;
+  isUnassigned?: boolean;
+}
+
+/**
+ * Protokół dostawy
+ */
+export interface DeliveryProtocol {
+  delivery: Delivery;
+  orders: Order[];
+  items: DeliveryItem[];
+}
+
+export interface DeliveryItem {
+  id: ID;
+  deliveryId: ID;
+  itemType: string;
+  description: string;
+  quantity: number;
+  createdAt: Timestamp;
+}
+
+export interface CreateDeliveryItemData {
+  itemType: string;
+  description: string;
+  quantity: number;
+}
+
+/**
+ * Active drag item state
+ */
+export interface ActiveDragItem {
+  orderId: ID;
+  orderNumber: string;
+  sourceDeliveryId?: ID;
+}

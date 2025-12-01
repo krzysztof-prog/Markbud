@@ -1,0 +1,16 @@
+
+> akrobud@1.0.0 dev:web C:\Users\Krzysztof\Desktop\AKROBUD
+> pnpm --filter @akrobud/web dev
+
+
+> @akrobud/web@1.0.0 dev C:\Users\Krzysztof\Desktop\AKROBUD\apps\web
+> next dev
+
+ ⚠ Port 3000 is in use, trying 3001 instead.
+ ⚠ Port 3001 is in use, trying 3002 instead.
+ ⚠ Port 3002 is in use, trying 3003 instead.
+   ▲ Next.js 14.0.4
+   - Local:        http://localhost:3003
+
+ ✓ Ready in 5.3s
+[?25h

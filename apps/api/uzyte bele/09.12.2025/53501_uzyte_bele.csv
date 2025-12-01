@@ -1,0 +1,21 @@
+﻿Numer zlecenia;Numer art.;Nowych bel;reszta
+53501;18866730;10;2437
+53501;19016730;4;3298
+53501;19315730;11;3514
+53501;19671000;16;5042
+53501;202609;9;5563
+53501;202623;14;4904
+
+Lista okien i drzwi dla tego zlecenia:
+Lp.;Szerokosc;Wysokosc;Typ profilu;Ilosc sztuk;Referencja
+1;3590;1231;BLOK;1;WERT
+2;2959;1421;BLOK;1;BADU
+3;2894;1361;BLOK;1;POLDERVAART
+4;2510;1571;BLOK;1;BUUL
+5;2292;1571;BLOK;1;BUUL
+6;2002;1221;BLOK;1;HOOFF
+7;1342;1361;BLOK;1;POLDERVAART
+8;1311;1571;BLOK;1;BUUL
+Laczna liczba sztuk okien i drzwi:;8
+Laczna liczba skrzydel:;14
+Laczna liczba szyb:;24

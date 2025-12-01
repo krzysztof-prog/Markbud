@@ -1,0 +1,17 @@
+﻿Numer zlecenia;Numer art.;Nowych bel;reszta
+53500;18866000;4;0
+53500;19016000;2;2576
+53500;19315000;6;2518
+53500;19671000;5;2972
+53500;19677000;3;2058
+53500;202609;4;4989
+53500;202623;7;4854
+
+Lista okien i drzwi dla tego zlecenia:
+Lp.;Szerokosc;Wysokosc;Typ profilu;Ilosc sztuk;Referencja
+1;3720;1331;BLOK;1;SCHLEBUSCH
+2;3632;1271;BLOK;1;WOUTERSEN
+3;3460;871;BLOK;1;STEVENS
+Laczna liczba sztuk okien i drzwi:;3
+Laczna liczba skrzydel:;6
+Laczna liczba szyb:;12

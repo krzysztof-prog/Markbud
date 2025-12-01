@@ -1,0 +1,16 @@
+﻿Numer zlecenia;Numer art.;Nowych bel;reszta
+53315;18866750;2;2434
+53315;19016750;1;5154
+53315;19181750;2;2757
+53315;19315750;2;3232
+53315;19671000;2;3952
+53315;202609;2;4398
+53315;202623;2;3446
+
+Lista okien i drzwi dla tego zlecenia:
+Lp.;Szerokosc;Wysokosc;Typ profilu;Ilosc sztuk;Referencja
+1;1560;961;BLOK;1;AARTS
+2;780;961;BLOK;1;AARTS
+Laczna liczba sztuk okien i drzwi:;2
+Laczna liczba skrzydel:;3
+Laczna liczba szyb:;3

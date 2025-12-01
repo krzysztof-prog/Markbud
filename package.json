@@ -1,0 +1,34 @@
+{
+  "name": "akrobud",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm run --parallel dev",
+    "dev:web": "pnpm --filter @akrobud/web dev",
+    "dev:api": "pnpm --filter @akrobud/api dev",
+    "build": "pnpm run --parallel build",
+    "build:web": "pnpm --filter @akrobud/web build",
+    "build:api": "pnpm --filter @akrobud/api build",
+    "db:generate": "pnpm --filter @akrobud/api db:generate",
+    "db:migrate": "pnpm --filter @akrobud/api db:migrate",
+    "db:migrate:deploy": "pnpm --filter @akrobud/api db:migrate:deploy",
+    "db:migrate:status": "pnpm --filter @akrobud/api db:migrate:status",
+    "db:push": "pnpm --filter @akrobud/api db:push",
+    "db:seed": "pnpm --filter @akrobud/api db:seed",
+    "db:studio": "pnpm --filter @akrobud/api db:studio",
+    "db:reset": "pnpm --filter @akrobud/api db:reset",
+    "lint": "pnpm run --parallel lint",
+    "clean": "pnpm run --parallel clean"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "dependencies": {
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^10.3.0"
+  }
+}

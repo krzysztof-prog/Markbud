@@ -1,0 +1,21 @@
+﻿Numer zlecenia;Numer art.;Nowych bel;reszta
+53503;18866730;9;3785
+53503;19016730;3;0
+53503;19315730;10;0
+53503;19671000;14;0
+53503;202609;7;0
+53503;202623;12;0
+
+Lista okien i drzwi dla tego zlecenia:
+Lp.;Szerokosc;Wysokosc;Typ profilu;Ilosc sztuk;Referencja
+1;3354;1341;BLOK;1;VAN AKEN
+2;3158;1381;BLOK;1;GILS
+3;3118;1401;BLOK;1;GRIFT
+4;2365;1211;BLOK;1;BERKEL
+5;2035;1161;BLOK;1;DRIESSEN
+6;1989;1141;BLOK;1;VAN AKEN
+7;1988;1161;BLOK;1;DRIESSEN
+8;782;1211;BLOK;1;BERKEL
+Laczna liczba sztuk okien i drzwi:;8
+Laczna liczba skrzydel:;13
+Laczna liczba szyb:;23
