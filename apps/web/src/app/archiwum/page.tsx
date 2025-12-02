@@ -9,11 +9,13 @@ import { Badge } from '@/components/ui/badge';
 import { ordersApi } from '@/lib/api';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { Archive, RotateCcw, Trash2, Search } from 'lucide-react';
+import { useDebounce } from '@/hooks/useDebounce';
 import type { Order } from '@/types';
 
 export default function ArchiwumPage() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebounce(searchTerm, 300); // 300ms debounce
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ['orders', 'archived'],
@@ -35,7 +37,7 @@ export default function ArchiwumPage() {
   });
 
   const filteredOrders = orders?.filter((order: Order) =>
-    order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())
+    order.orderNumber.toLowerCase().includes(debouncedSearch.toLowerCase())
   ) || [];
 
   return (
@@ -66,9 +68,9 @@ export default function ArchiwumPage() {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
               </div>
             ) : filteredOrders?.length > 0 ? (
-              <div className="rounded border overflow-hidden">
+              <div className="rounded border overflow-hidden overflow-y-auto max-h-[600px]">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50">
+                  <thead className="bg-slate-50 sticky top-0 z-10">
                     <tr>
                       <th className="px-4 py-3 text-left">Nr zlecenia</th>
                       <th className="px-4 py-3 text-left">Data utworzenia</th>
@@ -79,8 +81,8 @@ export default function ArchiwumPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredOrders.map((order: Order) => (
-                      <tr key={order.id} className="border-t hover:bg-slate-50">
+                    {filteredOrders.map((order: Order, index: number) => (
+                      <tr key={order.id} className={`border-t hover:bg-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                         <td className="px-4 py-3">
                           <span className="font-mono font-medium">{order.orderNumber}</span>
                         </td>

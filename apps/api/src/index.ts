@@ -2,6 +2,8 @@ import Fastify from 'fastify';
 import './types/fastify.js';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
+import compress from '@fastify/compress';
+import rateLimit from '@fastify/rate-limit';
 import { config as dotenvConfig } from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 
@@ -18,6 +20,8 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { workingDaysRoutes } from './routes/working-days.js';
 import schucoRoutes from './routes/schuco.js';
 import { palletRoutes } from './routes/pallets.js';
+import { currencyConfigRoutes } from './routes/currency-config.js';
+import { monthlyReportsRoutes } from './routes/monthly-reports.js';
 
 // Services
 import { FileWatcherService } from './services/file-watcher.js';
@@ -61,6 +65,36 @@ await fastify.register(multipart, {
   },
 });
 
+// Compression (gzip/deflate) - reduces payload size by ~70%
+await fastify.register(compress, {
+  global: true,
+  threshold: 1024, // Only compress responses > 1KB
+  encodings: ['gzip', 'deflate'],
+  // Don't compress already compressed formats
+  customTypes: /^text\/|application\/json|application\/javascript|application\/xml/,
+});
+
+// Rate Limiting - protect from abuse
+await fastify.register(rateLimit, {
+  global: true,
+  max: 100, // Max 100 requests per window
+  timeWindow: '15 minutes', // 15-minute window
+  cache: 10000, // Cache 10k IPs
+  allowList: ['127.0.0.1'], // Whitelist localhost (for dev)
+  redis: undefined, // Can be replaced with Redis for distributed systems
+  skipOnError: true, // Don't fail if rate limiter fails
+  addHeadersOnExceeding: {
+    'x-ratelimit-limit': true,
+    'x-ratelimit-remaining': true,
+    'x-ratelimit-reset': true,
+  },
+  addHeaders: {
+    'x-ratelimit-limit': true,
+    'x-ratelimit-remaining': true,
+    'x-ratelimit-reset': true,
+  },
+});
+
 // Dekoratory - dodaj Prisma do kontekstu
 fastify.decorate('prisma', prisma);
 
@@ -98,6 +132,8 @@ await fastify.register(dashboardRoutes, { prefix: '/api/dashboard' });
 await fastify.register(workingDaysRoutes, { prefix: '/api/working-days' });
 await fastify.register(schucoRoutes, { prefix: '/api/schuco' });
 await fastify.register(palletRoutes, { prefix: '/api/pallets' });
+await fastify.register(currencyConfigRoutes, { prefix: '/api/currency-config' });
+await fastify.register(monthlyReportsRoutes, { prefix: '/api/monthly-reports' });
 
 // Health checks
 fastify.get('/api/health', {

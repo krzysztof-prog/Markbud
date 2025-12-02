@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ordersApi, settingsApi } from '@/lib/api';
 import { formatDate, formatCurrency } from '@/lib/utils';
+import { useDebounce } from '@/hooks/useDebounce';
 import type { Order } from '@/types';
 import {
   Download,
@@ -106,6 +107,7 @@ const STORAGE_KEY_VISIBILITY = 'zestawienie-zlecen-columns-visibility';
 export default function ZestawienieZlecenPage() {
   const [selectedOrder, setSelectedOrder] = useState<{ id: number; number: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300); // 300ms debounce
   const [sortField, setSortField] = useState<ColumnId>('orderNumber');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [columns, setColumns] = useState<Column[]>(DEFAULT_COLUMNS);
@@ -113,6 +115,7 @@ export default function ZestawienieZlecenPage() {
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [columnFilters, setColumnFilters] = useState<Record<ColumnId, string>>({} as Record<ColumnId, string>);
+  const debouncedColumnFilters = useDebounce(columnFilters, 300); // 300ms debounce for column filters
   const [editingCell, setEditingCell] = useState<{ orderId: number; field: 'valuePln' | 'valueEur' | 'deadline' | 'orderStatus' } | null>(null);
   const [editValue, setEditValue] = useState<string>('');
 
@@ -317,9 +320,9 @@ export default function ZestawienieZlecenPage() {
   const filteredOrders = useMemo(() => {
     let result = allOrders;
 
-    // Filtrowanie globalne
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    // Filtrowanie globalne (debounced)
+    if (debouncedSearchQuery) {
+      const query = debouncedSearchQuery.toLowerCase();
       result = result.filter((order: ExtendedOrder) =>
         order.orderNumber?.toLowerCase().includes(query) ||
         order.client?.toLowerCase().includes(query) ||
@@ -327,8 +330,8 @@ export default function ZestawienieZlecenPage() {
       );
     }
 
-    // Filtrowanie po kolumnach
-    const activeFilters = Object.entries(columnFilters).filter(([_, value]) => value.trim() !== '');
+    // Filtrowanie po kolumnach (debounced)
+    const activeFilters = Object.entries(debouncedColumnFilters).filter(([_, value]) => value.trim() !== '');
     if (activeFilters.length > 0) {
       result = result.filter((order: ExtendedOrder) => {
         return activeFilters.every(([columnId, filterValue]) => {
@@ -404,7 +407,7 @@ export default function ZestawienieZlecenPage() {
     });
 
     return result;
-  }, [allOrders, searchQuery, sortField, sortDirection, columnFilters]);
+  }, [allOrders, debouncedSearchQuery, sortField, sortDirection, debouncedColumnFilters]);
 
   // Oblicz statystyki dla wszystkich zleceń
   const stats = useMemo(() => {
@@ -1011,9 +1014,9 @@ export default function ZestawienieZlecenPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="rounded border overflow-x-auto">
+                  <div className="rounded border overflow-x-auto max-h-[600px] overflow-y-auto">
                     <table className="w-full text-sm">
-                      <thead className="bg-slate-50">
+                      <thead className="bg-slate-50 sticky top-0 z-10">
                         <tr>
                           {visibleColumns.map((column) => (
                             <th
@@ -1030,11 +1033,11 @@ export default function ZestawienieZlecenPage() {
                             </th>
                           ))}
                         </tr>
-                        <tr className="border-t bg-slate-100">
+                        <tr className="border-t bg-slate-100 sticky top-[37px] z-10">
                           {visibleColumns.map((column) => (
                             <th
                               key={`filter-${column.id}`}
-                              className="px-2 py-1"
+                              className="px-2 py-1 bg-slate-100"
                             >
                               <input
                                 type="text"
@@ -1051,8 +1054,8 @@ export default function ZestawienieZlecenPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {orders.map((order: ExtendedOrder) => (
-                          <tr key={order.id} className="border-t hover:bg-slate-50">
+                        {orders.map((order: ExtendedOrder, index: number) => (
+                          <tr key={order.id} className={`border-t hover:bg-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                             {visibleColumns.map((column) => renderCell(order, column))}
                           </tr>
                         ))}

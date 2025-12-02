@@ -3,6 +3,7 @@
  */
 
 import { ProfileRepository } from '../repositories/ProfileRepository.js';
+import { cacheService } from './cache.js';
 import { NotFoundError, ConflictError } from '../utils/errors.js';
 import type { CreateProfileInput, UpdateProfileInput } from '../validators/profile.js';
 
@@ -10,7 +11,12 @@ export class ProfileService {
   constructor(private repository: ProfileRepository) {}
 
   async getAllProfiles() {
-    return this.repository.findAll();
+    // Try to get from cache (1 hour TTL)
+    return cacheService.getOrCompute(
+      'profiles',
+      () => this.repository.findAll(),
+      3600 // 1 hour TTL
+    );
   }
 
   async getProfileById(id: number) {
@@ -31,20 +37,33 @@ export class ProfileService {
       throw new ConflictError('Profile with this number already exists');
     }
 
-    return this.repository.create(data);
+    const created = await this.repository.create(data);
+
+    // Invalidate all profiles cache
+    cacheService.invalidateOnProfileChange();
+
+    return created;
   }
 
   async updateProfile(id: number, data: UpdateProfileInput) {
     // Verify profile exists
     await this.getProfileById(id);
 
-    return this.repository.update(id, data);
+    const updated = await this.repository.update(id, data);
+
+    // Invalidate all profiles cache
+    cacheService.invalidateOnProfileChange();
+
+    return updated;
   }
 
   async deleteProfile(id: number) {
     // Verify profile exists
     await this.getProfileById(id);
 
-    return this.repository.delete(id);
+    await this.repository.delete(id);
+
+    // Invalidate all profiles cache
+    cacheService.invalidateOnProfileChange();
   }
 }

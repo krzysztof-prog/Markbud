@@ -3,6 +3,7 @@
  */
 
 import { ColorRepository } from '../repositories/ColorRepository.js';
+import { cacheService } from './cache.js';
 import { NotFoundError, ConflictError } from '../utils/errors.js';
 import type { CreateColorInput, UpdateColorInput } from '../validators/color.js';
 
@@ -10,7 +11,18 @@ export class ColorService {
   constructor(private repository: ColorRepository) {}
 
   async getAllColors(type?: string) {
-    return this.repository.findAll(type);
+    // Cache key depends on type
+    const cacheKey = type
+      ? type === 'typical'
+        ? 'colors:typical'
+        : 'colors:atypical'
+      : 'colors';
+
+    return cacheService.getOrCompute(
+      cacheKey,
+      () => this.repository.findAll(type),
+      3600 // 1 hour TTL
+    );
   }
 
   async getColorById(id: number) {
@@ -46,6 +58,9 @@ export class ColorService {
     await this.repository.createProfileColorLinks(color.id, profileIds);
     await this.repository.createWarehouseStockEntries(color.id, profileIds);
 
+    // Invalidate color caches
+    cacheService.invalidateOnColorChange();
+
     return color;
   }
 
@@ -53,17 +68,30 @@ export class ColorService {
     // Verify color exists
     await this.getColorById(id);
 
-    return this.repository.update(id, data);
+    const updated = await this.repository.update(id, data);
+
+    // Invalidate color caches
+    cacheService.invalidateOnColorChange();
+
+    return updated;
   }
 
   async deleteColor(id: number) {
     // Verify color exists
     await this.getColorById(id);
 
-    return this.repository.delete(id);
+    await this.repository.delete(id);
+
+    // Invalidate color caches
+    cacheService.invalidateOnColorChange();
   }
 
   async updateProfileColorVisibility(profileId: number, colorId: number, isVisible: boolean) {
-    return this.repository.updateProfileColorVisibility(profileId, colorId, isVisible);
+    const result = await this.repository.updateProfileColorVisibility(profileId, colorId, isVisible);
+
+    // Invalidate color caches on visibility change
+    cacheService.invalidateOnColorChange();
+
+    return result;
   }
 }
