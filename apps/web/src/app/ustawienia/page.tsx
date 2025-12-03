@@ -578,9 +578,9 @@ export default function UstawieniaPage() {
                 </Button>
               </CardHeader>
               <CardContent>
-                <div className="rounded border overflow-hidden">
+                <div className="rounded border overflow-hidden max-h-[400px] overflow-y-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50">
+                    <thead className="bg-slate-50 sticky top-0 z-10">
                       <tr>
                         <th className="px-4 py-3 text-left">Nazwa</th>
                         <th className="px-4 py-3 text-center">Długość (mm)</th>
@@ -591,8 +591,8 @@ export default function UstawieniaPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {palletTypes?.map((pallet) => (
-                        <tr key={pallet.id} className="border-t">
+                      {palletTypes?.map((pallet, index: number) => (
+                        <tr key={pallet.id} className={`border-t hover:bg-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                           <td className="px-4 py-3 font-medium">{pallet.name}</td>
                           <td className="px-4 py-3 text-center">{pallet.lengthMm}</td>
                           <td className="px-4 py-3 text-center">{pallet.widthMm}</td>
@@ -649,9 +649,9 @@ export default function UstawieniaPage() {
                 </Button>
               </CardHeader>
               <CardContent>
-                <div className="rounded border overflow-hidden">
+                <div className="rounded border overflow-hidden max-h-[400px] overflow-y-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50">
+                    <thead className="bg-slate-50 sticky top-0 z-10">
                       <tr>
                         <th className="px-4 py-3 text-left">Kolor</th>
                         <th className="px-4 py-3 text-left">Kod</th>
@@ -661,8 +661,8 @@ export default function UstawieniaPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {colors?.map((color) => (
-                        <tr key={color.id} className="border-t">
+                      {colors?.map((color, index: number) => (
+                        <tr key={color.id} className={`border-t hover:bg-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                           <td className="px-4 py-3">
                             <div
                               className="w-6 h-6 rounded border"
@@ -725,9 +725,9 @@ export default function UstawieniaPage() {
                 </Button>
               </CardHeader>
               <CardContent>
-                <div className="rounded border overflow-hidden">
+                <div className="rounded border overflow-hidden max-h-[400px] overflow-y-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50">
+                    <thead className="bg-slate-50 sticky top-0 z-10">
                       <tr>
                         <th className="px-4 py-3 text-left">Numer</th>
                         <th className="px-4 py-3 text-left">Nazwa</th>
@@ -736,8 +736,8 @@ export default function UstawieniaPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {profiles?.map((profile) => (
-                        <tr key={profile.id} className="border-t">
+                      {profiles?.map((profile, index: number) => (
+                        <tr key={profile.id} className={`border-t hover:bg-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                           <td className="px-4 py-3 font-mono font-medium">{profile.number}</td>
                           <td className="px-4 py-3">{profile.name}</td>
                           <td className="px-4 py-3 text-muted-foreground">

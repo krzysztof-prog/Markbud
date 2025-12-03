@@ -16,6 +16,8 @@ import {
   Box,
   Menu,
   X,
+  PackageSearch,
+  ChevronLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -41,6 +43,7 @@ const navigation: NavigationItem[] = [
     ]
   },
   { name: 'Dostawy', href: '/dostawy', icon: Truck },
+  { name: 'Schuco Tracking', href: '/schuco', icon: PackageSearch },
   { name: 'Zestawienie miesięczne', href: '/zestawienia', icon: FileText },
   { name: 'Zestawienie zleceń', href: '/zestawienia/zlecenia', icon: FileText },
   { name: 'Importy', href: '/importy', icon: FolderInput },
@@ -52,6 +55,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const [expandedItems, setExpandedItems] = useState<string[]>(['/magazyn']);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
 
   const toggleExpanded = (href: string) => {
     setExpandedItems((prev) =>
@@ -80,6 +84,18 @@ export function Sidebar() {
 
   return (
     <>
+      {/* Desktop collapsed sidebar toggle button */}
+      {desktopCollapsed && (
+        <button
+          onClick={() => setDesktopCollapsed(false)}
+          className="hidden md:fixed md:top-4 md:left-4 md:z-50 md:flex items-center justify-center w-10 h-10 bg-slate-900 text-white rounded-lg shadow-lg hover:bg-slate-800 transition-colors"
+          aria-label="Expand sidebar"
+          title="Rozwiń pasek boczny"
+        >
+          <ChevronLeft className="h-6 w-6 rotate-180" />
+        </button>
+      )}
+
       {/* Mobile hamburger button */}
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
@@ -100,15 +116,30 @@ export function Sidebar() {
       {/* Sidebar */}
       <div
         className={cn(
-          'flex h-full w-64 flex-col bg-slate-900 text-white transition-transform duration-300 ease-in-out z-40',
-          'md:translate-x-0 md:relative',
+          'flex h-full flex-col bg-slate-900 text-white transition-all duration-300 ease-in-out z-40',
+          'md:translate-x-0 md:relative md:static',
           'fixed inset-y-0 left-0',
-          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+          'md:w-64 md:translate-x-0',
+          desktopCollapsed ? 'md:w-20' : 'md:w-64',
+          mobileOpen ? 'translate-x-0 w-64' : '-translate-x-full'
         )}
       >
         {/* Logo */}
-        <div className="flex h-16 items-center px-6 border-b border-slate-800">
-          <span className="text-xl font-bold text-blue-400">AKROBUD</span>
+        <div className="flex h-16 items-center justify-between px-6 border-b border-slate-800">
+          <span className={cn(
+            'text-xl font-bold text-blue-400 transition-all duration-300',
+            desktopCollapsed ? 'md:hidden' : 'block'
+          )}>AKROBUD</span>
+          <button
+            onClick={() => setDesktopCollapsed(!desktopCollapsed)}
+            className="hidden md:flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-800 transition-colors flex-shrink-0"
+            aria-label="Toggle sidebar"
+          >
+            <ChevronLeft className={cn(
+              'h-5 w-5 transition-transform duration-300',
+              desktopCollapsed ? 'rotate-180' : ''
+            )} />
+          </button>
         </div>
 
       {/* Navigation */}
@@ -130,18 +161,23 @@ export function Sidebar() {
                   onClick={() => toggleExpanded(item.href)}
                   className={cn(
                     'w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    desktopCollapsed ? 'md:justify-center md:px-2' : '',
                     isActive
                       ? 'bg-blue-600 text-white'
                       : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   )}
+                  title={desktopCollapsed ? item.name : undefined}
                 >
                   <item.icon className="h-5 w-5 flex-shrink-0" />
-                  <span className="flex-1 text-left">{item.name}</span>
-                  {isExpanded ? (
+                  <span className={cn(
+                    'flex-1 text-left transition-all duration-300 whitespace-nowrap overflow-hidden',
+                    desktopCollapsed ? 'md:w-0 md:opacity-0' : ''
+                  )}>{item.name}</span>
+                  {isExpanded && !desktopCollapsed ? (
                     <ChevronDown className="h-4 w-4 flex-shrink-0" />
-                  ) : (
+                  ) : !desktopCollapsed ? (
                     <ChevronRight className="h-4 w-4 flex-shrink-0" />
-                  )}
+                  ) : null}
                 </button>
               ) : (
                 <Link
@@ -149,19 +185,24 @@ export function Sidebar() {
                   onClick={closeMobile}
                   className={cn(
                     'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    desktopCollapsed ? 'md:justify-center md:px-2' : '',
                     isActive
                       ? 'bg-blue-600 text-white'
                       : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   )}
+                  title={desktopCollapsed ? item.name : undefined}
                 >
                   <item.icon className="h-5 w-5 flex-shrink-0" />
-                  {item.name}
+                  <span className={cn(
+                    'transition-all duration-300 whitespace-nowrap overflow-hidden',
+                    desktopCollapsed ? 'md:w-0 md:opacity-0' : ''
+                  )}>{item.name}</span>
                 </Link>
               )}
 
               {/* Podstrony */}
-              {hasSubItems && isExpanded && (
-                <div className="ml-4 mt-1 space-y-1">
+              {hasSubItems && isExpanded && !desktopCollapsed && (
+                <div className="ml-4 mt-1 space-y-1 md:block">
                   {item.subItems!.map((subItem) => {
                     const isSubActive = pathname === subItem.href;
                     return (

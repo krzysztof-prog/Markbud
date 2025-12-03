@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Bell, AlertTriangle } from 'lucide-react';
+import { Bell, AlertTriangle, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '@/lib/api';
 import Link from 'next/link';
+import { GlobalSearch } from '@/components/search/GlobalSearch';
 
 interface HeaderProps {
   title: string;
@@ -16,6 +17,7 @@ interface HeaderProps {
 
 export function Header({ title, alertsCount = 0, children }: HeaderProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const { data: alerts } = useQuery({
@@ -33,21 +35,32 @@ export function Header({ title, alertsCount = 0, children }: HeaderProps) {
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape' && isDropdownOpen) {
-        setIsDropdownOpen(false);
+      if (event.key === 'Escape') {
+        if (isSearchOpen) {
+          // Search modal handles its own Escape
+          return;
+        }
+        if (isDropdownOpen) {
+          setIsDropdownOpen(false);
+        }
+      }
+      // Ctrl+K or Cmd+K to open search
+      if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
+        event.preventDefault();
+        setIsSearchOpen(true);
       }
     }
 
     if (isDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleKeyDown);
     }
+    document.addEventListener('keydown', handleKeyDown);
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isDropdownOpen]);
+  }, [isDropdownOpen, isSearchOpen]);
 
   return (
     <header className="flex h-16 items-center justify-between border-b bg-white px-6 md:px-6 pl-16 md:pl-6">
@@ -59,6 +72,31 @@ export function Header({ title, alertsCount = 0, children }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
+        {/* Wyszukiwanie */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setIsSearchOpen(true)}
+          className="hidden md:flex items-center gap-2 text-slate-600 hover:text-slate-900"
+        >
+          <Search className="h-4 w-4" />
+          <span className="text-sm">Szukaj</span>
+          <kbd className="hidden lg:inline-flex h-5 px-1.5 items-center gap-1 rounded border bg-slate-100 font-mono text-xs text-slate-600">
+            <span className="text-xs">⌘</span>K
+          </kbd>
+        </Button>
+
+        {/* Mobile search icon */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setIsSearchOpen(true)}
+          className="md:hidden flex-shrink-0"
+          aria-label="Szukaj"
+        >
+          <Search className="h-5 w-5" />
+        </Button>
+
         {/* Powiadomienia */}
         <div className="relative" ref={dropdownRef}>
           <Button
@@ -165,6 +203,9 @@ export function Header({ title, alertsCount = 0, children }: HeaderProps) {
           </div>
         )}
       </div>
+
+      {/* Global Search Component */}
+      <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
     </header>
   );
 }

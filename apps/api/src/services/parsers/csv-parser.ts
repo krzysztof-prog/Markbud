@@ -25,6 +25,11 @@ interface UzyteBeleWindow {
 
 interface ParsedUzyteBele {
   orderNumber: string;
+  orderNumberParsed?: {
+    base: string;
+    suffix: string | null;
+    full: string;
+  };
   client?: string;
   project?: string;
   system?: string;
@@ -45,9 +50,50 @@ interface ParsedUzyteBele {
     sashes: number;
     glasses: number;
   };
+  conflict?: {
+    baseOrderExists: boolean;
+    baseOrderId?: number;
+    baseOrderNumber?: string;
+  };
 }
 
 export class CsvParser {
+  /**
+   * Parsuje numer zlecenia i wyciąga numer bazowy oraz sufiks
+   * Przykłady:
+   * - "54222" → { base: "54222", suffix: null }
+   * - "54222-a" → { base: "54222", suffix: "a" }
+   * - "54222a" → { base: "54222", suffix: "a" }
+   * - "54222-abc" → { base: "54222", suffix: "abc" }
+   * - "54222 xxx" → { base: "54222", suffix: "xxx" }
+   * - "54222 a" → { base: "54222", suffix: "a" }
+   */
+  parseOrderNumber(orderNumber: string): { base: string; suffix: string | null; full: string } {
+    // Wzorzec 1: cyfry + separator (myślnik/spacja) + 1-3 znaki alfanumeryczne
+    // Wzorzec 2: cyfry + 1-3 litery BEZ separatora (dla formatu "54222a")
+    const matchWithSeparator = orderNumber.match(/^(\d+)[-\s]([a-zA-Z0-9]{1,3})$/);
+    const matchWithoutSeparator = orderNumber.match(/^(\d+)([a-zA-Z]{1,3})$/);
+    const matchPlain = orderNumber.match(/^(\d+)$/);
+
+    if (matchWithSeparator) {
+      const [, base, suffix] = matchWithSeparator;
+      return { base, suffix, full: orderNumber };
+    }
+
+    if (matchWithoutSeparator) {
+      const [, base, suffix] = matchWithoutSeparator;
+      return { base, suffix, full: orderNumber };
+    }
+
+    if (matchPlain) {
+      const [, base] = matchPlain;
+      return { base, suffix: null, full: orderNumber };
+    }
+
+    // Nie pasuje do żadnego wzorca - zwróć jako jest
+    return { base: orderNumber, suffix: null, full: orderNumber };
+  }
+
   /**
    * Parsuje numer artykułu na numer profilu i kod koloru
    * Format: X-profil-kolor, np. 19016050 → 9016 = profil, 050 = kolor
@@ -93,21 +139,57 @@ export class CsvParser {
    * Podgląd pliku "użyte bele" przed importem
    */
   async previewUzyteBele(filepath: string): Promise<ParsedUzyteBele> {
-    return this.parseUzyteBeleFile(filepath);
+    const parsed = await this.parseUzyteBeleFile(filepath);
+
+    // Parsuj numer zlecenia i sprawdź konflikty
+    const orderNumberParsed = this.parseOrderNumber(parsed.orderNumber);
+    parsed.orderNumberParsed = orderNumberParsed;
+
+    // Jeśli zlecenie ma sufiks, sprawdź czy istnieje zlecenie bazowe
+    if (orderNumberParsed.suffix) {
+      const baseOrder = await prisma.order.findUnique({
+        where: { orderNumber: orderNumberParsed.base },
+      });
+
+      // Zawsze zwróć informacje o konflikcie, nawet jeśli zlecenia bazowego nie ma
+      parsed.conflict = {
+        baseOrderExists: baseOrder !== null,
+        baseOrderId: baseOrder?.id,
+        baseOrderNumber: baseOrder?.orderNumber,
+      };
+    }
+
+    return parsed;
   }
 
   /**
    * Przetwórz plik "użyte bele" i zapisz do bazy
+   * @param filepath - Ścieżka do pliku CSV
+   * @param action - 'overwrite' (nadpisz istniejące) lub 'add_new' (utwórz nowe/zaktualizuj)
+   * @param replaceBase - Jeśli true i zlecenie ma sufiks, zamieni zlecenie bazowe zamiast tworzyć nowe
    */
   async processUzyteBele(
     filepath: string,
-    action: 'overwrite' | 'add_new'
+    action: 'overwrite' | 'add_new',
+    replaceBase?: boolean
   ): Promise<{ orderId: number; requirementsCount: number; windowsCount: number }> {
     const parsed = await this.parseUzyteBeleFile(filepath);
 
+    // Parsuj numer zlecenia
+    const orderNumberParsed = this.parseOrderNumber(parsed.orderNumber);
+
+    // Określ który numer zlecenia użyć (bazowy vs pełny)
+    let targetOrderNumber = parsed.orderNumber;
+
+    // Jeśli zlecenie ma sufiks i użytkownik chce zamienić bazowe
+    if (orderNumberParsed.suffix && replaceBase) {
+      targetOrderNumber = orderNumberParsed.base;
+      console.log(`   🔄 Zamienianie zlecenia bazowego ${orderNumberParsed.base} (zamiast tworzenia ${parsed.orderNumber})`);
+    }
+
     // Znajdź lub utwórz zlecenie
     let order = await prisma.order.findUnique({
-      where: { orderNumber: parsed.orderNumber },
+      where: { orderNumber: targetOrderNumber },
     });
 
     if (order && action === 'overwrite') {
@@ -135,7 +217,7 @@ export class CsvParser {
     } else if (!order) {
       order = await prisma.order.create({
         data: {
-          orderNumber: parsed.orderNumber,
+          orderNumber: targetOrderNumber, // Używa targetOrderNumber zamiast parsed.orderNumber
           client: parsed.client || undefined,
           project: parsed.project || undefined,
           system: parsed.system || undefined,
@@ -329,7 +411,8 @@ export class CsvParser {
         // Parsuj wiersz requirements - musi mieć numer zlecenia w pierwszej kolumnie
         if (parts.length >= 4 && parts[0] && parts[1]) {
           // Pierwszy wiersz z danymi - wyciągnij numer zlecenia
-          if (orderNumber === 'UNKNOWN' && parts[0].match(/^\d+$/)) {
+          // Akceptuj cyfry opcjonalnie z separatorem + sufiks: 54222, 54222-a, 54222 xxx
+          if (orderNumber === 'UNKNOWN' && parts[0].match(/^\d+(?:[-\s][a-zA-Z0-9]{1,3})?$/)) {
             orderNumber = parts[0];
           }
 

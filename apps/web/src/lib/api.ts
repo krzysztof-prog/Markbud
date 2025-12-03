@@ -24,6 +24,7 @@ import type {
   MonthlyStockUpdate,
   WarehouseHistory,
   Shortage,
+  WarehouseDataResponse,
   OkucArticle,
   CreateOkucArticleData,
   UpdateOkucArticleData,
@@ -131,6 +132,7 @@ export const ordersApi = {
     return fetchApi<Order[]>(`/api/orders${query ? `?${query}` : ''}`);
   },
   getById: (id: number) => fetchApi<Order>(`/api/orders/${id}`),
+  getByNumber: (orderNumber: string) => fetchApi<Order>(`/api/orders/by-number/${orderNumber}`),
   getTable: (colorId: number) => fetchApi<OrderTableData>(`/api/orders/table/${colorId}`),
   getRequirementsTotals: () => fetchApi<Array<{ profileId: number; total: number }>>('/api/orders/requirements/totals'),
   getPdf: async (id: number) => {
@@ -157,7 +159,7 @@ export const ordersApi = {
 
 // Magazyn
 export const warehouseApi = {
-  getByColor: (colorId: number) => fetchApi<WarehouseStock[]>(`/api/warehouse/${colorId}`),
+  getByColor: (colorId: number) => fetchApi<WarehouseDataResponse>(`/api/warehouse/${colorId}`),
   updateStock: (colorId: number, profileId: number, data: UpdateStockData) =>
     fetchApi<WarehouseStock>(`/api/warehouse/${colorId}/${profileId}`, {
       method: 'PUT',
@@ -521,4 +523,176 @@ export const palletsApi = {
    */
   deletePalletType: (id: number) =>
     fetchApi<void>(`/api/pallets/types/${id}`, { method: 'DELETE' }),
+};
+
+// Zestawienia Miesięczne
+export const monthlyReportsApi = {
+  /**
+   * GET /api/monthly-reports
+   * Pobierz wszystkie raporty
+   */
+  getAll: (limit?: number) =>
+    fetchApi<Array<{
+      id: number;
+      year: number;
+      month: number;
+      reportDate: string;
+      totalOrders: number;
+      totalWindows: number;
+      totalSashes: number;
+      totalValuePln: number;
+      totalValueEur: number;
+      createdAt: string;
+      updatedAt: string;
+      _count: { reportItems: number };
+    }>>(`/api/monthly-reports${limit ? `?limit=${limit}` : ''}`),
+
+  /**
+   * GET /api/monthly-reports/:year/:month
+   * Pobierz raport dla konkretnego miesiąca
+   */
+  getByYearMonth: (year: number, month: number) =>
+    fetchApi<{
+      id: number;
+      year: number;
+      month: number;
+      reportDate: string;
+      totalOrders: number;
+      totalWindows: number;
+      totalSashes: number;
+      totalValuePln: number;
+      totalValueEur: number;
+      createdAt: string;
+      updatedAt: string;
+      reportItems: Array<{
+        id: number;
+        orderNumber: string;
+        invoiceNumber: string | null;
+        windowsCount: number;
+        sashesCount: number;
+        unitsCount: number;
+        valuePln: number | null;
+        valueEur: number | null;
+      }>;
+    }>(`/api/monthly-reports/${year}/${month}`),
+
+  /**
+   * POST /api/monthly-reports/:year/:month/generate
+   * Wygeneruj raport
+   */
+  generate: (year: number, month: number) =>
+    fetchApi<{
+      reportId: number;
+      year: number;
+      month: number;
+      totalOrders: number;
+      totalWindows: number;
+      totalSashes: number;
+      totalValuePln: number;
+      totalValueEur: number;
+      items: Array<{
+        orderId: number;
+        orderNumber: string;
+        invoiceNumber: string | null;
+        windowsCount: number;
+        sashesCount: number;
+        unitsCount: number;
+        valuePln: number | null;
+        valueEur: number | null;
+      }>;
+    }>(`/api/monthly-reports/${year}/${month}/generate`, { method: 'POST' }),
+
+  /**
+   * GET /api/monthly-reports/:year/:month/export/excel
+   * Pobierz raport jako Excel
+   */
+  exportExcel: async (year: number, month: number): Promise<Blob> => {
+    const url = `${API_URL}/api/monthly-reports/${year}/${month}/export/excel`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to export Excel');
+    return response.blob();
+  },
+
+  /**
+   * GET /api/monthly-reports/:year/:month/export/pdf
+   * Pobierz raport jako PDF
+   */
+  exportPdf: async (year: number, month: number): Promise<Blob> => {
+    const url = `${API_URL}/api/monthly-reports/${year}/${month}/export/pdf`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to export PDF');
+    return response.blob();
+  },
+
+  /**
+   * DELETE /api/monthly-reports/:year/:month
+   * Usuń raport
+   */
+  delete: (year: number, month: number) =>
+    fetchApi<void>(`/api/monthly-reports/${year}/${month}`, { method: 'DELETE' }),
+};
+
+// Konfiguracja Walut
+export const currencyConfigApi = {
+  /**
+   * GET /api/currency-config/current
+   * Pobierz aktualny kurs
+   */
+  getCurrent: () =>
+    fetchApi<{
+      id: number;
+      eurToPlnRate: number;
+      effectiveDate: string;
+      createdAt: string;
+      updatedAt: string;
+    }>('/api/currency-config/current'),
+
+  /**
+   * GET /api/currency-config/history
+   * Pobierz historię kursów
+   */
+  getHistory: (limit?: number) =>
+    fetchApi<Array<{
+      id: number;
+      eurToPlnRate: number;
+      effectiveDate: string;
+      createdAt: string;
+      updatedAt: string;
+    }>>(`/api/currency-config/history${limit ? `?limit=${limit}` : ''}`),
+
+  /**
+   * POST /api/currency-config
+   * Ustaw kurs
+   */
+  setRate: (eurToPlnRate: number, effectiveDate?: string) =>
+    fetchApi<{
+      id: number;
+      eurToPlnRate: number;
+      effectiveDate: string;
+      createdAt: string;
+      updatedAt: string;
+    }>('/api/currency-config', {
+      method: 'POST',
+      body: JSON.stringify({ eurToPlnRate, effectiveDate }),
+    }),
+
+  /**
+   * POST /api/currency-config/convert/eur-to-pln
+   * Konwertuj EUR na PLN
+   */
+  convertEurToPln: (amount: number) =>
+    fetchApi<{ eur: number; pln: number; rate: number }>(
+      '/api/currency-config/convert/eur-to-pln',
+      { method: 'POST', body: JSON.stringify({ amount }) }
+    ),
+
+  /**
+   * POST /api/currency-config/convert/pln-to-eur
+   * Konwertuj PLN na EUR
+   */
+  convertPlnToEur: (amount: number) =>
+    fetchApi<{ pln: number; eur: number; rate: number }>(
+      '/api/currency-config/convert/pln-to-eur',
+      { method: 'POST', body: JSON.stringify({ amount }) }
+    ),
 };

@@ -90,6 +90,12 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
     });
     const lowThreshold = parseInt(lowThresholdSetting?.value || '10');
 
+    // Pobierz informacje o kolorze
+    const colorInfo = await prisma.color.findUnique({
+      where: { id: parseInt(colorId) },
+      select: { id: true, code: true, name: true, hexColor: true, type: true },
+    });
+
     // Przekształć na format tabeli
     const tableData = stocks.map((stock) => {
       const demand = demandMap.get(stock.profileId) || { beams: 0, meters: 0 };
@@ -122,7 +128,10 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
       };
     });
 
-    return tableData;
+    return {
+      color: colorInfo,
+      data: tableData,
+    };
   });
 
   // PUT /api/warehouse/:colorId/:profileId - aktualizuj stan magazynowy
@@ -230,24 +239,13 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
       results.push(result);
     }
 
-    // Archiwizuj zrealizowane zlecenia dla tego koloru
-    const completedOrders = await prisma.order.updateMany({
-      where: {
-        status: 'completed',
-        archivedAt: null,
-        requirements: {
-          some: { colorId },
-        },
-      },
-      data: {
-        status: 'archived',
-        archivedAt: new Date(),
-      },
-    });
+    // UWAGA: Automatyczna archiwizacja wyłączona
+    // Archiwizacja odbywa się teraz przez endpoint POST /finalize-month
+    // To zapewnia kontrolę nad tym, kiedy zlecenia są archiwizowane
 
     return {
       updates: results,
-      archivedOrdersCount: completedOrders.count,
+      archivedOrdersCount: 0, // Brak automatycznej archiwizacji
     };
   });
 
@@ -281,6 +279,142 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     return history;
+  });
+
+  // GET /api/warehouse/history - historia dla wszystkich kolorów
+  fastify.get<{
+    Querystring: { limit?: string };
+  }>('/history', async (request) => {
+    const { limit } = request.query;
+
+    const history = await prisma.warehouseHistory.findMany({
+      select: {
+        id: true,
+        profileId: true,
+        colorId: true,
+        calculatedStock: true,
+        actualStock: true,
+        difference: true,
+        recordedAt: true,
+        profile: {
+          select: { id: true, number: true, name: true },
+        },
+        color: {
+          select: { id: true, code: true, name: true },
+        },
+      },
+      orderBy: { recordedAt: 'desc' },
+      take: limit ? parseInt(limit) : 100,
+    });
+
+    return history;
+  });
+
+  // POST /api/warehouse/rollback-inventory - cofnij ostatnią inwentaryzację
+  fastify.post<{
+    Body: {
+      colorId: number;
+    };
+  }>('/rollback-inventory', async (request, reply) => {
+    const { colorId } = request.body;
+
+    // Pobierz ostatnie wpisy z historii dla tego koloru
+    const lastInventoryRecords = await prisma.warehouseHistory.findMany({
+      where: { colorId },
+      orderBy: { recordedAt: 'desc' },
+      take: 100, // Zakładamy że inwentaryzacja dotyczy max 100 profili
+    });
+
+    if (lastInventoryRecords.length === 0) {
+      return reply.status(404).send({ error: 'Brak historii inwentaryzacji do cofnięcia' });
+    }
+
+    // Grupuj po dacie (z dokładnością do minuty) - wszystkie z tej samej inwentaryzacji
+    const latestDate = lastInventoryRecords[0].recordedAt;
+
+    // Sprawdź czy inwentaryzacja nie jest starsza niż 24h
+    const hoursSinceInventory = (Date.now() - latestDate.getTime()) / (1000 * 60 * 60);
+    if (hoursSinceInventory >= 24) {
+      return reply.status(400).send({
+        error: 'Nie można cofnąć inwentaryzacji starszej niż 24h',
+        recordedAt: latestDate.toISOString(),
+        hoursSince: hoursSinceInventory.toFixed(1)
+      });
+    }
+
+    const inventoryToRollback = lastInventoryRecords.filter((record) => {
+      const timeDiff = Math.abs(latestDate.getTime() - record.recordedAt.getTime());
+      return timeDiff < 60000; // W ciągu 1 minuty = ta sama inwentaryzacja
+    });
+
+    // Cofnij każdy wpis w transakcji
+    const result = await prisma.$transaction(async (tx) => {
+      const results = [];
+
+      for (const record of inventoryToRollback) {
+        // Przywróć stan magazynu do wartości obliczonej (przed inwentaryzacją)
+        await tx.warehouseStock.update({
+          where: {
+            profileId_colorId: {
+              profileId: record.profileId,
+              colorId: record.colorId,
+            },
+          },
+          data: {
+            currentStockBeams: record.calculatedStock,
+          },
+        });
+
+        // Usuń wpis z historii
+        await tx.warehouseHistory.delete({
+          where: { id: record.id },
+        });
+
+        results.push({
+          profileId: record.profileId,
+          restoredStock: record.calculatedStock,
+          removedActualStock: record.actualStock,
+        });
+      }
+
+      // Znajdź zlecenia zarchiwizowane w tym samym czasie i przywróć je
+      const archivedOrders = await tx.order.findMany({
+        where: {
+          status: 'archived',
+          archivedAt: {
+            gte: new Date(latestDate.getTime() - 60000), // 1 minuta przed
+            lte: new Date(latestDate.getTime() + 60000), // 1 minuta po
+          },
+          requirements: {
+            some: { colorId },
+          },
+        },
+      });
+
+      // Przywróć status 'completed' dla zarchiwizowanych zleceń
+      if (archivedOrders.length > 0) {
+        await tx.order.updateMany({
+          where: {
+            id: { in: archivedOrders.map((o) => o.id) },
+          },
+          data: {
+            status: 'completed',
+            archivedAt: null,
+          },
+        });
+      }
+
+      return {
+        rolledBackRecords: results,
+        restoredOrdersCount: archivedOrders.length,
+      };
+    });
+
+    return {
+      success: true,
+      message: `Cofnięto inwentaryzację z ${latestDate.toISOString()}`,
+      ...result,
+    };
   });
 
   // GET /api/warehouse/shortages - lista braków materiałowych
@@ -368,5 +502,183 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
       .sort((a, b) => (b?.shortage || 0) - (a?.shortage || 0));
 
     return shortages;
+  });
+
+  // GET /api/warehouse/:colorId/average - średnia miesięczna zużycia profili
+  fastify.get<{
+    Params: { colorId: string };
+    Querystring: { months?: string };
+  }>('/:colorId/average', async (request) => {
+    const { colorId } = request.params;
+    const months = parseInt(request.query.months || '6');
+
+    // Oblicz datę sprzed X miesięcy
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - months);
+
+    // Pobierz zapotrzebowania z ukończonych zleceń
+    const requirements = await prisma.orderRequirement.findMany({
+      where: {
+        colorId: parseInt(colorId),
+        order: {
+          status: { in: ['completed', 'archived'] },
+          completedAt: {
+            gte: startDate,
+          },
+        },
+      },
+      select: {
+        profileId: true,
+        beamsCount: true,
+        order: {
+          select: {
+            completedAt: true,
+          },
+        },
+        profile: {
+          select: {
+            id: true,
+            number: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    // Grupuj po profileId i miesiącu
+    const profileMonthlyData = new Map<
+      number,
+      {
+        profileNumber: string;
+        profileName: string;
+        monthlyUsage: Map<string, number>;
+      }
+    >();
+
+    requirements.forEach((req) => {
+      if (!req.order.completedAt) return;
+
+      const month = req.order.completedAt.toISOString().slice(0, 7); // "YYYY-MM"
+
+      if (!profileMonthlyData.has(req.profileId)) {
+        profileMonthlyData.set(req.profileId, {
+          profileNumber: req.profile.number,
+          profileName: req.profile.name || '',
+          monthlyUsage: new Map(),
+        });
+      }
+
+      const profileData = profileMonthlyData.get(req.profileId)!;
+      const currentUsage = profileData.monthlyUsage.get(month) || 0;
+      profileData.monthlyUsage.set(month, currentUsage + req.beamsCount);
+    });
+
+    // Oblicz średnią dla każdego profilu
+    const averages = Array.from(profileMonthlyData.entries()).map(
+      ([profileId, data]) => {
+        const monthlyData = Array.from(data.monthlyUsage.entries())
+          .map(([month, beams]) => ({ month, beams }))
+          .sort((a, b) => b.month.localeCompare(a.month));
+
+        const totalBeams = monthlyData.reduce((sum, m) => sum + m.beams, 0);
+        const averageBeamsPerMonth =
+          monthlyData.length > 0 ? totalBeams / months : 0;
+
+        return {
+          profileId,
+          profileNumber: data.profileNumber,
+          profileName: data.profileName,
+          averageBeamsPerMonth: Math.round(averageBeamsPerMonth * 10) / 10,
+          monthlyData,
+          totalBeams,
+          monthsWithData: monthlyData.length,
+        };
+      }
+    );
+
+    return { averages, requestedMonths: months };
+  });
+
+  // POST /api/warehouse/finalize-month - zakończenie remanentu miesiąca
+  fastify.post<{
+    Body: {
+      month: string; // Format: "YYYY-MM"
+      archive?: boolean;
+    };
+  }>('/finalize-month', async (request) => {
+    const { month, archive } = request.body;
+
+    // Parse month
+    const [year, monthNum] = month.split('-').map(Number);
+    const startDate = new Date(year, monthNum - 1, 1);
+    const endDate = new Date(year, monthNum, 1);
+
+    if (!archive) {
+      // Tylko zwróć preview
+      const ordersToArchive = await prisma.order.findMany({
+        where: {
+          status: 'completed',
+          completedAt: {
+            gte: startDate,
+            lt: endDate,
+          },
+          archivedAt: null,
+        },
+        select: {
+          id: true,
+          orderNumber: true,
+          completedAt: true,
+        },
+      });
+
+      return {
+        preview: true,
+        ordersCount: ordersToArchive.length,
+        orderNumbers: ordersToArchive.map((o) => o.orderNumber),
+        month,
+      };
+    }
+
+    // Archiwizuj zlecenia
+    const ordersToArchive = await prisma.order.findMany({
+      where: {
+        status: 'completed',
+        completedAt: {
+          gte: startDate,
+          lt: endDate,
+        },
+        archivedAt: null,
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+      },
+    });
+
+    if (ordersToArchive.length === 0) {
+      return {
+        success: true,
+        message: `Brak zleceń do archiwizacji za ${month}`,
+        archivedCount: 0,
+        archivedOrderNumbers: [],
+      };
+    }
+
+    await prisma.order.updateMany({
+      where: {
+        id: { in: ordersToArchive.map((o) => o.id) },
+      },
+      data: {
+        status: 'archived',
+        archivedAt: new Date(),
+      },
+    });
+
+    return {
+      success: true,
+      message: `Zarchiwizowano ${ordersToArchive.length} zleceń za ${month}`,
+      archivedCount: ordersToArchive.length,
+      archivedOrderNumbers: ordersToArchive.map((o) => o.orderNumber),
+    };
   });
 };

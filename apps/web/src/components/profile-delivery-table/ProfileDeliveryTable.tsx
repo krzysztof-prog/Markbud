@@ -407,17 +407,17 @@ export function ProfileDeliveryTable() {
                     </tr>
                   </thead>
                   <tbody>
-                    {colorGroup.profiles.map((profile, idx) => (
+                    {colorGroup.profiles.map((profile, idx) => {
+                      const rowBg = idx % 2 === 0 ? 'bg-white' : 'bg-slate-100';
+                      return (
                       <tr
                         key={profile.id}
-                        className={`border-b border-slate-200 transition-colors hover:bg-slate-50 ${
-                          idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'
-                        }`}
+                        className={`border-b border-slate-200 transition-colors hover:bg-slate-100 ${rowBg}`}
                       >
-                        <td className="px-3 py-2.5 font-medium text-sm text-slate-900 border-r border-slate-200 sticky left-0 bg-inherit z-10">
+                        <td className={`px-3 py-2.5 font-medium text-sm text-slate-900 border-r border-slate-200 sticky left-0 z-10 ${rowBg}`}>
                           {profile.name}
                         </td>
-                        <td className="px-2 py-2 border-r border-slate-200 sticky left-[140px] bg-inherit z-10">
+                        <td className={`px-2 py-2 border-r border-slate-200 sticky left-[140px] z-10 ${rowBg}`}>
                           <Input
                             type="number"
                             value={profile.magValue}
@@ -426,7 +426,7 @@ export function ProfileDeliveryTable() {
                             min="0"
                           />
                         </td>
-                        <td className="px-3 py-2.5 text-center font-semibold text-sm text-slate-900 border-r border-slate-200 sticky left-[240px] bg-inherit z-10">
+                        <td className={`px-3 py-2.5 text-center font-semibold text-sm text-slate-900 border-r border-slate-200 sticky left-[240px] z-10 ${rowBg}`}>
                           {profile.deliveries.reduce((sum, d) => sum + d.quantity, 0)}
                         </td>
                         <td className="px-3 py-2.5 text-center font-bold text-sm text-slate-900 border-r border-slate-200 sticky left-[340px] bg-yellow-50 z-10">
@@ -444,7 +444,8 @@ export function ProfileDeliveryTable() {
                           </td>
                         ))}
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

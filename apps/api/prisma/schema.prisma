@@ -109,16 +109,20 @@ model Order {
   totalGlasses     Int?      @map("total_glasses")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
+  completedAt    DateTime? @map("completed_at")
   archivedAt     DateTime? @map("archived_at")
 
-  requirements   OrderRequirement[]
-  windows        OrderWindow[]
-  deliveryOrders DeliveryOrder[]
-  orderNotes     Note[]
+  requirements      OrderRequirement[]
+  windows           OrderWindow[]
+  deliveryOrders    DeliveryOrder[]
+  orderNotes        Note[]
+  monthlyReportItems MonthlyReportItem[]
 
   @@index([status])
   @@index([archivedAt])
   @@index([createdAt])
+  @@index([invoiceNumber, createdAt])
+  @@index([invoiceNumber, deliveryDate])
   @@map("orders")
 }
 
@@ -600,4 +604,59 @@ model SchucoFetchLog {
   @@index([startedAt])
   @@index([triggerType])
   @@map("schuco_fetch_logs")
+}
+
+// ==================== ZESTAWIENIA MIESIĘCZNE ====================
+
+model MonthlyReport {
+  id                 Int       @id @default(autoincrement())
+  year               Int
+  month              Int       // 1-12
+  reportDate         DateTime  @default(now()) @map("report_date")
+  totalOrders        Int       @default(0) @map("total_orders")
+  totalWindows       Int       @default(0) @map("total_windows")
+  totalSashes        Int       @default(0) @map("total_sashes")
+  totalValuePln      Float     @default(0) @map("total_value_pln")
+  totalValueEur      Float     @default(0) @map("total_value_eur")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  reportItems        MonthlyReportItem[]
+
+  @@unique([year, month])
+  @@index([year, month])
+  @@index([reportDate])
+  @@map("monthly_reports")
+}
+
+model MonthlyReportItem {
+  id                 Int       @id @default(autoincrement())
+  reportId           Int       @map("report_id")
+  orderId            Int       @map("order_id")
+  orderNumber        String    @map("order_number")
+  invoiceNumber      String?   @map("invoice_number")
+  windowsCount       Int       @default(0) @map("windows_count")
+  sashesCount        Int       @default(0) @map("sashes_count")
+  unitsCount         Int       @default(0) @map("units_count")
+  valuePln           Float?    @map("value_pln")
+  valueEur           Float?    @map("value_eur")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  report             MonthlyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  order              Order         @relation(fields: [orderId], references: [id])
+
+  @@index([reportId])
+  @@index([orderId])
+  @@map("monthly_report_items")
+}
+
+model CurrencyConfig {
+  id                 Int       @id @default(autoincrement())
+  eurToPlnRate       Float     @map("eur_to_pln_rate")
+  effectiveDate      DateTime  @default(now()) @map("effective_date")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@index([effectiveDate])
+  @@map("currency_config")
 }

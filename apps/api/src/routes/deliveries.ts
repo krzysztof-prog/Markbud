@@ -464,29 +464,34 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = deliveryParamsSchema.parse(request.params);
     const { orderId, targetDeliveryId } = moveOrderSchema.parse(request.body);
 
-    // Usuń z obecnej dostawy
-    await prisma.deliveryOrder.delete({
-      where: {
-        deliveryId_orderId: {
-          deliveryId: parseInt(id),
-          orderId,
+    // Wykonaj przeniesienie w transakcji - jeśli cokolwiek się nie uda, wszystko zostanie wycofane
+    const deliveryOrder = await prisma.$transaction(async (tx) => {
+      // Usuń z obecnej dostawy
+      await tx.deliveryOrder.delete({
+        where: {
+          deliveryId_orderId: {
+            deliveryId: parseInt(id),
+            orderId,
+          },
         },
-      },
-    });
+      });
 
-    // Pobierz maksymalną pozycję w docelowej dostawie
-    const maxPosition = await prisma.deliveryOrder.aggregate({
-      where: { deliveryId: targetDeliveryId },
-      _max: { position: true },
-    });
+      // Pobierz maksymalną pozycję w docelowej dostawie
+      const maxPosition = await tx.deliveryOrder.aggregate({
+        where: { deliveryId: targetDeliveryId },
+        _max: { position: true },
+      });
 
-    // Dodaj do docelowej dostawy
-    const deliveryOrder = await prisma.deliveryOrder.create({
-      data: {
-        deliveryId: targetDeliveryId,
-        orderId,
-        position: (maxPosition._max.position || 0) + 1,
-      },
+      // Dodaj do docelowej dostawy
+      const newDeliveryOrder = await tx.deliveryOrder.create({
+        data: {
+          deliveryId: targetDeliveryId,
+          orderId,
+          position: (maxPosition._max.position || 0) + 1,
+        },
+      });
+
+      return newDeliveryOrder;
     });
 
     return deliveryOrder;

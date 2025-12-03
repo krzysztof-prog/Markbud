@@ -240,8 +240,34 @@ export class FileWatcherService {
 
         await copyFile(csvFile, destPath);
 
-        // Utwórz rekord importu
         const relativePath = path.relative(folderPath, csvFile);
+
+        // Sprawdź czy plik ma konflikt (zlecenie z sufiksem)
+        const preview = await parser.previewUzyteBele(destPath);
+        const hasConflict = preview.conflict !== undefined;
+
+        if (hasConflict) {
+          // Jeśli jest konflikt, zostaw jako PENDING i poczekaj na decyzję użytkownika
+          await this.prisma.fileImport.create({
+            data: {
+              filename: relativePath,
+              filepath: destPath,
+              fileType: 'uzyte_bele',
+              status: 'pending',
+              metadata: JSON.stringify({
+                preview,
+                deliveryId: delivery.id,
+                autoDetectedConflict: true,
+              }),
+            },
+          });
+
+          logger.warn(`   ⚠️ Konflikt wykryty: ${relativePath} → zlecenie ${preview.orderNumber} (bazowe: ${preview.conflict?.baseOrderExists ? 'ISTNIEJE' : 'NIE ISTNIEJE'})`);
+          logger.info(`   ⏸️ Plik oczekuje na decyzję użytkownika`);
+          continue; // Pomiń automatyczne przetwarzanie
+        }
+
+        // Brak konfliktu - przetwórz automatycznie
         const fileImport = await this.prisma.fileImport.create({
           data: {
             filename: relativePath,

@@ -160,6 +160,12 @@ export default function ZestawieniaPage() {
                   Szczegółowe zestawienie zleceń
                 </Button>
               </Link>
+              <Link href="/zestawienia/raporty">
+                <Button variant="outline" className="gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Raporty Miesięczne
+                </Button>
+              </Link>
             </div>
             {exportError && (
               <p className="text-sm text-red-600">Błąd: {exportError}</p>

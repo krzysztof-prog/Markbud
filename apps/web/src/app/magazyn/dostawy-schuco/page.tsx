@@ -362,9 +362,9 @@ export default function DostawySchucoPage() {
                     </div>
                   </div>
                   <MobileScrollHint />
-                  <div className="overflow-x-auto max-w-full">
+                  <div className="overflow-x-auto max-w-full max-h-[600px] overflow-y-auto">
                     <table className="w-full text-sm min-w-[1200px]">
-                      <thead className="bg-slate-50 border-b sticky top-0">
+                      <thead className="bg-slate-50 border-b sticky top-0 z-10">
                         <tr>
                           <th className="px-4 py-3 text-left font-semibold text-slate-900">
                             Data zamówienia
@@ -390,12 +390,13 @@ export default function DostawySchucoPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {deliveries.map((delivery: SchucoDelivery) => {
+                        {deliveries.map((delivery: SchucoDelivery, index: number) => {
                           const changesInfo = getChangedFieldsInfo(delivery);
+                          const baseStripeBg = index % 2 === 0 ? 'bg-white' : 'bg-slate-100';
                           const rowContent = (
                             <tr
                               key={delivery.id}
-                              className={cn('border-b transition-colors', getRowClasses(delivery))}
+                              className={cn('border-b transition-colors', getRowClasses(delivery) || baseStripeBg)}
                             >
                               <td className="px-4 py-3">
                                 {delivery.orderDate}

@@ -205,11 +205,14 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /api/imports/:id/approve - zatwierdź import
   fastify.post<{
     Params: { id: string };
-    Body: { action?: 'overwrite' | 'add_new' };
+    Body: {
+      action?: 'overwrite' | 'add_new';
+      replaceBase?: boolean; // Czy zamienić zlecenie bazowe (dla zleceń z sufiksem)
+    };
   }>('/:id/approve', async (request, reply) => {
     const { id } = request.params;
     const parsedId = parseIntParam(id, 'id');
-    const { action = 'add_new' } = request.body;
+    const { action = 'add_new', replaceBase = false } = request.body;
 
     const fileImport = await prisma.fileImport.findUnique({
       where: { id: parsedId },
@@ -233,8 +236,66 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
       let result;
 
       if (fileImport.fileType === 'uzyte_bele') {
-        const parser = new CsvParser();
-        result = await parser.processUzyteBele(fileImport.filepath, action);
+        // Sprawdź czy plik był wykryty przez File Watcher i ma deliveryId
+        let metadata: any = {};
+        try {
+          metadata = fileImport.metadata ? JSON.parse(fileImport.metadata as string) : {};
+        } catch (e) {
+          // Ignore parse errors
+        }
+
+        const deliveryId = metadata.deliveryId;
+
+        // Użyj transakcji dla atomowego przetworzenia i dodania do dostawy
+        result = await prisma.$transaction(async (tx) => {
+          const parser = new CsvParser();
+          const processResult = await parser.processUzyteBele(fileImport.filepath, action, replaceBase);
+
+          // Jeśli plik był z File Watchera, dodaj zlecenie do dostawy
+          if (deliveryId && processResult.orderId) {
+            // Walidacja - sprawdź czy dostawa istnieje
+            const delivery = await tx.delivery.findUnique({
+              where: { id: deliveryId },
+            });
+
+            if (delivery) {
+              const existingDeliveryOrder = await tx.deliveryOrder.findUnique({
+                where: {
+                  deliveryId_orderId: {
+                    deliveryId: deliveryId,
+                    orderId: processResult.orderId,
+                  },
+                },
+              });
+
+              if (!existingDeliveryOrder) {
+                const maxPosition = await tx.deliveryOrder.aggregate({
+                  where: { deliveryId: deliveryId },
+                  _max: { position: true },
+                });
+
+                await tx.deliveryOrder.create({
+                  data: {
+                    deliveryId: deliveryId,
+                    orderId: processResult.orderId,
+                    position: (maxPosition._max.position || 0) + 1,
+                  },
+                });
+
+                logger.info(`   📦 Dodano zlecenie do dostawy ID: ${deliveryId}`);
+              }
+            } else {
+              logger.warn(`   ⚠️ Dostawa ID ${deliveryId} nie istnieje, pominięto dodanie do dostawy`);
+            }
+          }
+
+          return processResult;
+        });
+
+        // Emit event poza transakcją
+        if (result.orderId) {
+          emitOrderUpdated({ id: result.orderId });
+        }
       } else if (fileImport.fileType === 'ceny_pdf') {
         const parser = new PdfParser();
         result = await parser.processCenyPdf(fileImport.filepath);

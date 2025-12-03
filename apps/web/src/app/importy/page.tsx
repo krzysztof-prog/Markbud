@@ -407,9 +407,9 @@ export default function ImportyPage() {
 
                 {/* Lista plików */}
                 {folderScanResult.csvFiles.length > 0 && (
-                  <div className="rounded border overflow-hidden bg-white">
+                  <div className="rounded border overflow-hidden bg-white max-h-[400px] overflow-y-auto">
                     <table className="w-full text-sm">
-                      <thead className="bg-slate-100">
+                      <thead className="bg-slate-100 sticky top-0 z-10">
                         <tr>
                           <th className="px-3 py-2 text-left">Ścieżka / Plik</th>
                           <th className="px-3 py-2 text-left">Zlecenie</th>
@@ -421,7 +421,7 @@ export default function ImportyPage() {
                         {folderScanResult.csvFiles.map((file, i) => {
                           const isInSubfolder = file.relativePath.includes('\\') || file.relativePath.includes('/');
                           return (
-                            <tr key={i} className="border-t">
+                            <tr key={i} className={`border-t hover:bg-slate-200 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                               <td className="px-3 py-2">
                                 <div className="flex flex-col gap-0.5">
                                   <span className="font-mono text-xs">{file.filename}</span>
@@ -843,9 +843,9 @@ export default function ImportyPage() {
                   {(preview.data as any[])?.filter((d: any) => d.type === 'requirement')?.length > 0 && (
                     <div>
                       <p className="text-sm font-medium text-slate-500 mb-2">Zapotrzebowanie na materiały:</p>
-                      <div className="rounded border overflow-hidden">
+                      <div className="rounded border overflow-hidden max-h-[400px] overflow-y-auto">
                         <table className="w-full text-sm">
-                          <thead className="bg-slate-50">
+                          <thead className="bg-slate-50 sticky top-0 z-10">
                             <tr>
                               <th className="px-3 py-2 text-left">Nr artykułu</th>
                               <th className="px-3 py-2 text-left">Profil</th>
@@ -856,7 +856,7 @@ export default function ImportyPage() {
                           </thead>
                           <tbody>
                             {(preview.data as any[]).filter((d: any) => d.type === 'requirement').map((req: any, i: number) => (
-                              <tr key={i} className="border-t">
+                              <tr key={i} className={`border-t hover:bg-slate-200 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                                 <td className="px-3 py-2 font-mono">{req.articleNumber}</td>
                                 <td className="px-3 py-2">{req.profileNumber}</td>
                                 <td className="px-3 py-2">{req.colorCode}</td>
@@ -873,9 +873,9 @@ export default function ImportyPage() {
                   {(preview.data as any[])?.filter((d: any) => d.type === 'window')?.length > 0 && (
                     <div>
                       <p className="text-sm font-medium text-slate-500 mb-2">Lista okien i drzwi:</p>
-                      <div className="rounded border overflow-hidden">
+                      <div className="rounded border overflow-hidden max-h-[400px] overflow-y-auto">
                         <table className="w-full text-sm">
-                          <thead className="bg-slate-50">
+                          <thead className="bg-slate-50 sticky top-0 z-10">
                             <tr>
                               <th className="px-3 py-2 text-center">Lp.</th>
                               <th className="px-3 py-2 text-center">Szerokość</th>
@@ -887,7 +887,7 @@ export default function ImportyPage() {
                           </thead>
                           <tbody>
                             {(preview.data as any[]).filter((d: any) => d.type === 'window').map((win: any, i: number) => (
-                              <tr key={i} className="border-t">
+                              <tr key={i} className={`border-t hover:bg-slate-200 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                                 <td className="px-3 py-2 text-center">{win.lp}</td>
                                 <td className="px-3 py-2 text-center">{win.szer} mm</td>
                                 <td className="px-3 py-2 text-center">{win.wys} mm</td>
@@ -942,9 +942,9 @@ export default function ImportyPage() {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
               </div>
             ) : [...completedImports, ...errorImports].length > 0 ? (
-              <div className="rounded border overflow-hidden">
+              <div className="rounded border overflow-hidden max-h-[600px] overflow-y-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50">
+                  <thead className="bg-slate-50 sticky top-0 z-10">
                     <tr>
                       <th className="px-4 py-3 text-left">Plik</th>
                       <th className="px-4 py-3 text-left">Typ</th>
@@ -957,8 +957,8 @@ export default function ImportyPage() {
                     {[...completedImports, ...errorImports]
                       .sort((a: Import, b: Import) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                       .slice(0, 20)
-                      .map((imp: Import) => (
-                        <tr key={imp.id} className="border-t hover:bg-slate-50">
+                      .map((imp: Import, index: number) => (
+                        <tr key={imp.id} className={`border-t hover:bg-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               {imp.fileType === 'uzyte_bele' ? (

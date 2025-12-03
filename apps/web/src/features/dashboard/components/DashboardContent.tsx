@@ -29,7 +29,7 @@ export function DashboardContent() {
   const { data: alerts, isLoading: alertsLoading } = useAlerts();
   const { data: weeklyStats, isLoading: weeklyStatsLoading } = useWeeklyStats();
 
-  if (dashboardLoading || alertsLoading) {
+  if (dashboardLoading) {
     return (
       <div className="flex flex-col h-full">
         <Header title="Dashboard" alertsCount={0} />

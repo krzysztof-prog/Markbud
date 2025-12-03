@@ -193,9 +193,9 @@ export function OrderDetailModal({
             {order.windows && order.windows.length > 0 && (
               <div>
                 <h4 className="font-medium mb-3">Lista okien i drzwi ({order.windows.length})</h4>
-                <div className="rounded border overflow-hidden">
+                <div className="rounded border overflow-hidden max-h-[400px] overflow-y-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50">
+                    <thead className="bg-slate-50 sticky top-0 z-10">
                       <tr>
                         <th className="px-3 py-2 text-center w-12">Lp.</th>
                         <th className="px-3 py-2 text-center">Szerokość</th>
@@ -207,7 +207,7 @@ export function OrderDetailModal({
                     </thead>
                     <tbody>
                       {order.windows.map((win: any, i: number) => (
-                        <tr key={win.id || i} className="border-t hover:bg-slate-50">
+                        <tr key={win.id || i} className={`border-t hover:bg-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                           <td className="px-3 py-2 text-center text-slate-500">{i + 1}</td>
                           <td className="px-3 py-2 text-center font-mono">{win.widthMm} mm</td>
                           <td className="px-3 py-2 text-center font-mono">{win.heightMm} mm</td>
@@ -226,9 +226,9 @@ export function OrderDetailModal({
             {order.requirements && order.requirements.length > 0 && (
               <div>
                 <h4 className="font-medium mb-3">Zapotrzebowanie na profile ({order.requirements.length})</h4>
-                <div className="rounded border overflow-hidden">
+                <div className="rounded border overflow-hidden max-h-[400px] overflow-y-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50">
+                    <thead className="bg-slate-50 sticky top-0 z-10">
                       <tr>
                         <th className="px-3 py-2 text-left">Profil</th>
                         <th className="px-3 py-2 text-left">Kolor</th>
@@ -238,8 +238,8 @@ export function OrderDetailModal({
                       </tr>
                     </thead>
                     <tbody>
-                      {order.requirements.map((req: any) => (
-                        <tr key={req.id} className="border-t hover:bg-slate-50">
+                      {order.requirements.map((req: any, index: number) => (
+                        <tr key={req.id} className={`border-t hover:bg-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                           <td className="px-3 py-2 font-mono font-medium">{req.profile?.number}</td>
                           <td className="px-3 py-2">
                             <div className="flex items-center gap-2">
