@@ -15,6 +15,8 @@ function getWeekNumber(date: Date): number {
 }
 
 interface DeliveryData {
+  deliveryId: number;
+  deliveryNumber: string; // "I", "II", etc.
   week: number;
   day: string;
   date: string;
@@ -51,7 +53,7 @@ export function ProfileDeliveryTable() {
 
   // Pobierz profile requirements z dostaw
   const { data: deliveryProfileReqs } = useQuery({
-    queryKey: ['delivery-profile-requirements', 'v5', startDate],
+    queryKey: ['delivery-profile-requirements', 'v7', startDate],
     queryFn: () => {
       console.log('[ProfileDeliveryTable] Fetching deliveryProfileReqs with from:', startDate);
       if (!startDate) {
@@ -89,8 +91,8 @@ export function ProfileDeliveryTable() {
         colorsByCode.set(color.code, color);
       });
 
-      // Stwórz mapę dat dostaw
-      const dateMap = new Map<string, DeliveryData>();
+      // Stwórz mapę dostaw (każda dostawa to osobna kolumna, nawet jeśli tego samego dnia)
+      const deliveryMap = new Map<number, DeliveryData>();
 
       if (deliveriesData && Array.isArray(deliveriesData)) {
         deliveriesData.forEach((delivery: any) => {
@@ -108,33 +110,22 @@ export function ProfileDeliveryTable() {
           const dayName = deliveryDate.toLocaleDateString('pl-PL', { weekday: 'short' }).slice(0, 4) + '.';
           const weekNum = getWeekNumber(deliveryDate);
 
-          if (!dateMap.has(dateStr)) {
-            dateMap.set(dateStr, {
-              week: weekNum,
-              day: dayName,
-              date: dateStr,
-              quantity: 0,
-            });
-          }
+          deliveryMap.set(delivery.id, {
+            deliveryId: delivery.id,
+            deliveryNumber: delivery.deliveryNumber || '',
+            week: weekNum,
+            day: dayName,
+            date: dateStr,
+            quantity: 0,
+          });
         });
       }
 
-      // Stwórz mapę delivery requirements: `profileId-colorCode-date` -> totalBeams
+      // Stwórz mapę delivery requirements: `profileId-colorCode-deliveryId` -> totalBeams
       const deliveryReqMap = new Map<string, number>();
       if (deliveryProfileReqs && Array.isArray(deliveryProfileReqs)) {
         deliveryProfileReqs.forEach((req: any) => {
-          if (!req.deliveryDate) return;
-
-          const deliveryDate = new Date(req.deliveryDate);
-
-          // Sprawdź czy data jest prawidłowa
-          if (isNaN(deliveryDate.getTime())) return;
-
-          const dateStr = deliveryDate.toLocaleDateString('pl-PL', {
-            month: '2-digit',
-            day: '2-digit',
-          });
-          const key = `${req.profileId}-${req.colorCode}-${dateStr}`;
+          const key = `${req.profileId}-${req.colorCode}-${req.deliveryId}`;
           deliveryReqMap.set(key, req.totalBeams);
         });
       }
@@ -185,8 +176,8 @@ export function ProfileDeliveryTable() {
               name: profile.number || profile.name,
               magValue: 0,
               requirementTotal: req.totalBeams,
-              deliveries: Array.from(dateMap.values()).map(d => {
-                const key = `${profile.id}-${colorCode}-${d.date}`;
+              deliveries: Array.from(deliveryMap.values()).map(d => {
+                const key = `${profile.id}-${colorCode}-${d.deliveryId}`;
                 return {
                   ...d,
                   quantity: deliveryReqMap.get(key) || 0,
@@ -221,8 +212,8 @@ export function ProfileDeliveryTable() {
             name: profile.number || profile.name,
             magValue: 0,
             requirementTotal: 0,
-            deliveries: Array.from(dateMap.values()).map(d => {
-              const key = `${profile.id}-${colorCode}-${d.date}`;
+            deliveries: Array.from(deliveryMap.values()).map(d => {
+              const key = `${profile.id}-${colorCode}-${d.deliveryId}`;
               return {
                 ...d,
                 quantity: deliveryReqMap.get(key) || 0,
@@ -255,16 +246,12 @@ export function ProfileDeliveryTable() {
     return deliveries.slice(0, columns).reduce((sum, d) => sum + d.quantity, 0);
   };
 
-  const getAllDates = useMemo(() => {
-    const allDates = new Set<string>();
-    colorGroups.forEach((group) => {
-      group.profiles.forEach((profile) => {
-        profile.deliveries.forEach((delivery) => {
-          allDates.add(delivery.date);
-        });
-      });
-    });
-    return Array.from(allDates);
+  const getAllDeliveries = useMemo(() => {
+    // Pobierz wszystkie dostawy z pierwszego profilu pierwszej grupy (wszystkie profile mają te same dostawy)
+    if (colorGroups.length === 0 || colorGroups[0].profiles.length === 0) {
+      return [];
+    }
+    return colorGroups[0].profiles[0].deliveries;
   }, [colorGroups]);
 
   const handleQuantityChange = useCallback((colorId: string, profileId: string, dateIndex: number, value: string) => {
@@ -309,9 +296,7 @@ export function ProfileDeliveryTable() {
     );
   }, []);
 
-  const dates = getAllDates.sort(
-    (a, b) => new Date(a.split('.').reverse().join('-')).getTime() - new Date(b.split('.').reverse().join('-')).getTime()
-  );
+  const deliveries = getAllDeliveries; // Już posortowane według kolejności z bazy
 
   if (profilesLoading || colorsLoading) {
     return (
@@ -359,8 +344,8 @@ export function ProfileDeliveryTable() {
                     <col className="w-[100px]" />
                     <col className="w-[100px]" />
                     <col className="w-[100px]" />
-                    {dates.map((date) => (
-                      <col key={`col-${date}`} className="w-[100px]" />
+                    {deliveries.map((delivery) => (
+                      <col key={`col-${delivery.deliveryId}`} className="w-[100px]" />
                     ))}
                   </colgroup>
                   <thead>
@@ -377,9 +362,10 @@ export function ProfileDeliveryTable() {
                           className="w-16 h-7 text-center text-sm font-bold border-yellow-400 bg-yellow-50 focus:border-yellow-500 focus:ring-yellow-500"
                         />
                       </th>
-                      {dates.map((date) => (
-                        <th key={`header-date-${date}`} className="px-2 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200">
-                          {date}
+                      {deliveries.map((delivery) => (
+                        <th key={`header-date-${delivery.deliveryId}`} className="px-2 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200">
+                          <div>{delivery.date}</div>
+                          {delivery.deliveryNumber && <div className="text-[10px] text-slate-500">({delivery.deliveryNumber})</div>}
                         </th>
                       ))}
                     </tr>
@@ -395,15 +381,12 @@ export function ProfileDeliveryTable() {
                       </th>
                       <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[340px] bg-slate-50/50 z-20">
                       </th>
-                      {dates.map((date) => {
-                        const delivery = colorGroup.profiles[0]?.deliveries.find((d) => d.date === date);
-                        return (
-                          <th key={`header-week-${date}`} className="px-2 py-2 text-center border-r border-slate-200">
-                            <div className="text-xs text-slate-600">tyg. {delivery?.week || ''}</div>
-                            <div className="text-xs text-slate-500">{delivery?.day || ''}</div>
-                          </th>
-                        );
-                      })}
+                      {deliveries.map((delivery) => (
+                        <th key={`header-week-${delivery.deliveryId}`} className="px-2 py-2 text-center border-r border-slate-200">
+                          <div className="text-xs text-slate-600">tyg. {delivery.week}</div>
+                          <div className="text-xs text-slate-500">{delivery.day}</div>
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
@@ -433,7 +416,7 @@ export function ProfileDeliveryTable() {
                           {getSumForColumns(profile.deliveries, sumColumns)}
                         </td>
                         {profile.deliveries.map((delivery, dateIdx) => (
-                          <td key={`${profile.id}-${dateIdx}`} className="px-2 py-2 border-r border-slate-200">
+                          <td key={`${profile.id}-${delivery.deliveryId}`} className="px-2 py-2 border-r border-slate-200">
                             <Input
                               type="number"
                               value={delivery.quantity}

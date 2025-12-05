@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import fastifyWebsocket from '@fastify/websocket';
+import fastifyWebsocket, { type SocketStream } from '@fastify/websocket';
 import { eventEmitter } from '../services/event-emitter.js';
 
 interface DataChangeEvent {
@@ -10,42 +10,42 @@ interface DataChangeEvent {
 
 const MAX_CONNECTIONS = 100;
 
-// Set do śledzenia aktywnych WebSocket połączeń
-const activeConnections = new Set<any>();
+// Set do śledzenia aktywnych WebSocket połączeń (przechowujemy SocketStream)
+const activeConnections = new Set<SocketStream>();
 
 export async function setupWebSocket(fastify: FastifyInstance) {
   // Zarejestruj WebSocket plugin
   await fastify.register(fastifyWebsocket, {
-    errorHandler: (error, socket) => {
+    errorHandler: (error, connection) => {
       console.error('WebSocket error:', error);
-      socket.send(JSON.stringify({ type: 'error', message: 'Błąd WebSocket' }));
-      socket.close();
+      connection.socket.send(JSON.stringify({ type: 'error', message: 'Błąd WebSocket' }));
+      connection.socket.close();
     },
   });
 
   // WebSocket route - połączenie dla real-time updates
-  fastify.get('/ws', { websocket: true }, (socket, req) => {
+  fastify.get('/ws', { websocket: true }, (connection: SocketStream, req) => {
     // Sprawdź limit połączeń
     if (activeConnections.size >= MAX_CONNECTIONS) {
-      socket.send(JSON.stringify({ type: 'error', message: 'Przekroczono limit połączeń' }));
-      socket.close();
+      connection.write(JSON.stringify({ type: 'error', message: 'Przekroczono limit połączeń' }));
+      connection.end();
       return;
     }
 
     console.log('New WebSocket connection');
-    activeConnections.add(socket);
+    activeConnections.add(connection);
 
     // Wysyłanie heartbeat co 30 sekund, aby uniknąć timeout'ów
     const heartbeat = setInterval(() => {
-      if (socket.readyState === 1) { // OPEN
-        socket.send(JSON.stringify({ type: 'ping' }));
+      if (!connection.destroyed) {
+        connection.write(JSON.stringify({ type: 'ping' }));
       }
     }, 30000);
 
     // Słuchaj zmian danych i wyślij do klienta
     const unsubscribe = eventEmitter.onAnyChange((event: DataChangeEvent) => {
-      if (socket.readyState === 1) { // OPEN
-        socket.send(JSON.stringify({
+      if (!connection.destroyed) {
+        connection.write(JSON.stringify({
           type: 'dataChange',
           event: {
             type: event.type,
@@ -57,7 +57,7 @@ export async function setupWebSocket(fastify: FastifyInstance) {
     });
 
     // Obsługa wiadomości od klienta (pong na ping)
-    socket.on('message', (data: Buffer) => {
+    connection.on('data', (data: Buffer) => {
       try {
         const message = JSON.parse(data.toString());
         if (message.type === 'pong') {
@@ -66,7 +66,7 @@ export async function setupWebSocket(fastify: FastifyInstance) {
       } catch (error) {
         console.error('Failed to parse WebSocket message:', error);
         try {
-          socket.send(JSON.stringify({ type: 'error', message: 'Błąd parsowania wiadomości' }));
+          connection.write(JSON.stringify({ type: 'error', message: 'Błąd parsowania wiadomości' }));
         } catch (e) {
           console.error('Failed to send error message:', e);
         }
@@ -74,29 +74,29 @@ export async function setupWebSocket(fastify: FastifyInstance) {
     });
 
     // Obsługa zamknięcia połączenia
-    socket.on('close', () => {
+    connection.on('close', () => {
       console.log('WebSocket connection closed');
-      activeConnections.delete(socket);
+      activeConnections.delete(connection);
       clearInterval(heartbeat);
       unsubscribe();
     });
 
-    socket.on('error', (error: Error) => {
+    connection.on('error', (error: Error) => {
       console.error('WebSocket error:', error);
-      activeConnections.delete(socket);
+      activeConnections.delete(connection);
       clearInterval(heartbeat);
       unsubscribe();
     });
   });
 
   // Function do broadcast'owania wiadomości do wszystkich klientów
-  fastify.decorate('broadcastToClients', (message: any) => {
+  fastify.decorate('broadcastToClients', (message: unknown) => {
     const messageStr = JSON.stringify(message);
-    activeConnections.forEach((socket) => {
-      if (socket.readyState === 1) { // OPEN
-        socket.send(messageStr);
+    activeConnections.forEach((connection) => {
+      if (!connection.destroyed) {
+        connection.write(messageStr);
       } else {
-        activeConnections.delete(socket);
+        activeConnections.delete(connection);
       }
     });
   });

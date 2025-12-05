@@ -688,6 +688,7 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
                     profileId: true,
                     colorId: true,
                     beamsCount: true,
+                    meters: true,
                     color: {
                       select: {
                         code: true,
@@ -712,18 +713,25 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     }> = [];
 
     deliveries.forEach((delivery) => {
-      const profileMap = new Map<string, number>();
+      const profileMap = new Map<string, { beams: number; meters: number }>();
 
       delivery.deliveryOrders.forEach((deliveryOrder) => {
         deliveryOrder.order.requirements.forEach((req) => {
           const key = `${req.profileId}-${req.color.code}`;
-          const current = profileMap.get(key) || 0;
-          profileMap.set(key, current + req.beamsCount);
+          const current = profileMap.get(key) || { beams: 0, meters: 0 };
+          profileMap.set(key, {
+            beams: current.beams + req.beamsCount,
+            meters: current.meters + req.meters,
+          });
         });
       });
 
-      profileMap.forEach((totalBeams, key) => {
+      profileMap.forEach((data, key) => {
         const [profileId, colorCode] = key.split('-');
+        // Dodaj belki z metrów: suma metrów / 6m, zaokrąglona w górę
+        const beamsFromMeters = Math.ceil(data.meters / 6);
+        const totalBeams = data.beams + beamsFromMeters;
+
         result.push({
           deliveryId: delivery.id,
           deliveryDate: delivery.deliveryDate.toISOString(),

@@ -56,6 +56,11 @@ export function Sidebar() {
   const [expandedItems, setExpandedItems] = useState<string[]>(['/magazyn']);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const toggleExpanded = (href: string) => {
     setExpandedItems((prev) =>
@@ -81,6 +86,21 @@ export function Sidebar() {
       document.body.style.overflow = 'unset';
     };
   }, [mobileOpen]);
+
+  // Prevent hydration mismatch by not rendering interactive elements until mounted
+  if (!mounted) {
+    return (
+      <div className="hidden md:flex h-full w-64 flex-col bg-slate-900 text-white">
+        <div className="flex h-16 items-center px-6 border-b border-slate-800">
+          <span className="text-xl font-bold text-blue-400">AKROBUD</span>
+        </div>
+        <nav className="flex-1 px-3 py-4" />
+        <div className="border-t border-slate-800 p-4">
+          <p className="text-xs text-slate-500">AKROBUD v1.0.0</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

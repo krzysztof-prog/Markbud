@@ -22,18 +22,66 @@ export class FileWatcherService {
   async start() {
     // Pobierz ścieżki z ustawień (domyślnie folder w głównym katalogu projektu)
     const projectRoot = path.resolve(__dirname, '../../../../');
-    const uzyteBelePath = await this.getSetting('watchFolderUzyteBele') || path.join(projectRoot, 'uzyte bele');
-    const cenyPath = await this.getSetting('watchFolderCeny') || path.join(projectRoot, 'ceny');
+
+    // Sprawdź zmienne środowiskowe, potem ustawienia z bazy, potem domyślne
+    const uzyteBelePath = process.env.WATCH_FOLDER_UZYTE_BELE
+      || await this.getSetting('watchFolderUzyteBele')
+      || path.join(projectRoot, 'uzyte bele');
+    const cenyPath = process.env.WATCH_FOLDER_CENY
+      || await this.getSetting('watchFolderCeny')
+      || path.join(projectRoot, 'ceny');
 
     console.log('👀 Uruchamiam File Watcher...');
     console.log(`   📁 Folder "użyte bele": ${uzyteBelePath}`);
     console.log(`   📁 Folder "ceny": ${cenyPath}`);
+
+    // Najpierw zeskanuj istniejące foldery
+    await this.scanExistingFolders(uzyteBelePath);
 
     // Watcher dla PODFOLDERÓW w "użyte bele" - automatyczny import
     this.watchUzyteBeleFolders(uzyteBelePath);
 
     // Watcher dla folderu "ceny" (PDF) - stary system
     this.watchFolder(cenyPath, 'ceny_pdf', ['*.pdf', '*.PDF']);
+  }
+
+  /**
+   * Skanuje istniejące podfoldery w "użyte bele" i importuje pliki CSV
+   */
+  async scanExistingFolders(basePath: string) {
+    const absolutePath = path.resolve(basePath);
+
+    if (!existsSync(absolutePath)) {
+      console.log(`   ⚠️ Folder nie istnieje: ${absolutePath}`);
+      return;
+    }
+
+    console.log(`   🔍 Skanuję istniejące foldery w: ${absolutePath}`);
+
+    try {
+      const { readdir } = await import('fs/promises');
+      const entries = await readdir(absolutePath, { withFileTypes: true });
+
+      const dateFolders = entries.filter(entry => {
+        if (!entry.isDirectory()) return false;
+        // Sprawdź czy nazwa zawiera datę w formacie DD.MM.YYYY
+        return /\d{2}\.\d{2}\.\d{4}/.test(entry.name);
+      });
+
+      if (dateFolders.length === 0) {
+        console.log(`   ℹ️ Brak folderów z datą do zaimportowania`);
+        return;
+      }
+
+      console.log(`   📂 Znaleziono ${dateFolders.length} folderów z datą`);
+
+      for (const folder of dateFolders) {
+        const folderPath = path.join(absolutePath, folder.name);
+        await this.handleNewUzyteBeleFolder(folderPath);
+      }
+    } catch (error) {
+      logger.error(`Błąd skanowania ${absolutePath}: ${error instanceof Error ? error.message : 'Nieznany błąd'}`);
+    }
   }
 
   private async getSetting(key: string): Promise<string | null> {
@@ -234,23 +282,42 @@ export class FileWatcherService {
     // Przetwórz każdy plik CSV
     for (const csvFile of csvFiles) {
       try {
+        const originalFilename = path.basename(csvFile);
+
+        // Sprawdź czy ten plik (po nazwie oryginalnej) był już importowany
+        const alreadyImported = await this.prisma.fileImport.findFirst({
+          where: {
+            filename: { contains: originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_') },
+            status: { in: ['completed', 'processing'] },
+          },
+        });
+
+        if (alreadyImported) {
+          logger.info(`   ⏭️ Plik ${originalFilename} już był zaimportowany, pomijam`);
+          continue;
+        }
+
         const timestamp = Date.now();
-        const safeFilename = `${timestamp}_${path.basename(csvFile).replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const safeFilename = `${timestamp}_${originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
         const destPath = path.join(uploadsDir, safeFilename);
 
         await copyFile(csvFile, destPath);
 
         const relativePath = path.relative(folderPath, csvFile);
 
-        // Sprawdź czy plik ma konflikt (zlecenie z sufiksem)
+        // Sprawdź czy plik ma konflikt (zlecenie z sufiksem gdzie bazowe ISTNIEJE)
         const preview = await parser.previewUzyteBele(destPath);
-        const hasConflict = preview.conflict !== undefined;
 
-        if (hasConflict) {
-          // Jeśli jest konflikt, zostaw jako PENDING i poczekaj na decyzję użytkownika
+        // Konflikt występuje TYLKO gdy:
+        // - zlecenie ma sufiks (-a, -b, itp.) ORAZ
+        // - zlecenie bazowe ISTNIEJE w bazie
+        const hasRealConflict = preview.conflict?.baseOrderExists === true;
+
+        if (hasRealConflict) {
+          // Jeśli jest konflikt (bazowe istnieje), zostaw jako PENDING i poczekaj na decyzję użytkownika
           await this.prisma.fileImport.create({
             data: {
-              filename: relativePath,
+              filename: safeFilename,
               filepath: destPath,
               fileType: 'uzyte_bele',
               status: 'pending',
@@ -262,7 +329,7 @@ export class FileWatcherService {
             },
           });
 
-          logger.warn(`   ⚠️ Konflikt wykryty: ${relativePath} → zlecenie ${preview.orderNumber} (bazowe: ${preview.conflict?.baseOrderExists ? 'ISTNIEJE' : 'NIE ISTNIEJE'})`);
+          logger.warn(`   ⚠️ Konflikt: ${relativePath} → zlecenie ${preview.orderNumber} (bazowe ${preview.conflict?.baseOrderNumber} ISTNIEJE)`);
           logger.info(`   ⏸️ Plik oczekuje na decyzję użytkownika`);
           continue; // Pomiń automatyczne przetwarzanie
         }
@@ -270,7 +337,7 @@ export class FileWatcherService {
         // Brak konfliktu - przetwórz automatycznie
         const fileImport = await this.prisma.fileImport.create({
           data: {
-            filename: relativePath,
+            filename: safeFilename,
             filepath: destPath,
             fileType: 'uzyte_bele',
             status: 'processing',

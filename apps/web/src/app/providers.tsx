@@ -3,17 +3,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Toaster } from '@/components/ui/toaster';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
-
-// Create persister for localStorage
-const persister = typeof window !== 'undefined'
-  ? createSyncStoragePersister({
-      storage: window.localStorage,
-      key: 'AKROBUD_REACT_QUERY_CACHE',
-    })
-  : undefined;
 
 function RealtimeSyncWrapper({ children }: { children: React.ReactNode }) {
   useRealtimeSync();
@@ -21,6 +13,9 @@ function RealtimeSyncWrapper({ children }: { children: React.ReactNode }) {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  const [persister, setPersister] = useState<ReturnType<typeof createSyncStoragePersister> | null>(null);
+
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -49,8 +44,19 @@ export function Providers({ children }: { children: React.ReactNode }) {
       })
   );
 
-  // Use PersistQueryClientProvider if persister is available (client-side)
-  if (persister) {
+  useEffect(() => {
+    setMounted(true);
+    // Create persister only on client side
+    const storagePersister = createSyncStoragePersister({
+      storage: window.localStorage,
+      key: 'AKROBUD_REACT_QUERY_CACHE',
+    });
+    setPersister(storagePersister);
+  }, []);
+
+  // Always render the same structure to avoid hydration mismatch
+  // Use PersistQueryClientProvider once mounted with persister
+  if (mounted && persister) {
     return (
       <PersistQueryClientProvider
         client={queryClient}
@@ -71,7 +77,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Fallback for server-side rendering
+  // Initial render (SSR and first client render) - use regular QueryClientProvider
   return (
     <QueryClientProvider client={queryClient}>
       <RealtimeSyncWrapper>{children}</RealtimeSyncWrapper>

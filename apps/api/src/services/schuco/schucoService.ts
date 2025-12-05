@@ -186,9 +186,10 @@ export class SchucoService {
       const orderDateParsed = this.parser.parseDate(delivery.orderDate);
 
       if (!existing) {
-        // New record
-        await this.prisma.schucoDelivery.create({
-          data: {
+        // New record - use upsert to handle race conditions with duplicate orderNumbers in CSV
+        await this.prisma.schucoDelivery.upsert({
+          where: { orderNumber: delivery.orderNumber },
+          create: {
             orderDate: delivery.orderDate,
             orderDateParsed: orderDateParsed,
             orderNumber: delivery.orderNumber,
@@ -206,6 +207,24 @@ export class SchucoService {
             changedAt: now,
             changedFields: null,
             previousValues: null,
+          },
+          update: {
+            // If record already exists (duplicate in CSV), update it
+            orderDate: delivery.orderDate,
+            orderDateParsed: orderDateParsed,
+            projectNumber: delivery.projectNumber,
+            orderName: delivery.orderName,
+            shippingStatus: delivery.shippingStatus,
+            deliveryWeek: delivery.deliveryWeek || null,
+            deliveryType: delivery.deliveryType || null,
+            tracking: delivery.tracking || null,
+            complaint: delivery.complaint || null,
+            orderType: delivery.orderType || null,
+            totalAmount: delivery.totalAmount || null,
+            rawData: JSON.stringify(delivery.rawData),
+            changeType: 'updated',
+            changedAt: now,
+            updatedAt: now,
           },
         });
         stats.newRecords++;

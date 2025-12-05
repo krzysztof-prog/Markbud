@@ -1,0 +1,20 @@
+﻿Numer zlecenia;Numer art.;Nowych bel;reszta
+53490;18866000;5;1321
+53490;18869000;8;0
+53490;19671000;9;5341
+53490;202609;4;0
+53490;202623;8;0
+
+Lista okien i drzwi dla tego zlecenia:
+Lp.;Szerokosc;Wysokosc;Typ profilu;Ilosc sztuk;Referencja
+1;2375;1195;VLAK;1;D5010
+2;2362;1145;VLAK;1;D3238
+3;2362;1145;VLAK;1;D3236
+4;2321;1195;VLAK;1;D5010
+5;1466;1145;VLAK;1;D3236
+6;1466;1145;VLAK;1;D3238
+Laczna liczba sztuk okien i drzwi:;6
+Laczna liczba skrzydel:;8
+Laczna liczba szyb:;14
+
+Klient:AKROBUD SOKO�OWSKI SPӣKA KOMANDYTOWA

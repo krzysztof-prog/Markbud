@@ -77,7 +77,16 @@
       "Bash(timeout 10 npm run dev:*)",
       "Bash(timeout 10 node:*)",
       "Bash(timeout 8 echo:*)",
-      "Bash(pnpm exec tsc:*)"
+      "Bash(pnpm exec tsc:*)",
+      "Bash(pnpm run dev)",
+      "Bash(npx next dev)",
+      "Bash(pnpm build:web:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(npm ls:*)",
+      "Bash(where:*)",
+      "Bash(pnpm dev)",
+      "Bash(PORT=3000 pnpm dev:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

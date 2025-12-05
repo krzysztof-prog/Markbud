@@ -27,18 +27,17 @@ export default function OptymalizacjaPage({ params }: PageProps) {
 
   return (
     <>
-      <Header
-        title="Optymalizacja Palet"
-        breadcrumbs={
-          <Breadcrumb
-            items={[
-              { label: 'Dostawy', href: '/dostawy' },
-              { label: `Dostawa #${deliveryId}`, href: `/dostawy/${deliveryId}` },
-              { label: 'Optymalizacja' },
-            ]}
-          />
-        }
-      />
+      <Header title="Optymalizacja Palet" />
+
+      <div className="px-6 pt-4">
+        <Breadcrumb
+          items={[
+            { label: 'Dostawy', href: '/dostawy' },
+            { label: `Dostawa #${deliveryId}`, href: `/dostawy/${deliveryId}` },
+            { label: 'Optymalizacja' },
+          ]}
+        />
+      </div>
 
       <div className="container mx-auto p-6 max-w-7xl">
         <Suspense fallback={<TableSkeleton rows={5} />}>

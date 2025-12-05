@@ -201,7 +201,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                             variant={
                               order.status === 'completed'
                                 ? 'default'
-                                : order.status === 'new'
+                                : order.status === 'pending'
                                 ? 'secondary'
                                 : 'outline'
                             }
@@ -209,8 +209,8 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                           >
                             {order.status === 'completed'
                               ? 'Zakończone'
-                              : order.status === 'new'
-                              ? 'Nowe'
+                              : order.status === 'pending'
+                              ? 'Oczekujące'
                               : order.status}
                           </Badge>
                         </div>
