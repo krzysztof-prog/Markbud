@@ -38,8 +38,8 @@ export class SchucoHandler {
     try {
       logger.info('[SchucoHandler] Manual refresh triggered');
 
-      // Increase socket timeout for this long-running request (3 minutes)
-      request.raw.setTimeout(180000);
+      // Increase socket timeout for this long-running request (3.5 minutes)
+      request.raw.setTimeout(210000);
 
       const result = await this.schucoService.fetchAndStoreDeliveries();
 

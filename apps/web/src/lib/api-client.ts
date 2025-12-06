@@ -2,7 +2,7 @@
  * API Client - wspólny helper do komunikacji z backendem
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export interface ApiError extends Error {
   status?: number;
@@ -25,6 +25,10 @@ export interface ApiError extends Error {
 export async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${API_URL}${endpoint}`;
 
+  // Create AbortController for timeout handling
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 210000); // 3.5 minutes timeout
+
   try {
     const response = await fetch(url, {
       ...options,
@@ -32,7 +36,10 @@ export async function fetchApi<T>(endpoint: string, options?: RequestInit): Prom
         'Content-Type': 'application/json',
         ...options?.headers,
       },
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
@@ -48,6 +55,15 @@ export async function fetchApi<T>(endpoint: string, options?: RequestInit): Prom
 
     return response.json();
   } catch (error) {
+    clearTimeout(timeoutId);
+
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      // Timeout error
+      const timeoutError: ApiError = new Error('Czas oczekiwania na odpowiedź serwera upłynął. Spróbuj ponownie.');
+      timeoutError.status = 408;
+      throw timeoutError;
+    }
+
     if (error instanceof TypeError) {
       // Network error
       const networkError: ApiError = new Error('Błąd połączenia sieciowego. Sprawdź połączenie internetowe.');
@@ -63,14 +79,30 @@ export async function fetchApi<T>(endpoint: string, options?: RequestInit): Prom
  */
 export async function uploadFile<T>(endpoint: string, file: File): Promise<T> {
   const url = `${API_URL}${endpoint}`;
+
+  // Validate file size before upload (10MB limit)
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  if (file.size > maxSize) {
+    const error: ApiError = new Error(`Plik jest zbyt duży. Maksymalny rozmiar: ${maxSize / 1024 / 1024}MB`);
+    error.status = 413;
+    throw error;
+  }
+
   const formData = new FormData();
   formData.append('file', file);
+
+  // Create AbortController for timeout handling
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 210000); // 3.5 minutes for file uploads
 
   try {
     const response = await fetch(url, {
       method: 'POST',
       body: formData,
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
@@ -82,6 +114,15 @@ export async function uploadFile<T>(endpoint: string, file: File): Promise<T> {
 
     return response.json();
   } catch (error) {
+    clearTimeout(timeoutId);
+
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      // Timeout error
+      const timeoutError: ApiError = new Error('Czas oczekiwania na upload pliku upłynął. Spróbuj ponownie.');
+      timeoutError.status = 408;
+      throw timeoutError;
+    }
+
     if (error instanceof TypeError) {
       const networkError: ApiError = new Error('Błąd połączenia sieciowego. Sprawdź połączenie internetowe.');
       networkError.status = 0;
