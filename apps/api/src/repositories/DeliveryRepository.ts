@@ -169,6 +169,39 @@ export class DeliveryRepository {
     });
   }
 
+  async addOrderToDeliveryAtomic(deliveryId: number, orderId: number) {
+    return this.prisma.$transaction(async (tx) => {
+      // Get max position atomically within transaction
+      const result = await tx.deliveryOrder.aggregate({
+        where: { deliveryId },
+        _max: { position: true },
+      });
+      const maxPosition = result._max.position || 0;
+
+      // Create delivery order with incremented position
+      return tx.deliveryOrder.create({
+        data: {
+          deliveryId,
+          orderId,
+          position: maxPosition + 1,
+        },
+        select: {
+          deliveryId: true,
+          orderId: true,
+          position: true,
+          order: {
+            select: {
+              id: true,
+              orderNumber: true,
+              status: true,
+              valuePln: true,
+            },
+          },
+        },
+      });
+    });
+  }
+
   async removeOrderFromDelivery(deliveryId: number, orderId: number): Promise<void> {
     await this.prisma.deliveryOrder.delete({
       where: {
@@ -206,6 +239,53 @@ export class DeliveryRepository {
     } catch (error) {
       throw new Error(`Failed to reorder delivery orders: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  async moveOrderBetweenDeliveries(
+    sourceDeliveryId: number,
+    targetDeliveryId: number,
+    orderId: number
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      // Remove from source delivery
+      await tx.deliveryOrder.delete({
+        where: {
+          deliveryId_orderId: {
+            deliveryId: sourceDeliveryId,
+            orderId,
+          },
+        },
+      });
+
+      // Get max position in target delivery
+      const result = await tx.deliveryOrder.aggregate({
+        where: { deliveryId: targetDeliveryId },
+        _max: { position: true },
+      });
+      const maxPosition = result._max.position || 0;
+
+      // Add to target delivery with incremented position
+      return tx.deliveryOrder.create({
+        data: {
+          deliveryId: targetDeliveryId,
+          orderId,
+          position: maxPosition + 1,
+        },
+        select: {
+          deliveryId: true,
+          orderId: true,
+          position: true,
+          order: {
+            select: {
+              id: true,
+              orderNumber: true,
+              status: true,
+              valuePln: true,
+            },
+          },
+        },
+      });
+    });
   }
 
   async addItem(deliveryId: number, data: { itemType: string; description: string; quantity: number }) {

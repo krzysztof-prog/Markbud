@@ -166,30 +166,28 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
     const endDate = new Date(startOfWeek);
     endDate.setDate(startOfWeek.getDate() + 56);
 
-    const deliveries = await prisma.delivery.findMany({
-      where: {
-        deliveryDate: {
-          gte: startOfWeek,
-          lt: endDate,
-        },
-      },
-      include: {
-        deliveryOrders: {
-          include: {
-            order: {
-              include: {
-                windows: {
-                  select: { quantity: true },
-                },
-              },
-            },
-          },
-        },
-      },
-      orderBy: { deliveryDate: 'asc' },
-    });
+    // OPTIMIZED: Single raw SQL query z GROUP BY zamiast deep nesting
+    const weekStats = await prisma.$queryRaw<Array<{
+      deliveryDate: Date;
+      deliveriesCount: bigint;
+      ordersCount: bigint;
+      windowsCount: bigint;
+    }>>`
+      SELECT
+        DATE(d.delivery_date) as "deliveryDate",
+        COUNT(DISTINCT d.id) as "deliveriesCount",
+        COUNT(DISTINCT do.order_id) as "ordersCount",
+        COALESCE(SUM(ow.quantity), 0) as "windowsCount"
+      FROM deliveries d
+      LEFT JOIN delivery_orders do ON do.delivery_id = d.id
+      LEFT JOIN order_windows ow ON ow.order_id = do.order_id
+      WHERE d.delivery_date >= ${startOfWeek}
+        AND d.delivery_date < ${endDate}
+      GROUP BY DATE(d.delivery_date)
+      ORDER BY d.delivery_date ASC
+    `;
 
-    // Grupuj dostawy po tygodniach
+    // Grupuj po tygodniach w JavaScript (szybkie, bo już zagregowane)
     const weeks: any[] = [];
     for (let i = 0; i < 8; i++) {
       const weekStart = new Date(startOfWeek);
@@ -199,41 +197,24 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
       weekEnd.setDate(weekStart.getDate() + 6);
       weekEnd.setHours(23, 59, 59, 999);
 
-      // Znajdź dostawy w tym tygodniu
-      const weekDeliveries = deliveries.filter((d) => {
-        const deliveryDate = new Date(d.deliveryDate);
-        return deliveryDate >= weekStart && deliveryDate <= weekEnd;
+      // Znajdź dostawy w tym tygodniu (z już zagregowanych danych)
+      const weekData = weekStats.filter((stat) => {
+        const date = new Date(stat.deliveryDate);
+        return date >= weekStart && date <= weekEnd;
       });
 
-      // Oblicz statystyki dla tygodnia
-      let windows = 0;
-      let sashes = 0;
-      let glasses = 0;
-
-      weekDeliveries.forEach((delivery) => {
-        delivery.deliveryOrders.forEach((dOrder: any) => {
-          // Oblicz z relacji windows
-          const orderWindows = dOrder.order.windows?.reduce(
-            (sum: number, w: any) => sum + (w.quantity || 0),
-            0
-          ) || 0;
-
-          windows += orderWindows;
-          // Dla uproszczenia zakładamy, że każde okno to 1 skrzydło i 1 szyba
-          // TODO: Dodać dokładniejsze obliczenia z modelu danych
-          sashes += orderWindows;
-          glasses += orderWindows;
-        });
-      });
+      const windows = weekData.reduce((sum, s) => sum + Number(s.windowsCount), 0);
+      const deliveries = weekData.reduce((sum, s) => sum + Number(s.deliveriesCount), 0);
 
       weeks.push({
         weekNumber: i + 1,
         startDate: weekStart.toISOString(),
         endDate: weekEnd.toISOString(),
-        deliveriesCount: weekDeliveries.length,
+        deliveriesCount: deliveries,
+        ordersCount: weekData.reduce((sum, s) => sum + Number(s.ordersCount), 0),
         windows,
-        sashes,
-        glasses,
+        sashes: windows, // Assumption: 1 window = 1 sash
+        glasses: windows, // Assumption: 1 window = 1 glass
       });
     }
 
@@ -314,62 +295,70 @@ function getWeekNumber(date: Date): number {
   return weekNum;
 }
 
-// Helper function do pobierania braków
+// Interface for raw SQL shortage result
+interface ShortageResult {
+  profileId: number;
+  profileNumber: string;
+  colorId: number;
+  colorCode: string;
+  colorName: string;
+  currentStock: number;
+  demand: number;
+  afterDemand: number;
+  shortage: number;
+}
+
+// Helper function do pobierania braków - OPTIMIZED (single raw SQL query)
 async function getShortages() {
-  const stocks = await prisma.warehouseStock.findMany({
-    select: {
-      profileId: true,
-      colorId: true,
-      currentStockBeams: true,
-      profile: {
-        select: { id: true, number: true },
-      },
-      color: {
-        select: { id: true, code: true, name: true },
-      },
-    },
-  });
+  // Single query z LEFT JOIN zamiast 2 osobnych queries + O(n) mapping
+  const shortages = await prisma.$queryRaw<ShortageResult[]>`
+    SELECT
+      ws.profile_id as "profileId",
+      p.number as "profileNumber",
+      ws.color_id as "colorId",
+      c.code as "colorCode",
+      c.name as "colorName",
+      ws.current_stock_beams as "currentStock",
+      COALESCE(SUM(req.beams_count), 0) as demand,
+      (ws.current_stock_beams - COALESCE(SUM(req.beams_count), 0)) as "afterDemand",
+      ABS(ws.current_stock_beams - COALESCE(SUM(req.beams_count), 0)) as shortage
+    FROM warehouse_stock ws
+    INNER JOIN profiles p ON p.id = ws.profile_id
+    INNER JOIN colors c ON c.id = ws.color_id
+    LEFT JOIN order_requirements req ON
+      req.profile_id = ws.profile_id
+      AND req.color_id = ws.color_id
+    LEFT JOIN orders o ON o.id = req.order_id
+      AND o.archived_at IS NULL
+      AND o.status NOT IN ('archived', 'completed')
+    GROUP BY
+      ws.profile_id,
+      ws.color_id,
+      ws.current_stock_beams,
+      p.number,
+      c.code,
+      c.name
+    HAVING (ws.current_stock_beams - COALESCE(SUM(req.beams_count), 0)) < 0
+    ORDER BY shortage DESC
+  `;
 
-  const demands = await prisma.orderRequirement.groupBy({
-    by: ['profileId', 'colorId'],
-    where: {
-      order: {
-        archivedAt: null,
-        status: { notIn: ['archived', 'completed'] },
-      },
-    },
-    _sum: {
-      beamsCount: true,
-    },
-  });
+  // Mapowanie do formatu API (bardzo szybkie, już zagregowane dane)
+  return shortages.map((s) => ({
+    profileId: s.profileId,
+    profileNumber: s.profileNumber,
+    colorId: s.colorId,
+    colorCode: s.colorCode,
+    colorName: s.colorName,
+    currentStock: s.currentStock,
+    demand: Number(s.demand),
+    shortage: Number(s.shortage),
+    priority: calculatePriority(Number(s.afterDemand)),
+  }));
+}
 
-  const demandMap = new Map(
-    demands.map((d) => [`${d.profileId}-${d.colorId}`, d._sum.beamsCount || 0])
-  );
-
-  const shortages = stocks
-    .map((stock) => {
-      const key = `${stock.profileId}-${stock.colorId}`;
-      const demand = demandMap.get(key) || 0;
-      const afterDemand = stock.currentStockBeams - demand;
-
-      if (afterDemand < 0) {
-        return {
-          profileId: stock.profileId,
-          profileNumber: stock.profile.number,
-          colorId: stock.colorId,
-          colorCode: stock.color.code,
-          colorName: stock.color.name,
-          currentStock: stock.currentStockBeams,
-          demand,
-          shortage: Math.abs(afterDemand),
-          priority:
-            afterDemand < -10 ? 'critical' : afterDemand < -5 ? 'high' : 'medium',
-        };
-      }
-      return null;
-    })
-    .filter(Boolean);
-
-  return shortages.sort((a, b) => (b?.shortage || 0) - (a?.shortage || 0));
+// Helper function for calculating priority
+function calculatePriority(afterDemand: number): 'critical' | 'high' | 'medium' {
+  if (afterDemand < -10) return 'critical';
+  if (afterDemand < -5) return 'high';
+  return 'medium';
 }

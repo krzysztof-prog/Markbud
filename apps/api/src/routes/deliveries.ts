@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../index.js';
 import { deliveryTotalsService } from '../services/deliveryTotalsService.js';
+import { DeliveryRepository } from '../repositories/DeliveryRepository.js';
+import { DeliveryService } from '../services/deliveryService.js';
 import {
   emitDeliveryCreated,
   emitDeliveryUpdated,
@@ -21,6 +23,10 @@ import {
 import { NotFoundError } from '../utils/errors.js';
 
 export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
+  // Initialize service layer for endpoints requiring business logic and event emission
+  const deliveryRepository = new DeliveryRepository(prisma);
+  const deliveryService = new DeliveryService(deliveryRepository);
+
   // GET /api/deliveries - lista dostaw
   fastify.get<{
     Querystring: {
@@ -213,8 +219,13 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
     const { id } = deliveryParamsSchema.parse(request.params);
 
+    const deliveryId = parseInt(id, 10);
+    if (isNaN(deliveryId)) {
+      return reply.status(400).send({ error: 'Invalid delivery ID' });
+    }
+
     const delivery = await prisma.delivery.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: deliveryId },
       select: {
         id: true,
         deliveryDate: true,
@@ -323,13 +334,18 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
       status?: string;
       notes?: string;
     };
-  }>('/:id', async (request) => {
+  }>('/:id', async (request, reply) => {
     const { id } = deliveryParamsSchema.parse(request.params);
     const validated = updateDeliverySchema.parse(request.body);
     const { deliveryDate, status, notes } = validated;
 
+    const deliveryId = parseInt(id, 10);
+    if (isNaN(deliveryId)) {
+      return reply.status(400).send({ error: 'Invalid delivery ID' });
+    }
+
     const delivery = await prisma.delivery.update({
-      where: { id: parseInt(id) },
+      where: { id: deliveryId },
       data: {
         deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
         status,
@@ -347,12 +363,17 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
     const { id } = deliveryParamsSchema.parse(request.params);
 
+    const deliveryId = parseInt(id, 10);
+    if (isNaN(deliveryId)) {
+      return reply.status(400).send({ error: 'Invalid delivery ID' });
+    }
+
     await prisma.delivery.delete({
-      where: { id: parseInt(id) },
+      where: { id: deliveryId },
     });
 
     // Emit event
-    emitDeliveryDeleted(parseInt(id));
+    emitDeliveryDeleted(deliveryId);
 
     return reply.status(204).send();
   });
@@ -365,9 +386,14 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = deliveryParamsSchema.parse(request.params);
     const { orderId } = addOrderSchema.parse(request.body);
 
+    const deliveryId = parseInt(id, 10);
+    if (isNaN(deliveryId)) {
+      return reply.status(400).send({ error: 'Invalid delivery ID' });
+    }
+
     // Pobierz aktualną maksymalną pozycję
     const maxPosition = await prisma.deliveryOrder.aggregate({
-      where: { deliveryId: parseInt(id) },
+      where: { deliveryId },
       _max: { position: true },
     });
 
@@ -375,7 +401,7 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
 
     const deliveryOrder = await prisma.deliveryOrder.create({
       data: {
-        deliveryId: parseInt(id),
+        deliveryId,
         orderId,
         position: newPosition,
       },
@@ -395,7 +421,7 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     // Emit events
-    emitDeliveryUpdated({ id: parseInt(id) });
+    emitDeliveryUpdated({ id: deliveryId });
     emitOrderUpdated({ id: orderId });
 
     return reply.status(201).send(deliveryOrder);
@@ -408,17 +434,22 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = deliveryParamsSchema.parse(request.params);
     const orderId = parseInt(request.params.orderId, 10);
 
+    const deliveryId = parseInt(id, 10);
+    if (isNaN(deliveryId) || isNaN(orderId)) {
+      return reply.status(400).send({ error: 'Invalid delivery ID or order ID' });
+    }
+
     await prisma.deliveryOrder.delete({
       where: {
         deliveryId_orderId: {
-          deliveryId: parseInt(id),
+          deliveryId,
           orderId,
         },
       },
     });
 
     // Emit events
-    emitDeliveryUpdated({ id: parseInt(id) });
+    emitDeliveryUpdated({ id: deliveryId });
     emitOrderUpdated({ id: orderId });
 
     return reply.status(204).send();
@@ -428,16 +459,21 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.put<{
     Params: { id: string };
     Body: { orderIds: number[] };
-  }>('/:id/orders/reorder', async (request) => {
+  }>('/:id/orders/reorder', async (request, reply) => {
     const { id } = deliveryParamsSchema.parse(request.params);
     const { orderIds } = reorderSchema.parse(request.body);
+
+    const deliveryId = parseInt(id, 10);
+    if (isNaN(deliveryId)) {
+      return reply.status(400).send({ error: 'Invalid delivery ID' });
+    }
 
     // Zaktualizuj pozycje
     const updates = orderIds.map((orderId, index) =>
       prisma.deliveryOrder.update({
         where: {
           deliveryId_orderId: {
-            deliveryId: parseInt(id),
+            deliveryId,
             orderId,
           },
         },
@@ -460,49 +496,37 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
       orderId: number;
       targetDeliveryId: number;
     };
-  }>('/:id/move-order', async (request) => {
+  }>('/:id/move-order', async (request, reply) => {
     const { id } = deliveryParamsSchema.parse(request.params);
     const { orderId, targetDeliveryId } = moveOrderSchema.parse(request.body);
 
-    // Wykonaj przeniesienie w transakcji - jeśli cokolwiek się nie uda, wszystko zostanie wycofane
-    const deliveryOrder = await prisma.$transaction(async (tx) => {
-      // Usuń z obecnej dostawy
-      await tx.deliveryOrder.delete({
-        where: {
-          deliveryId_orderId: {
-            deliveryId: parseInt(id),
-            orderId,
-          },
-        },
-      });
+    const deliveryId = parseInt(id, 10);
+    if (isNaN(deliveryId)) {
+      return reply.status(400).send({ error: 'Invalid delivery ID' });
+    }
 
-      // Pobierz maksymalną pozycję w docelowej dostawie
-      const maxPosition = await tx.deliveryOrder.aggregate({
-        where: { deliveryId: targetDeliveryId },
-        _max: { position: true },
-      });
+    // Delegate to service layer for proper event emission and transactional handling
+    // Service handles: transaction, WebSocket events (emitDeliveryUpdated, emitOrderUpdated), business logic
+    const deliveryOrder = await deliveryService.moveOrderBetweenDeliveries(
+      deliveryId,
+      targetDeliveryId,
+      orderId
+    );
 
-      // Dodaj do docelowej dostawy
-      const newDeliveryOrder = await tx.deliveryOrder.create({
-        data: {
-          deliveryId: targetDeliveryId,
-          orderId,
-          position: (maxPosition._max.position || 0) + 1,
-        },
-      });
-
-      return newDeliveryOrder;
-    });
-
-    return deliveryOrder;
+    return reply.send(deliveryOrder);
   });
 
   // GET /api/deliveries/:id/protocol - wygeneruj protokół odbioru
   fastify.get<{ Params: { id: string } }>('/:id/protocol', async (request, reply) => {
     const { id } = deliveryParamsSchema.parse(request.params);
 
+    const deliveryId = parseInt(id, 10);
+    if (isNaN(deliveryId)) {
+      return reply.status(400).send({ error: 'Invalid delivery ID' });
+    }
+
     const delivery = await prisma.delivery.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: deliveryId },
       select: {
         id: true,
         deliveryDate: true,
@@ -553,10 +577,10 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     // Pobierz obliczony totalPallets z sługi
-    const totalPallets = await deliveryTotalsService.getTotalPallets(delivery.id);
+    const totalPallets = await deliveryTotalsService.getTotalPallets(deliveryId);
 
     const protocol = {
-      deliveryId: delivery.id,
+      deliveryId: deliveryId,
       deliveryDate: delivery.deliveryDate,
       orders,
       totalWindows,
@@ -580,9 +604,14 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = deliveryParamsSchema.parse(request.params);
     const { itemType, description, quantity } = addItemSchema.parse(request.body);
 
+    const deliveryId = parseInt(id, 10);
+    if (isNaN(deliveryId)) {
+      return reply.status(400).send({ error: 'Invalid delivery ID' });
+    }
+
     const item = await prisma.deliveryItem.create({
       data: {
-        deliveryId: parseInt(id),
+        deliveryId,
         itemType,
         description,
         quantity,
@@ -590,7 +619,7 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     // Emit event
-    emitDeliveryUpdated({ id: parseInt(id) });
+    emitDeliveryUpdated({ id: deliveryId });
 
     return reply.status(201).send(item);
   });
@@ -602,12 +631,17 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = deliveryParamsSchema.parse(request.params);
     const itemId = parseInt(request.params.itemId, 10);
 
+    const deliveryId = parseInt(id, 10);
+    if (isNaN(deliveryId) || isNaN(itemId)) {
+      return reply.status(400).send({ error: 'Invalid delivery ID or item ID' });
+    }
+
     await prisma.deliveryItem.delete({
       where: { id: itemId },
     });
 
     // Emit event
-    emitDeliveryUpdated({ id: parseInt(id) });
+    emitDeliveryUpdated({ id: deliveryId });
 
     return reply.status(204).send();
   });
@@ -622,8 +656,13 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = deliveryParamsSchema.parse(request.params);
     const { productionDate } = completeDeliverySchema.parse(request.body);
 
+    const deliveryId = parseInt(id, 10);
+    if (isNaN(deliveryId)) {
+      return reply.status(400).send({ error: 'Invalid delivery ID' });
+    }
+
     const delivery = await prisma.delivery.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: deliveryId },
       select: {
         id: true,
         deliveryOrders: {
@@ -652,7 +691,7 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     // Emit events for delivery and all orders
-    emitDeliveryUpdated({ id: parseInt(id) });
+    emitDeliveryUpdated({ id: deliveryId });
     orderIds.forEach((orderId) => {
       emitOrderUpdated({ id: orderId });
     });
@@ -727,7 +766,14 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       profileMap.forEach((data, key) => {
-        const [profileId, colorCode] = key.split('-');
+        const [profileIdStr, colorCode] = key.split('-');
+        const profileIdNum = parseInt(profileIdStr, 10);
+
+        if (isNaN(profileIdNum)) {
+          console.error(`Invalid profile ID: ${profileIdStr}`);
+          return;
+        }
+
         // Dodaj belki z metrów: suma metrów / 6m, zaokrąglona w górę
         const beamsFromMeters = Math.ceil(data.meters / 6);
         const totalBeams = data.beams + beamsFromMeters;
@@ -735,7 +781,7 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
         result.push({
           deliveryId: delivery.id,
           deliveryDate: delivery.deliveryDate.toISOString(),
-          profileId: parseInt(profileId),
+          profileId: profileIdNum,
           colorCode,
           totalBeams,
         });
@@ -750,8 +796,13 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     Querystring: {
       months?: string; // liczba miesięcy wstecz (domyślnie 6)
     };
-  }>('/stats/profiles', async (request) => {
-    const monthsBack = parseInt(request.query.months || '6');
+  }>('/stats/profiles', async (request, reply) => {
+    const monthsBack = parseInt(request.query.months || '6', 10);
+
+    if (isNaN(monthsBack) || monthsBack < 1 || monthsBack > 60) {
+      return reply.status(400).send({ error: 'Invalid months parameter (must be between 1 and 60)' });
+    }
+
     const today = new Date();
 
     // Przygotuj zakresy dat dla każdego miesiąca

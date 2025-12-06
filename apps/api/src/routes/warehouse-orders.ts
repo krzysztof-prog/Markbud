@@ -9,12 +9,24 @@ export const warehouseOrderRoutes: FastifyPluginAsync = async (fastify) => {
       profileId?: string;
       status?: string;
     };
-  }>('/', async (request) => {
+  }>('/', async (request, reply) => {
     const { colorId, profileId, status } = request.query;
 
     const where: any = {};
-    if (colorId) where.colorId = Number(colorId);
-    if (profileId) where.profileId = Number(profileId);
+    if (colorId) {
+      const parsedColorId = Number(colorId);
+      if (isNaN(parsedColorId)) {
+        return reply.status(400).send({ error: 'Invalid colorId parameter' });
+      }
+      where.colorId = parsedColorId;
+    }
+    if (profileId) {
+      const parsedProfileId = Number(profileId);
+      if (isNaN(parsedProfileId)) {
+        return reply.status(400).send({ error: 'Invalid profileId parameter' });
+      }
+      where.profileId = parsedProfileId;
+    }
     if (status) where.status = status;
 
     const orders = await prisma.warehouseOrder.findMany({
@@ -110,11 +122,23 @@ export const warehouseOrderRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
+    const parsedProfileId = Number(profileId);
+    const parsedColorId = Number(colorId);
+    const parsedOrderedBeams = Number(orderedBeams);
+
+    if (isNaN(parsedProfileId) || isNaN(parsedColorId) || isNaN(parsedOrderedBeams)) {
+      return reply.status(400).send({ error: 'Invalid numeric values in request body' });
+    }
+
+    if (parsedOrderedBeams <= 0) {
+      return reply.status(400).send({ error: 'orderedBeams must be greater than 0' });
+    }
+
     const order = await prisma.warehouseOrder.create({
       data: {
-        profileId: Number(profileId),
-        colorId: Number(colorId),
-        orderedBeams: Number(orderedBeams),
+        profileId: parsedProfileId,
+        colorId: parsedColorId,
+        orderedBeams: parsedOrderedBeams,
         expectedDeliveryDate: new Date(expectedDeliveryDate),
         notes: notes || null,
         status: 'pending',

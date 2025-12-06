@@ -86,9 +86,25 @@
       "Bash(where:*)",
       "Bash(pnpm dev)",
       "Bash(PORT=3000 pnpm dev:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(npx:*)",
+      "Bash(claude mcp list:*)",
+      "Bash(claude mcp add sqlite npx -y mcp-server-sqlite-npx \"c:/Users/Krzysztof/Desktop/AKROBUD/apps/api/prisma/dev.db\")",
+      "Bash(claude mcp add --help:*)",
+      "Bash(claude mcp add:*)",
+      "Bash(claude mcp get:*)",
+      "Bash(claude:*)",
+      "Bash(cmd /c \"claude mcp reset-project-choices\")",
+      "Bash(cmd /c \"npx -y mcp-server-sqlite-npx c:/Users/Krzysztof/Desktop/AKROBUD/apps/api/prisma/dev.db\")",
+      "Bash(cmd /c \"dir /x c:\\Users | findstr Krzysztof\")",
+      "mcp__chrome-devtools__*",
+      "mcp__sqlite__*",
+      "mcp__context7__*",
+      "mcp__sequential-thinking__*",
+      "Bash(pnpm kill)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "enableAllProjectMcpServers": true
 }

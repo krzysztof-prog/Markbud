@@ -123,9 +123,6 @@ model Order {
   @@index([createdAt])
   @@index([invoiceNumber, createdAt])
   @@index([invoiceNumber, deliveryDate])
-  @@index([archivedAt, status])
-  @@index([createdAt, archivedAt])
-  @@index([status, archivedAt])
   @@map("orders")
 }
 
@@ -253,8 +250,6 @@ model Delivery {
   @@index([status])
   @@index([deliveryDate])
   @@index([createdAt])
-  @@index([deliveryDate, status])
-  @@index([status, deliveryDate])
   @@map("deliveries")
 }
 
@@ -367,7 +362,6 @@ model FileImport {
 
   @@index([status])
   @@index([createdAt])
-  @@index([status, createdAt])
   @@map("file_imports")
 }
 
@@ -591,9 +585,6 @@ model SchucoDelivery {
   @@index([orderDateParsed])
   @@index([changeType])
   @@index([changedAt])
-  @@index([changeType, changedAt])
-  @@index([orderDateParsed, shippingStatus])
-  @@index([shippingStatus, orderDateParsed])
   @@map("schuco_deliveries")
 }
 

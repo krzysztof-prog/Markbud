@@ -52,10 +52,17 @@ export const monthlyReportsRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-  }, async (request) => {
-    const limit = request.query.limit ? parseInt(request.query.limit, 10) : 12;
-    const reports = await monthlyReportService.getAllReports(limit);
+  }, async (request, reply) => {
+    let limit = 12;
+    if (request.query.limit) {
+      const parsedLimit = parseInt(request.query.limit, 10);
+      if (isNaN(parsedLimit) || parsedLimit < 1) {
+        return reply.status(400).send({ error: 'Invalid limit parameter' });
+      }
+      limit = parsedLimit;
+    }
 
+    const reports = await monthlyReportService.getAllReports(limit);
     return reports;
   });
 
@@ -122,8 +129,16 @@ export const monthlyReportsRoutes: FastifyPluginAsync = async (fastify) => {
     const year = parseInt(request.params.year, 10);
     const month = parseInt(request.params.month, 10);
 
+    if (isNaN(year) || isNaN(month)) {
+      return reply.status(400).send({ error: 'Invalid year or month' });
+    }
+
     if (month < 1 || month > 12) {
       return reply.status(400).send({ error: 'Month must be between 1 and 12' });
+    }
+
+    if (year < 2000 || year > 2100) {
+      return reply.status(400).send({ error: 'Year must be between 2000 and 2100' });
     }
 
     const report = await monthlyReportService.getReport(year, month);

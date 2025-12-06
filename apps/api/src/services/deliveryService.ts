@@ -74,9 +74,8 @@ export class DeliveryService {
     // Verify delivery exists
     await this.getDeliveryById(deliveryId);
 
-    // Get max position and add order
-    const maxPosition = await this.repository.getMaxOrderPosition(deliveryId);
-    const deliveryOrder = await this.repository.addOrderToDelivery(deliveryId, orderId, maxPosition + 1);
+    // Add order with atomic position calculation to prevent race conditions
+    const deliveryOrder = await this.repository.addOrderToDeliveryAtomic(deliveryId, orderId);
 
     // Emit events
     emitDeliveryUpdated({ id: deliveryId });
@@ -103,18 +102,17 @@ export class DeliveryService {
     targetDeliveryId: number,
     orderId: number
   ) {
-    // Remove from source delivery
-    await this.repository.removeOrderFromDelivery(sourceDeliveryId, orderId);
-
-    // Get max position in target delivery
-    const maxPosition = await this.repository.getMaxOrderPosition(targetDeliveryId);
-
-    // Add to target delivery
-    const deliveryOrder = await this.repository.addOrderToDelivery(
+    // Execute as atomic transaction to prevent data loss
+    const deliveryOrder = await this.repository.moveOrderBetweenDeliveries(
+      sourceDeliveryId,
       targetDeliveryId,
-      orderId,
-      maxPosition + 1
+      orderId
     );
+
+    // Emit events after successful transaction
+    emitDeliveryUpdated({ id: sourceDeliveryId });
+    emitDeliveryUpdated({ id: targetDeliveryId });
+    emitOrderUpdated({ id: orderId });
 
     return deliveryOrder;
   }

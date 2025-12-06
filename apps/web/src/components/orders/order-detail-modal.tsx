@@ -59,7 +59,7 @@ export function OrderDetailModal({
   const handleOpenPdf = () => {
     if (orderId) {
       // Otwórz PDF przez endpoint API
-      window.open(`http://localhost:3001/api/orders/${orderId}/pdf`, '_blank');
+      window.open(`http://localhost:4000/api/orders/${orderId}/pdf`, '_blank');
     }
   };
 

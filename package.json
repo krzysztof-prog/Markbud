@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/kill-dev-servers.js",
     "dev": "pnpm run --parallel dev",
     "dev:web": "pnpm --filter @akrobud/web dev",
     "dev:api": "pnpm --filter @akrobud/api dev",
@@ -18,7 +19,8 @@
     "db:studio": "pnpm --filter @akrobud/api db:studio",
     "db:reset": "pnpm --filter @akrobud/api db:reset",
     "lint": "pnpm run --parallel lint",
-    "clean": "pnpm run --parallel clean"
+    "clean": "pnpm run --parallel clean",
+    "kill": "node scripts/kill-dev-servers.js"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

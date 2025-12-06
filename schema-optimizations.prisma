@@ -1,0 +1,134 @@
+// OPTYMALIZACJE SCHEMATU PRISMA
+// Plik zawiera tylko zmiany - należy skopiować do głównego schema.prisma
+
+// ==================== DELIVERY ====================
+model Delivery {
+  // ... existing fields ...
+
+  // NOWE INDEKSY - dodać na końcu modelu, przed @@map
+  @@index([deliveryDate, status], name: "idx_delivery_date_status")
+  @@index([status, deliveryDate], name: "idx_status_delivery_date")
+
+  @@map("deliveries")
+}
+
+// ==================== ORDER ====================
+model Order {
+  // ... existing fields ...
+
+  // NOWE INDEKSY - dodać zamiast istniejących lub obok
+  @@index([archivedAt, status], name: "idx_archived_status")
+  @@index([createdAt, archivedAt], name: "idx_created_archived")
+  @@index([status, archivedAt], name: "idx_status_archived")
+
+  // ISTNIEJĄCE - pozostawić bez zmian
+  @@index([status])
+  @@index([archivedAt])
+  @@index([createdAt])
+  @@index([invoiceNumber, createdAt])
+  @@index([invoiceNumber, deliveryDate])
+
+  @@map("orders")
+}
+
+// ==================== ORDER REQUIREMENT ====================
+model OrderRequirement {
+  // ... existing fields ...
+
+  // NOWE - kompozytowy indeks zamiast 3 osobnych
+  @@index([orderId, profileId, colorId], name: "idx_order_profile_color_composite")
+
+  // STARE - można usunąć jeśli dodano composite (opcjonalne)
+  // @@index([colorId])
+  // @@index([profileId])
+  // @@index([orderId])
+
+  // ZACHOWAĆ
+  @@unique([orderId, profileId, colorId])
+  @@index([createdAt])
+
+  @@map("order_requirements")
+}
+
+// ==================== SCHUCO DELIVERY ====================
+model SchucoDelivery {
+  // ... existing fields ...
+
+  // NOWE INDEKSY
+  @@index([changeType, changedAt], name: "idx_change_type_changed_at")
+  @@index([orderDateParsed, shippingStatus], name: "idx_order_date_status")
+  @@index([shippingStatus, orderDateParsed], name: "idx_status_order_date")
+
+  // ISTNIEJĄCE - pozostawić
+  @@index([fetchedAt])
+  @@index([orderNumber])
+  @@index([orderDate])
+  @@index([orderDateParsed])
+  @@index([changeType])
+  @@index([changedAt])
+
+  @@map("schuco_deliveries")
+}
+
+// ==================== FILE IMPORT ====================
+model FileImport {
+  // ... existing fields ...
+
+  // NOWY - kompozytowy indeks
+  @@index([status, createdAt], name: "idx_status_created_composite")
+
+  // ISTNIEJĄCE - pozostawić
+  @@index([status])
+  @@index([createdAt])
+
+  @@map("file_imports")
+}
+
+// ==================== WAREHOUSE STOCK ====================
+model WarehouseStock {
+  // ... existing fields ...
+
+  // OPCJONALNIE - dodać indeks na updatedAt jeśli często filtrujemy po dacie
+  // @@index([updatedAt], name: "idx_warehouse_updated_at")
+
+  // ISTNIEJĄCE - pozostawić
+  @@unique([profileId, colorId])
+  @@index([colorId])
+  @@index([profileId])
+
+  @@map("warehouse_stock")
+}
+
+// ==================== NOTATKI DOTYCZĄCE ZMIAN ====================
+
+/**
+ * DLACZEGO TE ZMIANY?
+ *
+ * 1. Kompozytowe indeksy (multi-column indexes):
+ *    - SQLite używa tylko JEDNEGO indeksu na query
+ *    - WHERE clauses z wieloma kolumnami benefitują z composite indexes
+ *    - Przykład: WHERE archived_at IS NULL AND status = 'new'
+ *      → lepiej idx_archived_status niż 2 osobne
+ *
+ * 2. Kolejność kolumn w indeksie:
+ *    - Pierwsza kolumna: najbardziej selektywna (najmniej duplikatów)
+ *    - Przykład: (deliveryDate, status) lepsze niż (status, deliveryDate)
+ *      bo deliveryDate ma więcej unikalnych wartości
+ *
+ * 3. Zachowanie starych indeksów:
+ *    - Niektóre queries mogą używać pojedynczych kolumn
+ *    - Koszt utrzymania: minimalny w małych bazach
+ *    - Można usunąć jeśli pewni że nie są używane
+ *
+ * POMIAR SKUTECZNOŚCI:
+ *
+ * ```sql
+ * -- Sprawdź które indeksy są używane
+ * EXPLAIN QUERY PLAN
+ * SELECT * FROM orders
+ * WHERE archived_at IS NULL AND status = 'new';
+ *
+ * -- Powinno zwrócić:
+ * -- SEARCH orders USING INDEX idx_archived_status (archived_at=? AND status=?)
+ * ```
+ */

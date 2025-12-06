@@ -89,43 +89,51 @@ async function main() {
         }
 
         if (matchedSkills.length > 0) {
-            let output = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-            output += '🎯 SKILL ACTIVATION CHECK\n';
-            output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+            // Sort by priority: critical > high > medium > low
+            const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+            const sortedSkills = matchedSkills.sort((a, b) =>
+                priorityOrder[a.config.priority] - priorityOrder[b.config.priority]
+            );
 
-            const critical = matchedSkills.filter(s => s.config.priority === 'critical');
-            const high = matchedSkills.filter(s => s.config.priority === 'high');
-            const medium = matchedSkills.filter(s => s.config.priority === 'medium');
-            const low = matchedSkills.filter(s => s.config.priority === 'low');
+            // Auto-activate critical and high priority skills
+            const skillsToActivate = sortedSkills.filter(s =>
+                s.config.priority === 'critical' || s.config.priority === 'high'
+            );
 
-            if (critical.length > 0) {
-                output += '⚠️ CRITICAL SKILLS (REQUIRED):\n';
-                critical.forEach(s => output += `  → ${s.name}\n`);
-                output += '\n';
+            if (skillsToActivate.length > 0) {
+                let output = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+                output += '🎯 AUTO-ACTIVATING SKILLS\n';
+                output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+
+                skillsToActivate.forEach(skill => {
+                    const icon = skill.config.priority === 'critical' ? '⚠️' : '📚';
+                    output += `${icon} ${skill.name} (${skill.config.priority})\n`;
+                });
+
+                output += '\n📋 INSTRUCTION: Before responding to the user\'s request,\n';
+                output += 'you MUST activate the following skill(s):\n\n';
+
+                skillsToActivate.forEach(skill => {
+                    output += `   → Use Skill tool: "${skill.name}"\n`;
+                });
+
+                output += '\n⚡ This is AUTOMATIC - activate the skill immediately.\n';
+                output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+                console.log(output);
             }
 
-            if (high.length > 0) {
-                output += '📚 RECOMMENDED SKILLS:\n';
-                high.forEach(s => output += `  → ${s.name}\n`);
-                output += '\n';
+            // Suggest medium/low priority skills (don't auto-activate)
+            const suggestedSkills = sortedSkills.filter(s =>
+                s.config.priority === 'medium' || s.config.priority === 'low'
+            );
+
+            if (suggestedSkills.length > 0) {
+                let output = '\n💡 OPTIONAL SKILLS (manual activation):\n';
+                suggestedSkills.forEach(s => {
+                    output += `  → ${s.name} (${s.config.priority})\n`;
+                });
+                console.log(output);
             }
-
-            if (medium.length > 0) {
-                output += '💡 SUGGESTED SKILLS:\n';
-                medium.forEach(s => output += `  → ${s.name}\n`);
-                output += '\n';
-            }
-
-            if (low.length > 0) {
-                output += '📌 OPTIONAL SKILLS:\n';
-                low.forEach(s => output += `  → ${s.name}\n`);
-                output += '\n';
-            }
-
-            output += 'ACTION: Use Skill tool BEFORE responding\n';
-            output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-
-            console.log(output);
         }
 
         process.exit(0);
