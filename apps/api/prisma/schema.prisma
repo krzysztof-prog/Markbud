@@ -39,6 +39,7 @@ model Profile {
   articleNumber String?  @unique  @map("article_number")
   name          String
   description   String?
+  sortOrder     Int      @default(0) @map("sort_order")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 

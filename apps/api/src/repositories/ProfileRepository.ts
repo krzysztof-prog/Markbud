@@ -10,7 +10,7 @@ export class ProfileRepository {
 
   async findAll(): Promise<Profile[]> {
     return this.prisma.profile.findMany({
-      orderBy: { number: 'asc' },
+      orderBy: [{ sortOrder: 'asc' }, { number: 'asc' }],
     });
   }
 
@@ -22,6 +22,7 @@ export class ProfileRepository {
         number: true,
         name: true,
         description: true,
+        sortOrder: true,
         createdAt: true,
         updatedAt: true,
         profileColors: {
@@ -67,5 +68,17 @@ export class ProfileRepository {
     await this.prisma.profile.delete({
       where: { id },
     });
+  }
+
+  async updateProfileOrders(profileOrders: { id: number; sortOrder: number }[]): Promise<void> {
+    // Use transaction to update all profiles atomically
+    await this.prisma.$transaction(
+      profileOrders.map((order) =>
+        this.prisma.profile.update({
+          where: { id: order.id },
+          data: { sortOrder: order.sortOrder },
+        })
+      )
+    );
   }
 }

@@ -9,6 +9,7 @@ export interface Profile {
   number: string;
   name: string;
   description?: string;
+  sortOrder?: number; // Kolejność sortowania
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

@@ -32,30 +32,32 @@ interface FetchResult {
 
 export class SchucoService {
   private prisma: PrismaClient;
-  private scraper: SchucoScraper;
   private parser: SchucoParser;
 
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
-    this.scraper = new SchucoScraper();
     this.parser = new SchucoParser();
   }
 
   /**
    * Fetch and store Schuco deliveries with change tracking
    */
-  async fetchAndStoreDeliveries(triggerType: 'manual' | 'scheduled' = 'manual'): Promise<FetchResult> {
+  async fetchAndStoreDeliveries(
+    headless: boolean = true,
+    triggerType: 'manual' | 'scheduled' = 'manual'
+  ): Promise<FetchResult> {
     const startTime = Date.now();
     const logId = await this.createFetchLog('pending', triggerType);
 
     try {
-      logger.info(`[SchucoService] Starting fetch process (trigger: ${triggerType})...`);
+      logger.info(`[SchucoService] Starting fetch process (trigger: ${triggerType}, headless: ${headless})...`);
 
       // Step 1: Clear old change markers (older than 24 hours)
       await this.clearOldChangeMarkers();
 
-      // Step 2: Scrape website and download CSV
-      const csvFilePath = await this.scraper.scrapeDeliveries();
+      // Step 2: Scrape website and download CSV - create scraper with headless setting
+      const scraper = new SchucoScraper({ headless });
+      const csvFilePath = await scraper.scrapeDeliveries();
 
       // Step 3: Parse CSV file
       const deliveries = await this.parser.parseCSV(csvFilePath);
@@ -100,16 +102,16 @@ export class SchucoService {
   }
 
   /**
-   * Clear change markers older than 24 hours
+   * Clear change markers older than 72 hours
    */
   private async clearOldChangeMarkers(): Promise<void> {
-    const yesterday = new Date();
-    yesterday.setHours(yesterday.getHours() - 24);
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setHours(threeDaysAgo.getHours() - 72);
 
     const result = await this.prisma.schucoDelivery.updateMany({
       where: {
         changedAt: {
-          lt: yesterday,
+          lt: threeDaysAgo,
         },
         changeType: {
           not: null,
@@ -124,7 +126,7 @@ export class SchucoService {
     });
 
     if (result.count > 0) {
-      logger.info(`[SchucoService] Cleared ${result.count} old change markers`);
+      logger.info(`[SchucoService] Cleared ${result.count} old change markers (>72h)`);
     }
   }
 

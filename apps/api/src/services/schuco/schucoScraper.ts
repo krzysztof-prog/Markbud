@@ -107,6 +107,13 @@ export class SchucoScraper {
 
     this.page = await this.browser.newPage();
 
+    // Close the default blank page that Puppeteer creates
+    const pages = await this.browser.pages();
+    if (pages.length > 1) {
+      // Close the first page (default blank), keep our newly created one
+      await pages[0].close();
+    }
+
     // Set viewport - like Python: driver.set_window_size() is implicit with --start-maximized
     await this.page.setViewport({ width: 1920, height: 1080 });
 

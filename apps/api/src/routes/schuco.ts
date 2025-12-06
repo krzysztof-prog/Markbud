@@ -62,6 +62,12 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
     schema: {
       description: 'Trigger manual refresh of Schuco deliveries',
       tags: ['schuco'],
+      body: {
+        type: 'object',
+        properties: {
+          headless: { type: 'boolean', default: true },
+        },
+      },
       response: {
         200: {
           type: 'object',

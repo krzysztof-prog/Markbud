@@ -4,6 +4,24 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { deliveriesApi, profilesApi, colorsApi, ordersApi } from '@/lib/api';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
 
 // Funkcja do obliczenia numeru tygodnia
 function getWeekNumber(date: Date): number {
@@ -26,6 +44,7 @@ interface DeliveryData {
 interface ProfileRow {
   id: string;
   name: string;
+  sortOrder: number; // Kolejność profilu
   magValue: number;
   deliveries: DeliveryData[];
   requirementTotal: number; // Całkowite zapotrzebowanie dla tego profilu w tej grupie kolorów
@@ -37,13 +56,119 @@ interface ColorGroup {
   profiles: ProfileRow[];
 }
 
+// Komponent wiersza z drag-and-drop
+interface SortableRowProps {
+  profile: ProfileRow;
+  idx: number;
+  colorGroupId: string;
+  deliveries: DeliveryData[];
+  sumColumns: number;
+  getSumForColumns: (deliveries: DeliveryData[], columns: number) => number;
+  handleMagValueChange: (colorId: string, profileId: string, value: string) => void;
+  handleQuantityChange: (colorId: string, profileId: string, dateIndex: number, value: string) => void;
+}
+
+function SortableRow({
+  profile,
+  idx,
+  colorGroupId,
+  deliveries,
+  sumColumns,
+  getSumForColumns,
+  handleMagValueChange,
+  handleQuantityChange,
+}: SortableRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: profile.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const rowBg = idx % 2 === 0 ? 'bg-white' : 'bg-slate-100';
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className={`border-b border-slate-200 transition-colors hover:bg-slate-100 ${rowBg}`}
+    >
+      <td className={`px-3 py-2.5 font-medium text-sm text-slate-900 border-r border-slate-200 sticky left-0 z-10 ${rowBg}`}>
+        <div className="flex items-center gap-2">
+          <button
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing p-1 hover:bg-slate-200 rounded"
+            type="button"
+          >
+            <GripVertical className="h-4 w-4 text-slate-400" />
+          </button>
+          <span>{profile.name}</span>
+        </div>
+      </td>
+      <td className={`px-2 py-2 border-r border-slate-200 sticky left-[140px] z-10 ${rowBg}`}>
+        <Input
+          type="number"
+          value={profile.magValue}
+          onChange={(e) => handleMagValueChange(colorGroupId, profile.id, e.target.value)}
+          className="text-center h-8 text-sm border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+          min="0"
+        />
+      </td>
+      <td className={`px-3 py-2.5 text-center font-semibold text-sm text-slate-900 border-r border-slate-200 sticky left-[240px] z-10 ${rowBg}`}>
+        {profile.deliveries.reduce((sum, d) => sum + d.quantity, 0)}
+      </td>
+      <td className="px-3 py-2.5 text-center font-bold text-sm text-slate-900 border-r border-slate-200 sticky left-[340px] bg-yellow-50 z-10">
+        {getSumForColumns(profile.deliveries, sumColumns)}
+      </td>
+      {profile.deliveries.map((delivery, dateIdx) => (
+        <td key={`${profile.id}-${delivery.deliveryId}`} className="px-2 py-2 border-r border-slate-200">
+          <Input
+            type="number"
+            value={delivery.quantity}
+            onChange={(e) => handleQuantityChange(colorGroupId, profile.id, dateIdx, e.target.value)}
+            className="text-center h-8 text-sm border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+            min="0"
+          />
+        </td>
+      ))}
+    </tr>
+  );
+}
+
 export function ProfileDeliveryTable() {
-  const [sumColumns, setSumColumns] = useState(3);
+  // Wczytaj domyślną liczbę kolumn z localStorage
+  const [sumColumns, setSumColumns] = useState(() => {
+    const saved = localStorage.getItem('profileDeliveryTable.sumColumns');
+    return saved ? parseInt(saved) : 3;
+  });
+
   const [colorGroups, setColorGroups] = useState<ColorGroup[]>([]);
   const [startDate, setStartDate] = useState<string>(() => {
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
+
+  // Zapisz liczbę kolumn do localStorage przy każdej zmianie
+  useEffect(() => {
+    localStorage.setItem('profileDeliveryTable.sumColumns', sumColumns.toString());
+  }, [sumColumns]);
+
+  // Sensory dla drag-and-drop
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Pobierz wszystkie dostawy do danych o datach
   const { data: deliveriesData } = useQuery({
@@ -54,13 +179,7 @@ export function ProfileDeliveryTable() {
   // Pobierz profile requirements z dostaw
   const { data: deliveryProfileReqs } = useQuery({
     queryKey: ['delivery-profile-requirements', 'v7', startDate],
-    queryFn: () => {
-      console.log('[ProfileDeliveryTable] Fetching deliveryProfileReqs with from:', startDate);
-      if (!startDate) {
-        console.error('[ProfileDeliveryTable] startDate is empty!');
-      }
-      return deliveriesApi.getProfileRequirements({ from: startDate });
-    },
+    queryFn: () => deliveriesApi.getProfileRequirements({ from: startDate }),
     enabled: !!startDate, // Only run query when startDate exists
   });
 
@@ -174,6 +293,7 @@ export function ProfileDeliveryTable() {
             groupMap.get(colorCode)!.profiles.push({
               id: profile.id.toString(),
               name: profile.number || profile.name,
+              sortOrder: profile.sortOrder || 0,
               magValue: 0,
               requirementTotal: req.totalBeams,
               deliveries: Array.from(deliveryMap.values()).map(d => {
@@ -210,6 +330,7 @@ export function ProfileDeliveryTable() {
           groupMap.get(colorCode)!.profiles.push({
             id: profile.id.toString(),
             name: profile.number || profile.name,
+            sortOrder: profile.sortOrder || 0,
             magValue: 0,
             requirementTotal: 0,
             deliveries: Array.from(deliveryMap.values()).map(d => {
@@ -229,9 +350,8 @@ export function ProfileDeliveryTable() {
           id: colorCode,
           name: colorName,
           profiles: profiles.sort((a, b) => {
-            const aNum = parseInt(a.name) || 0;
-            const bNum = parseInt(b.name) || 0;
-            return aNum - bNum;
+            // Sortuj po sortOrder (zapisanym w bazie)
+            return a.sortOrder - b.sortOrder;
           }),
         }))
         .sort((a, b) => {
@@ -294,6 +414,64 @@ export function ProfileDeliveryTable() {
         return group;
       })
     );
+  }, []);
+
+  const handleDragEnd = useCallback((event: DragEndEvent, colorId: string) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    setColorGroups((prevGroups) => {
+      // Znajdź grupę, która została zmieniona
+      const changedGroup = prevGroups.find((g) => g.id === colorId);
+      if (!changedGroup) return prevGroups;
+
+      const oldIndex = changedGroup.profiles.findIndex((p) => p.id === active.id);
+      const newIndex = changedGroup.profiles.findIndex((p) => p.id === over.id);
+
+      if (oldIndex === -1 || newIndex === -1) return prevGroups;
+
+      // Oblicz nową kolejność profili dla tej grupy
+      const reorderedProfiles = arrayMove(changedGroup.profiles, oldIndex, newIndex);
+
+      // Stwórz mapę: profileId -> nowy sortOrder
+      const newOrderMap = new Map<string, number>();
+      reorderedProfiles.forEach((profile, index) => {
+        newOrderMap.set(profile.id, index);
+      });
+
+      // Zastosuj tę samą kolejność do WSZYSTKICH grup kolorów
+      const newGroups = prevGroups.map((group) => {
+        // Zaktualizuj sortOrder dla każdego profilu w tej grupie
+        const updatedProfiles = group.profiles.map((profile) => {
+          const newSortOrder = newOrderMap.get(profile.id);
+          if (newSortOrder !== undefined) {
+            return { ...profile, sortOrder: newSortOrder };
+          }
+          return profile;
+        });
+
+        // Posortuj profile według nowego sortOrder
+        const sortedProfiles = [...updatedProfiles].sort((a, b) => a.sortOrder - b.sortOrder);
+
+        return { ...group, profiles: sortedProfiles };
+      });
+
+      // Zbierz wszystkie unikalne profile i zapisz ich nową kolejność do backendu
+      const profileOrders = Array.from(newOrderMap.entries()).map(([id, sortOrder]) => ({
+        id: parseInt(id),
+        sortOrder,
+      }));
+
+      // Zapisz do backendu
+      profilesApi.updateOrders(profileOrders).catch((error) => {
+        console.error('Failed to update profile order:', error);
+      });
+
+      return newGroups;
+    });
   }, []);
 
   const deliveries = getAllDeliveries; // Już posortowane według kolejności z bazy
@@ -389,47 +567,32 @@ export function ProfileDeliveryTable() {
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
-                    {colorGroup.profiles.map((profile, idx) => {
-                      const rowBg = idx % 2 === 0 ? 'bg-white' : 'bg-slate-100';
-                      return (
-                      <tr
-                        key={profile.id}
-                        className={`border-b border-slate-200 transition-colors hover:bg-slate-100 ${rowBg}`}
-                      >
-                        <td className={`px-3 py-2.5 font-medium text-sm text-slate-900 border-r border-slate-200 sticky left-0 z-10 ${rowBg}`}>
-                          {profile.name}
-                        </td>
-                        <td className={`px-2 py-2 border-r border-slate-200 sticky left-[140px] z-10 ${rowBg}`}>
-                          <Input
-                            type="number"
-                            value={profile.magValue}
-                            onChange={(e) => handleMagValueChange(colorGroup.id, profile.id, e.target.value)}
-                            className="text-center h-8 text-sm border-slate-300 focus:border-blue-500 focus:ring-blue-500"
-                            min="0"
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={(event) => handleDragEnd(event, colorGroup.id)}
+                  >
+                    <SortableContext
+                      items={colorGroup.profiles.map((p) => p.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <tbody>
+                        {colorGroup.profiles.map((profile, idx) => (
+                          <SortableRow
+                            key={profile.id}
+                            profile={profile}
+                            idx={idx}
+                            colorGroupId={colorGroup.id}
+                            deliveries={deliveries}
+                            sumColumns={sumColumns}
+                            getSumForColumns={getSumForColumns}
+                            handleMagValueChange={handleMagValueChange}
+                            handleQuantityChange={handleQuantityChange}
                           />
-                        </td>
-                        <td className={`px-3 py-2.5 text-center font-semibold text-sm text-slate-900 border-r border-slate-200 sticky left-[240px] z-10 ${rowBg}`}>
-                          {profile.deliveries.reduce((sum, d) => sum + d.quantity, 0)}
-                        </td>
-                        <td className="px-3 py-2.5 text-center font-bold text-sm text-slate-900 border-r border-slate-200 sticky left-[340px] bg-yellow-50 z-10">
-                          {getSumForColumns(profile.deliveries, sumColumns)}
-                        </td>
-                        {profile.deliveries.map((delivery, dateIdx) => (
-                          <td key={`${profile.id}-${delivery.deliveryId}`} className="px-2 py-2 border-r border-slate-200">
-                            <Input
-                              type="number"
-                              value={delivery.quantity}
-                              onChange={(e) => handleQuantityChange(colorGroup.id, profile.id, dateIdx, e.target.value)}
-                              className="text-center h-8 text-sm border-slate-300 focus:border-blue-500 focus:ring-blue-500"
-                              min="0"
-                            />
-                          </td>
                         ))}
-                      </tr>
-                      );
-                    })}
-                  </tbody>
+                      </tbody>
+                    </SortableContext>
+                  </DndContext>
                 </table>
               </div>
             ) : (

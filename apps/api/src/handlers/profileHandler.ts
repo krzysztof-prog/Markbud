@@ -8,8 +8,10 @@ import {
   createProfileSchema,
   updateProfileSchema,
   profileParamsSchema,
+  updateProfileOrderSchema,
   type CreateProfileInput,
   type UpdateProfileInput,
+  type UpdateProfileOrderInput,
 } from '../validators/profile.js';
 
 export class ProfileHandler {
@@ -54,6 +56,15 @@ export class ProfileHandler {
   ) {
     const { id } = profileParamsSchema.parse(request.params);
     await this.service.deleteProfile(parseInt(id));
+    return reply.status(204).send();
+  }
+
+  async updateOrders(
+    request: FastifyRequest<{ Body: UpdateProfileOrderInput }>,
+    reply: FastifyReply
+  ) {
+    const validated = updateProfileOrderSchema.parse(request.body);
+    await this.service.updateProfileOrders(validated);
     return reply.status(204).send();
   }
 }

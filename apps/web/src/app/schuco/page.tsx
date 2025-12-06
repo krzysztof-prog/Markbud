@@ -86,7 +86,7 @@ export default function SchucoPage() {
 
   // Refresh mutation with error handling
   const refreshMutation = useMutation({
-    mutationFn: schucoApi.refresh,
+    mutationFn: () => schucoApi.refresh(true), // Always headless for this page
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['schuco-deliveries'] });
       queryClient.invalidateQueries({ queryKey: ['schuco-status'] });

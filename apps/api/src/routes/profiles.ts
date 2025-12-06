@@ -16,4 +16,5 @@ export const profileRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/', handler.create.bind(handler));
   fastify.put('/:id', handler.update.bind(handler));
   fastify.delete('/:id', handler.delete.bind(handler));
+  fastify.patch('/update-orders', handler.updateOrders.bind(handler));
 };

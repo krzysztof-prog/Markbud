@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { schucoApi } from '@/lib/api';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -67,6 +69,7 @@ const getShippingStatusBadge = (status: string) => {
 export default function DostawySchucoPage() {
   const queryClient = useQueryClient();
   const [currentPage, setCurrentPage] = useState(1);
+  const [showBrowser, setShowBrowser] = useState(false); // Default: hidden browser (headless: true)
 
   // Fetch deliveries with pagination
   const { data: deliveriesData, isLoading: isLoadingDeliveries } = useQuery<SchucoDeliveriesResponse>({
@@ -82,7 +85,7 @@ export default function DostawySchucoPage() {
 
   // Refresh mutation
   const refreshMutation = useMutation({
-    mutationFn: () => schucoApi.refresh(),
+    mutationFn: () => schucoApi.refresh(!showBrowser), // Invert: showBrowser=false means headless=true
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['schuco-deliveries'] });
       queryClient.invalidateQueries({ queryKey: ['schuco-status'] });
@@ -140,7 +143,7 @@ export default function DostawySchucoPage() {
     if (delivery.changeType === 'updated') {
       return 'bg-amber-50 hover:bg-amber-100 border-l-4 border-l-amber-500';
     }
-    return 'hover:bg-slate-50';
+    return null; // Return null to allow baseStripeBg to be used
   };
 
   // Parse changed fields for tooltip
@@ -218,15 +221,27 @@ export default function DostawySchucoPage() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">Status ostatniego pobrania</CardTitle>
-                  <Button
-                    onClick={handleRefresh}
-                    disabled={refreshMutation.isPending}
-                    size="sm"
-                    className="gap-2"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${refreshMutation.isPending ? 'animate-spin' : ''}`} />
-                    {refreshMutation.isPending ? 'Pobieram...' : 'Odśwież dane'}
-                  </Button>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="show-browser"
+                        checked={showBrowser}
+                        onCheckedChange={(checked: boolean | 'indeterminate') => setShowBrowser(!!checked)}
+                      />
+                      <Label htmlFor="show-browser" className="text-sm cursor-pointer">
+                        Pokaż przeglądarkę
+                      </Label>
+                    </div>
+                    <Button
+                      onClick={handleRefresh}
+                      disabled={refreshMutation.isPending}
+                      size="sm"
+                      className="gap-2"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${refreshMutation.isPending ? 'animate-spin' : ''}`} />
+                      {refreshMutation.isPending ? 'Pobieram...' : 'Odśwież dane'}
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -393,10 +408,14 @@ export default function DostawySchucoPage() {
                         {deliveries.map((delivery: SchucoDelivery, index: number) => {
                           const changesInfo = getChangedFieldsInfo(delivery);
                           const baseStripeBg = index % 2 === 0 ? 'bg-white' : 'bg-slate-100';
+                          const changeClasses = getRowClasses(delivery);
                           const rowContent = (
                             <tr
                               key={delivery.id}
-                              className={cn('border-b transition-colors', getRowClasses(delivery) || baseStripeBg)}
+                              className={cn(
+                                'border-b transition-colors',
+                                changeClasses ? changeClasses : `${baseStripeBg} hover:bg-slate-50`
+                              )}
                             >
                               <td className="px-4 py-3">
                                 {delivery.orderDate}

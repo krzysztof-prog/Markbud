@@ -3,85 +3,93 @@ import { prisma } from '../index.js';
 
 export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/dashboard - dane głównego dashboardu
-  fastify.get('/', async () => {
-    // Aktywne zlecenia (nie zarchiwizowane)
-    const activeOrdersCount = await prisma.order.count({
-      where: { archivedAt: null },
-    });
+  fastify.get('/', async (request, reply) => {
+    try {
+      // Aktywne zlecenia (nie zarchiwizowane)
+      const activeOrdersCount = await prisma.order.count({
+        where: { archivedAt: null },
+      });
 
-    // Nadchodzące dostawy (w ciągu 7 dni)
-    const now = new Date();
-    const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      // Nadchodzące dostawy (w ciągu 7 dni)
+      const now = new Date();
+      const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    const upcomingDeliveries = await prisma.delivery.findMany({
-      where: {
-        deliveryDate: {
-          gte: now,
-          lte: weekFromNow,
+      const upcomingDeliveries = await prisma.delivery.findMany({
+        where: {
+          deliveryDate: {
+            gte: now,
+            lte: weekFromNow,
+          },
+          status: { in: ['planned', 'in_preparation', 'ready'] },
         },
-        status: { in: ['planned', 'in_preparation', 'ready'] },
-      },
-      select: {
-        id: true,
-        deliveryDate: true,
-        status: true,
-        _count: {
-          select: { deliveryOrders: true },
+        select: {
+          id: true,
+          deliveryDate: true,
+          status: true,
+          _count: {
+            select: { deliveryOrders: true },
+          },
         },
-      },
-      orderBy: { deliveryDate: 'asc' },
-    });
+        orderBy: { deliveryDate: 'asc' },
+      });
 
-    // Oczekujące importy
-    const pendingImports = await prisma.fileImport.findMany({
-      where: { status: 'pending' },
-      select: {
-        id: true,
-        filename: true,
-        fileType: true,
-        status: true,
-        createdAt: true,
-        errorMessage: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-    });
+      // Oczekujące importy
+      const pendingImports = await prisma.fileImport.findMany({
+        where: { status: 'pending' },
+        select: {
+          id: true,
+          filename: true,
+          fileType: true,
+          status: true,
+          createdAt: true,
+          errorMessage: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
 
-    // Braki materiałowe
-    const shortages = await getShortages();
+      // Braki materiałowe
+      const shortages = await getShortages();
 
-    // Ostatnie zlecenia
-    const recentOrders = await prisma.order.findMany({
-      where: { archivedAt: null },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        createdAt: true,
-        valuePln: true,
-      },
-    });
+      // Ostatnie zlecenia
+      const recentOrders = await prisma.order.findMany({
+        where: { archivedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
+          createdAt: true,
+          valuePln: true,
+        },
+      });
 
-    return {
-      stats: {
-        activeOrders: activeOrdersCount,
-        upcomingDeliveriesCount: upcomingDeliveries.length,
-        pendingImportsCount: pendingImports.length,
-        shortagesCount: shortages.length,
-      },
-      upcomingDeliveries: upcomingDeliveries.map((d) => ({
-        id: d.id,
-        deliveryDate: d.deliveryDate.toISOString(),
-        status: d.status,
-        ordersCount: d._count.deliveryOrders,
-        weekNumber: getWeekNumber(d.deliveryDate),
-      })),
-      pendingImports,
-      shortages: shortages.slice(0, 5), // Top 5 braków
-      recentOrders,
-    };
+      return {
+        stats: {
+          activeOrders: activeOrdersCount,
+          upcomingDeliveriesCount: upcomingDeliveries.length,
+          pendingImportsCount: pendingImports.length,
+          shortagesCount: shortages.length,
+        },
+        upcomingDeliveries: upcomingDeliveries.map((d) => ({
+          id: d.id,
+          deliveryDate: d.deliveryDate.toISOString(),
+          status: d.status,
+          ordersCount: d._count.deliveryOrders,
+          weekNumber: getWeekNumber(d.deliveryDate),
+        })),
+        pendingImports,
+        shortages: shortages.slice(0, 5), // Top 5 braków
+        recentOrders,
+      };
+    } catch (error) {
+      request.log.error({ error }, 'Dashboard endpoint error');
+      return reply.status(500).send({
+        error: 'Failed to load dashboard data',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
   });
 
   // GET /api/dashboard/alerts - alerty
@@ -152,73 +160,81 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // GET /api/dashboard/stats/weekly - statystyki tygodniowe dla najbliższych 8 tygodni
-  fastify.get('/stats/weekly', async () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  fastify.get('/stats/weekly', async (request, reply) => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-    // Znajdź poniedziałek bieżącego tygodnia
-    const dayOfWeek = today.getDay();
-    const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() + daysToMonday);
+      // Znajdź poniedziałek bieżącego tygodnia
+      const dayOfWeek = today.getDay();
+      const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() + daysToMonday);
 
-    // Pobierz dostawy dla najbliższych 8 tygodni (56 dni)
-    const endDate = new Date(startOfWeek);
-    endDate.setDate(startOfWeek.getDate() + 56);
+      // Pobierz dostawy dla najbliższych 8 tygodni (56 dni)
+      const endDate = new Date(startOfWeek);
+      endDate.setDate(startOfWeek.getDate() + 56);
 
-    // OPTIMIZED: Single raw SQL query z GROUP BY zamiast deep nesting
-    const weekStats = await prisma.$queryRaw<Array<{
-      deliveryDate: Date;
-      deliveriesCount: bigint;
-      ordersCount: bigint;
-      windowsCount: bigint;
-    }>>`
-      SELECT
-        DATE(d.delivery_date) as "deliveryDate",
-        COUNT(DISTINCT d.id) as "deliveriesCount",
-        COUNT(DISTINCT do.order_id) as "ordersCount",
-        COALESCE(SUM(ow.quantity), 0) as "windowsCount"
-      FROM deliveries d
-      LEFT JOIN delivery_orders do ON do.delivery_id = d.id
-      LEFT JOIN order_windows ow ON ow.order_id = do.order_id
-      WHERE d.delivery_date >= ${startOfWeek}
-        AND d.delivery_date < ${endDate}
-      GROUP BY DATE(d.delivery_date)
-      ORDER BY d.delivery_date ASC
-    `;
+      // OPTIMIZED: Single raw SQL query z GROUP BY zamiast deep nesting
+      const weekStats = await prisma.$queryRaw<Array<{
+        deliveryDate: Date;
+        deliveriesCount: number;
+        ordersCount: number;
+        windowsCount: number;
+      }>>`
+        SELECT
+          DATE(d.delivery_date) as "deliveryDate",
+          COUNT(DISTINCT d.id) as "deliveriesCount",
+          COUNT(DISTINCT do.order_id) as "ordersCount",
+          COALESCE(SUM(ow.quantity), 0) as "windowsCount"
+        FROM deliveries d
+        LEFT JOIN delivery_orders do ON do.delivery_id = d.id
+        LEFT JOIN order_windows ow ON ow.order_id = do.order_id
+        WHERE d.delivery_date >= ${startOfWeek}
+          AND d.delivery_date < ${endDate}
+        GROUP BY DATE(d.delivery_date)
+        ORDER BY d.delivery_date ASC
+      `;
 
-    // Grupuj po tygodniach w JavaScript (szybkie, bo już zagregowane)
-    const weeks: any[] = [];
-    for (let i = 0; i < 8; i++) {
-      const weekStart = new Date(startOfWeek);
-      weekStart.setDate(startOfWeek.getDate() + (i * 7));
+      // Grupuj po tygodniach w JavaScript (szybkie, bo już zagregowane)
+      const weeks: any[] = [];
+      for (let i = 0; i < 8; i++) {
+        const weekStart = new Date(startOfWeek);
+        weekStart.setDate(startOfWeek.getDate() + (i * 7));
 
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 6);
-      weekEnd.setHours(23, 59, 59, 999);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        weekEnd.setHours(23, 59, 59, 999);
 
-      // Znajdź dostawy w tym tygodniu (z już zagregowanych danych)
-      const weekData = weekStats.filter((stat) => {
-        const date = new Date(stat.deliveryDate);
-        return date >= weekStart && date <= weekEnd;
-      });
+        // Znajdź dostawy w tym tygodniu (z już zagregowanych danych)
+        const weekData = weekStats.filter((stat) => {
+          const date = new Date(stat.deliveryDate);
+          return date >= weekStart && date <= weekEnd;
+        });
 
-      const windows = weekData.reduce((sum, s) => sum + Number(s.windowsCount), 0);
-      const deliveries = weekData.reduce((sum, s) => sum + Number(s.deliveriesCount), 0);
+        const windows = weekData.reduce((sum, s) => sum + Number(s.windowsCount), 0);
+        const deliveries = weekData.reduce((sum, s) => sum + Number(s.deliveriesCount), 0);
 
-      weeks.push({
-        weekNumber: i + 1,
-        startDate: weekStart.toISOString(),
-        endDate: weekEnd.toISOString(),
-        deliveriesCount: deliveries,
-        ordersCount: weekData.reduce((sum, s) => sum + Number(s.ordersCount), 0),
-        windows,
-        sashes: windows, // Assumption: 1 window = 1 sash
-        glasses: windows, // Assumption: 1 window = 1 glass
+        weeks.push({
+          weekNumber: i + 1,
+          startDate: weekStart.toISOString(),
+          endDate: weekEnd.toISOString(),
+          deliveriesCount: deliveries,
+          ordersCount: weekData.reduce((sum, s) => sum + Number(s.ordersCount), 0),
+          windows,
+          sashes: windows, // Assumption: 1 window = 1 sash
+          glasses: windows, // Assumption: 1 window = 1 glass
+        });
+      }
+
+      return { weeks };
+    } catch (error) {
+      request.log.error({ error }, 'Weekly stats endpoint error');
+      return reply.status(500).send({
+        error: 'Failed to load weekly statistics',
+        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-
-    return { weeks };
   });
 
   // GET /api/dashboard/stats/monthly - statystyki miesięczne

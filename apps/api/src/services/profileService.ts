@@ -5,7 +5,7 @@
 import { ProfileRepository } from '../repositories/ProfileRepository.js';
 import { cacheService } from './cache.js';
 import { NotFoundError, ConflictError } from '../utils/errors.js';
-import type { CreateProfileInput, UpdateProfileInput } from '../validators/profile.js';
+import type { CreateProfileInput, UpdateProfileInput, UpdateProfileOrderInput } from '../validators/profile.js';
 
 export class ProfileService {
   constructor(private repository: ProfileRepository) {}
@@ -62,6 +62,13 @@ export class ProfileService {
     await this.getProfileById(id);
 
     await this.repository.delete(id);
+
+    // Invalidate all profiles cache
+    cacheService.invalidateOnProfileChange();
+  }
+
+  async updateProfileOrders(data: UpdateProfileOrderInput) {
+    await this.repository.updateProfileOrders(data.profileOrders);
 
     // Invalidate all profiles cache
     cacheService.invalidateOnProfileChange();

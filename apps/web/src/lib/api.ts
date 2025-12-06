@@ -123,6 +123,11 @@ export const profilesApi = {
     fetchApi<Profile>(`/api/profiles/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: number) =>
     fetchApi<void>(`/api/profiles/${id}`, { method: 'DELETE' }),
+  updateOrders: (profileOrders: Array<{ id: number; sortOrder: number }>) =>
+    fetchApi<void>('/api/profiles/update-orders', {
+      method: 'PATCH',
+      body: JSON.stringify({ profileOrders }),
+    }),
 };
 
 // Zlecenia
@@ -424,10 +429,10 @@ export const schucoApi = {
     fetchApi<import('@/types').SchucoDeliveriesResponse>(
       `/api/schuco/deliveries?page=${page}&pageSize=${pageSize}`
     ),
-  refresh: () =>
+  refresh: (headless = true) =>
     fetchApi<import('@/types').SchucoRefreshResponse>('/api/schuco/refresh', {
       method: 'POST',
-      body: JSON.stringify({}), // Empty body required for Fastify
+      body: JSON.stringify({ headless }),
     }),
   getStatus: () =>
     fetchApi<import('@/types').SchucoFetchLog>('/api/schuco/status'),

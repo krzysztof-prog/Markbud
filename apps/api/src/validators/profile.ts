@@ -19,6 +19,16 @@ export const profileParamsSchema = z.object({
   id: z.string().regex(/^\d+$/, 'Invalid profile ID'),
 });
 
+export const updateProfileOrderSchema = z.object({
+  profileOrders: z.array(
+    z.object({
+      id: z.number(),
+      sortOrder: z.number(),
+    })
+  ),
+});
+
 export type CreateProfileInput = z.infer<typeof createProfileSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type ProfileParams = z.infer<typeof profileParamsSchema>;
+export type UpdateProfileOrderInput = z.infer<typeof updateProfileOrderSchema>;

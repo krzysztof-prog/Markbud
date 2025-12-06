@@ -78,7 +78,7 @@ export class SchucoScheduler {
     logger.info(`[SchucoScheduler] Running scheduled fetch (${scheduledTime})...`);
 
     try {
-      const result = await this.schucoService.fetchAndStoreDeliveries('scheduled');
+      const result = await this.schucoService.fetchAndStoreDeliveries(true, 'scheduled');
 
       if (result.success) {
         logger.info(

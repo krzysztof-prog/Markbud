@@ -34,14 +34,18 @@ export class SchucoHandler {
    * POST /api/schuco/refresh
    * Trigger manual refresh - scrape and store new data
    */
-  refreshDeliveries = async (request: FastifyRequest, reply: FastifyReply) => {
+  refreshDeliveries = async (
+    request: FastifyRequest<{ Body: { headless?: boolean } }>,
+    reply: FastifyReply
+  ) => {
     try {
-      logger.info('[SchucoHandler] Manual refresh triggered');
+      const { headless = true } = request.body || {};
+      logger.info(`[SchucoHandler] Manual refresh triggered (headless: ${headless})`);
 
       // Increase socket timeout for this long-running request (3.5 minutes)
       request.raw.setTimeout(210000);
 
-      const result = await this.schucoService.fetchAndStoreDeliveries();
+      const result = await this.schucoService.fetchAndStoreDeliveries(headless);
 
       if (result.success) {
         return reply.code(200).send({
