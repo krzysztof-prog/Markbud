@@ -414,25 +414,38 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
+    // Sanitize and validate path to prevent path traversal attacks
+    const basePath = process.env.IMPORTS_BASE_PATH || 'C:\\Dostawy';
+    const normalizedBase = path.resolve(basePath);
+    const normalizedFolder = path.resolve(folderPath);
+
+    // Ensure the folder is within the allowed base path (case-insensitive on Windows)
+    if (!normalizedFolder.toLowerCase().startsWith(normalizedBase.toLowerCase())) {
+      return reply.status(403).send({
+        error: 'Dostęp zabroniony',
+        details: 'Folder musi znajdować się w dozwolonej lokalizacji',
+      });
+    }
+
     // Sprawdź czy folder istnieje
-    if (!existsSync(folderPath)) {
+    if (!existsSync(normalizedFolder)) {
       return reply.status(404).send({
         error: 'Folder nie istnieje',
-        details: `Nie znaleziono folderu: ${folderPath}`,
+        details: `Nie znaleziono folderu: ${normalizedFolder}`,
       });
     }
 
     // Sprawdź czy to faktycznie folder
-    const stats = statSync(folderPath);
+    const stats = statSync(normalizedFolder);
     if (!stats.isDirectory()) {
       return reply.status(400).send({
         error: 'Ścieżka nie jest folderem',
-        details: `Podana ścieżka nie jest folderem: ${folderPath}`,
+        details: `Podana ścieżka nie jest folderem: ${normalizedFolder}`,
       });
     }
 
     // Wyciągnij datę z nazwy folderu (format DD.MM.YYYY)
-    const folderName = path.basename(folderPath);
+    const folderName = path.basename(normalizedFolder);
     const dateMatch = folderName.match(/(\d{2})\.(\d{2})\.(\d{4})/);
 
     if (!dateMatch) {
@@ -454,7 +467,7 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     // Znajdź wszystkie pliki CSV w folderze i podfolderach (rekursywnie)
-    const csvFilesData = await findCsvFilesRecursively(folderPath, 3);
+    const csvFilesData = await findCsvFilesRecursively(normalizedFolder, 3);
 
     if (csvFilesData.length === 0) {
       return reply.status(400).send({
@@ -670,17 +683,30 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(400).send({ error: 'Brak parametru folderPath' });
     }
 
-    if (!existsSync(folderPath)) {
+    // Sanitize and validate path to prevent path traversal attacks
+    const basePath = process.env.IMPORTS_BASE_PATH || 'C:\\Dostawy';
+    const normalizedBase = path.resolve(basePath);
+    const normalizedFolder = path.resolve(folderPath);
+
+    // Ensure the folder is within the allowed base path (case-insensitive on Windows)
+    if (!normalizedFolder.toLowerCase().startsWith(normalizedBase.toLowerCase())) {
+      return reply.status(403).send({
+        error: 'Dostęp zabroniony',
+        details: 'Folder musi znajdować się w dozwolonej lokalizacji',
+      });
+    }
+
+    if (!existsSync(normalizedFolder)) {
       return reply.status(404).send({ error: 'Folder nie istnieje' });
     }
 
-    const stats = statSync(folderPath);
+    const stats = statSync(normalizedFolder);
     if (!stats.isDirectory()) {
       return reply.status(400).send({ error: 'Ścieżka nie jest folderem' });
     }
 
     // Wyciągnij datę z nazwy folderu
-    const folderName = path.basename(folderPath);
+    const folderName = path.basename(normalizedFolder);
     const dateMatch = folderName.match(/(\d{2})\.(\d{2})\.(\d{4})/);
 
     let detectedDate: string | null = null;
@@ -690,7 +716,7 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     // Znajdź pliki CSV rekursywnie (maksymalnie 3 poziomy głębokości)
-    const csvFilesData = await findCsvFilesRecursively(folderPath, 3);
+    const csvFilesData = await findCsvFilesRecursively(normalizedFolder, 3);
 
     // Pobierz podgląd każdego pliku
     const parser = new CsvParser();
