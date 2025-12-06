@@ -334,6 +334,63 @@ export default function DostawyPage() {
     },
   });
 
+  const moveOrderBetweenDeliveriesMutation = useMutation({
+    mutationFn: ({ sourceDeliveryId, targetDeliveryId, orderId }: { sourceDeliveryId: number; targetDeliveryId: number; orderId: number }) =>
+      deliveriesApi.moveOrder(sourceDeliveryId, orderId, targetDeliveryId),
+
+    onMutate: async ({ sourceDeliveryId, targetDeliveryId, orderId }) => {
+      await queryClient.cancelQueries({ queryKey: ['deliveries-calendar'] });
+      const previousData = queryClient.getQueryData(['deliveries-calendar']);
+
+      // Optimistically move order between deliveries
+      queryClient.setQueryData(['deliveries-calendar'], (old: any) => {
+        if (!old) return old;
+
+        return {
+          ...old,
+          deliveries: old.deliveries?.map((delivery: any) => {
+            // Remove from source
+            if (delivery.id === sourceDeliveryId) {
+              return {
+                ...delivery,
+                orders: (delivery.orders || []).filter((o: any) => o.id !== orderId),
+              };
+            }
+            // Add to target
+            if (delivery.id === targetDeliveryId) {
+              return {
+                ...delivery,
+                orders: [
+                  ...(delivery.orders || []),
+                  { id: orderId, _optimistic: true },
+                ],
+              };
+            }
+            return delivery;
+          }),
+        };
+      });
+
+      return { previousData };
+    },
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar'] });
+      showSuccessToast('Zlecenie przeniesione', 'Zlecenie zostało przeniesione między dostawami');
+    },
+
+    onError: (error, _variables, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(['deliveries-calendar'], context.previousData);
+      }
+      showErrorToast('Błąd przenoszenia zlecenia', getErrorMessage(error));
+    },
+
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar'] });
+    },
+  });
+
   const addOrderToDeliveryMutation = useMutation({
     mutationFn: ({ deliveryId, orderId }: { deliveryId: number; orderId: number }) =>
       deliveriesApi.addOrder(deliveryId, orderId),
@@ -578,24 +635,18 @@ export default function DostawyPage() {
 
     // Przypadek 1: Przenoszenie między dostawami
     if (sourceDeliveryId && targetDeliveryId && sourceDeliveryId !== targetDeliveryId) {
-      // Przetwarzaj sekwencyjnie aby uniknąć race conditions
+      // Use atomic moveOrder mutation to prevent data loss
       (async () => {
         for (const id of ordersToMove) {
           try {
-            // Najpierw usuń z dostawy źródłowej
-            await removeOrderFromDeliveryMutation.mutateAsync({
-              deliveryId: sourceDeliveryId,
-              orderId: id,
-            });
-            // Potem dodaj do dostawy docelowej
-            await addOrderToDeliveryMutation.mutateAsync({
-              deliveryId: targetDeliveryId,
+            await moveOrderBetweenDeliveriesMutation.mutateAsync({
+              sourceDeliveryId,
+              targetDeliveryId,
               orderId: id,
             });
           } catch (error) {
             console.error(`Failed to move order ${id}:`, error);
-            showErrorToast('Błąd', `Nie udało się przenieść zlecenia ${id}`);
-            // Przerwij dalsze przenoszenie w przypadku błędu
+            // Error handling and rollback is done in mutation's onError
             break;
           }
         }
