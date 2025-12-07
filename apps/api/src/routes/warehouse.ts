@@ -239,13 +239,24 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
       results.push(result);
     }
 
-    // UWAGA: Automatyczna archiwizacja wyłączona
-    // Archiwizacja odbywa się teraz przez endpoint POST /finalize-month
-    // To zapewnia kontrolę nad tym, kiedy zlecenia są archiwizowane
+    // Automatyczna archiwizacja zleceń completed dla tego koloru
+    const archivedOrders = await prisma.order.updateMany({
+      where: {
+        status: 'completed',
+        archivedAt: null,
+        requirements: {
+          some: { colorId },
+        },
+      },
+      data: {
+        status: 'archived',
+        archivedAt: new Date(),
+      },
+    });
 
     return {
       updates: results,
-      archivedOrdersCount: 0, // Brak automatycznej archiwizacji
+      archivedOrdersCount: archivedOrders.count,
     };
   });
 
@@ -516,13 +527,13 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
     const startDate = new Date();
     startDate.setMonth(startDate.getMonth() - months);
 
-    // Pobierz zapotrzebowania z ukończonych zleceń
+    // Pobierz zapotrzebowania z ukończonych zleceń (używamy deliveryDate jako daty wykonania)
     const requirements = await prisma.orderRequirement.findMany({
       where: {
         colorId: parseInt(colorId),
         order: {
           status: { in: ['completed', 'archived'] },
-          completedAt: {
+          deliveryDate: {
             gte: startDate,
           },
         },
@@ -530,20 +541,27 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
       select: {
         profileId: true,
         beamsCount: true,
-        order: {
-          select: {
-            completedAt: true,
-          },
-        },
-        profile: {
-          select: {
-            id: true,
-            number: true,
-            name: true,
-          },
-        },
+        orderId: true,
       },
     });
+
+    // Pobierz zlecenia z deliveryDate
+    const orderIds = [...new Set(requirements.map((r) => r.orderId))];
+    const orders = await prisma.order.findMany({
+      where: { id: { in: orderIds } },
+      select: { id: true, deliveryDate: true },
+    });
+
+    const orderDateMap = new Map(orders.map((o) => [o.id, o.deliveryDate]));
+
+    // Pobierz profile
+    const profileIds = [...new Set(requirements.map((r) => r.profileId))];
+    const profiles = await prisma.profile.findMany({
+      where: { id: { in: profileIds } },
+      select: { id: true, number: true, name: true },
+    });
+
+    const profileMap = new Map(profiles.map((p) => [p.id, p]));
 
     // Grupuj po profileId i miesiącu
     const profileMonthlyData = new Map<
@@ -556,14 +574,17 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
     >();
 
     requirements.forEach((req) => {
-      if (!req.order.completedAt) return;
+      const deliveryDate = orderDateMap.get(req.orderId);
+      if (!deliveryDate) return;
 
-      const month = req.order.completedAt.toISOString().slice(0, 7); // "YYYY-MM"
+      const month = deliveryDate.toISOString().slice(0, 7); // "YYYY-MM"
+      const profile = profileMap.get(req.profileId);
+      if (!profile) return;
 
       if (!profileMonthlyData.has(req.profileId)) {
         profileMonthlyData.set(req.profileId, {
-          profileNumber: req.profile.number,
-          profileName: req.profile.name || '',
+          profileNumber: profile.number,
+          profileName: profile.name || '',
           monthlyUsage: new Map(),
         });
       }
@@ -618,7 +639,7 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
       const ordersToArchive = await prisma.order.findMany({
         where: {
           status: 'completed',
-          completedAt: {
+          deliveryDate: {
             gte: startDate,
             lt: endDate,
           },
@@ -627,7 +648,7 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
         select: {
           id: true,
           orderNumber: true,
-          completedAt: true,
+          deliveryDate: true,
         },
       });
 
@@ -643,7 +664,7 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
     const ordersToArchive = await prisma.order.findMany({
       where: {
         status: 'completed',
-        completedAt: {
+        deliveryDate: {
           gte: startDate,
           lt: endDate,
         },

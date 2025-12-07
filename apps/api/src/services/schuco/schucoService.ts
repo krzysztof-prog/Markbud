@@ -290,11 +290,13 @@ export class SchucoService {
 
     const skip = (page - 1) * pageSize;
 
+    // Use Prisma findMany with manual sorting
+    // Sort: new first, updated second, regular last, then by date
     const [deliveries, total] = await Promise.all([
       this.prisma.schucoDelivery.findMany({
         orderBy: [
-          { orderDateParsed: 'desc' }, // Sort by parsed date, newest first
-          { id: 'desc' }, // Secondary sort by id for consistent ordering
+          { orderDateParsed: 'desc' },
+          { id: 'desc' },
         ],
         skip,
         take: pageSize,
@@ -302,8 +304,32 @@ export class SchucoService {
       this.prisma.schucoDelivery.count(),
     ]);
 
+    // Sort deliveries in memory: new first, updated second, then by date
+    const sortedDeliveries = deliveries.sort((a, b) => {
+      // Priority: new=1, updated=2, null=3
+      const getPriority = (changeType: string | null) => {
+        if (changeType === 'new') return 1;
+        if (changeType === 'updated') return 2;
+        return 3;
+      };
+
+      const priorityA = getPriority(a.changeType);
+      const priorityB = getPriority(b.changeType);
+
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      // Same priority - sort by date
+      if (a.orderDateParsed && b.orderDateParsed) {
+        return b.orderDateParsed.getTime() - a.orderDateParsed.getTime();
+      }
+
+      return b.id - a.id;
+    });
+
     return {
-      data: deliveries,
+      data: sortedDeliveries,
       total,
       page,
       pageSize,

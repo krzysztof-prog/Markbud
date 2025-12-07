@@ -21,13 +21,14 @@ export interface Import {
 
 export interface ImportPreview {
   import: Import;
-  data: any[];
+  data: Record<string, unknown>[];
   summary: {
     totalRecords: number;
     validRecords: number;
     invalidRecords: number;
     warnings?: string[];
   };
+  message?: string;
 }
 
 export interface UploadImportResponse {

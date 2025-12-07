@@ -440,4 +440,42 @@ export class FileWatcherService {
     this.watchers = [];
     console.log('👀 File Watcher zatrzymany');
   }
+
+  /**
+   * Restartuje watchery (przydatne po zmianie ustawien folderow)
+   */
+  async restart() {
+    console.log('🔄 Restartuję File Watcher...');
+    await this.stop();
+    await this.start();
+  }
+
+  /**
+   * Zwraca aktualne sciezki monitorowanych folderow
+   */
+  async getCurrentPaths(): Promise<{
+    watchFolderUzyteBele: string;
+    watchFolderCeny: string;
+    importsBasePath: string;
+  }> {
+    const projectRoot = path.resolve(__dirname, '../../../../');
+
+    const watchFolderUzyteBele = process.env.WATCH_FOLDER_UZYTE_BELE
+      || await this.getSetting('watchFolderUzyteBele')
+      || path.join(projectRoot, 'uzyte bele');
+
+    const watchFolderCeny = process.env.WATCH_FOLDER_CENY
+      || await this.getSetting('watchFolderCeny')
+      || path.join(projectRoot, 'ceny');
+
+    const importsBasePath = await this.getSetting('importsBasePath')
+      || process.env.IMPORTS_BASE_PATH
+      || 'C:\\Dostawy';
+
+    return {
+      watchFolderUzyteBele,
+      watchFolderCeny,
+      importsBasePath,
+    };
+  }
 }

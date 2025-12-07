@@ -2,13 +2,13 @@
  * Warehouse Repository - Database access layer
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 export class WarehouseRepository {
   constructor(private prisma: PrismaClient) {}
 
   async getStock(profileId?: number, colorId?: number) {
-    const where: any = {};
+    const where: Prisma.WarehouseStockWhereInput = {};
     if (profileId) where.profileId = profileId;
     if (colorId) where.colorId = colorId;
 

@@ -37,22 +37,31 @@ export async function setupWebSocket(fastify: FastifyInstance) {
 
     // Wysyłanie heartbeat co 30 sekund, aby uniknąć timeout'ów
     const heartbeat = setInterval(() => {
-      if (!connection.destroyed) {
-        connection.write(JSON.stringify({ type: 'ping' }));
+      if (!connection.destroyed && connection.socket.readyState === 1) {
+        try {
+          connection.write(JSON.stringify({ type: 'ping' }));
+        } catch (error) {
+          console.error('Failed to send heartbeat:', error);
+          clearInterval(heartbeat);
+        }
       }
     }, 30000);
 
     // Słuchaj zmian danych i wyślij do klienta
     const unsubscribe = eventEmitter.onAnyChange((event: DataChangeEvent) => {
-      if (!connection.destroyed) {
-        connection.write(JSON.stringify({
-          type: 'dataChange',
-          event: {
-            type: event.type,
-            data: event.data,
-            timestamp: event.timestamp,
-          },
-        }));
+      if (!connection.destroyed && connection.socket.readyState === 1) {
+        try {
+          connection.write(JSON.stringify({
+            type: 'dataChange',
+            event: {
+              type: event.type,
+              data: event.data,
+              timestamp: event.timestamp,
+            },
+          }));
+        } catch (error) {
+          console.error('Failed to send data change event:', error);
+        }
       }
     });
 
@@ -93,8 +102,13 @@ export async function setupWebSocket(fastify: FastifyInstance) {
   fastify.decorate('broadcastToClients', (message: unknown) => {
     const messageStr = JSON.stringify(message);
     activeConnections.forEach((connection) => {
-      if (!connection.destroyed) {
-        connection.write(messageStr);
+      if (!connection.destroyed && connection.socket.readyState === 1) {
+        try {
+          connection.write(messageStr);
+        } catch (error) {
+          console.error('Failed to broadcast message:', error);
+          activeConnections.delete(connection);
+        }
       } else {
         activeConnections.delete(connection);
       }

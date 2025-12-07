@@ -2,7 +2,7 @@
  * Settings Repository - Database access layer
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 export class SettingsRepository {
   constructor(private prisma: PrismaClient) {}
@@ -54,7 +54,7 @@ export class SettingsRepository {
     });
   }
 
-  async updatePalletType(id: number, data: any) {
+  async updatePalletType(id: number, data: Prisma.PalletTypeUpdateInput) {
     return this.prisma.palletType.update({
       where: { id },
       data,
@@ -80,7 +80,7 @@ export class SettingsRepository {
     });
   }
 
-  async updatePackingRule(id: number, data: any) {
+  async updatePackingRule(id: number, data: Prisma.PackingRuleUpdateInput) {
     return this.prisma.packingRule.update({
       where: { id },
       data,

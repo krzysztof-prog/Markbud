@@ -123,7 +123,7 @@ export default function ZestawienieZlecenPage() {
 
   // Mutacja do aktualizacji zlecenia
   const updateOrderMutation = useMutation({
-    mutationFn: ({ orderId, data }: { orderId: number; data: any }) =>
+    mutationFn: ({ orderId, data }: { orderId: number; data: Record<string, unknown> }) =>
       ordersApi.patch(orderId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -166,7 +166,7 @@ export default function ZestawienieZlecenPage() {
     if (!editingCell) return;
 
     const { orderId, field } = editingCell;
-    const data: any = {};
+    const data: Record<string, string | null> = {};
 
     // Mapuj field name do API field name
     if (field === 'valuePln') {
@@ -411,8 +411,17 @@ export default function ZestawienieZlecenPage() {
 
   // Oblicz statystyki dla wszystkich zleceń
   const stats = useMemo(() => {
+    interface StatsAccumulator {
+      totalOrders: number;
+      totalValuePln: number;
+      totalValueEur: number;
+      totalWindows: number;
+      totalSashes: number;
+      totalGlasses: number;
+    }
+
     return allOrders.reduce(
-      (acc: { totalOrders: number; totalValuePln: number; totalValueEur: number; totalWindows: number; totalSashes: number; totalGlasses: number }, order: ExtendedOrder) => {
+      (acc: StatsAccumulator, order: ExtendedOrder) => {
         acc.totalOrders++;
         acc.totalValuePln += parseFloat(order.valuePln || '0');
         acc.totalValueEur += parseFloat(order.valueEur || '0');
@@ -491,7 +500,7 @@ export default function ZestawienieZlecenPage() {
       return { 'all': filteredOrders };
     }
 
-    const groups: Record<string, any[]> = {};
+    const groups: Record<string, ExtendedOrder[]> = {};
     filteredOrders.forEach((order: ExtendedOrder) => {
       const key = getGroupKey(order, groupBy);
       if (!groups[key]) {

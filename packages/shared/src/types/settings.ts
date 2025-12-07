@@ -5,6 +5,7 @@ export interface AppSettings {
   // Ścieżki do folderów
   watchFolderUzyteBele: string;
   watchFolderCeny: string;
+  importsBasePath: string; // Główna ścieżka do folderów z dostawami (np. C:\Dostawy)
 
   // Kurs walut
   eurToPlnRate: number;

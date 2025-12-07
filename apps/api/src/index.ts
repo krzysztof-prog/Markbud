@@ -41,6 +41,9 @@ dotenvConfig();
 // Inicjalizacja Prisma
 export const prisma = new PrismaClient();
 
+// FileWatcher - eksportowany do restartu z API
+export let fileWatcher: FileWatcherService | null = null;
+
 // Inicjalizacja Fastify
 const fastify = Fastify({
   logger: config.isDev,
@@ -227,7 +230,7 @@ const start = async () => {
     });
 
     // Uruchom File Watcher
-    const fileWatcher = new FileWatcherService(prisma);
+    fileWatcher = new FileWatcherService(prisma);
     await fileWatcher.start();
 
     // Uruchom Schuco Scheduler (pobieranie 3x dziennie: 8:00, 12:00, 15:00)

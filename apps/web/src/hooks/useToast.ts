@@ -3,7 +3,7 @@ import * as React from "react"
 export type ToastActionElement = React.ReactElement<any>
 
 type ToastBase = {
-  variant?: "default" | "destructive" | "success" | "info"
+  variant?: "default" | "destructive" | "success" | "info" | "warning"
 }
 
 const TOAST_LIMIT = 1

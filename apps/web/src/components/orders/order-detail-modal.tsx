@@ -12,18 +12,19 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ordersApi } from '@/lib/api';
 import { Package, Layers, Grid3X3, Calendar, FileText, FileDown } from 'lucide-react';
-import type { Order } from '@/types';
+import type { Order, Window } from '@/types';
+import type { Requirement } from '@/types';
 
 // Extended order with additional fields from PDF/imports
 interface OrderDetail extends Order {
-  windows?: any[];
+  windows?: Window[];
   totalWindows?: number;
   totalSashes?: number;
   totalGlasses?: number;
   deliveryDate?: string;
   invoiceNumber?: string;
   notes?: string;
-  requirements?: any[];
+  requirements?: Requirement[];
 }
 
 interface OrderDetailModalProps {
@@ -96,7 +97,7 @@ export function OrderDetailModal({
             {(() => {
               // Oblicz totals z danych okien jako fallback
               const calculatedWindows = order.windows?.reduce(
-                (sum: number, w: any) => sum + (w.quantity || 1),
+                (sum: number, w: Window) => sum + (w.quantity || 1),
                 0
               ) || 0;
               const displayWindows = order.totalWindows ?? (calculatedWindows > 0 ? calculatedWindows : '-');
@@ -206,7 +207,7 @@ export function OrderDetailModal({
                       </tr>
                     </thead>
                     <tbody>
-                      {order.windows.map((win: any, i: number) => (
+                      {order.windows.map((win: Window, i: number) => (
                         <tr key={win.id || i} className={`border-t hover:bg-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                           <td className="px-3 py-2 text-center text-slate-500">{i + 1}</td>
                           <td className="px-3 py-2 text-center font-mono">{win.widthMm} mm</td>
@@ -238,7 +239,7 @@ export function OrderDetailModal({
                       </tr>
                     </thead>
                     <tbody>
-                      {order.requirements.map((req: any, index: number) => (
+                      {order.requirements.map((req: Requirement & { beamsCount?: number; meters?: number; restMm?: number }, index: number) => (
                         <tr key={req.id} className={`border-t hover:bg-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                           <td className="px-3 py-2 font-mono font-medium">{req.profile?.number}</td>
                           <td className="px-3 py-2">
@@ -251,7 +252,7 @@ export function OrderDetailModal({
                             </div>
                           </td>
                           <td className="px-3 py-2 text-center font-medium">{req.beamsCount}</td>
-                          <td className="px-3 py-2 text-center">{req.meters.toFixed(1)}</td>
+                          <td className="px-3 py-2 text-center">{req.meters?.toFixed(1)}</td>
                           <td className="px-3 py-2 text-center text-slate-500">{req.restMm}</td>
                         </tr>
                       ))}

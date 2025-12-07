@@ -14,6 +14,32 @@ import { useState, useRef } from 'react';
 import { toast } from '@/hooks/useToast';
 import type { Import, ImportPreview } from '@/types';
 
+// Typy pomocnicze dla danych importu
+interface ImportMetadata {
+  orderNumber?: string;
+  reference?: string;
+  valueNetto?: number;
+  valueBrutto?: number;
+  currency?: string;
+  dimensions?: { width?: number; height?: number };
+  totals?: { windows?: number; sashes?: number; glasses?: number };
+}
+
+interface ImportDataItem {
+  type?: 'requirement' | 'window' | string;
+  articleNumber?: string;
+  profileNumber?: string;
+  colorCode?: string;
+  calculatedBeams?: number;
+  calculatedMeters?: number;
+  lp?: number;
+  szer?: number;
+  wys?: number;
+  typProfilu?: string;
+  ilosc?: number;
+  referencja?: string;
+}
+
 export default function ImportyPage() {
   const queryClient = useQueryClient();
   const [previewId, setPreviewId] = useState<number | null>(null);
@@ -55,7 +81,7 @@ export default function ImportyPage() {
 
   const { data: preview, isLoading: previewLoading } = useQuery({
     queryKey: ['import-preview', previewId],
-    queryFn: () => importsApi.getPreview(previewId!) as Promise<any>,
+    queryFn: () => importsApi.getPreview(previewId!),
     enabled: !!previewId,
   });
 
@@ -71,10 +97,11 @@ export default function ImportyPage() {
         variant: 'success',
       });
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Nie udało się zatwierdzić importu';
       toast({
         title: 'Błąd importu',
-        description: error?.message || 'Nie udało się zatwierdzić importu',
+        description: message,
         variant: 'destructive',
       });
     },
@@ -91,10 +118,11 @@ export default function ImportyPage() {
         variant: 'info',
       });
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Nie udało się odrzucić importu';
       toast({
         title: 'Błąd',
-        description: error?.message || 'Nie udało się odrzucić importu',
+        description: message,
         variant: 'destructive',
       });
     },
@@ -134,11 +162,12 @@ export default function ImportyPage() {
         variant: 'success',
       });
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       setUploadProgress(0);
+      const message = error instanceof Error ? error.message : 'Nie udało się przesłać pliku';
       toast({
         title: 'Błąd przesyłania',
-        description: error?.message || 'Nie udało się przesłać pliku',
+        description: message,
         variant: 'destructive',
       });
     },
@@ -155,10 +184,11 @@ export default function ImportyPage() {
         variant: 'success',
       });
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Nie udało się usunąć importu';
       toast({
         title: 'Błąd usuwania',
-        description: error?.message || 'Nie udało się usunąć importu',
+        description: message,
         variant: 'destructive',
       });
     },
@@ -183,11 +213,12 @@ export default function ImportyPage() {
         });
       }
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       setFolderScanResult(null);
+      const message = error instanceof Error ? error.message : 'Nie udało się przeskanować folderu';
       toast({
         title: 'Błąd skanowania',
-        description: error?.message || 'Nie udało się przeskanować folderu',
+        description: message,
         variant: 'destructive',
       });
     },
@@ -214,10 +245,11 @@ export default function ImportyPage() {
       setFolderScanResult(null);
       setSelectedDeliveryNumber(null);
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Nie udało się zaimportować plików';
       toast({
         title: 'Błąd importu',
-        description: error?.message || 'Nie udało się zaimportować plików',
+        description: message,
         variant: 'destructive',
       });
     },
@@ -768,53 +800,53 @@ export default function ImportyPage() {
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <p className="text-sm font-medium text-slate-500">Numer zlecenia</p>
-                      <p className="text-lg font-mono">{(preview.import.metadata as any)?.orderNumber}</p>
+                      <p className="text-lg font-mono">{(preview.import.metadata as ImportMetadata)?.orderNumber}</p>
                     </div>
-                    {(preview.import.metadata as any)?.reference && (
+                    {(preview.import.metadata as ImportMetadata)?.reference && (
                       <div>
                         <p className="text-sm font-medium text-slate-500">Referencja</p>
-                        <p className="text-lg font-mono">{(preview.import.metadata as any)?.reference}</p>
+                        <p className="text-lg font-mono">{(preview.import.metadata as ImportMetadata)?.reference}</p>
                       </div>
                     )}
-                    {(preview.data as any[])?.filter((d: any) => d.type === 'requirement')?.length > 0 && (
+                    {(preview.data as unknown as ImportDataItem[])?.filter((d) => d.type === 'requirement')?.length > 0 && (
                       <div>
                         <p className="text-sm font-medium text-slate-500">Pozycje materiałów</p>
-                        <p className="text-lg">{(preview.data as any[]).filter((d: any) => d.type === 'requirement').length}</p>
+                        <p className="text-lg">{(preview.data as unknown as ImportDataItem[]).filter((d) => d.type === 'requirement').length}</p>
                       </div>
                     )}
-                    {(preview.data as any[])?.filter((d: any) => d.type === 'window')?.length > 0 && (
+                    {(preview.data as unknown as ImportDataItem[])?.filter((d) => d.type === 'window')?.length > 0 && (
                       <div>
                         <p className="text-sm font-medium text-slate-500">Pozycje okien</p>
-                        <p className="text-lg">{(preview.data as any[]).filter((d: any) => d.type === 'window').length}</p>
+                        <p className="text-lg">{(preview.data as unknown as ImportDataItem[]).filter((d) => d.type === 'window').length}</p>
                       </div>
                     )}
                   </div>
 
                   {/* Podsumowanie z PDF - wartość i waluta */}
-                  {((preview.import.metadata as any)?.valueNetto || (preview.import.metadata as any)?.currency) && (
+                  {((preview.import.metadata as ImportMetadata)?.valueNetto || (preview.import.metadata as ImportMetadata)?.currency) && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-green-50 rounded-lg border border-green-200">
                       <div className="text-center">
                         <p className="text-2xl font-bold text-green-700">
-                          {(preview.import.metadata as any)?.valueNetto?.toFixed(2) || '0.00'}
+                          {(preview.import.metadata as ImportMetadata)?.valueNetto?.toFixed(2) || '0.00'}
                         </p>
                         <p className="text-sm text-green-600">Suma netto</p>
                       </div>
                       <div className="text-center">
                         <p className="text-2xl font-bold text-green-700">
-                          {(preview.import.metadata as any)?.valueBrutto?.toFixed(2) || '0.00'}
+                          {(preview.import.metadata as ImportMetadata)?.valueBrutto?.toFixed(2) || '0.00'}
                         </p>
                         <p className="text-sm text-green-600">Suma brutto</p>
                       </div>
                       <div className="text-center">
                         <p className="text-2xl font-bold text-green-700">
-                          {(preview.import.metadata as any)?.currency === 'EUR' ? '€' : 'PLN'}
+                          {(preview.import.metadata as ImportMetadata)?.currency === 'EUR' ? '€' : 'PLN'}
                         </p>
                         <p className="text-sm text-green-600">Waluta</p>
                       </div>
-                      {(preview.import.metadata as any)?.dimensions && (
+                      {(preview.import.metadata as ImportMetadata)?.dimensions && (
                         <div className="text-center">
                           <p className="text-lg font-bold text-green-700">
-                            {(preview.import.metadata as any)?.dimensions.width} x {(preview.import.metadata as any)?.dimensions.height}
+                            {(preview.import.metadata as ImportMetadata).dimensions?.width} x {(preview.import.metadata as ImportMetadata).dimensions?.height}
                           </p>
                           <p className="text-sm text-green-600">Wymiary (mm)</p>
                         </div>
@@ -823,24 +855,24 @@ export default function ImportyPage() {
                   )}
 
                   {/* Podsumowanie z CSV */}
-                  {((preview.import.metadata as any)?.totals?.windows > 0 || (preview.import.metadata as any)?.totals?.sashes > 0 || (preview.import.metadata as any)?.totals?.glasses > 0) && (
+                  {((preview.import.metadata as ImportMetadata)?.totals?.windows || (preview.import.metadata as ImportMetadata)?.totals?.sashes || (preview.import.metadata as ImportMetadata)?.totals?.glasses) && (
                     <div className="grid grid-cols-3 gap-4 p-4 bg-blue-50 rounded-lg">
                       <div className="text-center">
-                        <p className="text-2xl font-bold text-blue-700">{(preview.import.metadata as any)?.totals?.windows || 0}</p>
+                        <p className="text-2xl font-bold text-blue-700">{(preview.import.metadata as ImportMetadata)?.totals?.windows || 0}</p>
                         <p className="text-sm text-blue-600">Okna/Drzwi</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-2xl font-bold text-blue-700">{(preview.import.metadata as any)?.totals?.sashes || 0}</p>
+                        <p className="text-2xl font-bold text-blue-700">{(preview.import.metadata as ImportMetadata)?.totals?.sashes || 0}</p>
                         <p className="text-sm text-blue-600">Skrzydła</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-2xl font-bold text-blue-700">{(preview.import.metadata as any)?.totals?.glasses || 0}</p>
+                        <p className="text-2xl font-bold text-blue-700">{(preview.import.metadata as ImportMetadata)?.totals?.glasses || 0}</p>
                         <p className="text-sm text-blue-600">Szyby</p>
                       </div>
                     </div>
                   )}
 
-                  {(preview.data as any[])?.filter((d: any) => d.type === 'requirement')?.length > 0 && (
+                  {(preview.data as unknown as ImportDataItem[])?.filter((d) => d.type === 'requirement')?.length > 0 && (
                     <div>
                       <p className="text-sm font-medium text-slate-500 mb-2">Zapotrzebowanie na materiały:</p>
                       <div className="rounded border overflow-hidden max-h-[400px] overflow-y-auto">
@@ -855,7 +887,7 @@ export default function ImportyPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {(preview.data as any[]).filter((d: any) => d.type === 'requirement').map((req: any, i: number) => (
+                            {(preview.data as unknown as ImportDataItem[]).filter((d) => d.type === 'requirement').map((req, i) => (
                               <tr key={i} className={`border-t hover:bg-slate-200 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                                 <td className="px-3 py-2 font-mono">{req.articleNumber}</td>
                                 <td className="px-3 py-2">{req.profileNumber}</td>
@@ -870,7 +902,7 @@ export default function ImportyPage() {
                     </div>
                   )}
 
-                  {(preview.data as any[])?.filter((d: any) => d.type === 'window')?.length > 0 && (
+                  {(preview.data as unknown as ImportDataItem[])?.filter((d) => d.type === 'window')?.length > 0 && (
                     <div>
                       <p className="text-sm font-medium text-slate-500 mb-2">Lista okien i drzwi:</p>
                       <div className="rounded border overflow-hidden max-h-[400px] overflow-y-auto">
@@ -886,7 +918,7 @@ export default function ImportyPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {(preview.data as any[]).filter((d: any) => d.type === 'window').map((win: any, i: number) => (
+                            {(preview.data as unknown as ImportDataItem[]).filter((d) => d.type === 'window').map((win, i) => (
                               <tr key={i} className={`border-t hover:bg-slate-200 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                                 <td className="px-3 py-2 text-center">{win.lp}</td>
                                 <td className="px-3 py-2 text-center">{win.szer} mm</td>

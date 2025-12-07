@@ -39,6 +39,11 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
                   complaint: { type: 'string', nullable: true },
                   orderType: { type: 'string', nullable: true },
                   totalAmount: { type: 'string', nullable: true },
+                  // Change tracking fields
+                  changeType: { type: 'string', nullable: true },
+                  changedAt: { type: 'string', format: 'date-time', nullable: true },
+                  changedFields: { type: 'string', nullable: true },
+                  previousValues: { type: 'string', nullable: true },
                   fetchedAt: { type: 'string', format: 'date-time' },
                   createdAt: { type: 'string', format: 'date-time' },
                   updatedAt: { type: 'string', format: 'date-time' },
@@ -146,5 +151,39 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
       },
     },
     handler: schucoHandler.getLogs,
+  });
+
+  // DEBUG: Get changed records count
+  fastify.get('/debug/changed', async (request, reply) => {
+    const [newCount, updatedCount, totalCount] = await Promise.all([
+      fastify.prisma.schucoDelivery.count({ where: { changeType: 'new' } }),
+      fastify.prisma.schucoDelivery.count({ where: { changeType: 'updated' } }),
+      fastify.prisma.schucoDelivery.count(),
+    ]);
+
+    const changedRecords = await fastify.prisma.schucoDelivery.findMany({
+      where: {
+        OR: [
+          { changeType: 'new' },
+          { changeType: 'updated' }
+        ]
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        changeType: true,
+        changedAt: true,
+        changedFields: true,
+      },
+      orderBy: { changedAt: 'desc' },
+      take: 20,
+    });
+
+    return reply.send({
+      newCount,
+      updatedCount,
+      totalCount,
+      changedRecords,
+    });
   });
 }

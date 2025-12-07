@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../index.js';
 import { createReadStream, existsSync } from 'fs';
 import path from 'path';
@@ -21,7 +22,7 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
   }>('/', async (request) => {
     const { status, archived, colorId } = request.query;
 
-    const where: any = {};
+    const where: Prisma.OrderWhereInput = {};
 
     if (status) {
       where.status = status;
@@ -333,19 +334,19 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
     const { valuePln, valueEur, deadline, status } = request.body;
 
     // Przygotuj dane do aktualizacji - tylko pola które zostały przesłane
-    const updateData: any = {};
+    const updateData: Prisma.OrderUpdateInput = {};
 
     if (valuePln !== undefined) {
-      updateData.valuePln = valuePln;
+      updateData.valuePln = valuePln !== null ? parseFloat(valuePln) : null;
     }
     if (valueEur !== undefined) {
-      updateData.valueEur = valueEur;
+      updateData.valueEur = valueEur !== null ? parseFloat(valueEur) : null;
     }
     if (deadline !== undefined) {
       updateData.deadline = deadline ? new Date(deadline) : null;
     }
     if (status !== undefined) {
-      updateData.status = status;
+      updateData.status = status ?? undefined;
     }
 
     const order = await prisma.order.update({
@@ -640,12 +641,12 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     // Pogrupuj po profileId i zsumuj ilości bel
-    const totals: Record<number, { profileId: number; profileNumber: string; profileArticleNumber: string | null; colorId: number; colorCode: string; totalBeams: number; totalMeters: number }> = {};
+    const totals: Record<string, { profileId: number; profileNumber: string; profileArticleNumber: string | null; colorId: number; colorCode: string; totalBeams: number; totalMeters: number }> = {};
 
     for (const req of requirements) {
       const key = `${req.profileId}-${req.colorId}`;
-      if (!totals[key as any]) {
-        totals[key as any] = {
+      if (!totals[key]) {
+        totals[key] = {
           profileId: req.profileId,
           profileNumber: req.profile.number,
           profileArticleNumber: req.profile.articleNumber,
@@ -655,8 +656,8 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
           totalMeters: 0,
         };
       }
-      totals[key as any].totalBeams += req.beamsCount;
-      totals[key as any].totalMeters += req.meters;
+      totals[key].totalBeams += req.beamsCount;
+      totals[key].totalMeters += req.meters;
     }
 
     return Object.values(totals);

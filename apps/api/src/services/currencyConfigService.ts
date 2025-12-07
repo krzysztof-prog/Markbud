@@ -3,10 +3,10 @@
  * Manages EUR to PLN exchange rate configuration
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, CurrencyConfig } from '@prisma/client';
 
 interface CachedConfig {
-  config: any;
+  config: CurrencyConfig | null;
   expiresAt: number;
 }
 

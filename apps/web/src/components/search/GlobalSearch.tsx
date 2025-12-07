@@ -117,7 +117,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
   };
 
   const handleSelectOrder = (order: Order) => {
-    // Otwórz szczegóły zlecenia (można dostosować ścieżkę)
+    // Otwórz szczegóły zlecenia z modal'em
     router.push(`/dostawy?order=${order.id}`);
     onClose();
   };

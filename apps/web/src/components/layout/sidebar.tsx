@@ -21,12 +21,13 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
+import type React from 'react';
 
 type NavigationItem = {
   name: string;
   href: string;
-  icon: any;
-  subItems?: { name: string; href: string; icon: any }[];
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  subItems?: { name: string; href: string; icon: React.ComponentType<React.SVGProps<SVGSVGElement>> }[];
 };
 
 const navigation: NavigationItem[] = [
@@ -168,7 +169,7 @@ export function Sidebar() {
           // Dla "/zestawienia" tylko dokładne dopasowanie, aby nie podświetlać przy podstronach
           const isActive = item.href === '/zestawienia'
             ? pathname === item.href
-            : pathname === item.href || pathname.startsWith(`${item.href}/`);
+            : pathname === item.href || (pathname?.startsWith(`${item.href}/`) ?? false);
 
           const isExpanded = expandedItems.includes(item.href);
           const hasSubItems = 'subItems' in item && item.subItems;

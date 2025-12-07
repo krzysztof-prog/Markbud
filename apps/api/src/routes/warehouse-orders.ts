@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../index.js';
 
 export const warehouseOrderRoutes: FastifyPluginAsync = async (fastify) => {
@@ -12,7 +13,7 @@ export const warehouseOrderRoutes: FastifyPluginAsync = async (fastify) => {
   }>('/', async (request, reply) => {
     const { colorId, profileId, status } = request.query;
 
-    const where: any = {};
+    const where: Prisma.WarehouseOrderWhereInput = {};
     if (colorId) {
       const parsedColorId = Number(colorId);
       if (isNaN(parsedColorId)) {
@@ -197,7 +198,7 @@ export const warehouseOrderRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Wykonaj aktualizację w transakcji
     const order = await prisma.$transaction(async (tx) => {
-      const data: any = {};
+      const data: Prisma.WarehouseOrderUpdateInput = {};
       if (orderedBeams !== undefined) data.orderedBeams = Number(orderedBeams);
       if (expectedDeliveryDate !== undefined)
         data.expectedDeliveryDate = new Date(expectedDeliveryDate);

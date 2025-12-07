@@ -9,6 +9,26 @@ import { logger } from '../utils/logger.js';
 import { parseIntParam } from '../utils/errors.js';
 import { emitDeliveryCreated, emitOrderUpdated } from '../services/event-emitter.js';
 
+// Domyslna sciezka bazowa dla importow
+const DEFAULT_IMPORTS_BASE_PATH = 'C:\\Dostawy';
+
+/**
+ * Pobiera sciezke bazowa importow z ustawien (baza danych) lub env
+ */
+async function getImportsBasePath(): Promise<string> {
+  // Najpierw sprawdz ustawienie w bazie
+  const setting = await prisma.setting.findUnique({
+    where: { key: 'importsBasePath' },
+  });
+
+  if (setting?.value) {
+    return setting.value;
+  }
+
+  // Fallback na zmienna srodowiskowa lub domyslna wartosc
+  return process.env.IMPORTS_BASE_PATH || DEFAULT_IMPORTS_BASE_PATH;
+}
+
 /**
  * Rekursywnie przeszukuje folder w poszukiwaniu plików CSV z "uzyte" lub "bele" w nazwie
  * @param dirPath Ścieżka do folderu
@@ -237,14 +257,14 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
 
       if (fileImport.fileType === 'uzyte_bele') {
         // Sprawdź czy plik był wykryty przez File Watcher i ma deliveryId
-        let metadata: any = {};
+        let metadata: Record<string, unknown> = {};
         try {
           metadata = fileImport.metadata ? JSON.parse(fileImport.metadata as string) : {};
         } catch (e) {
           // Ignore parse errors
         }
 
-        const deliveryId = metadata.deliveryId;
+        const deliveryId = typeof metadata.deliveryId === 'number' ? metadata.deliveryId : undefined;
 
         // Użyj transakcji dla atomowego przetworzenia i dodania do dostawy
         result = await prisma.$transaction(async (tx) => {
@@ -414,8 +434,8 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
-    // Sanitize and validate path to prevent path traversal attacks
-    const basePath = process.env.IMPORTS_BASE_PATH || 'C:\\Dostawy';
+    // Pobierz sciezke bazowa z ustawien
+    const basePath = await getImportsBasePath();
     const normalizedBase = path.resolve(basePath);
     const normalizedFolder = path.resolve(folderPath);
 
@@ -628,8 +648,8 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
 
   // GET /api/imports/list-folders - lista folderów z datami w nazwie
   fastify.get('/list-folders', async (request, reply) => {
-    // Domyślna ścieżka bazowa (można ją skonfigurować w .env)
-    const basePath = process.env.IMPORTS_BASE_PATH || 'C:\\Dostawy';
+    // Pobierz sciezke bazowa z ustawien
+    const basePath = await getImportsBasePath();
 
     if (!existsSync(basePath)) {
       return reply.status(404).send({
@@ -683,8 +703,8 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(400).send({ error: 'Brak parametru folderPath' });
     }
 
-    // Sanitize and validate path to prevent path traversal attacks
-    const basePath = process.env.IMPORTS_BASE_PATH || 'C:\\Dostawy';
+    // Pobierz sciezke bazowa z ustawien
+    const basePath = await getImportsBasePath();
     const normalizedBase = path.resolve(basePath);
     const normalizedFolder = path.resolve(folderPath);
 

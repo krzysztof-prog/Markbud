@@ -2,7 +2,7 @@
  * Order Repository - Database access layer
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 export interface OrderFilters {
   status?: string;
@@ -14,7 +14,7 @@ export class OrderRepository {
   constructor(private prisma: PrismaClient) {}
 
   async findAll(filters: OrderFilters = {}) {
-    const where: any = {};
+    const where: Prisma.OrderWhereInput = {};
 
     if (filters.status) {
       where.status = filters.status;
@@ -164,7 +164,7 @@ export class OrderRepository {
     });
   }
 
-  async update(id: number, data: any) {
+  async update(id: number, data: Prisma.OrderUpdateInput) {
     return this.prisma.order.update({
       where: { id },
       data,

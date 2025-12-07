@@ -3,8 +3,19 @@
 
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Button } from '@/components/ui/button';
-import { Package, Eye, X, GripVertical } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Package, Eye, X, GripVertical, ArrowRight, Trash2 } from 'lucide-react';
+import { cn, formatDate } from '@/lib/utils';
+import { SyncIndicator } from '@/components/ui/sync-indicator';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 
 // Komponent dla przeciąganego zlecenia
 export function DraggableOrder({
@@ -22,6 +33,7 @@ export function DraggableOrder({
     totalWindows?: number | null;
     totalSashes?: number | null;
     totalGlasses?: number | null;
+    _optimistic?: boolean; // Flaga optimistic update
   };
   deliveryId?: number;
   onView: () => void;
@@ -57,14 +69,18 @@ export function DraggableOrder({
         {...listeners}
         className={cn(
           'flex items-center justify-between px-1.5 py-0.5 rounded text-xs bg-white border transition-all cursor-grab active:cursor-grabbing select-none',
-          isDragging ? 'opacity-50' : 'hover:bg-blue-50 hover:border-blue-300 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1'
+          isDragging ? 'opacity-50' : 'hover:bg-blue-50 hover:border-blue-300 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1',
+          order._optimistic && 'border-yellow-300 bg-yellow-50/50'
         )}
         onDoubleClick={(e) => {
           e.stopPropagation();
           onView();
         }}
       >
-        <span className="font-mono font-medium text-[10px] pointer-events-none">{order.orderNumber}</span>
+        <div className="flex items-center gap-1 pointer-events-none">
+          <span className="font-mono font-medium text-[10px]">{order.orderNumber}</span>
+          {order._optimistic && <SyncIndicator status="pending" size="xs" />}
+        </div>
         {order.totalWindows ? (
           <span className="text-[10px] text-slate-500 pointer-events-none">{order.totalWindows}ok</span>
         ) : null}
@@ -81,7 +97,8 @@ export function DraggableOrder({
       className={cn(
         'flex items-center justify-between p-1.5 rounded border bg-white transition-all group select-none',
         isDragging ? 'opacity-50 cursor-grabbing' : 'hover:bg-slate-50 cursor-grab focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2',
-        isSelected && 'bg-blue-50 border-blue-400 ring-2 ring-blue-200'
+        isSelected && 'bg-blue-50 border-blue-400 ring-2 ring-blue-200',
+        order._optimistic && 'border-yellow-300 bg-yellow-50/50'
       )}
     >
       <div className="flex items-center gap-1.5 flex-1 pointer-events-none">
@@ -97,6 +114,7 @@ export function DraggableOrder({
         <GripVertical className="h-3.5 w-3.5 text-slate-400" />
         <Package className="h-3 w-3 text-slate-400" />
         <span className="font-mono text-xs font-medium">{order.orderNumber}</span>
+        {order._optimistic && <SyncIndicator status="pending" size="xs" />}
         {order.totalWindows && (
           <span className="text-xs text-slate-500">{order.totalWindows} okien</span>
         )}
@@ -247,3 +265,112 @@ export function OrderDragOverlay({
     </div>
   );
 }
+
+// Typ dla dostawy w context menu
+interface DeliveryOption {
+  id: number;
+  deliveryDate: string;
+  deliveryNumber?: string | null;
+}
+
+// Komponent zlecenia z context menu - alternatywa dla drag & drop
+export function DraggableOrderWithContextMenu({
+  order,
+  deliveryId,
+  onView,
+  onRemove,
+  compact = false,
+  isSelected = false,
+  onToggleSelect,
+  availableDeliveries = [],
+  onMoveToDelivery,
+}: {
+  order: {
+    id: number;
+    orderNumber: string;
+    totalWindows?: number | null;
+    totalSashes?: number | null;
+    totalGlasses?: number | null;
+    _optimistic?: boolean;
+  };
+  deliveryId?: number;
+  onView: () => void;
+  onRemove?: () => void;
+  compact?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
+  availableDeliveries?: DeliveryOption[];
+  onMoveToDelivery?: (orderId: number, targetDeliveryId: number | null) => void;
+}) {
+  const hasContextMenu = onMoveToDelivery && availableDeliveries.length > 0;
+
+  // Filtruj dostawy - nie pokazuj obecnej dostawy
+  const otherDeliveries = availableDeliveries.filter(d => d.id !== deliveryId);
+
+  const content = (
+    <DraggableOrder
+      order={order}
+      deliveryId={deliveryId}
+      onView={onView}
+      onRemove={onRemove}
+      compact={compact}
+      isSelected={isSelected}
+      onToggleSelect={onToggleSelect}
+    />
+  );
+
+  if (!hasContextMenu) {
+    return content;
+  }
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        {content}
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-56">
+        <ContextMenuItem onClick={onView}>
+          <Eye className="mr-2 h-4 w-4" />
+          Podgląd zlecenia
+        </ContextMenuItem>
+
+        {otherDeliveries.length > 0 && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <ArrowRight className="mr-2 h-4 w-4" />
+                Przenieś do dostawy
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="w-48">
+                {otherDeliveries.map((delivery) => (
+                  <ContextMenuItem
+                    key={delivery.id}
+                    onClick={() => onMoveToDelivery?.(order.id, delivery.id)}
+                  >
+                    {formatDate(delivery.deliveryDate)}
+                    {delivery.deliveryNumber && ` (${delivery.deliveryNumber})`}
+                  </ContextMenuItem>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          </>
+        )}
+
+        {onRemove && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              onClick={onRemove}
+              className="text-red-600 focus:text-red-600 focus:bg-red-50"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Usuń z dostawy
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+

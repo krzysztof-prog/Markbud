@@ -24,6 +24,7 @@ import type {
   MonthlyStockUpdate,
   WarehouseHistory,
   Shortage,
+  RemanentHistoryEntry,
   WarehouseDataResponse,
   OkucArticle,
   CreateOkucArticleData,
@@ -39,6 +40,7 @@ import type {
   CreatePalletTypeData,
   UpdatePalletTypeData,
   Import,
+  ImportPreview,
   DashboardResponse,
   Alert,
   Holiday,
@@ -177,7 +179,7 @@ export const warehouseApi = {
     }),
   getShortages: () => fetchApi<Shortage[]>('/api/warehouse/shortages'),
   getHistory: (colorId: number, limit?: number) =>
-    fetchApi<WarehouseHistory[]>(`/api/warehouse/history/${colorId}${limit ? `?limit=${limit}` : ''}`),
+    fetchApi<RemanentHistoryEntry[]>(`/api/warehouse/history/${colorId}${limit ? `?limit=${limit}` : ''}`),
 };
 
 // Zamówienia magazynowe
@@ -237,6 +239,30 @@ export const deliveriesApi = {
       body: JSON.stringify({ orderId, targetDeliveryId }),
     }),
   getProtocol: (id: number) => fetchApi<DeliveryProtocol>(`/api/deliveries/${id}/protocol`),
+  getProtocolPdf: async (deliveryId: number): Promise<Blob> => {
+    const url = `${API_URL}/api/deliveries/${deliveryId}/protocol/pdf`;
+
+    try {
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
+        const error: ApiError = new Error(data.error || `HTTP Error: ${response.status}`);
+        error.status = response.status;
+        error.data = data;
+        throw error;
+      }
+
+      return response.blob();
+    } catch (error) {
+      if (error instanceof TypeError) {
+        const networkError: ApiError = new Error('Błąd połączenia sieciowego');
+        networkError.status = 0;
+        throw networkError;
+      }
+      throw error;
+    }
+  },
   addItem: (deliveryId: number, data: CreateDeliveryItemData) =>
     fetchApi<DeliveryItem>(`/api/deliveries/${deliveryId}/items`, {
       method: 'POST',
@@ -325,7 +351,7 @@ export const importsApi = {
   getPending: () => fetchApi<Import[]>('/api/imports/pending'),
   getAll: (status?: string) =>
     fetchApi<Import[]>(`/api/imports${status ? `?status=${status}` : ''}`),
-  getPreview: (id: number) => fetchApi<Import>(`/api/imports/${id}/preview`),
+  getPreview: (id: number) => fetchApi<ImportPreview>(`/api/imports/${id}/preview`),
   approve: (id: number, action?: 'overwrite' | 'add_new') =>
     fetchApi<Import>(`/api/imports/${id}/approve`, {
       method: 'POST',
@@ -438,6 +464,10 @@ export const schucoApi = {
     fetchApi<import('@/types').SchucoFetchLog>('/api/schuco/status'),
   getLogs: () =>
     fetchApi<import('@/types').SchucoFetchLog[]>('/api/schuco/logs'),
+  getTotalChangedCounts: () =>
+    fetchApi<{ newCount: number; updatedCount: number; totalCount: number }>(
+      '/api/schuco/debug/changed'
+    ),
 };
 
 // Optymalizacja palet
@@ -636,6 +666,9 @@ export const monthlyReportsApi = {
   delete: (year: number, month: number) =>
     fetchApi<void>(`/api/monthly-reports/${year}/${month}`, { method: 'DELETE' }),
 };
+
+// Remanent magazynu
+export { remanentApi } from '@/features/warehouse/remanent/api/remanentApi';
 
 // Konfiguracja Walut
 export const currencyConfigApi = {

@@ -7,7 +7,7 @@ import { wsLogger } from '@/lib/logger';
 
 interface DataChangeEvent {
   type: string;
-  data: any;
+  data: Record<string, unknown>;
   timestamp: string;
 }
 
@@ -29,12 +29,12 @@ export function useRealtimeSync() {
   const heartbeatTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Stabilne referencje dla funkcji - używamy ref pattern aby uniknąć re-kreacji
-  const handlePingRef = useRef<() => void>();
-  const resetHeartbeatTimeoutRef = useRef<() => void>();
-  const handleDataChangeRef = useRef<(event: DataChangeEvent) => void>();
+  const handlePingRef = useRef<(() => void) | undefined>(undefined);
+  const resetHeartbeatTimeoutRef = useRef<(() => void) | undefined>(undefined);
+  const handleDataChangeRef = useRef<((event: DataChangeEvent) => void) | undefined>(undefined);
 
   // Funkcja do obsługi zmian danych - przechowujemy aktualną wersję w ref
-  handleDataChangeRef.current = useCallback(
+  const handleDataChange = useCallback(
     (event: DataChangeEvent) => {
       wsLogger.debug('Data change event:', event.type);
 
@@ -90,16 +90,18 @@ export function useRealtimeSync() {
     },
     [queryClient]
   );
+  handleDataChangeRef.current = handleDataChange;
 
   // Funkcja do wysyłania pong na ping
-  handlePingRef.current = useCallback(() => {
+  const handlePing = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'pong' }));
     }
   }, []);
+  handlePingRef.current = handlePing;
 
   // Funkcja do resetowania heartbeat timeout
-  resetHeartbeatTimeoutRef.current = useCallback(() => {
+  const resetHeartbeatTimeout = useCallback(() => {
     if (heartbeatTimeoutRef.current) {
       clearTimeout(heartbeatTimeoutRef.current);
     }
@@ -110,11 +112,27 @@ export function useRealtimeSync() {
       wsRef.current?.close();
     }, 35000);
   }, []);
+  resetHeartbeatTimeoutRef.current = resetHeartbeatTimeout;
 
   // Funkcja do obsługi wiadomości WebSocket - używamy stabilnych referencji
-  const handleMessage = useCallback((event: MessageEvent) => {
+  const handleMessage = useCallback(async (event: MessageEvent) => {
     try {
-      const message: WebSocketMessage = JSON.parse(event.data);
+      let messageData: string;
+
+      // Obsługa różnych typów danych WebSocket
+      if (typeof event.data === 'string') {
+        messageData = event.data;
+      } else if (event.data instanceof Blob) {
+        // Konwertuj Blob na string
+        wsLogger.log('Received Blob message, converting to text...');
+        messageData = await event.data.text();
+        wsLogger.log('Blob converted:', messageData);
+      } else {
+        wsLogger.warn('Received unsupported message type:', typeof event.data);
+        return;
+      }
+
+      const message: WebSocketMessage = JSON.parse(messageData);
 
       if (message.type === 'ping') {
         resetHeartbeatTimeoutRef.current?.();
@@ -124,14 +142,19 @@ export function useRealtimeSync() {
         handleDataChangeRef.current?.(message.event);
       }
     } catch (error) {
-      wsLogger.error('Failed to parse message:', error);
+      // Loguj tylko błąd bez szczegółów, aby uniknąć logowania całego obiektu
+      if (error instanceof Error) {
+        wsLogger.error('Failed to parse WebSocket message:', error.message);
+      } else {
+        wsLogger.error('Failed to parse WebSocket message');
+      }
     }
   }, []); // Puste dependency array - wszystkie zależności są w ref-ach
 
   // Funkcja do nawiązania połączenia WebSocket - używamy stabilnej referencji
-  const connectRef = useRef<() => void>();
+  const connectRef = useRef<(() => void) | undefined>(undefined);
 
-  connectRef.current = useCallback(() => {
+  const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return; // Już połączeni
     }
@@ -192,6 +215,7 @@ export function useRealtimeSync() {
       }
     }
   }, [handleMessage]); // handleMessage jest teraz stabilny
+  connectRef.current = connect;
 
   // Cleanup - teraz z pustym dependency array, bo wszystko jest w ref-ach
   useEffect(() => {

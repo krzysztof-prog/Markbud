@@ -136,8 +136,9 @@ export const currencyConfigRoutes: FastifyPluginAsync = async (fastify) => {
       );
 
       return reply.status(201).send(config);
-    } catch (error: any) {
-      return reply.status(400).send({ error: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to update currency rate';
+      return reply.status(400).send({ error: message });
     }
   });
 
@@ -184,8 +185,9 @@ export const currencyConfigRoutes: FastifyPluginAsync = async (fastify) => {
         pln: parseFloat(pln.toFixed(2)),
         rate: config.eurToPlnRate,
       };
-    } catch (error: any) {
-      return reply.status(400).send({ error: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to convert EUR to PLN';
+      return reply.status(400).send({ error: message });
     }
   });
 
@@ -232,8 +234,8 @@ export const currencyConfigRoutes: FastifyPluginAsync = async (fastify) => {
         eur: parseFloat(eur.toFixed(2)),
         rate: config.eurToPlnRate,
       };
-    } catch (error: any) {
-      return reply.status(400).send({ error: error.message });
+    } catch (error: unknown) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 };

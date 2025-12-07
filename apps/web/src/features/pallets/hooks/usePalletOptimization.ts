@@ -2,7 +2,7 @@
  * Pallet Optimization hooks - data fetching i mutations
  */
 
-import { useSuspenseQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSuspenseQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { palletsApi } from '../api/palletsApi';
 import type { OptimizationResult } from '@/types/pallet';
 
@@ -16,21 +16,23 @@ export const PALLET_TYPES_QUERY_KEY = () => ['pallet-types'] as const;
 // ==================== HOOKS - OPTIMIZATION ====================
 
 /**
- * Hook do pobierania optymalizacji dla dostawy z Suspense
+ * Hook do pobierania optymalizacji dla dostawy
+ * Używa useQuery zamiast useSuspenseQuery aby umożliwić obsługę 404 bez error boundary
  *
  * @param deliveryId - ID dostawy
- * @param enabled - Czy hook ma być aktywny (domyślnie: true)
  *
  * @example
  * ```tsx
  * function OptimizationResults() {
- *   const { data } = usePalletOptimization(123);
+ *   const { data, error, isLoading } = usePalletOptimization(123);
+ *   if (isLoading) return <div>Ładowanie...</div>;
+ *   if (error?.status === 404) return <div>Brak optymalizacji</div>;
  *   return <div>{data.totalPallets} palet</div>;
  * }
  * ```
  */
 export function usePalletOptimization(deliveryId: number) {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: PALLET_OPTIMIZATION_QUERY_KEY(deliveryId),
     queryFn: () => palletsApi.getOptimization(deliveryId),
     staleTime: 5 * 60 * 1000, // 5 minut

@@ -101,7 +101,7 @@ function SortableRow({
       style={style}
       className={`border-b border-slate-200 transition-colors hover:bg-slate-100 ${rowBg}`}
     >
-      <td className={`px-3 py-2.5 font-medium text-sm text-slate-900 border-r border-slate-200 sticky left-0 z-10 ${rowBg}`}>
+      <td className={`px-3 py-2.5 font-medium text-sm text-slate-900 border-r border-slate-200 sticky left-0 z-10 ${rowBg}`} style={{ width: '140px' }}>
         <div className="flex items-center gap-2">
           <button
             {...attributes}
@@ -114,7 +114,7 @@ function SortableRow({
           <span>{profile.name}</span>
         </div>
       </td>
-      <td className={`px-2 py-2 border-r border-slate-200 sticky left-[140px] z-10 ${rowBg}`}>
+      <td className={`px-2 py-2 border-r border-slate-200 sticky left-[140px] z-10 ${rowBg}`} style={{ width: '100px' }}>
         <Input
           type="number"
           value={profile.magValue}
@@ -123,14 +123,14 @@ function SortableRow({
           min="0"
         />
       </td>
-      <td className={`px-3 py-2.5 text-center font-semibold text-sm text-slate-900 border-r border-slate-200 sticky left-[240px] z-10 ${rowBg}`}>
+      <td className={`px-3 py-2.5 text-center font-semibold text-sm text-slate-900 border-r border-slate-200 sticky left-[240px] z-10 ${rowBg}`} style={{ width: '100px' }}>
         {profile.deliveries.reduce((sum, d) => sum + d.quantity, 0)}
       </td>
-      <td className="px-3 py-2.5 text-center font-bold text-sm text-slate-900 border-r border-slate-200 sticky left-[340px] bg-yellow-50 z-10">
+      <td className={`px-3 py-2.5 text-center font-bold text-sm text-slate-900 border-r border-slate-200 sticky left-[340px] z-10 ${rowBg}`} style={{ width: '100px' }}>
         {getSumForColumns(profile.deliveries, sumColumns)}
       </td>
       {profile.deliveries.map((delivery, dateIdx) => (
-        <td key={`${profile.id}-${delivery.deliveryId}`} className="px-2 py-2 border-r border-slate-200">
+        <td key={`${profile.id}-${delivery.deliveryId}`} className="px-2 py-2 border-r border-slate-200 relative" style={{ width: '100px', zIndex: 1 }}>
           <Input
             type="number"
             value={delivery.quantity}
@@ -145,8 +145,9 @@ function SortableRow({
 }
 
 export function ProfileDeliveryTable() {
-  // Wczytaj domyślną liczbę kolumn z localStorage
+  // Wczytaj domyślną liczbę kolumn z localStorage (tylko po stronie klienta)
   const [sumColumns, setSumColumns] = useState(() => {
+    if (typeof window === 'undefined') return 3;
     const saved = localStorage.getItem('profileDeliveryTable.sumColumns');
     return saved ? parseInt(saved) : 3;
   });
@@ -157,9 +158,11 @@ export function ProfileDeliveryTable() {
     return today.toISOString().split('T')[0];
   });
 
-  // Zapisz liczbę kolumn do localStorage przy każdej zmianie
+  // Zapisz liczbę kolumn do localStorage przy każdej zmianie (tylko po stronie klienta)
   useEffect(() => {
-    localStorage.setItem('profileDeliveryTable.sumColumns', sumColumns.toString());
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('profileDeliveryTable.sumColumns', sumColumns.toString());
+    }
   }, [sumColumns]);
 
   // Sensory dla drag-and-drop
@@ -176,27 +179,34 @@ export function ProfileDeliveryTable() {
     queryFn: () => deliveriesApi.getAll(),
   });
 
+  // Typy dla danych z API
+  type ProfileRequirement = { deliveryId: number; deliveryDate: string; profileId: number; colorCode: string; totalBeams: number };
+  type RequirementTotal = { profileId: number; total: number };
+  type ProfileData = { id: number; number?: string; name: string; sortOrder?: number; articleNumber?: string };
+  type ColorData = { id: number; code: string; name: string };
+  type DeliveryBasic = { id: number; deliveryDate: string; deliveryNumber?: string | null };
+
   // Pobierz profile requirements z dostaw
-  const { data: deliveryProfileReqs } = useQuery({
+  const { data: deliveryProfileReqs } = useQuery<ProfileRequirement[]>({
     queryKey: ['delivery-profile-requirements', 'v7', startDate],
     queryFn: () => deliveriesApi.getProfileRequirements({ from: startDate }),
     enabled: !!startDate, // Only run query when startDate exists
   });
 
   // Pobierz wszystkie profile
-  const { data: allProfiles, isLoading: profilesLoading } = useQuery({
+  const { data: allProfiles, isLoading: profilesLoading } = useQuery<ProfileData[]>({
     queryKey: ['all-profiles', 'v2'],
     queryFn: () => profilesApi.getAll(),
   });
 
   // Pobierz wszystkie kolory
-  const { data: allColors, isLoading: colorsLoading } = useQuery({
+  const { data: allColors, isLoading: colorsLoading } = useQuery<ColorData[]>({
     queryKey: ['all-colors', 'v2'],
     queryFn: () => colorsApi.getAll(),
   });
 
   // Pobierz sumy zapotrzebowań z zlecen
-  const { data: requirementsTotals } = useQuery({
+  const { data: requirementsTotals } = useQuery<RequirementTotal[]>({
     queryKey: ['requirements-totals', 'v2'],
     queryFn: () => ordersApi.getRequirementsTotals(),
   });
@@ -205,8 +215,8 @@ export function ProfileDeliveryTable() {
   useEffect(() => {
     if (allProfiles && allColors && deliveryProfileReqs) {
       // Stwórz mapę kolorów po kodzie
-      const colorsByCode = new Map<string, any>();
-      allColors.forEach((color: any) => {
+      const colorsByCode = new Map<string, ColorData>();
+      allColors.forEach((color) => {
         colorsByCode.set(color.code, color);
       });
 
@@ -214,7 +224,7 @@ export function ProfileDeliveryTable() {
       const deliveryMap = new Map<number, DeliveryData>();
 
       if (deliveriesData && Array.isArray(deliveriesData)) {
-        deliveriesData.forEach((delivery: any) => {
+        deliveriesData.forEach((delivery: DeliveryBasic) => {
           const deliveryDate = new Date(delivery.deliveryDate);
 
           // Filtruj po dacie jeśli ustawiono startDate
@@ -243,37 +253,39 @@ export function ProfileDeliveryTable() {
       // Stwórz mapę delivery requirements: `profileId-colorCode-deliveryId` -> totalBeams
       const deliveryReqMap = new Map<string, number>();
       if (deliveryProfileReqs && Array.isArray(deliveryProfileReqs)) {
-        deliveryProfileReqs.forEach((req: any) => {
+        deliveryProfileReqs.forEach((req) => {
           const key = `${req.profileId}-${req.colorCode}-${req.deliveryId}`;
           deliveryReqMap.set(key, req.totalBeams);
         });
       }
 
-      // Stwórz mapę zapotrzebowań (profileId-colorCode -> totalBeams)
+      // Stwórz mapę zapotrzebowań z deliveryProfileReqs (profileId-colorCode -> totalBeams)
       const requirementsMap = new Map<string, number>();
-      if (requirementsTotals && Array.isArray(requirementsTotals)) {
-        requirementsTotals.forEach((req: any) => {
+      if (deliveryProfileReqs && Array.isArray(deliveryProfileReqs)) {
+        deliveryProfileReqs.forEach((req) => {
           const key = `${req.profileId}-${req.colorCode}`;
-          requirementsMap.set(key, req.totalBeams);
+          const currentTotal = requirementsMap.get(key) || 0;
+          requirementsMap.set(key, currentTotal + req.totalBeams);
         });
       }
 
       // Pogrupuj profile po kodzie koloru
       const groupMap = new Map<string, { colorName: string; profiles: ProfileRow[] }>();
 
-      // Stwórz mapę zapotrzebowań po profileId-colorCode
-      const profileRequirementsMap = new Map<string, number>();
-      if (requirementsTotals && Array.isArray(requirementsTotals)) {
-        requirementsTotals.forEach((req: any) => {
+      // Najpierw dodaj profile z zapotrzebowaniem z deliveryProfileReqs
+      if (deliveryProfileReqs && Array.isArray(deliveryProfileReqs)) {
+        // Grupuj zapotrzebowania po profileId-colorCode
+        const groupedReqs = new Map<string, ProfileRequirement>();
+        deliveryProfileReqs.forEach((req) => {
           const key = `${req.profileId}-${req.colorCode}`;
-          profileRequirementsMap.set(key, req.totalBeams);
+          if (!groupedReqs.has(key)) {
+            groupedReqs.set(key, req);
+          }
         });
-      }
 
-      // Najpierw dodaj profile z zapotrzebowaniem
-      if (requirementsTotals && Array.isArray(requirementsTotals)) {
-        requirementsTotals.forEach((req: any) => {
-          const profile = allProfiles.find((p: any) => p.id === req.profileId);
+        // Dodaj profile do grupy
+        groupedReqs.forEach((req) => {
+          const profile = allProfiles.find((p) => p.id === req.profileId);
           if (!profile) return;
 
           const colorCode = req.colorCode;
@@ -290,12 +302,13 @@ export function ProfileDeliveryTable() {
           // Sprawdź czy profil już nie został dodany do tej grupy
           const profileRow = groupMap.get(colorCode)!.profiles.find((p) => p.id === profile.id.toString());
           if (!profileRow) {
+            const reqKey = `${profile.id}-${colorCode}`;
             groupMap.get(colorCode)!.profiles.push({
               id: profile.id.toString(),
               name: profile.number || profile.name,
               sortOrder: profile.sortOrder || 0,
               magValue: 0,
-              requirementTotal: req.totalBeams,
+              requirementTotal: requirementsMap.get(reqKey) || 0,
               deliveries: Array.from(deliveryMap.values()).map(d => {
                 const key = `${profile.id}-${colorCode}-${d.deliveryId}`;
                 return {
@@ -309,7 +322,7 @@ export function ProfileDeliveryTable() {
       }
 
       // Następnie dodaj profile bez zapotrzebowania (jeśli mają articleNumber)
-      allProfiles.forEach((profile: any) => {
+      allProfiles.forEach((profile) => {
         const articleNumber = profile.articleNumber;
         if (!articleNumber) return;
 
@@ -516,51 +529,43 @@ export function ProfileDeliveryTable() {
 
             {colorGroup.profiles.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="border-collapse bg-white">
-                  <colgroup>
-                    <col className="w-[140px]" />
-                    <col className="w-[100px]" />
-                    <col className="w-[100px]" />
-                    <col className="w-[100px]" />
-                    {deliveries.map((delivery) => (
-                      <col key={`col-${delivery.deliveryId}`} className="w-[100px]" />
-                    ))}
-                  </colgroup>
+                <table className="bg-white" style={{ tableLayout: 'fixed', width: `${440 + deliveries.length * 100}px` }}>
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-300">
-                      <th className="px-3 py-2 text-left font-semibold text-xs text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-50 z-20"></th>
-                      <th className="px-3 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200 sticky left-[140px] bg-slate-50 z-20"></th>
-                      <th className="px-3 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200 sticky left-[240px] bg-slate-50 z-20"></th>
-                      <th className="px-2 py-2 text-center border-r border-slate-200 sticky left-[340px] bg-yellow-100 z-20">
+                      <th className="px-3 py-2 text-left font-semibold text-xs text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-50 z-20" style={{ width: '140px' }}></th>
+                      <th className="px-3 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200 sticky left-[140px] bg-slate-50 z-20" style={{ width: '100px' }}></th>
+                      <th className="px-3 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200 sticky left-[240px] bg-slate-50 z-20" style={{ width: '100px' }}></th>
+                      <th className="px-2 py-2 text-center border-r border-slate-200 sticky left-[340px] bg-slate-50 z-20" style={{ width: '100px' }}>
                         <Input
                           type="number"
                           min="1"
                           value={sumColumns}
                           onChange={(e) => setSumColumns(Math.max(1, parseInt(e.target.value) || 1))}
-                          className="w-16 h-7 text-center text-sm font-bold border-yellow-400 bg-yellow-50 focus:border-yellow-500 focus:ring-yellow-500"
+                          className="w-16 h-7 text-center text-sm font-semibold border-slate-300 bg-white focus:border-blue-500 focus:ring-blue-500"
                         />
                       </th>
                       {deliveries.map((delivery) => (
-                        <th key={`header-date-${delivery.deliveryId}`} className="px-2 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200">
+                        <th key={`header-date-${delivery.deliveryId}`} className="px-2 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200 whitespace-nowrap relative" style={{ width: '100px', zIndex: 1 }}>
                           <div>{delivery.date}</div>
                           {delivery.deliveryNumber && <div className="text-[10px] text-slate-500">({delivery.deliveryNumber})</div>}
                         </th>
                       ))}
                     </tr>
                     <tr className="bg-slate-50/50 border-b border-slate-200">
-                      <th className="px-3 py-2 text-left text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-0 bg-slate-50/50 z-20">
+                      <th className="px-3 py-2 text-left text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-0 bg-slate-50/50 z-20" style={{ width: '140px' }}>
                         PROFIL
                       </th>
-                      <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[140px] bg-slate-50/50 z-20">
+                      <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[140px] bg-slate-50/50 z-20" style={{ width: '100px' }}>
                         MAG
                       </th>
-                      <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[240px] bg-slate-50/50 z-20">
+                      <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[240px] bg-slate-50/50 z-20" style={{ width: '100px' }}>
                         SUM
                       </th>
-                      <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[340px] bg-slate-50/50 z-20">
+                      <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[340px] bg-slate-50/50 z-20" style={{ width: '100px' }}>
+                        <div className="text-xs font-semibold text-slate-700">SUMA {sumColumns}</div>
                       </th>
                       {deliveries.map((delivery) => (
-                        <th key={`header-week-${delivery.deliveryId}`} className="px-2 py-2 text-center border-r border-slate-200">
+                        <th key={`header-week-${delivery.deliveryId}`} className="px-2 py-2 text-center border-r border-slate-200 whitespace-nowrap relative" style={{ width: '100px', zIndex: 1 }}>
                           <div className="text-xs text-slate-600">tyg. {delivery.week}</div>
                           <div className="text-xs text-slate-500">{delivery.day}</div>
                         </th>

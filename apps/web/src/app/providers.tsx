@@ -25,9 +25,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
             gcTime: 10 * 60 * 1000, // 10 minutes garbage collection
             refetchOnWindowFocus: false,
             refetchOnMount: false,
-            retry: (failureCount, error: any) => {
+            retry: (failureCount, error: unknown) => {
               // Don't retry on 404 or 403
-              if (error?.status === 404 || error?.status === 403) {
+              const err = error as { status?: number };
+              if (err?.status === 404 || err?.status === 403) {
                 return false;
               }
               // Retry max 2 times for other errors

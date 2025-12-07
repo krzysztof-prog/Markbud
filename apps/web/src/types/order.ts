@@ -2,6 +2,24 @@ import type { ID, Timestamp, Status } from './common';
 import type { Requirement } from './requirement';
 
 /**
+ * Okno/drzwi w zleceniu
+ */
+export interface Window {
+  id?: ID;
+  widthMm: number;
+  heightMm: number;
+  profileType: string;
+  quantity: number;
+  reference?: string;
+  lp?: number;
+  szer?: number;
+  wys?: number;
+  typProfilu?: string;
+  ilosc?: number;
+  referencja?: string;
+}
+
+/**
  * Zlecenie produkcyjne
  */
 export interface Order {

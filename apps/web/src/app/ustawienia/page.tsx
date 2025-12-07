@@ -15,7 +15,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Save, Plus, Trash2, Pencil, FolderOpen, Mail, DollarSign, Package, X } from 'lucide-react';
+import { Save, Plus, Trash2, Pencil, FolderOpen, Mail, DollarSign, Package, X, FileBox, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { FolderBrowser } from '@/components/ui/folder-browser';
 import { useFormValidation } from '@/hooks/useFormValidation';
 import { cn } from '@/lib/utils';
 
@@ -247,6 +249,28 @@ export default function UstawieniaPage() {
     },
   });
 
+  // File watcher status and restart
+  const { data: fileWatcherStatus, refetch: refetchFileWatcherStatus } = useQuery({
+    queryKey: ['file-watcher-status'],
+    queryFn: async () => {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/settings/file-watcher/status`);
+      return res.json();
+    },
+  });
+
+  const restartFileWatcherMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/settings/file-watcher/restart`, {
+        method: 'POST',
+      });
+      if (!res.ok) throw new Error('Blad restartu file watchera');
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchFileWatcherStatus();
+    },
+  });
+
   const handleSettingChange = (key: string, value: string) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
     setHasChanges(true);
@@ -254,6 +278,11 @@ export default function UstawieniaPage() {
 
   const handleSave = () => {
     updateSettingsMutation.mutate(settings);
+  };
+
+  const handleSaveAndRestartWatcher = async () => {
+    await updateSettingsMutation.mutateAsync(settings);
+    restartFileWatcherMutation.mutate();
   };
 
   // Pallet handlers
@@ -469,42 +498,48 @@ export default function UstawieniaPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
+                  <FileBox className="h-5 w-5" />
+                  Folder importow dostaw
+                </CardTitle>
+                <CardDescription>
+                  Glowna sciezka do folderow z danymi dostaw (CSV z programu PROF)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FolderBrowser
+                  value={settings.importsBasePath || ''}
+                  onChange={(path) => handleSettingChange('importsBasePath', path)}
+                  placeholder="C:\Dostawy"
+                  description="Folder zawierajacy podfoldery z datami dostaw (np. 01.12.2025)"
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
                   <FolderOpen className="h-5 w-5" />
                   Monitorowane foldery
                 </CardTitle>
                 <CardDescription>
-                  Ścieżki do folderów, które system będzie skanować w poszukiwaniu nowych plików
+                  Sciezki do folderow, ktore system bedzie skanowac w poszukiwaniu nowych plikow
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium block mb-1">
-                    Folder "użyte bele" (pliki CSV)
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="text"
-                      value={settings.watchFolderUzyteBele || ''}
-                      onChange={(e) => handleSettingChange('watchFolderUzyteBele', e.target.value)}
-                      className="flex-1 font-mono text-sm"
-                      placeholder="./uzyte bele"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium block mb-1">
-                    Folder "ceny" (pliki PDF)
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="text"
-                      value={settings.watchFolderCeny || ''}
-                      onChange={(e) => handleSettingChange('watchFolderCeny', e.target.value)}
-                      className="flex-1 font-mono text-sm"
-                      placeholder="./ceny"
-                    />
-                  </div>
-                </div>
+                <FolderBrowser
+                  value={settings.watchFolderUzyteBele || ''}
+                  onChange={(path) => handleSettingChange('watchFolderUzyteBele', path)}
+                  label='Folder "uzyte bele" (pliki CSV)'
+                  placeholder="./uzyte bele"
+                  description="Folder z plikami CSV zawierajacymi dane o uzytych belach"
+                />
+                <FolderBrowser
+                  value={settings.watchFolderCeny || ''}
+                  onChange={(path) => handleSettingChange('watchFolderCeny', path)}
+                  label='Folder "ceny" (pliki PDF)'
+                  placeholder="./ceny"
+                  description="Folder z plikami PDF z cenami"
+                />
               </CardContent>
             </Card>
 
@@ -551,11 +586,60 @@ export default function UstawieniaPage() {
               </CardContent>
             </Card>
 
+            {/* File Watcher Status */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <RefreshCw className="h-5 w-5" />
+                  Status monitorowania
+                </CardTitle>
+                <CardDescription>
+                  Aktualnie monitorowane sciezki przez File Watcher
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {fileWatcherStatus?.running ? (
+                  <>
+                    <Alert>
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      <AlertDescription>
+                        File Watcher dziala poprawnie
+                      </AlertDescription>
+                    </Alert>
+                    <div className="text-sm space-y-1">
+                      <p><strong>Folder importow:</strong> <code className="text-xs bg-muted px-1 rounded">{fileWatcherStatus.paths?.importsBasePath || 'nie ustawiono'}</code></p>
+                      <p><strong>Folder uzyte bele:</strong> <code className="text-xs bg-muted px-1 rounded">{fileWatcherStatus.paths?.watchFolderUzyteBele || 'nie ustawiono'}</code></p>
+                      <p><strong>Folder ceny:</strong> <code className="text-xs bg-muted px-1 rounded">{fileWatcherStatus.paths?.watchFolderCeny || 'nie ustawiono'}</code></p>
+                    </div>
+                  </>
+                ) : (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      File Watcher nie jest uruchomiony
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => restartFileWatcherMutation.mutate()}
+                  disabled={restartFileWatcherMutation.isPending}
+                >
+                  <RefreshCw className={cn('h-4 w-4 mr-2', restartFileWatcherMutation.isPending && 'animate-spin')} />
+                  Restartuj File Watcher
+                </Button>
+              </CardContent>
+            </Card>
+
             {hasChanges && (
-              <div className="flex justify-end">
-                <Button onClick={handleSave} disabled={updateSettingsMutation.isPending}>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={handleSave} disabled={updateSettingsMutation.isPending}>
                   <Save className="h-4 w-4 mr-2" />
                   Zapisz zmiany
+                </Button>
+                <Button onClick={handleSaveAndRestartWatcher} disabled={updateSettingsMutation.isPending || restartFileWatcherMutation.isPending}>
+                  <RefreshCw className={cn('h-4 w-4 mr-2', restartFileWatcherMutation.isPending && 'animate-spin')} />
+                  Zapisz i restartuj watcher
                 </Button>
               </div>
             )}

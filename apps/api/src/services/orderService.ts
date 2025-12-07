@@ -2,6 +2,7 @@
  * Order Service - Business logic layer
  */
 
+import { Prisma } from '@prisma/client';
 import { OrderRepository } from '../repositories/OrderRepository.js';
 import { NotFoundError } from '../utils/errors.js';
 import {
@@ -45,7 +46,7 @@ export class OrderService {
     return order;
   }
 
-  async updateOrder(id: number, data: any) {
+  async updateOrder(id: number, data: Prisma.OrderUpdateInput) {
     // Verify order exists
     await this.getOrderById(id);
 

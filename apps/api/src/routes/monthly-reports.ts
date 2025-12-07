@@ -217,8 +217,8 @@ export const monthlyReportsRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       const result = await monthlyReportService.generateAndSaveReport(year, month);
       return reply.status(201).send(result);
-    } catch (error: any) {
-      return reply.status(500).send({ error: error.message });
+    } catch (error: unknown) {
+      return reply.status(500).send({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -427,8 +427,8 @@ export const monthlyReportsRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       await monthlyReportService.deleteReport(year, month);
       return reply.status(204).send();
-    } catch (error: any) {
-      return reply.status(500).send({ error: error.message });
+    } catch (error: unknown) {
+      return reply.status(500).send({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 };

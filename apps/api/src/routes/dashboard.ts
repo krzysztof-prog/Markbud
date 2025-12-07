@@ -196,8 +196,19 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
         ORDER BY d.delivery_date ASC
       `;
 
+      interface WeekStat {
+        weekNumber: number;
+        startDate: string;
+        endDate: string;
+        deliveriesCount: number;
+        ordersCount: number;
+        windows: number;
+        sashes: number;
+        glasses: number;
+      }
+
       // Grupuj po tygodniach w JavaScript (szybkie, bo już zagregowane)
-      const weeks: any[] = [];
+      const weeks: WeekStat[] = [];
       for (let i = 0; i < 8; i++) {
         const weekStart = new Date(startOfWeek);
         weekStart.setDate(startOfWeek.getDate() + (i * 7));

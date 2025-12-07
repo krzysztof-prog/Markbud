@@ -50,7 +50,7 @@ export default function OptymalizacjaPage({ params }: PageProps) {
 
 function OptimizationContent({ deliveryId }: { deliveryId: number }) {
   const router = useRouter();
-  const { data: optimization, error } = usePalletOptimization(deliveryId);
+  const { data: optimization, error, isLoading } = usePalletOptimization(deliveryId);
   const optimizeMutation = useOptimizePallet();
   const deleteMutation = useDeleteOptimization();
   const downloadPdf = useDownloadPdf();
@@ -87,8 +87,33 @@ function OptimizationContent({ deliveryId }: { deliveryId: number }) {
     }
   };
 
-  // Jeśli brak optymalizacji (404)
-  if (error && (error as any).status === 404) {
+  // Show loading state
+  if (isLoading) {
+    return <TableSkeleton rows={5} />;
+  }
+
+  // Handle errors other than 404
+  if (error && (error as any).status !== 404) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-destructive">Błąd</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-muted-foreground">
+            {getErrorMessage(error)}
+          </p>
+          <Button variant="outline" onClick={() => router.push('/dostawy')}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Powrót do dostaw
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Jeśli brak optymalizacji (404) lub brak danych
+  if (!optimization || (error && (error as any).status === 404)) {
     return (
       <Card>
         <CardHeader>
@@ -123,10 +148,6 @@ function OptimizationContent({ deliveryId }: { deliveryId: number }) {
         </CardContent>
       </Card>
     );
-  }
-
-  if (!optimization) {
-    return <TableSkeleton rows={5} />;
   }
 
   return (

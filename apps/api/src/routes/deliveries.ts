@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../index.js';
 import { deliveryTotalsService } from '../services/deliveryTotalsService.js';
 import { DeliveryRepository } from '../repositories/DeliveryRepository.js';
@@ -21,11 +22,13 @@ import {
   completeDeliverySchema,
 } from '../validators/delivery.js';
 import { NotFoundError } from '../utils/errors.js';
+import { DeliveryProtocolService } from '../services/DeliveryProtocolService.js';
 
 export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
   // Initialize service layer for endpoints requiring business logic and event emission
   const deliveryRepository = new DeliveryRepository(prisma);
   const deliveryService = new DeliveryService(deliveryRepository);
+  const protocolService = new DeliveryProtocolService();
 
   // GET /api/deliveries - lista dostaw
   fastify.get<{
@@ -38,7 +41,7 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     const validated = deliveryQuerySchema.parse(request.query);
     const { from, to, status } = validated;
 
-    const where: any = {};
+    const where: Prisma.DeliveryWhereInput = {};
 
     if (from || to) {
       where.deliveryDate = {};
@@ -592,6 +595,88 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     return protocol;
   });
 
+  // GET /api/deliveries/:id/protocol/pdf - pobierz PDF protokołu odbioru
+  fastify.get<{ Params: { id: string } }>('/:id/protocol/pdf', async (request, reply) => {
+    const { id } = deliveryParamsSchema.parse(request.params);
+
+    const deliveryId = parseInt(id, 10);
+    if (isNaN(deliveryId)) {
+      return reply.status(400).send({ error: 'Invalid delivery ID' });
+    }
+
+    const delivery = await prisma.delivery.findUnique({
+      where: { id: deliveryId },
+      select: {
+        id: true,
+        deliveryDate: true,
+        deliveryOrders: {
+          select: {
+            orderId: true,
+            position: true,
+            order: {
+              select: {
+                id: true,
+                orderNumber: true,
+                valuePln: true,
+                windows: {
+                  select: {
+                    id: true,
+                    quantity: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { position: 'asc' },
+        },
+      },
+    });
+
+    if (!delivery) {
+      throw new NotFoundError('Delivery');
+    }
+
+    // Oblicz statystyki
+    let totalWindows = 0;
+    let totalValue = 0;
+
+    const orders = delivery.deliveryOrders.map((do_) => {
+      const windowsCount = do_.order.windows.reduce((sum, w) => sum + w.quantity, 0);
+      totalWindows += windowsCount;
+
+      const value = parseFloat(do_.order.valuePln?.toString() || '0');
+      totalValue += value;
+
+      return {
+        orderNumber: do_.order.orderNumber,
+        windowsCount,
+        value,
+        isReclamation: false,
+      };
+    });
+
+    const totalPallets = await deliveryTotalsService.getTotalPallets(deliveryId);
+
+    const protocolData = {
+      deliveryId,
+      deliveryDate: delivery.deliveryDate,
+      orders,
+      totalWindows,
+      totalPallets,
+      totalValue,
+      generatedAt: new Date(),
+    };
+
+    // Generuj PDF
+    const pdfBuffer = await protocolService.generatePdf(protocolData);
+
+    // Zwróć PDF
+    return reply
+      .header('Content-Type', 'application/pdf')
+      .header('Content-Disposition', `attachment; filename="${protocolService.generateFilename(deliveryId)}"`)
+      .send(pdfBuffer);
+  });
+
   // POST /api/deliveries/:id/items - dodaj dodatkowy artykuł do dostawy
   fastify.post<{
     Params: { id: string };
@@ -704,7 +789,7 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     const { from } = request.query as { from?: string };
 
     // Przygotuj warunek filtrowania po dacie
-    const whereCondition: any = {};
+    const whereCondition: Prisma.DeliveryWhereInput = {};
     if (from) {
       whereCondition.deliveryDate = {
         gte: new Date(from),
