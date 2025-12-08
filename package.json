@@ -20,7 +20,11 @@
     "db:reset": "pnpm --filter @akrobud/api db:reset",
     "lint": "pnpm run --parallel lint",
     "clean": "pnpm run --parallel clean",
-    "kill": "node scripts/kill-dev-servers.js"
+    "kill": "node scripts/kill-dev-servers.js",
+    "bd": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe",
+    "bd:list": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe list",
+    "bd:ready": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe ready",
+    "bd:info": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe info"
   },
   "devDependencies": {
     "typescript": "^5.3.3"
