@@ -95,16 +95,19 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/dashboard/alerts - alerty
   fastify.get('/alerts', async () => {
     const alerts = [];
+    let alertIdCounter = 1;
 
     // Braki materiałowe
     const shortages = await getShortages();
     for (const shortage of shortages) {
       if (shortage) {
         alerts.push({
+          id: alertIdCounter++,
           type: 'shortage',
           priority: shortage.priority,
           message: `Brak profilu ${shortage.profileNumber} w kolorze ${shortage.colorName}`,
           details: `Brakuje ${shortage.shortage} bel`,
+          timestamp: new Date().toISOString(),
           data: shortage,
         });
       }
@@ -116,10 +119,12 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
     });
     if (pendingImports > 0) {
       alerts.push({
+        id: alertIdCounter++,
         type: 'import',
         priority: 'medium',
         message: `${pendingImports} plik(ów) oczekuje na import`,
         details: 'Sprawdź zakładkę importów',
+        timestamp: new Date().toISOString(),
       });
     }
 
@@ -141,10 +146,12 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
 
     if (todayDeliveries > 0) {
       alerts.push({
+        id: alertIdCounter++,
         type: 'delivery',
         priority: 'high',
         message: `${todayDeliveries} dostawa(y) zaplanowana na dziś`,
         details: 'Sprawdź kalendarz dostaw',
+        timestamp: new Date().toISOString(),
       });
     }
 
@@ -176,14 +183,15 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
       endDate.setDate(startOfWeek.getDate() + 56);
 
       // OPTIMIZED: Single raw SQL query z GROUP BY zamiast deep nesting
+      // Note: delivery_date is stored as INTEGER (unix timestamp in milliseconds)
       const weekStats = await prisma.$queryRaw<Array<{
-        deliveryDate: Date;
+        deliveryDate: string;
         deliveriesCount: number;
         ordersCount: number;
         windowsCount: number;
       }>>`
         SELECT
-          DATE(d.delivery_date) as "deliveryDate",
+          DATE(datetime(d.delivery_date/1000, 'unixepoch')) as "deliveryDate",
           COUNT(DISTINCT d.id) as "deliveriesCount",
           COUNT(DISTINCT do.order_id) as "ordersCount",
           COALESCE(SUM(ow.quantity), 0) as "windowsCount"
@@ -192,7 +200,7 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
         LEFT JOIN order_windows ow ON ow.order_id = do.order_id
         WHERE d.delivery_date >= ${startOfWeek}
           AND d.delivery_date < ${endDate}
-        GROUP BY DATE(d.delivery_date)
+        GROUP BY DATE(datetime(d.delivery_date/1000, 'unixepoch'))
         ORDER BY d.delivery_date ASC
       `;
 
@@ -219,7 +227,8 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
 
         // Znajdź dostawy w tym tygodniu (z już zagregowanych danych)
         const weekData = weekStats.filter((stat) => {
-          const date = new Date(stat.deliveryDate);
+          if (!stat.deliveryDate) return false;
+          const date = new Date(stat.deliveryDate + 'T00:00:00.000Z');
           return date >= weekStart && date <= weekEnd;
         });
 

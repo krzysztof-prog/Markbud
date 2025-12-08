@@ -20,14 +20,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { FolderBrowser } from '@/components/ui/folder-browser';
 import { useFormValidation } from '@/hooks/useFormValidation';
 import { cn } from '@/lib/utils';
+import { ProfileDepthsTab } from './ProfileDepthsTab';
 
 interface PalletType {
   id: number;
   name: string;
   lengthMm: number;
-  widthMm: number;
-  heightMm: number;
-  loadWidthMm: number;
+  loadDepthMm: number;
 }
 
 interface Color {
@@ -67,6 +66,7 @@ export default function UstawieniaPage() {
     data: null,
   });
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; type: 'pallet' | 'color' | 'profile'; id: number; name: string } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Validation hooks
   const {
@@ -84,14 +84,8 @@ export default function UstawieniaPage() {
     lengthMm: [
       { validate: (v: number) => v > 0, message: 'Długość musi być większa od 0' },
     ],
-    widthMm: [
-      { validate: (v: number) => v > 0, message: 'Szerokość musi być większa od 0' },
-    ],
-    heightMm: [
-      { validate: (v: number) => v > 0, message: 'Wysokość musi być większa od 0' },
-    ],
-    loadWidthMm: [
-      { validate: (v: number) => v === undefined || v === null || v >= 0, message: 'Szer. załadunku nie może być ujemna' },
+    loadDepthMm: [
+      { validate: (v: number) => v > 0, message: 'Szer. załadunku musi być większa od 0' },
     ],
   });
 
@@ -246,6 +240,10 @@ export default function UstawieniaPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
       setDeleteDialog(null);
+      setDeleteError(null);
+    },
+    onError: (error: Error) => {
+      setDeleteError(error.message || 'Nie można usunąć profilu');
     },
   });
 
@@ -253,14 +251,14 @@ export default function UstawieniaPage() {
   const { data: fileWatcherStatus, refetch: refetchFileWatcherStatus } = useQuery({
     queryKey: ['file-watcher-status'],
     queryFn: async () => {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/settings/file-watcher/status`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/settings/file-watcher/status`);
       return res.json();
     },
   });
 
   const restartFileWatcherMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/settings/file-watcher/restart`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/settings/file-watcher/restart`, {
         method: 'POST',
       });
       if (!res.ok) throw new Error('Blad restartu file watchera');
@@ -294,9 +292,7 @@ export default function UstawieniaPage() {
     const formData = {
       name: data.name || '',
       lengthMm: Number(data.lengthMm) || 0,
-      widthMm: Number(data.widthMm) || 0,
-      heightMm: Number(data.heightMm) || 0,
-      loadWidthMm: Number(data.loadWidthMm) || 0,
+      loadDepthMm: Number(data.loadDepthMm) || 0,
     };
 
     if (!validatePalletForm(formData)) {
@@ -309,20 +305,16 @@ export default function UstawieniaPage() {
       createPalletMutation.mutate({
         name: formData.name,
         lengthMm: formData.lengthMm,
-        widthMm: formData.widthMm,
-        heightMm: formData.heightMm,
-        loadWidthMm: formData.loadWidthMm,
-      } as any);
+        loadDepthMm: formData.loadDepthMm,
+      });
     } else if (data.id) {
       updatePalletMutation.mutate({
         id: data.id,
         data: {
           name: formData.name,
           lengthMm: formData.lengthMm,
-          widthMm: formData.widthMm,
-          heightMm: formData.heightMm,
-          loadWidthMm: formData.loadWidthMm,
-        } as any,
+          loadDepthMm: formData.loadDepthMm,
+        },
       });
     }
   };
@@ -646,7 +638,7 @@ export default function UstawieniaPage() {
           </TabsContent>
 
           {/* Palety */}
-          <TabsContent value="pallets">
+          <TabsContent value="pallets" className="space-y-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
@@ -655,7 +647,7 @@ export default function UstawieniaPage() {
                 </div>
                 <Button
                   size="sm"
-                  onClick={() => setPalletDialog({ open: true, mode: 'add', data: { name: '', lengthMm: 0, widthMm: 0, heightMm: 0, loadWidthMm: 0 } })}
+                  onClick={() => setPalletDialog({ open: true, mode: 'add', data: { name: '', lengthMm: 0, loadDepthMm: 0 } })}
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   Dodaj typ
@@ -668,8 +660,6 @@ export default function UstawieniaPage() {
                       <tr>
                         <th className="px-4 py-3 text-left">Nazwa</th>
                         <th className="px-4 py-3 text-center">Długość (mm)</th>
-                        <th className="px-4 py-3 text-center">Szerokość (mm)</th>
-                        <th className="px-4 py-3 text-center">Wysokość (mm)</th>
                         <th className="px-4 py-3 text-center">Szer. załadunku (mm)</th>
                         <th className="px-4 py-3 text-center">Akcje</th>
                       </tr>
@@ -679,9 +669,7 @@ export default function UstawieniaPage() {
                         <tr key={pallet.id} className={`border-t hover:bg-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                           <td className="px-4 py-3 font-medium">{pallet.name}</td>
                           <td className="px-4 py-3 text-center">{pallet.lengthMm}</td>
-                          <td className="px-4 py-3 text-center">{pallet.widthMm}</td>
-                          <td className="px-4 py-3 text-center">{pallet.heightMm}</td>
-                          <td className="px-4 py-3 text-center">{pallet.loadWidthMm}</td>
+                          <td className="px-4 py-3 text-center">{pallet.loadDepthMm}</td>
                           <td className="px-4 py-3 text-center">
                             <div className="flex justify-center gap-1">
                               <Button
@@ -714,6 +702,9 @@ export default function UstawieniaPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Głębokości profili */}
+            <ProfileDepthsTab />
           </TabsContent>
 
           {/* Kolory */}
@@ -733,9 +724,9 @@ export default function UstawieniaPage() {
                 </Button>
               </CardHeader>
               <CardContent>
-                <div className="rounded border overflow-hidden max-h-[400px] overflow-y-auto">
+                <div className="rounded border overflow-hidden">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50 sticky top-0 z-10">
+                    <thead className="bg-slate-50">
                       <tr>
                         <th className="px-4 py-3 text-left">Kolor</th>
                         <th className="px-4 py-3 text-left">Kod</th>
@@ -809,9 +800,9 @@ export default function UstawieniaPage() {
                 </Button>
               </CardHeader>
               <CardContent>
-                <div className="rounded border overflow-hidden max-h-[400px] overflow-y-auto">
+                <div className="rounded border overflow-hidden">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50 sticky top-0 z-10">
+                    <thead className="bg-slate-50">
                       <tr>
                         <th className="px-4 py-3 text-left">Numer</th>
                         <th className="px-4 py-3 text-left">Nazwa</th>
@@ -929,68 +920,24 @@ export default function UstawieniaPage() {
               </div>
               <div>
                 <label className="text-sm font-medium block mb-1">
-                  Szerokość (mm) <span className="text-red-600">*</span>
+                  Szer. załadunku (mm) <span className="text-red-600">*</span>
                 </label>
                 <Input
                   type="number"
-                  value={palletDialog.data?.widthMm || ''}
+                  value={palletDialog.data?.loadDepthMm || ''}
                   onChange={(e) => {
                     const value = parseInt(e.target.value) || 0;
-                    setPalletDialog((prev) => ({ ...prev, data: { ...prev.data, widthMm: value } }));
-                    validatePalletField('widthMm', value);
+                    setPalletDialog((prev) => ({ ...prev, data: { ...prev.data, loadDepthMm: value } }));
+                    validatePalletField('loadDepthMm', value);
                   }}
-                  onBlur={() => touchPalletField('widthMm')}
+                  onBlur={() => touchPalletField('loadDepthMm')}
                   className={cn(
-                    palletTouched.widthMm && palletErrors.widthMm && 'border-red-500 focus-visible:ring-red-500'
+                    palletTouched.loadDepthMm && palletErrors.loadDepthMm && 'border-red-500 focus-visible:ring-red-500'
                   )}
-                  aria-invalid={palletTouched.widthMm && !!palletErrors.widthMm}
+                  aria-invalid={palletTouched.loadDepthMm && !!palletErrors.loadDepthMm}
                 />
-                {palletTouched.widthMm && palletErrors.widthMm && (
-                  <p className="text-sm text-red-600 mt-1">{palletErrors.widthMm}</p>
-                )}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium block mb-1">
-                  Wysokość (mm) <span className="text-red-600">*</span>
-                </label>
-                <Input
-                  type="number"
-                  value={palletDialog.data?.heightMm || ''}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value) || 0;
-                    setPalletDialog((prev) => ({ ...prev, data: { ...prev.data, heightMm: value } }));
-                    validatePalletField('heightMm', value);
-                  }}
-                  onBlur={() => touchPalletField('heightMm')}
-                  className={cn(
-                    palletTouched.heightMm && palletErrors.heightMm && 'border-red-500 focus-visible:ring-red-500'
-                  )}
-                  aria-invalid={palletTouched.heightMm && !!palletErrors.heightMm}
-                />
-                {palletTouched.heightMm && palletErrors.heightMm && (
-                  <p className="text-sm text-red-600 mt-1">{palletErrors.heightMm}</p>
-                )}
-              </div>
-              <div>
-                <label className="text-sm font-medium block mb-1">Szer. załadunku (mm)</label>
-                <Input
-                  type="number"
-                  value={palletDialog.data?.loadWidthMm || ''}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value) || 0;
-                    setPalletDialog((prev) => ({ ...prev, data: { ...prev.data, loadWidthMm: value } }));
-                    validatePalletField('loadWidthMm', value);
-                  }}
-                  onBlur={() => touchPalletField('loadWidthMm')}
-                  className={cn(
-                    palletTouched.loadWidthMm && palletErrors.loadWidthMm && 'border-red-500 focus-visible:ring-red-500'
-                  )}
-                  aria-invalid={palletTouched.loadWidthMm && !!palletErrors.loadWidthMm}
-                />
-                {palletTouched.loadWidthMm && palletErrors.loadWidthMm && (
-                  <p className="text-sm text-red-600 mt-1">{palletErrors.loadWidthMm}</p>
+                {palletTouched.loadDepthMm && palletErrors.loadDepthMm && (
+                  <p className="text-sm text-red-600 mt-1">{palletErrors.loadDepthMm}</p>
                 )}
               </div>
             </div>
@@ -1245,27 +1192,44 @@ export default function UstawieniaPage() {
       </Dialog>
 
       {/* Dialog: Potwierdzenie usunięcia */}
-      <Dialog open={!!deleteDialog} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+      <Dialog open={!!deleteDialog} onOpenChange={(open) => {
+        if (!open) {
+          setDeleteDialog(null);
+          setDeleteError(null);
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Potwierdź usunięcie</DialogTitle>
           </DialogHeader>
-          <p className="py-4">
-            Czy na pewno chcesz usunąć{' '}
-            <span className="font-semibold">{deleteDialog?.name}</span>?
-            Tej operacji nie można cofnąć.
-          </p>
+          {deleteError ? (
+            <Alert variant="destructive" className="my-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{deleteError}</AlertDescription>
+            </Alert>
+          ) : (
+            <p className="py-4">
+              Czy na pewno chcesz usunąć{' '}
+              <span className="font-semibold">{deleteDialog?.name}</span>?
+              Tej operacji nie można cofnąć.
+            </p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialog(null)}>
-              Anuluj
+            <Button variant="outline" onClick={() => {
+              setDeleteDialog(null);
+              setDeleteError(null);
+            }}>
+              {deleteError ? 'Zamknij' : 'Anuluj'}
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deletePalletMutation.isPending || deleteColorMutation.isPending || deleteProfileMutation.isPending}
-            >
-              Usuń
-            </Button>
+            {!deleteError && (
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deletePalletMutation.isPending || deleteColorMutation.isPending || deleteProfileMutation.isPending}
+              >
+                Usuń
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

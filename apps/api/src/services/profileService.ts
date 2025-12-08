@@ -61,6 +61,35 @@ export class ProfileService {
     // Verify profile exists
     await this.getProfileById(id);
 
+    // Check for related records that would prevent deletion
+    const relatedCounts = await this.repository.getRelatedCounts(id);
+
+    const hasRelatedData =
+      relatedCounts.orderRequirements > 0 ||
+      relatedCounts.warehouseStock > 0 ||
+      relatedCounts.warehouseOrders > 0 ||
+      relatedCounts.warehouseHistory > 0;
+
+    if (hasRelatedData) {
+      const details: string[] = [];
+      if (relatedCounts.orderRequirements > 0) {
+        details.push(`zapotrzebowanie w ${relatedCounts.orderRequirements} zleceniach`);
+      }
+      if (relatedCounts.warehouseStock > 0) {
+        details.push(`stan magazynowy (${relatedCounts.warehouseStock} pozycji)`);
+      }
+      if (relatedCounts.warehouseOrders > 0) {
+        details.push(`${relatedCounts.warehouseOrders} zamówień magazynowych`);
+      }
+      if (relatedCounts.warehouseHistory > 0) {
+        details.push(`historia magazynu (${relatedCounts.warehouseHistory} wpisów)`);
+      }
+
+      throw new ConflictError(
+        `Nie można usunąć profilu - istnieją powiązane dane: ${details.join(', ')}. Usuń najpierw powiązane dane.`
+      );
+    }
+
     await this.repository.delete(id);
 
     // Invalidate all profiles cache

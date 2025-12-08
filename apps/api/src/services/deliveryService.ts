@@ -35,15 +35,55 @@ export class DeliveryService {
   }
 
   async createDelivery(data: { deliveryDate: string; deliveryNumber?: string; notes?: string }) {
+    const deliveryDate = new Date(data.deliveryDate);
+
+    // Generate delivery number if not provided: DD.MM.YYYY_X
+    let deliveryNumber = data.deliveryNumber;
+    if (!deliveryNumber) {
+      deliveryNumber = await this.generateDeliveryNumber(deliveryDate);
+    }
+
     const delivery = await this.repository.create({
-      deliveryDate: new Date(data.deliveryDate),
-      deliveryNumber: data.deliveryNumber,
+      deliveryDate,
+      deliveryNumber,
       notes: data.notes,
     });
 
     emitDeliveryCreated(delivery);
 
     return delivery;
+  }
+
+  /**
+   * Generate delivery number in format DD.MM.YYYY_X
+   * where X is I, II, III, IV etc. for multiple deliveries on same day
+   */
+  private async generateDeliveryNumber(deliveryDate: Date): Promise<string> {
+    // Format: DD.MM.YYYY
+    const day = String(deliveryDate.getDate()).padStart(2, '0');
+    const month = String(deliveryDate.getMonth() + 1).padStart(2, '0');
+    const year = deliveryDate.getFullYear();
+    const datePrefix = `${day}.${month}.${year}`;
+
+    // Get all deliveries on the same day
+    const startOfDay = new Date(deliveryDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(deliveryDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const existingDeliveries = await this.repository.findAll({
+      from: startOfDay,
+      to: endOfDay,
+    });
+
+    // Count existing deliveries on same day
+    const count = existingDeliveries.length;
+
+    // Roman numerals for the sequence
+    const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+    const suffix = romanNumerals[count] || String(count + 1);
+
+    return `${datePrefix}_${suffix}`;
   }
 
   async updateDelivery(id: number, data: { deliveryDate?: string; status?: string; notes?: string }) {

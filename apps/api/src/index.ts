@@ -22,6 +22,7 @@ import schucoRoutes from './routes/schuco.js';
 import { palletRoutes } from './routes/pallets.js';
 import { currencyConfigRoutes } from './routes/currency-config.js';
 import { monthlyReportsRoutes } from './routes/monthly-reports.js';
+import { profileDepthRoutes } from './routes/profileDepths.js';
 
 // Services
 import { FileWatcherService } from './services/file-watcher.js';
@@ -137,6 +138,7 @@ await fastify.register(schucoRoutes, { prefix: '/api/schuco' });
 await fastify.register(palletRoutes, { prefix: '/api/pallets' });
 await fastify.register(currencyConfigRoutes, { prefix: '/api/currency-config' });
 await fastify.register(monthlyReportsRoutes, { prefix: '/api/monthly-reports' });
+await fastify.register(profileDepthRoutes, { prefix: '/api/profile-depths' });
 
 // Health checks
 fastify.get('/api/health', {

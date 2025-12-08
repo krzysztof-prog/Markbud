@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -279,14 +279,14 @@ function OrdersTable({
               <tr className="bg-slate-100 border-b text-xs">
                 <th className="px-4 py-2 text-left text-slate-500 sticky left-0 bg-slate-100 z-30 w-32"></th>
                 {profiles.map((profile: OrderTableData['profiles'][0]) => (
-                  <>
-                    <th key={`${profile.id}-bele`} className="px-2 py-2 text-center text-slate-700 font-semibold border-l-4 border-l-blue-400 bg-blue-100 min-w-[70px]">
+                  <React.Fragment key={profile.id}>
+                    <th className="px-2 py-2 text-center text-slate-700 font-semibold border-l-4 border-l-blue-400 bg-blue-100 min-w-[70px]">
                       bele
                     </th>
-                    <th key={`${profile.id}-m`} className="px-2 py-2 text-center text-slate-500 border-l min-w-[70px]">
+                    <th className="px-2 py-2 text-center text-slate-500 border-l min-w-[70px]">
                       m
                     </th>
-                  </>
+                  </React.Fragment>
                 ))}
               </tr>
             </thead>

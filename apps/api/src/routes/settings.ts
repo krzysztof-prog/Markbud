@@ -84,15 +84,13 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     Body: {
       name: string;
       lengthMm: number;
-      widthMm: number;
-      heightMm: number;
-      loadWidthMm: number;
+      loadDepthMm: number;
     };
   }>('/pallet-types', async (request, reply) => {
-    const { name, lengthMm, widthMm, heightMm, loadWidthMm } = request.body;
+    const { name, lengthMm, loadDepthMm } = request.body;
 
     const palletType = await prisma.palletType.create({
-      data: { name, lengthMm, widthMm, heightMm, loadWidthMm },
+      data: { name, lengthMm, loadDepthMm },
     });
 
     return reply.status(201).send(palletType);

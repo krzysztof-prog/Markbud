@@ -13,7 +13,7 @@ System ERP dla firmy AKROBUD - zarządzanie produkcją okien aluminiowych, magaz
 - **Architektura:** Layered (Routes → Handlers → Services → Repositories)
 
 ### Frontend (`apps/web`)
-- **Framework:** Next.js 14 (App Router)
+- **Framework:** Next.js 15.5.7 (App Router)
 - **UI:** TailwindCSS + Shadcn/ui (Radix)
 - **State:** React Query (TanStack Query)
 - **Tabele:** TanStack Table
@@ -101,6 +101,15 @@ const { data } = useQuery({ queryKey: ['orders'], queryFn: fetchOrders });
 
 // Shadcn/ui dla komponentów
 <Button variant="outline">Click</Button>
+
+// WAŻNE: Dynamic imports w Next.js 15 - ZAWSZE używaj explicit default export
+const Component = dynamic(
+  () => import('./Component').then((mod) => mod.default),
+  {
+    loading: () => <LoadingSkeleton />,
+    ssr: false,
+  }
+);
 ```
 
 ## Komendy
@@ -140,6 +149,22 @@ POST       /api/imports/upload
 3. **Transakcje Prisma** dla operacji wielokrokowych
 4. **React Query** dla cachowania i synchronizacji
 5. **TypeScript strict mode** - brak `any`
+6. **Dynamic imports w Next.js 15** - ZAWSZE używaj `.then((mod) => mod.default)`
+   ```typescript
+   // ✅ POPRAWNIE
+   const Component = dynamic(
+     () => import('./Component').then((mod) => mod.default),
+     { ssr: false }
+   );
+
+   // ❌ BŁĄD - powoduje runtime error
+   const Component = dynamic(() => import('./Component'));
+   ```
+7. **Czyszczenie cache Next.js** - po zmianach w dynamic imports lub aktualizacji Next.js:
+   ```bash
+   rm -rf apps/web/.next
+   rm -rf apps/web/node_modules/.cache
+   ```
 
 ## Skills dostępne
 

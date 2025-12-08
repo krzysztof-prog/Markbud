@@ -10,17 +10,28 @@ export class PalletOptimizerRepository {
   constructor(private prisma: PrismaClient) {}
 
   /**
+   * Pobierz głębokości profili z bazy
+   */
+  async getProfileDepths(): Promise<Record<string, number>> {
+    const profileDepths = await this.prisma.profileDepth.findMany();
+    return profileDepths.reduce((map, depth) => {
+      map[depth.profileType] = depth.depthMm;
+      return map;
+    }, {} as Record<string, number>);
+  }
+
+  /**
    * Pobierz definicje typów palet z bazy
    */
   async getPalletTypes(): Promise<PalletDefinition[]> {
     const palletTypes = await this.prisma.palletType.findMany({
-      orderBy: { widthMm: 'desc' }, // Od najszerszej do najwęższej
+      orderBy: { lengthMm: 'desc' }, // Od najdłuższej do najkrótszej
     });
 
     return palletTypes.map(pt => ({
       name: pt.name,
-      widthMm: pt.widthMm,
-      maxLoadDepthMm: pt.loadWidthMm,
+      lengthMm: pt.lengthMm,
+      maxLoadDepthMm: pt.loadDepthMm,
       maxOverhangMm: 700, // Stała wartość zgodnie z wymaganiami
     }));
   }
@@ -98,7 +109,7 @@ export class PalletOptimizerRepository {
             create: result.pallets.map(pallet => ({
               palletNumber: pallet.palletNumber,
               palletTypeName: pallet.palletType,
-              palletWidth: pallet.palletWidthMm,
+              palletWidth: pallet.palletLengthMm,  // Długość palety (odpowiada szerokości okien)
               usedDepthMm: pallet.usedDepthMm,
               maxDepthMm: pallet.maxDepthMm,
               utilizationPercent: pallet.utilizationPercent,
@@ -140,7 +151,7 @@ export class PalletOptimizerRepository {
       return {
         palletNumber: p.palletNumber,
         palletType: p.palletTypeName,
-        palletWidthMm: p.palletWidth,
+        palletLengthMm: p.palletWidth,  // Długość palety
         maxDepthMm: p.maxDepthMm,
         usedDepthMm: p.usedDepthMm,
         utilizationPercent: p.utilizationPercent,
@@ -196,7 +207,7 @@ export class PalletOptimizerRepository {
    */
   async getAllPalletTypes() {
     return this.prisma.palletType.findMany({
-      orderBy: { widthMm: 'desc' },
+      orderBy: { lengthMm: 'desc' },
     });
   }
 
@@ -205,10 +216,8 @@ export class PalletOptimizerRepository {
    */
   async createPalletType(data: {
     name: string;
-    lengthMm: number;
-    widthMm: number;
-    heightMm: number;
-    loadWidthMm: number;
+    lengthMm: number;      // Długość palety
+    loadDepthMm: number;   // Głębokość załadunku
   }) {
     return this.prisma.palletType.create({ data });
   }
@@ -218,10 +227,8 @@ export class PalletOptimizerRepository {
    */
   async updatePalletType(id: number, data: {
     name?: string;
-    lengthMm?: number;
-    widthMm?: number;
-    heightMm?: number;
-    loadWidthMm?: number;
+    lengthMm?: number;       // Długość palety
+    loadDepthMm?: number;    // Głębokość załadunku
   }) {
     // POPRAWKA: Obsługa błędu gdy rekord nie istnieje
     try {

@@ -101,7 +101,22 @@
       "mcp__sqlite__*",
       "mcp__context7__*",
       "mcp__sequential-thinking__*",
-      "Bash(pnpm kill)"
+      "Bash(pnpm kill)",
+      "Bash(pnpm exec tsx:*)",
+      "Bash(ls:*)",
+      "Bash(pnpm dlx:*)",
+      "Bash(git pull:*)",
+      "Bash(git diff:*)",
+      "Bash(npm view:*)",
+      "Bash(npm search:*)",
+      "Bash(pnpm store prune:*)",
+      "Bash(pnpm dev:api:*)",
+      "Bash(del test-delivery-creation.mjs)",
+      "Bash(del:*)",
+      "Bash(rm:*)",
+      "Bash(pnpm build:api:*)",
+      "Bash(pnpm web typecheck:*)",
+      "Bash(git reset:*)"
     ],
     "deny": [],
     "ask": []

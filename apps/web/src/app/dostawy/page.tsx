@@ -7,17 +7,20 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 
-const DostawyPageContent = dynamic(() => import('./DostawyPageContent'), {
-  loading: () => <TableSkeleton />,
-  ssr: false,
-});
+const DostawyPageContent = dynamic(
+  () => import('./DostawyPageContent').then((mod) => mod.default),
+  {
+    loading: () => <TableSkeleton />,
+    ssr: false,
+  }
+);
 
-export default function DostawyPage() {
+function DostawyPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
@@ -36,4 +39,12 @@ export default function DostawyPage() {
   }, [searchParams]);
 
   return <DostawyPageContent initialSelectedOrderId={selectedOrderId} />;
+}
+
+export default function DostawyPage() {
+  return (
+    <Suspense fallback={<TableSkeleton />}>
+      <DostawyPageInner />
+    </Suspense>
+  );
 }

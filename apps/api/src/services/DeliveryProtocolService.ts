@@ -35,6 +35,10 @@ export class DeliveryProtocolService {
     reclamation: 105,
   };
 
+  // Fonty wspierające polskie znaki
+  private readonly BOLD_FONT = 'Times-Bold';
+  private readonly REGULAR_FONT = 'Times-Roman';
+
   /**
    * Generuj PDF protokołu odbioru
    */
@@ -67,14 +71,14 @@ export class DeliveryProtocolService {
         // ==================== NAGŁÓWEK ====================
         doc
           .fontSize(22)
-          .font('Helvetica-Bold')
+          .font(this.BOLD_FONT)
           .text('PROTOKÓŁ ODBIORU DOSTAWY', { align: 'center' });
 
         doc.moveDown(0.5);
 
         doc
           .fontSize(14)
-          .font('Helvetica')
+          .font(this.REGULAR_FONT)
           .fillColor('#2563eb')
           .text(`Dostawa #${data.deliveryId}`, { align: 'center' });
 
@@ -89,11 +93,11 @@ export class DeliveryProtocolService {
         doc.moveDown(1.5);
 
         // ==================== PODSUMOWANIE ====================
-        doc.fontSize(14).font('Helvetica-Bold').text('Podsumowanie:', { underline: true });
+        doc.fontSize(14).font(this.BOLD_FONT).text('Podsumowanie:', { underline: true });
 
         doc.moveDown(0.5);
 
-        doc.fontSize(11).font('Helvetica');
+        doc.fontSize(11).font(this.REGULAR_FONT);
 
         const leftCol = 70;
         const rightCol = 250;
@@ -113,7 +117,7 @@ export class DeliveryProtocolService {
         doc.moveDown(1.5);
 
         // ==================== TABELA ZLECEŃ ====================
-        doc.fontSize(14).font('Helvetica-Bold').text('Lista zleceń:', { underline: true });
+        doc.fontSize(14).font(this.BOLD_FONT).text('Lista zleceń:', { underline: true });
 
         doc.moveDown(0.5);
 
@@ -132,7 +136,7 @@ export class DeliveryProtocolService {
         doc.moveDown(0.3);
 
         // Wiersze
-        doc.fontSize(10).font('Helvetica').fillColor('#000000');
+        doc.fontSize(10).font(this.REGULAR_FONT).fillColor('#000000');
 
         data.orders.forEach((order, idx) => {
           // Sprawdź czy jest miejsce (jeśli nie - nowa strona)
@@ -147,7 +151,7 @@ export class DeliveryProtocolService {
               .lineTo(this.TABLE_LEFT + this.TABLE_WIDTH, newLineY)
               .stroke();
             doc.moveDown(0.3);
-            doc.fontSize(10).font('Helvetica').fillColor('#000000');
+            doc.fontSize(10).font(this.REGULAR_FONT).fillColor('#000000');
           }
 
           const rowY = doc.y;
@@ -167,11 +171,11 @@ export class DeliveryProtocolService {
           currentX += this.COL_WIDTHS.lp;
 
           // Numer zlecenia
-          doc.font('Helvetica-Bold').text(order.orderNumber, currentX, rowY, {
+          doc.font(this.BOLD_FONT).text(order.orderNumber, currentX, rowY, {
             width: this.COL_WIDTHS.orderNumber,
             align: 'left',
           });
-          doc.font('Helvetica');
+          doc.font(this.REGULAR_FONT);
           currentX += this.COL_WIDTHS.orderNumber;
 
           // Okna
@@ -219,7 +223,7 @@ export class DeliveryProtocolService {
           doc.addPage();
         }
 
-        doc.fontSize(11).font('Helvetica');
+        doc.fontSize(11).font(this.REGULAR_FONT);
 
         // Linia dla podpisu dostawcy
         const signatureY = doc.y + 30;
@@ -254,7 +258,7 @@ export class DeliveryProtocolService {
 
           doc
             .fontSize(8)
-            .font('Helvetica')
+            .font(this.REGULAR_FONT)
             .fillColor('#6b7280')
             .text(
               `Strona ${i + 1} z ${pageCount} | Wygenerowano: ${new Date().toLocaleString('pl-PL')} | System AKROBUD`,
@@ -289,7 +293,7 @@ export class DeliveryProtocolService {
       .fillColor('#e5e7eb')
       .fill();
 
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('#374151');
+    doc.fontSize(10).font(this.BOLD_FONT).fillColor('#374151');
 
     let currentX = this.TABLE_LEFT;
 

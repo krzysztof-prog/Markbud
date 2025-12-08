@@ -315,16 +315,12 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     const validated = createDeliverySchema.parse(request.body);
     const { deliveryDate, deliveryNumber, notes } = validated;
 
-    const delivery = await prisma.delivery.create({
-      data: {
-        deliveryDate: new Date(deliveryDate),
-        deliveryNumber,
-        notes,
-      },
+    // Use DeliveryService to create delivery with auto-generated delivery number
+    const delivery = await deliveryService.createDelivery({
+      deliveryDate,
+      deliveryNumber,
+      notes,
     });
-
-    // Emit event
-    emitDeliveryCreated(delivery);
 
     return reply.status(201).send(delivery);
   });
@@ -874,6 +870,195 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     return result;
+  });
+
+  // GET /api/deliveries/stats/windows/by-weekday - statystyki według dni tygodnia
+  // WAŻNE: Ten endpoint MUSI być przed /stats/windows, bo jest bardziej szczegółowy
+  fastify.get<{
+    Querystring: {
+      months?: string; // liczba miesięcy wstecz (domyślnie 6)
+    };
+  }>('/stats/windows/by-weekday', async (request, reply) => {
+    const monthsBack = parseInt(request.query.months || '6', 10);
+
+    if (isNaN(monthsBack) || monthsBack < 1 || monthsBack > 60) {
+      return reply.status(400).send({ error: 'Invalid months parameter (must be between 1 and 60)' });
+    }
+
+    const today = new Date();
+    const startDate = new Date(today.getFullYear(), today.getMonth() - monthsBack, 1);
+
+    // Pobierz wszystkie dostawy z ostatnich N miesięcy
+    const deliveries = await prisma.delivery.findMany({
+      where: {
+        deliveryDate: {
+          gte: startDate,
+        },
+      },
+      include: {
+        deliveryOrders: {
+          include: {
+            order: {
+              select: {
+                id: true,
+                orderNumber: true,
+                totalWindows: true,
+                totalSashes: true,
+                totalGlasses: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Agreguj według dni tygodnia (0 = niedziela, 1 = poniedziałek, ..., 6 = sobota)
+    const weekdayStats = new Map<number, {
+      deliveriesCount: number;
+      totalWindows: number;
+      totalSashes: number;
+      totalGlasses: number;
+    }>();
+
+    // Inicjalizuj wszystkie dni tygodnia
+    for (let i = 0; i < 7; i++) {
+      weekdayStats.set(i, {
+        deliveriesCount: 0,
+        totalWindows: 0,
+        totalSashes: 0,
+        totalGlasses: 0,
+      });
+    }
+
+    // Agreguj dane
+    deliveries.forEach((delivery) => {
+      const weekday = delivery.deliveryDate.getDay();
+      const stats = weekdayStats.get(weekday)!;
+
+      stats.deliveriesCount += 1;
+
+      delivery.deliveryOrders.forEach((dOrder) => {
+        stats.totalWindows += dOrder.order.totalWindows || 0;
+        stats.totalSashes += dOrder.order.totalSashes || 0;
+        stats.totalGlasses += dOrder.order.totalGlasses || 0;
+      });
+    });
+
+    // Mapuj nazwy dni tygodnia (polskie)
+    const weekdayNames = [
+      'Niedziela',
+      'Poniedziałek',
+      'Wtorek',
+      'Środa',
+      'Czwartek',
+      'Piątek',
+      'Sobota',
+    ];
+
+    const result = Array.from(weekdayStats.entries()).map(([weekday, stats]) => ({
+      weekday,
+      weekdayName: weekdayNames[weekday],
+      ...stats,
+      avgWindowsPerDelivery: stats.deliveriesCount > 0
+        ? stats.totalWindows / stats.deliveriesCount
+        : 0,
+      avgSashesPerDelivery: stats.deliveriesCount > 0
+        ? stats.totalSashes / stats.deliveriesCount
+        : 0,
+      avgGlassesPerDelivery: stats.deliveriesCount > 0
+        ? stats.totalGlasses / stats.deliveriesCount
+        : 0,
+    }));
+
+    return {
+      stats: result,
+      periodStart: startDate,
+      periodEnd: today,
+    };
+  });
+
+  // GET /api/deliveries/stats/windows - statystyki okien/skrzydeł/szyb miesięcznie
+  fastify.get<{
+    Querystring: {
+      months?: string; // liczba miesięcy wstecz (domyślnie 6)
+    };
+  }>('/stats/windows', async (request, reply) => {
+    const monthsBack = parseInt(request.query.months || '6', 10);
+
+    if (isNaN(monthsBack) || monthsBack < 1 || monthsBack > 60) {
+      return reply.status(400).send({ error: 'Invalid months parameter (must be between 1 and 60)' });
+    }
+
+    const today = new Date();
+
+    // Przygotuj zakresy dat dla każdego miesiąca
+    const monthRanges = [];
+    for (let i = 0; i < monthsBack; i++) {
+      const monthStart = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const monthEnd = new Date(today.getFullYear(), today.getMonth() - i + 1, 0);
+      monthRanges.push({
+        month: monthStart.getMonth() + 1,
+        year: monthStart.getFullYear(),
+        startDate: monthStart,
+        endDate: monthEnd,
+      });
+    }
+
+    // Pobierz dostawy dla każdego miesiąca
+    const stats = await Promise.all(
+      monthRanges.map(async (range) => {
+        const deliveries = await prisma.delivery.findMany({
+          where: {
+            deliveryDate: {
+              gte: range.startDate,
+              lte: range.endDate,
+            },
+          },
+          include: {
+            deliveryOrders: {
+              include: {
+                order: {
+                  select: {
+                    id: true,
+                    orderNumber: true,
+                    totalWindows: true,
+                    totalSashes: true,
+                    totalGlasses: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        // Agreguj statystyki okien, skrzydeł i szyb
+        let totalWindows = 0;
+        let totalSashes = 0;
+        let totalGlasses = 0;
+
+        deliveries.forEach((delivery) => {
+          delivery.deliveryOrders.forEach((dOrder) => {
+            totalWindows += dOrder.order.totalWindows || 0;
+            totalSashes += dOrder.order.totalSashes || 0;
+            totalGlasses += dOrder.order.totalGlasses || 0;
+          });
+        });
+
+        return {
+          month: range.month,
+          year: range.year,
+          monthLabel: `${range.year}-${String(range.month).padStart(2, '0')}`,
+          deliveriesCount: deliveries.length,
+          totalWindows,
+          totalSashes,
+          totalGlasses,
+        };
+      })
+    );
+
+    return {
+      stats: stats.reverse(), // Od najstarszego do najnowszego
+    };
   });
 
   // GET /api/deliveries/stats/profiles - statystyki użycia profili miesięcznie

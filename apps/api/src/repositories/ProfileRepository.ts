@@ -65,9 +65,36 @@ export class ProfileRepository {
   }
 
   async delete(id: number): Promise<void> {
+    // First delete related ProfileColor records (has onDelete: Cascade but do it explicitly)
+    await this.prisma.profileColor.deleteMany({
+      where: { profileId: id },
+    });
+
     await this.prisma.profile.delete({
       where: { id },
     });
+  }
+
+  async getRelatedCounts(id: number): Promise<{
+    orderRequirements: number;
+    warehouseStock: number;
+    warehouseOrders: number;
+    warehouseHistory: number;
+  }> {
+    const [orderRequirements, warehouseStock, warehouseOrders, warehouseHistory] =
+      await Promise.all([
+        this.prisma.orderRequirement.count({ where: { profileId: id } }),
+        this.prisma.warehouseStock.count({ where: { profileId: id } }),
+        this.prisma.warehouseOrder.count({ where: { profileId: id } }),
+        this.prisma.warehouseHistory.count({ where: { profileId: id } }),
+      ]);
+
+    return {
+      orderRequirements,
+      warehouseStock,
+      warehouseOrders,
+      warehouseHistory,
+    };
   }
 
   async updateProfileOrders(profileOrders: { id: number; sortOrder: number }[]): Promise<void> {

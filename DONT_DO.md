@@ -227,6 +227,32 @@
 
 ## Frontend
 
+### NIE używaj starych dynamic imports w Next.js 15
+- **Problem:** Next.js 15 wymaga explicit default export resolution w dynamic imports. Stary sposób powoduje runtime error: `can't access property "call", originalFactory is undefined`
+- **Rozwiązanie:** ZAWSZE używaj `.then((mod) => mod.default)` dla dynamic imports
+- **Przykład:**
+  ```typescript
+  // ❌ ZŁE - powoduje runtime error w Next.js 15
+  const Component = dynamic(() => import('./Component'));
+
+  // ✅ DOBRE - explicit default export resolution
+  const Component = dynamic(
+    () => import('./Component').then((mod) => mod.default),
+    {
+      loading: () => <LoadingSkeleton />,
+      ssr: false,
+    }
+  );
+  ```
+- **Dlaczego:** W Next.js 15 zmienił się sposób w jaki webpack/turbopack kompilują moduły. Module resolution wymaga teraz explicit resolution of default exports.
+- **Po naprawie:** Zawsze czyść cache Next.js:
+  ```bash
+  rm -rf apps/web/.next
+  rm -rf apps/web/node_modules/.cache
+  ```
+- **Jak znaleźć wszystkie:** `grep -r "dynamic(() => import" apps/web/src`
+- **Data nauki:** 2025-12-08 (runtime TypeError po aktualizacji do Next.js 15.5.7)
+
 ### NIE używaj `useEffect` do data fetching
 - **Problem:** Race conditions, brak cache
 - **Rozwiązanie:** React Query (`useQuery`, `useMutation`)
@@ -234,6 +260,28 @@
 ### NIE hardcoduj URL API
 - **Problem:** Nie działa w różnych środowiskach
 - **Rozwiązanie:** Użyj `api-client.ts` i zmiennych env
+
+### NIE restartuj frontendu bez czyszczenia cache po zmianach w dynamic imports
+- **Problem:** Stary cache `.next` może zawierać niekompatybilny kod, powodując runtime errors mimo poprawnego kodu źródłowego
+- **Rozwiązanie:** Po każdej zmianie w dynamic imports - wyczyść cache przed restartem
+- **Procedura:**
+  ```bash
+  # 1. Zabij wszystkie node procesy
+  powershell -Command "Get-Process -Name 'node' | Stop-Process -Force"
+
+  # 2. Wyczyść cache
+  rm -rf apps/web/.next
+  rm -rf apps/web/node_modules/.cache
+
+  # 3. Restart serwera
+  pnpm dev:web
+  ```
+- **Kiedy to robić:**
+  - Po zmianie dynamic imports
+  - Po aktualizacji Next.js
+  - Gdy widzisz runtime errors mimo poprawnego kodu
+  - Gdy hot reload nie działa poprawnie
+- **Data nauki:** 2025-12-08 (błędy persystowały mimo poprawy kodu)
 
 ### NIE importuj całych bibliotek
 - **Problem:** Bundle size
@@ -544,6 +592,70 @@
 
 ## React Hooks i State Management
 
+### ZAWSZE wywoływaj Hooks na POCZĄTKU komponentu - PRZED dowolnymi warunkami
+- **Problem:** Hooks muszą być wywoływane zawsze w tej samej kolejności i nigdy wewnątrz warunków. Jeśli Hook pojawi się po `if`, `&&` czy `return`, React wyrzuci błąd: "React has detected a change in the order of Hooks"
+- **Zasada React Rules of Hooks:**
+  1. Wywoływaj Hooks tylko na najwyższym poziomie
+  2. Nigdy wewnątrz `if`, `for`, `switch`, `try/catch`
+  3. Wszystkie Hooks muszą być w tej samej kolejności w każdym renderze
+- **Rozwiązanie:**
+  ```typescript
+  // ❌ ZŁE - Hook po early return
+  export function MyComponent() {
+    if (isLoading) return <Loader />;
+    const data = useMemo(() => {...}, []);  // ← Hook po warunku!
+  }
+
+  // ✅ DOBRE - wszystkie Hooks na początku
+  export function MyComponent() {
+    const data = useMemo(() => {...}, []);  // ← Hook na początku!
+    if (isLoading) return <Loader />;       // ← Warunek po Hookach
+  }
+  ```
+- **Prawidłowa struktura komponentu:**
+  ```typescript
+  // 1️⃣ Wszystkie Hooks (useQuery, useState, useMemo, useCallback, useEffect)
+  export function Component({ id }) {
+    const { data } = useQuery(...);
+    const [state, setState] = useState(...);
+    const memoized = useMemo(() => {...}, []);
+    const callback = useCallback(() => {...}, []);
+    useEffect(() => { ... }, []);
+
+    // 2️⃣ Potem early returns (if, guards)
+    if (!data) return <Empty />;
+    if (error) return <Error />;
+
+    // 3️⃣ Potem logika i render
+    return <div>{data.value}</div>;
+  }
+  ```
+- **Częste błędy:**
+  - `if (isLoading) return <Loader />; const data = useMemo(...)` ← Hook po return
+  - `if (data) { useEffect(...) }` ← Hook wewnątrz if
+  - `return data?.map(item => { useQuery(...) })` ← Hook w map
+- **Błąd w konsoli:** `Rendered more hooks than during the previous render.` lub `change in the order of Hooks`
+- **Data nauki:** 2025-12-08 (WarehouseHistory.tsx - useMemo po early returns)
+
+### NIE używaj warunkowych Hooks - zamiast tego dodaj warunki w Hook'u
+- **Problem:** Niektórzy kodują: `if (condition) useQuery(...)` - to łamie Rules of Hooks
+- **Rozwiązanie:** Wszystkie Hooks wywoływaj zawsze, ale sami mogą być warunkowe wewnątrz siebie
+- **Przykład:**
+  ```typescript
+  // ❌ ZŁE - warunkowy Hook
+  if (userId) {
+    const { data: user } = useQuery({...});
+  }
+
+  // ✅ DOBRE - warunkowy data fetching, Hook zawsze wykonywany
+  const { data: user, enabled: userId } = useQuery({
+    queryKey: ['user', userId],
+    queryFn: () => fetchUser(userId),
+    enabled: !!userId,  // ← Warunek tutaj, Hook zawsze!
+  });
+  ```
+- **Data nauki:** 2025-12-08 (ta praktyka jest prawidłowa w React Query)
+
 ### NIE zapominaj o synchronizacji lokalnego state z props
 - **Problem:** Komponent używa `useState(value)` ale gdy `value` zmieni się z zewnątrz (np. po fetch z API), lokalny state nie jest aktualizowany
 - **Rozwiązanie:** Dodaj `useEffect` który synchronizuje state gdy props się zmieni
@@ -559,6 +671,56 @@
   }, [value]);
   ```
 - **Data nauki:** 2025-12-07 (FolderBrowser component)
+
+### ZAWSZE dodawaj `key` do każdego elementu w `.map()` - fragment bez key powoduje błędy
+- **Problem:** React musi identyfikować które elementy się zmieniły. Bez `key`, React nie może prawidłowo aktualizować listy, co powoduje:
+  - Błąd w konsoli: `Each child in a list should have a unique "key" prop`
+  - Problemy z state w komponentach listy
+  - Błędy animacji/przejść
+  - Nieodświeżona lista
+- **Szczególnie ważne:** Fragment `<>` nie może mieć `key`! Używaj `<React.Fragment key={id}>` zamiast tego
+- **Rozwiązanie:**
+  ```typescript
+  // ❌ ZŁE - brak key
+  {items.map(item => (
+    <div>{item.name}</div>
+  ))}
+
+  // ❌ ZŁE - fragment bez key
+  {items.map(item => (
+    <>
+      <div>{item.name}</div>
+      <div>{item.value}</div>
+    </>
+  ))}
+
+  // ✅ DOBRE - zwykły element z key
+  {items.map(item => (
+    <div key={item.id}>
+      <div>{item.name}</div>
+      <div>{item.value}</div>
+    </div>
+  ))}
+
+  // ✅ DOBRE - React.Fragment z key (gdy nie chcesz dodatkowego divsa)
+  {items.map(item => (
+    <React.Fragment key={item.id}>
+      <div>{item.name}</div>
+      <div>{item.value}</div>
+    </React.Fragment>
+  ))}
+  ```
+- **Jakie key używać:**
+  - ✅ Unikalne ID z bazy: `key={item.id}`
+  - ✅ UUID gdy id nie ma: `key={item.uuid}`
+  - ❌ NIGDY index z map: `key={index}` (tylko jeśli lista nigdy się nie zmienia)
+  - ❌ NIGDY random: `key={Math.random()}` (tworzy nowy element za każdym razem)
+- **Błąd w konsoli:**
+  ```
+  Each child in a list should have a unique "key" prop.
+  Check the render method of `tr`. It was passed a child from OrdersTable.
+  ```
+- **Data nauki:** 2025-12-08 (MagazynAkrobudPageContent.tsx - fragment bez key)
 
 ### NIE duplikuj logiki w onClick i onDoubleClick
 - **Problem:** Kod robi to samo w obu handlerach, utrudnia maintenance i tworzy race conditions
@@ -583,6 +745,62 @@
   }}
   ```
 - **Data nauki:** 2025-12-07 (FolderBrowser component)
+
+### ZAWSZE sprawdzaj czy obiekt/property istnieje przed dostępem - undefined to najczęstsza przyczyna runtime errors
+- **Problem:** Runtime error: `Cannot read properties of undefined (reading 'metadata')`
+  - Kod zakłada że API zwróci `data.nested.property`
+  - Ale API może zwrócić `data` bez `nested`
+  - Lub `nested` bez `property`
+- **Rozwiązanie:** Sprawdzaj KAŻDY poziom zagnieżdżenia
+- **Praktyka:**
+  ```typescript
+  // ❌ ZŁE - zakładasz strukturę
+  {preview ? (
+    <div>{preview.import.metadata.orderNumber}</div>  // ← crash jeśli import/metadata nie istnieje!
+  )}
+
+  // ✅ DOBRE - sprawdzasz wszystkie poziomy
+  {preview && preview.import && preview.import.metadata ? (
+    <div>{preview.import.metadata.orderNumber}</div>
+  ) : (
+    <div>Brak danych</div>
+  )}
+
+  // ✅ DOBRE - optional chaining (krótsze, nowsze)
+  {preview?.import?.metadata?.orderNumber}
+
+  // ✅ DOBRE - dla elementów listy
+  {(items || []).map(item => (
+    <div key={item.id}>{item.name}</div>
+  ))}
+  ```
+- **Praktyczne poradzi przy API responses:**
+  1. **Zawsze sprawdzaj na backie czy pole jest required**
+     ```typescript
+     // Backend
+     interface ImportPreview {
+       import: Import;  // ← required (zawsze)
+       data: Record<string, unknown>[];  // ← required
+     }
+     ```
+  2. **Frontend musi się bronić nawet gdy backend mówi że field jest wymagany**
+     ```typescript
+     // Frontend - nawet jeśli backend mówi że import jest required,
+     // network error lub old API version może to zwrócić
+     {preview?.import?.metadata?.orderNumber}
+     ```
+- **Błędy w konsoli:**
+  - `Cannot read properties of undefined (reading 'metadata')`
+  - `Cannot read properties of null (reading 'length')`
+  - `data is not defined`
+- **Jak debugować:**
+  ```typescript
+  // Dodaj tymczasowy log
+  console.log('preview:', preview);
+  console.log('preview.import:', preview?.import);
+  console.log('metadata:', preview?.import?.metadata);
+  ```
+- **Data nauki:** 2025-12-08 (ImportyPage - preview.import był undefined)
 
 ### NIE waliduj danych przy każdej zmianie bez debounce
 - **Problem:** Zbyt wiele requestów do API, słaba wydajność
@@ -752,6 +970,66 @@
   ```
 - **Brakujące komponenty z tego projektu:** `alert`, `scroll-area`
 - **Data nauki:** 2025-12-07 (folder-browser.tsx potrzebował scroll-area)
+
+---
+
+## SQL i Raw Queries
+
+### NIE używaj DATE() lub strftime() bezpośrednio na kolumnach z timestamp w SQLite
+- **Problem:** SQLite przechowuje daty jako INTEGER (unix timestamp w milisekundach przez Prisma). Funkcje `DATE()` i `strftime()` zwracają `null` gdy operują na timestampie bez konwersji.
+- **Rozwiązanie:** Konwertuj timestamp na datetime przed użyciem date functions
+- **Przykład:**
+  ```sql
+  -- ❌ ZŁE - zwraca NULL
+  SELECT DATE(delivery_date) FROM deliveries;
+  SELECT strftime('%Y-%m-%d', delivery_date) FROM deliveries;
+
+  -- ✅ DOBRE - konwertuje ms → s → datetime → date
+  SELECT DATE(datetime(delivery_date/1000, 'unixepoch')) FROM deliveries;
+  SELECT strftime('%Y-%m-%d', datetime(delivery_date/1000, 'unixepoch')) FROM deliveries;
+  ```
+- **Wyjaśnienie:** Prisma przechowuje `DateTime` jako INTEGER (milisekundy od epoch), więc:
+  1. `/1000` konwertuje ms → s (SQLite unixepoch wymaga sekund)
+  2. `datetime(..., 'unixepoch')` konwertuje timestamp → datetime string
+  3. `DATE()` lub `strftime()` może operować na datetime string
+- **Jak debugować:**
+  ```sql
+  -- Sprawdź typ kolumny
+  SELECT typeof(delivery_date) FROM deliveries LIMIT 1;
+  -- Wynik: "integer"
+
+  -- Sprawdź raw value
+  SELECT delivery_date FROM deliveries LIMIT 1;
+  -- Wynik: 1733612400000 (timestamp w ms)
+
+  -- Przetestuj konwersję
+  SELECT datetime(delivery_date/1000, 'unixepoch') FROM deliveries LIMIT 1;
+  -- Wynik: "2025-12-08 23:00:00"
+  ```
+- **Data nauki:** 2025-12-08 (dashboard weekly stats zwracały null dla wszystkich dat)
+
+### NIE używaj delivery.orders?.length gdy backend zwraca ordersCount
+- **Problem:** Frontend component używa `delivery.orders?.length` do wyświetlenia liczby zleceń, ale backend endpoint zwraca tylko `ordersCount` (bez pełnej relacji `orders`)
+- **Rozwiązanie:** Sprawdź response z backendu i użyj odpowiedniego pola
+- **Przykład:**
+  ```typescript
+  // Backend response:
+  {
+    id: 13,
+    ordersCount: 13,  // ← to jest dostępne
+    orders: undefined // ← tego nie ma
+  }
+
+  // ❌ ZŁE - pokazuje 0 bo orders jest undefined
+  <p>{delivery.orders?.length || 0} zleceń</p>
+
+  // ✅ DOBRE - używa ordersCount z backendu
+  <p>{delivery.ordersCount || 0} zleceń</p>
+  ```
+- **Gdzie to naprawić:**
+  1. Zmień kod komponentu z `.orders?.length` na `.ordersCount`
+  2. Dodaj `ordersCount?: number` do interfejsu TypeScript (np. `Delivery`)
+- **Data nauki:** 2025-12-08 (dashboard "Nadchodzące dostawy" pokazywały "0 zleceń")
 
 ---
 

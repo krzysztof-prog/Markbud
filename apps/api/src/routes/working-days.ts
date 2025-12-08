@@ -174,48 +174,48 @@ export const workingDaysRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Dodaj polskie święta
     if (!country || country === 'PL') {
-      // Stałe święta
+      // Stałe święta - wszystkie są dniami wolnymi od pracy
       for (const holiday of POLISH_HOLIDAYS) {
         holidays.push({
           date: new Date(yearNum, holiday.month - 1, holiday.day),
           name: holiday.name,
           country: 'PL',
-          isHoliday: true,
+          isWorking: false, // Wszystkie polskie święta są dniami wolnymi
         });
       }
 
-      // Ruchome święta
+      // Ruchome święta - wszystkie są dniami wolnymi od pracy
       const movableHolidays = getPolishMovableHolidays(yearNum);
       for (const holiday of movableHolidays) {
         holidays.push({
           date: holiday.date,
           name: holiday.name,
           country: 'PL',
-          isHoliday: true,
+          isWorking: false, // Wszystkie polskie święta są dniami wolnymi
         });
       }
     }
 
     // Dodaj niemieckie święta
     if (!country || country === 'DE') {
-      // Stałe święta
+      // Stałe święta - wszystkie są dniami wolnymi od pracy
       for (const holiday of GERMAN_HOLIDAYS) {
         holidays.push({
           date: new Date(yearNum, holiday.month - 1, holiday.day),
           name: holiday.name,
           country: 'DE',
-          isHoliday: true,
+          isWorking: false, // Wszystkie niemieckie święta federalne są dniami wolnymi
         });
       }
 
-      // Ruchome święta
+      // Ruchome święta - wszystkie są dniami wolnymi od pracy
       const movableHolidays = getGermanMovableHolidays(yearNum);
       for (const holiday of movableHolidays) {
         holidays.push({
           date: holiday.date,
           name: holiday.name,
           country: 'DE',
-          isHoliday: true,
+          isWorking: false, // Wszystkie niemieckie święta są dniami wolnymi
         });
       }
     }

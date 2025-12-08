@@ -135,6 +135,24 @@ async function main() {
   }
   console.log('✅ Typy palet utworzone');
 
+  // ==================== GŁĘBOKOŚCI PROFILI ====================
+  // Głębokości według typu profilu dla algorytmu pakowania palet
+  const profileDepths = [
+    { profileType: 'VLAK', depthMm: 95, description: 'Profil VLAK - głębokość 95mm' },
+    { profileType: 'BLOK', depthMm: 137, description: 'Profil BLOK - głębokość 137mm' },
+    { profileType: 'szyba', depthMm: 50, description: 'Szyba - głębokość 50mm' },
+    { profileType: 'VARIANT', depthMm: 120, description: 'Profil VARIANT - głębokość 120mm' },
+  ];
+
+  for (const depth of profileDepths) {
+    await prisma.profileDepth.upsert({
+      where: { profileType: depth.profileType },
+      update: { depthMm: depth.depthMm, description: depth.description },
+      create: depth,
+    });
+  }
+  console.log('✅ Głębokości profili utworzone');
+
   // ==================== USTAWIENIA DOMYŚLNE ====================
   const defaultSettings = [
     { key: 'eurToPlnRate', value: '4.35' },

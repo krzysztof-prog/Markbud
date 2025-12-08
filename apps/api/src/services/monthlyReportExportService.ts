@@ -8,6 +8,10 @@ import PDFDocument from 'pdfkit';
 import { MonthlyReportData } from './monthlyReportService.js';
 
 export class MonthlyReportExportService {
+  // Fonty wspierające polskie znaki
+  private readonly BOLD_FONT = 'Times-Bold';
+  private readonly REGULAR_FONT = 'Times-Roman';
+
   /**
    * Export monthly report to Excel format
    */
@@ -135,7 +139,7 @@ export class MonthlyReportExportService {
 
       // Title
       doc.fontSize(20)
-        .font('Helvetica-Bold')
+        .font(this.BOLD_FONT)
         .text(`Zestawienie miesięczne ${reportData.month}/${reportData.year}`, {
           align: 'center',
         });
@@ -156,7 +160,7 @@ export class MonthlyReportExportService {
       ];
 
       // Draw header
-      doc.fontSize(10).font('Helvetica-Bold');
+      doc.fontSize(10).font(this.BOLD_FONT);
       columns.forEach((col) => {
         doc.text(col.label, col.x, tableTop, { width: col.width, align: 'center' });
       });
@@ -167,7 +171,7 @@ export class MonthlyReportExportService {
         .stroke();
 
       // Draw data rows
-      doc.font('Helvetica').fontSize(9);
+      doc.font(this.REGULAR_FONT).fontSize(9);
       let currentY = tableTop + rowHeight;
 
       reportData.items.forEach((item, index) => {
@@ -203,7 +207,7 @@ export class MonthlyReportExportService {
         .lineTo(610, currentY - 5)
         .stroke();
 
-      doc.font('Helvetica-Bold');
+      doc.font(this.BOLD_FONT);
       const totalUnits = reportData.items.reduce((sum, item) => sum + item.unitsCount, 0);
 
       const totalsData = [
@@ -225,11 +229,11 @@ export class MonthlyReportExportService {
 
       // Summary section
       currentY += 50;
-      doc.fontSize(12).font('Helvetica-Bold');
+      doc.fontSize(12).font(this.BOLD_FONT);
       doc.text('Podsumowanie:', 50, currentY);
 
       currentY += 25;
-      doc.fontSize(10).font('Helvetica');
+      doc.fontSize(10).font(this.REGULAR_FONT);
 
       const summaryLines = [
         `Liczba zleceń: ${reportData.totalOrders}`,
@@ -246,7 +250,7 @@ export class MonthlyReportExportService {
 
       // Footer
       doc.fontSize(8)
-        .font('Helvetica')
+        .font(this.REGULAR_FONT)
         .text(
           `Wygenerowano: ${new Date().toLocaleDateString('pl-PL')} ${new Date().toLocaleTimeString('pl-PL')}`,
           50,

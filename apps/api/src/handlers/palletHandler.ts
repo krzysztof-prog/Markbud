@@ -7,6 +7,7 @@ import { PalletOptimizerService } from '../services/pallet-optimizer/PalletOptim
 import { PdfExportService } from '../services/pallet-optimizer/PdfExportService.js';
 import {
   optimizeDeliveryParamsSchema,
+  optimizeDeliveryBodySchema,
   palletTypeSchema,
   updatePalletTypeSchema,
   palletTypeParamsSchema,
@@ -27,13 +28,15 @@ export class PalletHandler {
   /**
    * POST /api/pallets/optimize/:deliveryId
    * Uruchom optymalizację pakowania dla dostawy
+   * Body (opcjonalne): { options: OptimizationOptions }
    */
   async optimizeDelivery(
-    request: FastifyRequest<{ Params: { deliveryId: string } }>,
+    request: FastifyRequest<{ Params: { deliveryId: string }; Body?: unknown }>,
     reply: FastifyReply
   ) {
     const { deliveryId } = optimizeDeliveryParamsSchema.parse(request.params);
-    const result = await this.service.optimizeDelivery(parseInt(deliveryId));
+    const body = optimizeDeliveryBodySchema.parse(request.body || {});
+    const result = await this.service.optimizeDelivery(parseInt(deliveryId), body.options);
     return reply.status(201).send(result);
   }
 

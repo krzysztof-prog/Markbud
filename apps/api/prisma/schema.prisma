@@ -294,14 +294,25 @@ model DeliveryItem {
 model PalletType {
   id          Int      @id @default(autoincrement())
   name        String
-  lengthMm    Int      @map("length_mm")
-  widthMm     Int      @map("width_mm")
-  heightMm    Int      @map("height_mm")
-  loadWidthMm Int      @default(0) @map("load_width_mm")
+  lengthMm    Int      @map("length_mm")      // Długość palety (odpowiada szerokości okna)
+  loadDepthMm Int      @default(6000) @map("load_depth_mm") // Głębokość załadunku (poprzednio loadWidthMm)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("pallet_types")
+}
+
+// ==================== GŁĘBOKOŚCI PROFILI ====================
+
+model ProfileDepth {
+  id          Int      @id @default(autoincrement())
+  profileType String   @unique @map("profile_type")
+  depthMm     Int      @map("depth_mm")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("profile_depths")
 }
 
 // ==================== REGUŁY PAKOWANIA ====================

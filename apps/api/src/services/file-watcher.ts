@@ -242,16 +242,24 @@ export class FileWatcherService {
 
     logger.info(`   📄 Znaleziono ${csvFiles.length} plików CSV`);
 
-    // Znajdź lub utwórz dostawę
-    let delivery = await this.prisma.delivery.findFirst({
+    // Generuj pełny numer dostawy w formacie DD.MM.YYYY_X
+    const day = String(deliveryDate.getDate()).padStart(2, '0');
+    const month = String(deliveryDate.getMonth() + 1).padStart(2, '0');
+    const year = deliveryDate.getFullYear();
+    const fullDeliveryNumber = `${day}.${month}.${year}_${deliveryNumber}`;
+
+    // Znajdź dostawę - sprawdź wszystkie dostawy w tym dniu i dopasuj po sufiksie
+    const deliveriesOnDay = await this.prisma.delivery.findMany({
       where: {
         deliveryDate: {
           gte: new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate()),
           lt: new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate() + 1),
         },
-        deliveryNumber,
       },
     });
+
+    // Szukaj dostawy która kończy się tym samym sufiksem (I, II, III, etc.)
+    let delivery = deliveriesOnDay.find(d => d.deliveryNumber?.endsWith(`_${deliveryNumber}`));
 
     const deliveryCreated = !delivery;
 
@@ -259,14 +267,14 @@ export class FileWatcherService {
       delivery = await this.prisma.delivery.create({
         data: {
           deliveryDate,
-          deliveryNumber,
+          deliveryNumber: fullDeliveryNumber,
           status: 'planned',
         },
       });
-      logger.info(`   ✨ Utworzono nową dostawę ${deliveryNumber} na ${deliveryDate.toLocaleDateString('pl-PL')}`);
+      logger.info(`   ✨ Utworzono nową dostawę ${fullDeliveryNumber} na ${deliveryDate.toLocaleDateString('pl-PL')}`);
       emitDeliveryCreated(delivery);
     } else {
-      logger.info(`   📦 Używam istniejącej dostawy ${deliveryNumber} (ID: ${delivery.id})`);
+      logger.info(`   📦 Używam istniejącej dostawy ${delivery.deliveryNumber} (ID: ${delivery.id})`);
     }
 
     // Utwórz folder uploads jeśli nie istnieje

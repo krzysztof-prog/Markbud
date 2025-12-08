@@ -35,12 +35,12 @@ interface FolderBrowserProps {
   description?: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 async function browseFolders(path: string): Promise<BrowseFoldersResponse> {
   const url = path
-    ? `${API_URL}/settings/browse-folders?path=${encodeURIComponent(path)}`
-    : `${API_URL}/settings/browse-folders`;
+    ? `${API_URL}/api/settings/browse-folders?path=${encodeURIComponent(path)}`
+    : `${API_URL}/api/settings/browse-folders`;
 
   const response = await fetch(url);
   if (!response.ok) {
@@ -51,7 +51,7 @@ async function browseFolders(path: string): Promise<BrowseFoldersResponse> {
 }
 
 async function validateFolder(path: string): Promise<{ valid: boolean; error?: string }> {
-  const response = await fetch(`${API_URL}/settings/validate-folder`, {
+  const response = await fetch(`${API_URL}/api/settings/validate-folder`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),

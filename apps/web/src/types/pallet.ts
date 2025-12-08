@@ -28,6 +28,7 @@ export interface OptimizedWindow {
   depthMm: number;
   quantity: number;
   orderNumber: string;
+  sideBySideGroupId?: number; // ID grupy okien ułożonych obok siebie (undefined = pojedyncze okno)
 }
 
 // ==================== PALETA ====================
@@ -38,10 +39,8 @@ export interface OptimizedWindow {
 export interface PalletType {
   id: number;
   name: string;
-  lengthMm: number;
-  widthMm: number;
-  heightMm: number;
-  loadWidthMm: number;
+  lengthMm: number;      // Długość palety (odpowiada szerokości okien)
+  loadDepthMm: number;   // Głębokość załadunku
   createdAt: string;
   updatedAt: string;
 }
@@ -51,8 +50,8 @@ export interface PalletType {
  */
 export interface PalletDefinition {
   name: string;
-  widthMm: number;
-  loadWidthMm: number;
+  lengthMm: number;        // Długość palety (odpowiada szerokości okien)
+  maxLoadDepthMm: number;  // Głębokość załadunku
 }
 
 /**
@@ -61,12 +60,47 @@ export interface PalletDefinition {
 export interface OptimizedPallet {
   palletNumber: number;
   palletType: string;
-  palletWidthMm: number;
+  palletLengthMm: number;  // Długość palety (odpowiada szerokości okien)
   maxDepthMm: number;
   usedDepthMm: number;
   utilizationPercent: number;
   windows: OptimizedWindow[];
 }
+
+// ==================== OPCJE OPTYMALIZACJI ====================
+
+/**
+ * Opcje optymalizacji - checkboxy z parametrami sortowania
+ */
+export interface OptimizationOptions {
+  // Sortowanie
+  sortByHeightWhenWidthSimilar: boolean;  // Gdy szerokości podobne (±15%), sortuj po wysokości
+  widthSimilarityThreshold: number;       // Próg podobieństwa szerokości (domyślnie 0.15 = 15%)
+
+  // Palety
+  preferStandardPallets: boolean;         // Preferuj standardowe palety nad małe
+  minimizeOverhang: boolean;              // Minimalizuj wystawanie okien poza paletę
+  maxOverhangMm: number;                  // Maksymalne wystawanie (domyślnie 700mm)
+  maximizeUtilization: boolean;           // Preferuj jak najmniej wolnego miejsca na paletach
+
+  // Układanie
+  allowSideBySide: boolean;               // Pozwól układać dwa okna obok siebie (suma szerokości)
+  sideBySideMaxGap: number;               // Maksymalny gap między oknami obok siebie (mm)
+}
+
+/**
+ * Domyślne opcje optymalizacji
+ */
+export const DEFAULT_OPTIMIZATION_OPTIONS: OptimizationOptions = {
+  sortByHeightWhenWidthSimilar: true,
+  widthSimilarityThreshold: 0.15,
+  preferStandardPallets: true,
+  minimizeOverhang: true,
+  maxOverhangMm: 700,
+  maximizeUtilization: true,
+  allowSideBySide: true,
+  sideBySideMaxGap: 100,
+};
 
 // ==================== WYNIK OPTYMALIZACJI ====================
 
@@ -75,7 +109,7 @@ export interface OptimizedPallet {
  */
 export interface OptimizationSummary {
   totalWindows: number;
-  totalQuantity: number;
+  totalQuantity?: number;
   averageUtilization: number;
 }
 
@@ -87,6 +121,7 @@ export interface OptimizationResult {
   totalPallets: number;
   pallets: OptimizedPallet[];
   summary: OptimizationSummary;
+  options?: OptimizationOptions;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -152,9 +187,7 @@ export interface DeleteOptimizationResponse {
 export interface CreatePalletTypeRequest {
   name: string;
   lengthMm: number;
-  widthMm: number;
-  heightMm: number;
-  loadWidthMm: number;
+  loadDepthMm: number;
 }
 
 /**
@@ -164,9 +197,7 @@ export interface CreatePalletTypeResponse {
   id: number;
   name: string;
   lengthMm: number;
-  widthMm: number;
-  heightMm: number;
-  loadWidthMm: number;
+  loadDepthMm: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -177,9 +208,7 @@ export interface CreatePalletTypeResponse {
 export interface UpdatePalletTypeRequest {
   name?: string;
   lengthMm?: number;
-  widthMm?: number;
-  heightMm?: number;
-  loadWidthMm?: number;
+  loadDepthMm?: number;
 }
 
 /**
@@ -189,9 +218,7 @@ export interface UpdatePalletTypeResponse {
   id: number;
   name: string;
   lengthMm: number;
-  widthMm: number;
-  heightMm: number;
-  loadWidthMm: number;
+  loadDepthMm: number;
   createdAt: string;
   updatedAt: string;
 }

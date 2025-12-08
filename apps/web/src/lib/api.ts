@@ -74,7 +74,7 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
-      const error: ApiError = new Error(data.error || `HTTP Error: ${response.status}`);
+      const error: ApiError = new Error(data.message || data.error || `HTTP Error: ${response.status}`);
       error.status = response.status;
       error.data = data;
       throw error;
@@ -294,6 +294,34 @@ export const deliveriesApi = {
         }>;
       }>;
     }>(`/api/deliveries/stats/profiles${months ? `?months=${months}` : ''}`),
+  getWindowStats: (months?: number) =>
+    fetchApi<{
+      stats: Array<{
+        month: number;
+        year: number;
+        monthLabel: string;
+        deliveriesCount: number;
+        totalWindows: number;
+        totalSashes: number;
+        totalGlasses: number;
+      }>;
+    }>(`/api/deliveries/stats/windows${months ? `?months=${months}` : ''}`),
+  getWindowStatsByWeekday: (months?: number) =>
+    fetchApi<{
+      stats: Array<{
+        weekday: number;
+        weekdayName: string;
+        deliveriesCount: number;
+        totalWindows: number;
+        totalSashes: number;
+        totalGlasses: number;
+        avgWindowsPerDelivery: number;
+        avgSashesPerDelivery: number;
+        avgGlassesPerDelivery: number;
+      }>;
+      periodStart: string;
+      periodEnd: string;
+    }>(`/api/deliveries/stats/windows/by-weekday${months ? `?months=${months}` : ''}`),
 };
 
 // Typy dla importu z folderu
@@ -475,11 +503,12 @@ export const palletsApi = {
   /**
    * POST /api/pallets/optimize/:deliveryId
    * Uruchom optymalizację pakowania dla dostawy
+   * @param options - opcjonalne opcje optymalizacji
    */
-  optimize: (deliveryId: number) =>
+  optimize: (deliveryId: number, options?: Partial<import('@/types/pallet').OptimizationOptions>) =>
     fetchApi<OptimizationResult>(`/api/pallets/optimize/${deliveryId}`, {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify({ options }),
     }),
 
   /**
@@ -733,4 +762,57 @@ export const currencyConfigApi = {
       '/api/currency-config/convert/pln-to-eur',
       { method: 'POST', body: JSON.stringify({ amount }) }
     ),
+};
+
+// Głębokości profili
+export interface ProfileDepth {
+  id: number;
+  profileType: string;
+  depthMm: number;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const profileDepthsApi = {
+  /**
+   * GET /api/profile-depths
+   * Pobierz wszystkie głębokości profili
+   */
+  getAll: () => fetchApi<ProfileDepth[]>('/api/profile-depths'),
+
+  /**
+   * GET /api/profile-depths/:id
+   * Pobierz głębokość profilu po ID
+   */
+  getById: (id: number) => fetchApi<ProfileDepth>(`/api/profile-depths/${id}`),
+
+  /**
+   * POST /api/profile-depths
+   * Utwórz nową głębokość profilu
+   */
+  create: (data: { profileType: string; depthMm: number; description?: string }) =>
+    fetchApi<ProfileDepth>('/api/profile-depths', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * PATCH /api/profile-depths/:id
+   * Zaktualizuj głębokość profilu
+   */
+  update: (id: number, data: Partial<{ profileType: string; depthMm: number; description?: string }>) =>
+    fetchApi<ProfileDepth>(`/api/profile-depths/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * DELETE /api/profile-depths/:id
+   * Usuń głębokość profilu
+   */
+  delete: (id: number) =>
+    fetchApi(`/api/profile-depths/${id}`, {
+      method: 'DELETE',
+    }),
 };

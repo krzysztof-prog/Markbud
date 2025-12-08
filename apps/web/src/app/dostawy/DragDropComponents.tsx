@@ -115,8 +115,12 @@ export function DraggableOrder({
         <Package className="h-3 w-3 text-slate-400" />
         <span className="font-mono text-xs font-medium">{order.orderNumber}</span>
         {order._optimistic && <SyncIndicator status="pending" size="xs" />}
-        {order.totalWindows && (
-          <span className="text-xs text-slate-500">{order.totalWindows} okien</span>
+        {(order.totalWindows || order.totalSashes || order.totalGlasses) && (
+          <span className="text-xs text-slate-500">
+            {order.totalWindows ? `${order.totalWindows}ok` : ''}
+            {order.totalSashes ? ` ${order.totalSashes}sk` : ''}
+            {order.totalGlasses ? ` ${order.totalGlasses}sz` : ''}
+          </span>
         )}
       </div>
       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-auto">

@@ -3,13 +3,28 @@
  */
 
 import PDFDocument from 'pdfkit';
-import type { OptimizationResult } from './PalletOptimizerService.js';
+import type { OptimizationResult, OptimizedPallet, OptimizedWindow } from './PalletOptimizerService.js';
 import { logger } from '../../utils/logger.js';
+
+// Stałe dla wizualizacji
+const MAX_OVERHANG_MM = 700;
+const VIS_WIDTH = 400;  // Szerokość wizualizacji w punktach PDF
+const VIS_HEIGHT = 200; // Wysokość wizualizacji w punktach PDF
+const VIS_PADDING = 10;
+
+// Kolory profili (w formacie hex)
+const PROFILE_COLORS: Record<string, { fill: string; stroke: string }> = {
+    VLAK: { fill: '#3B82F6', stroke: '#2563EB' },
+    BLOK: { fill: '#10B981', stroke: '#059669' },
+    szyba: { fill: '#F59E0B', stroke: '#D97706' },
+    VARIANT: { fill: '#8B5CF6', stroke: '#7C3AED' },
+};
+const DEFAULT_COLOR = { fill: '#6B7280', stroke: '#4B5563' };
 
 export class PdfExportService {
     // Stałe dla layoutu
-    private readonly PAGE_BREAK_PALLET = 650;  // Próg dla nowej palety
-    private readonly PAGE_BREAK_ROW = 750;     // Próg dla nowego wiersza
+    private readonly PAGE_BREAK_PALLET = 500;  // Próg dla nowej palety (zmniejszony dla wizualizacji)
+    private readonly PAGE_BREAK_ROW = 720;     // Próg dla nowego wiersza (obniżony)
     private readonly TABLE_LEFT = 70;
     private readonly COL_WIDTHS = {
         lp: 30,
@@ -21,13 +36,17 @@ export class PdfExportService {
         order: 100,
     };
 
+    // Fonty wspierające polskie znaki
+    private readonly BOLD_FONT = 'Times-Bold';
+    private readonly REGULAR_FONT = 'Times-Roman';
+
     /**
      * Generuj PDF z wynikiem optymalizacji
      */
     async generatePdf(result: OptimizationResult): Promise<Buffer> {
         return new Promise((resolve, reject) => {
             try {
-                // Utwórz dokument PDF
+                // Utwórz dokument PDF z obsługą Unicode
                 const doc = new PDFDocument({
                     size: 'A4',
                     margins: {
@@ -37,6 +56,7 @@ export class PdfExportService {
                         right: 50,
                     },
                     bufferPages: true,  // Enable page buffering for footer support
+                    compress: true,
                 });
 
                 // Buffer do przechowywania PDF
@@ -48,14 +68,14 @@ export class PdfExportService {
                 // ==================== NAGŁÓWEK ====================
                 doc
                     .fontSize(20)
-                    .font('Helvetica-Bold')
+                    .font(this.BOLD_FONT)
                     .text('Optymalizacja Pakowania Palet', { align: 'center' });
 
                 doc.moveDown(0.5);
 
                 doc
                     .fontSize(12)
-                    .font('Helvetica')
+                    .font(this.REGULAR_FONT)
                     .text(`Dostawa ID: ${result.deliveryId}`, { align: 'center' });
 
                 doc
@@ -66,11 +86,11 @@ export class PdfExportService {
                 doc.moveDown(1);
 
                 // ==================== PODSUMOWANIE ====================
-                doc.fontSize(14).font('Helvetica-Bold').text('Podsumowanie:', { underline: true });
+                doc.fontSize(14).font(this.BOLD_FONT).text('Podsumowanie:', { underline: true });
 
                 doc.moveDown(0.3);
 
-                doc.fontSize(11).font('Helvetica');
+                doc.fontSize(11).font(this.REGULAR_FONT);
 
                 const summaryY = doc.y;
                 const leftColumn = 70;
@@ -88,7 +108,7 @@ export class PdfExportService {
                 doc.moveDown(1.5);
 
                 // ==================== SZCZEGÓŁY PALET ====================
-                doc.fontSize(14).font('Helvetica-Bold').text('Szczegóły Palet:', { underline: true });
+                doc.fontSize(14).font(this.BOLD_FONT).text('Szczegóły Palet:', { underline: true });
 
                 doc.moveDown(0.5);
 
@@ -105,10 +125,10 @@ export class PdfExportService {
                     // Nagłówek palety
                     doc
                         .fontSize(12)
-                        .font('Helvetica-Bold')
+                        .font(this.BOLD_FONT)
                         .fillColor('#2563eb') // Niebieski
                         .text(
-                            `${pallet.palletType} (${pallet.palletWidthMm}mm) - Wykorzystanie: ${pallet.utilizationPercent.toFixed(1)}%`
+                            `${pallet.palletType} (${pallet.palletLengthMm}mm) - Wykorzystanie: ${pallet.utilizationPercent.toFixed(1)}%`
                         );
 
                     doc.fillColor('#000000'); // Powrót do czarnego
@@ -116,10 +136,15 @@ export class PdfExportService {
                     doc.moveDown(0.2);
 
                     // Informacje o palecie
-                    doc.fontSize(10).font('Helvetica');
+                    doc.fontSize(10).font(this.REGULAR_FONT);
                     doc.text(`Głębokość: ${pallet.usedDepthMm}mm / ${pallet.maxDepthMm}mm`);
 
                     doc.moveDown(0.3);
+
+                    // Wizualizacja palety
+                    this.drawPalletVisualization(doc, pallet);
+
+                    doc.moveDown(0.5);
 
                     // Rysuj nagłówki tabeli (funkcja pomocnicza)
                     this.drawTableHeaders(doc);
@@ -136,7 +161,7 @@ export class PdfExportService {
                     doc.moveDown(0.2);
 
                     // Wiersze z oknami (posortowane od najszerszego)
-                    doc.fontSize(9).font('Helvetica').fillColor('#000000');
+                    doc.fontSize(9).font(this.REGULAR_FONT).fillColor('#000000');
 
                     pallet.windows.forEach((window, idx) => {
                         // POPRAWKA: Sprawdź czy jest miejsce na wiersz (jeśli nie - nowa strona z nagłówkami)
@@ -153,7 +178,7 @@ export class PdfExportService {
                                 .lineTo(this.TABLE_LEFT + totalTableWidth, newLineY)
                                 .stroke();
                             doc.moveDown(0.2);
-                            doc.fontSize(9).font('Helvetica').fillColor('#000000');
+                            doc.fontSize(9).font(this.REGULAR_FONT).fillColor('#000000');
                         }
 
                         const rowY = doc.y;
@@ -224,7 +249,7 @@ export class PdfExportService {
 
                     doc
                         .fontSize(8)
-                        .font('Helvetica')
+                        .font(this.REGULAR_FONT)
                         .fillColor('#6b7280')
                         .text(
                             `Strona ${range.start + i + 1} z ${range.count} | Wygenerowano przez System AKROBUD`,
@@ -254,7 +279,7 @@ export class PdfExportService {
     private drawTableHeaders(doc: PDFKit.PDFDocument): void {
         const tableTop = doc.y;
 
-        doc.fontSize(9).font('Helvetica-Bold').fillColor('#4b5563'); // Szary
+        doc.fontSize(9).font(this.BOLD_FONT).fillColor('#4b5563'); // Szary
 
         let currentX = this.TABLE_LEFT;
 
@@ -279,6 +304,148 @@ export class PdfExportService {
         doc.text('Zlecenie', currentX, tableTop, { width: this.COL_WIDTHS.order, align: 'center' });
 
         doc.moveDown(0.3);
+    }
+
+    /**
+     * Rysuj wizualizację palety
+     */
+    private drawPalletVisualization(doc: PDFKit.PDFDocument, pallet: OptimizedPallet): void {
+        const startX = this.TABLE_LEFT;
+        const startY = doc.y;
+
+        // Oblicz skalę
+        const totalWidthMm = pallet.palletLengthMm + MAX_OVERHANG_MM;
+        const totalDepthMm = pallet.maxDepthMm;
+
+        const drawableWidth = VIS_WIDTH - 2 * VIS_PADDING;
+        const drawableHeight = VIS_HEIGHT - 2 * VIS_PADDING;
+
+        const scaleX = drawableWidth / totalWidthMm;
+        const scaleY = drawableHeight / totalDepthMm;
+        const scale = Math.min(scaleX, scaleY);
+
+        const actualWidth = totalWidthMm * scale;
+        const actualHeight = totalDepthMm * scale;
+
+        const offsetX = startX + VIS_PADDING + (drawableWidth - actualWidth) / 2;
+        const offsetY = startY + VIS_PADDING;
+
+        // Rysuj tło palety
+        const palletWidthPx = pallet.palletLengthMm * scale;
+        const overhangWidthPx = MAX_OVERHANG_MM * scale;
+
+        // Strefa palety (szara)
+        doc
+            .rect(offsetX, offsetY, palletWidthPx, actualHeight)
+            .fillAndStroke('#F3F4F6', '#9CA3AF');
+
+        // Strefa overhang (żółta, przerywana)
+        doc
+            .rect(offsetX + palletWidthPx, offsetY, overhangWidthPx, actualHeight)
+            .fillOpacity(0.3)
+            .fillAndStroke('#FEF3C7', '#F59E0B');
+
+        doc.fillOpacity(1);
+
+        // Rysuj okna
+        let currentY = 0;
+        for (const window of pallet.windows) {
+            const windowWidth = window.widthMm * scale;
+            const windowHeight = window.depthMm * scale;
+            const windowX = offsetX;
+            const windowY = offsetY + currentY;
+
+            const color = PROFILE_COLORS[window.profileType] || DEFAULT_COLOR;
+
+            doc
+                .rect(windowX, windowY, windowWidth, windowHeight - 1)
+                .fillAndStroke(color.fill, color.stroke);
+
+            // Etykieta wymiaru (jeśli jest miejsce)
+            if (windowHeight > 12 && windowWidth > 40) {
+                doc
+                    .fontSize(7)
+                    .font(this.REGULAR_FONT)
+                    .fillColor('#FFFFFF')
+                    .text(
+                        `${window.widthMm}`,
+                        windowX + 2,
+                        windowY + windowHeight / 2 - 4,
+                        { width: windowWidth - 4, align: 'center' }
+                    );
+            }
+
+            currentY += windowHeight;
+        }
+
+        // Wymiary - szerokość palety
+        doc
+            .strokeColor('#6B7280')
+            .lineWidth(0.5)
+            .moveTo(offsetX, offsetY - 8)
+            .lineTo(offsetX + palletWidthPx, offsetY - 8)
+            .stroke();
+
+        doc
+            .moveTo(offsetX, offsetY - 12)
+            .lineTo(offsetX, offsetY - 4)
+            .stroke();
+
+        doc
+            .moveTo(offsetX + palletWidthPx, offsetY - 12)
+            .lineTo(offsetX + palletWidthPx, offsetY - 4)
+            .stroke();
+
+        doc
+            .fontSize(7)
+            .font(this.REGULAR_FONT)
+            .fillColor('#374151')
+            .text(
+                `${pallet.palletLengthMm} mm`,
+                offsetX,
+                offsetY - 20,
+                { width: palletWidthPx, align: 'center' }
+            );
+
+        // Etykieta overhang
+        doc
+            .fontSize(6)
+            .fillColor('#D97706')
+            .text(
+                `+${MAX_OVERHANG_MM} mm`,
+                offsetX + palletWidthPx,
+                offsetY - 18,
+                { width: overhangWidthPx, align: 'center' }
+            );
+
+        // Legenda kolorów (mała, na prawo od wizualizacji)
+        const legendX = startX + VIS_WIDTH + 20;
+        const legendY = startY + 10;
+        const legendItemHeight = 12;
+
+        doc.fontSize(7).font(this.BOLD_FONT).fillColor('#374151');
+        doc.text('Legenda:', legendX, legendY);
+
+        let legendCurrentY = legendY + 14;
+        for (const [type, colors] of Object.entries(PROFILE_COLORS)) {
+            doc
+                .rect(legendX, legendCurrentY, 10, 8)
+                .fillAndStroke(colors.fill, colors.stroke);
+
+            doc
+                .fontSize(6)
+                .font(this.REGULAR_FONT)
+                .fillColor('#374151')
+                .text(type, legendX + 14, legendCurrentY + 1);
+
+            legendCurrentY += legendItemHeight;
+        }
+
+        // Przywróć kolor
+        doc.fillColor('#000000');
+
+        // Przesuń pozycję doc.y za wizualizację
+        doc.y = startY + VIS_HEIGHT + 10;
     }
 
     /**

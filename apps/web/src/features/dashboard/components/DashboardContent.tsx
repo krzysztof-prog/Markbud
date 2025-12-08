@@ -255,19 +255,19 @@ export function DashboardContent() {
                       </div>
                       {hasData ? (
                         <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                          <div>
+                          <div key="windows">
                             <div className="text-slate-600">Okna</div>
                             <div className="text-lg font-bold text-blue-700">
                               {week.windows}
                             </div>
                           </div>
-                          <div>
+                          <div key="sashes">
                             <div className="text-slate-600">Skrzydła</div>
                             <div className="text-lg font-bold text-blue-700">
                               {week.sashes}
                             </div>
                           </div>
-                          <div>
+                          <div key="glasses">
                             <div className="text-slate-600">Szyby</div>
                             <div className="text-lg font-bold text-blue-700">
                               {week.glasses}
@@ -326,7 +326,7 @@ export function DashboardContent() {
                     <div>
                       <p className="font-medium">{formatDate(delivery.deliveryDate)}</p>
                       <p className="text-sm text-muted-foreground">
-                        {delivery.orders?.length || 0} zleceń
+                        {delivery.ordersCount || 0} zleceń
                       </p>
                     </div>
                     <Badge variant="outline" className="ml-auto">

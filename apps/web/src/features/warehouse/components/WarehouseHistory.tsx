@@ -35,19 +35,7 @@ export function WarehouseHistory({ colorId, colorName }: WarehouseHistoryProps) 
     staleTime: 5 * 60 * 1000, // 5 minut
   });
 
-  if (isLoading) {
-    return <TableSkeleton rows={10} columns={5} />;
-  }
-
-  if (error) {
-    return (
-      <div className="text-center py-8 text-red-500">
-        Błąd ładowania historii: {error instanceof Error ? error.message : 'Nieznany błąd'}
-      </div>
-    );
-  }
-
-  // Memoize grouped data to avoid recalculation on each render
+  // Memoize grouped data - MUST be called before any early returns to maintain hooks order
   const { groupedByDate, sortedDates } = useMemo(() => {
     if (!history || history.length === 0) {
       return { groupedByDate: {}, sortedDates: [] };
@@ -66,6 +54,18 @@ export function WarehouseHistory({ colorId, colorName }: WarehouseHistoryProps) 
 
     return { groupedByDate: grouped, sortedDates: sorted };
   }, [history]);
+
+  if (isLoading) {
+    return <TableSkeleton rows={10} columns={5} />;
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8 text-red-500">
+        Błąd ładowania historii: {error instanceof Error ? error.message : 'Nieznany błąd'}
+      </div>
+    );
+  }
 
   if (!history || history.length === 0) {
     return (

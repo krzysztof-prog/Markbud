@@ -10,10 +10,13 @@
 import dynamic from 'next/dynamic';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 
-const DostawySchucoPageContent = dynamic(() => import('./DostawySchucoPageContent'), {
-  loading: () => <TableSkeleton />,
-  ssr: false,
-});
+const DostawySchucoPageContent = dynamic(
+  () => import('./DostawySchucoPageContent').then((mod) => mod.default),
+  {
+    loading: () => <TableSkeleton />,
+    ssr: false,
+  }
+);
 
 export default function DostawySchucoPage() {
   return <DostawySchucoPageContent />;

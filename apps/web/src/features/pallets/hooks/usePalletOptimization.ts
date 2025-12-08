@@ -41,6 +41,14 @@ export function usePalletOptimization(deliveryId: number) {
 }
 
 /**
+ * Parametry dla mutacji optymalizacji
+ */
+interface OptimizeMutationParams {
+  deliveryId: number;
+  options?: Partial<import('@/types/pallet').OptimizationOptions>;
+}
+
+/**
  * Mutation do uruchomienia optymalizacji
  *
  * @example
@@ -49,7 +57,7 @@ export function usePalletOptimization(deliveryId: number) {
  *   const optimizeMutation = useOptimizePallet();
  *
  *   return (
- *     <button onClick={() => optimizeMutation.mutate(123)}>
+ *     <button onClick={() => optimizeMutation.mutate({ deliveryId: 123, options: { preferStandardPallets: true } })}>
  *       {optimizeMutation.isPending ? 'Optymalizacja...' : 'Optymalizuj'}
  *     </button>
  *   );
@@ -60,8 +68,9 @@ export function useOptimizePallet() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (deliveryId: number) => palletsApi.optimize(deliveryId),
-    onSuccess: (data: OptimizationResult, deliveryId: number) => {
+    mutationFn: ({ deliveryId, options }: OptimizeMutationParams) =>
+      palletsApi.optimize(deliveryId, options),
+    onSuccess: (data: OptimizationResult, { deliveryId }: OptimizeMutationParams) => {
       // Zaktualizuj cache
       queryClient.setQueryData(PALLET_OPTIMIZATION_QUERY_KEY(deliveryId), data);
     },
