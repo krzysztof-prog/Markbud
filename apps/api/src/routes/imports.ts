@@ -137,6 +137,128 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
         },
       });
 
+      // AUTO-IMPORT dla plików PDF z cenami
+      if (fileType === 'ceny_pdf') {
+        try {
+          const parser = new PdfParser();
+          const preview = await parser.previewCenyPdf(filepath);
+
+          // Sprawdź czy zlecenie istnieje
+          const order = await prisma.order.findUnique({
+            where: { orderNumber: preview.orderNumber },
+          });
+
+          if (!order) {
+            // Zlecenie nie istnieje - zostaw jako pending z informacją
+            await prisma.fileImport.update({
+              where: { id: fileImport.id },
+              data: {
+                status: 'pending',
+                metadata: JSON.stringify({
+                  autoImportError: true,
+                  errorType: 'order_not_found',
+                  parsed: preview,
+                  message: `Zlecenie ${preview.orderNumber} nie istnieje w bazie danych`,
+                }),
+              },
+            });
+
+            reply.status(201);
+            return {
+              ...fileImport,
+              autoImportStatus: 'error',
+              autoImportError: `Zlecenie ${preview.orderNumber} nie istnieje - wymaga ręcznego zatwierdzenia`,
+            };
+          }
+
+          // Sprawdź duplikat - czy już zaimportowano cenę dla tego zlecenia
+          const existingImport = await prisma.fileImport.findFirst({
+            where: {
+              fileType: 'ceny_pdf',
+              status: 'completed',
+              id: { not: fileImport.id },
+              metadata: { contains: `"orderId":${order.id}` },
+            },
+          });
+
+          if (existingImport) {
+            // Duplikat - zostaw jako pending z ostrzeżeniem
+            await prisma.fileImport.update({
+              where: { id: fileImport.id },
+              data: {
+                status: 'pending',
+                metadata: JSON.stringify({
+                  autoImportError: true,
+                  errorType: 'duplicate',
+                  parsed: preview,
+                  existingImportId: existingImport.id,
+                  existingImportDate: existingImport.processedAt,
+                  message: `Cena dla zlecenia ${preview.orderNumber} już została zaimportowana`,
+                }),
+              },
+            });
+
+            reply.status(201);
+            return {
+              ...fileImport,
+              autoImportStatus: 'warning',
+              autoImportError: `Duplikat - cena dla ${preview.orderNumber} już istnieje. Wymaga ręcznego zatwierdzenia.`,
+            };
+          }
+
+          // Wszystko OK - przetwórz automatycznie
+          const result = await parser.processCenyPdf(filepath);
+
+          await prisma.fileImport.update({
+            where: { id: fileImport.id },
+            data: {
+              status: 'completed',
+              processedAt: new Date(),
+              metadata: JSON.stringify({
+                ...result,
+                autoImported: true,
+                parsed: preview,
+              }),
+            },
+          });
+
+          logger.info(`✅ Auto-import PDF: ${filename} → zlecenie ${preview.orderNumber} (${preview.currency} ${preview.valueNetto})`);
+
+          reply.status(201);
+          return {
+            ...fileImport,
+            status: 'completed',
+            autoImportStatus: 'success',
+            result,
+          };
+
+        } catch (error) {
+          // Błąd parsowania - zostaw jako pending
+          const errorMessage = error instanceof Error ? error.message : 'Nieznany błąd';
+
+          await prisma.fileImport.update({
+            where: { id: fileImport.id },
+            data: {
+              status: 'pending',
+              metadata: JSON.stringify({
+                autoImportError: true,
+                errorType: 'parse_error',
+                message: errorMessage,
+              }),
+            },
+          });
+
+          logger.warn(`⚠️ Auto-import PDF failed: ${filename} - ${errorMessage}`);
+
+          reply.status(201);
+          return {
+            ...fileImport,
+            autoImportStatus: 'error',
+            autoImportError: errorMessage,
+          };
+        }
+      }
+
       reply.status(201);
       return fileImport;
     } catch (error) {

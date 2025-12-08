@@ -260,7 +260,17 @@ export default function ImportyPage() {
   const pdfImports = imports?.filter((i: Import) => i.fileType === 'ceny_pdf') || [];
 
   const pendingCsvImports = csvImports.filter((i: Import) => i.status === 'pending');
-  const pendingPdfImports = pdfImports.filter((i: Import) => i.status === 'pending');
+
+  // Dla PDF: pokazuj tylko pliki z błędami (status=pending + autoImportError w metadata)
+  const pendingPdfImports = pdfImports.filter((i: Import) => {
+    if (i.status !== 'pending') return false;
+    try {
+      const metadata = typeof i.metadata === 'string' ? JSON.parse(i.metadata) : i.metadata;
+      return metadata?.autoImportError === true;
+    } catch {
+      return false;
+    }
+  });
 
   const completedImports = imports?.filter((i: Import) => i.status === 'completed') || [];
   const errorImports = imports?.filter((i: Import) => i.status === 'error' || i.status === 'rejected') || [];
@@ -691,59 +701,99 @@ export default function ImportyPage() {
               {/* Oczekujące importy PDF */}
               <div>
                 <h4 className="text-sm font-medium text-slate-500 mb-2 flex items-center gap-1">
-                  <Clock className="h-4 w-4" />
-                  Oczekujące ({pendingPdfImports.length})
+                  <AlertCircle className="h-4 w-4" />
+                  Wymagające uwagi ({pendingPdfImports.length})
                 </h4>
                 {pendingPdfImports.length > 0 ? (
                   <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {pendingPdfImports.map((imp: Import) => (
-                      <div
-                        key={imp.id}
-                        className="flex items-center justify-between p-3 rounded-lg border bg-yellow-50 border-yellow-200"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <FileText className="h-5 w-5 text-blue-600 flex-shrink-0" />
-                          <div className="min-w-0">
-                            <p className="font-medium text-sm truncate">{imp.filename}</p>
-                            <p className="text-xs text-slate-500">
-                              {formatDate(imp.createdAt)}
-                            </p>
+                    {pendingPdfImports.map((imp: Import) => {
+                      let metadata: any = {};
+                      try {
+                        metadata = typeof imp.metadata === 'string' ? JSON.parse(imp.metadata) : imp.metadata || {};
+                      } catch {
+                        metadata = {};
+                      }
+
+                      const errorType = metadata?.errorType;
+                      const errorMessage = metadata?.message;
+
+                      let errorColor = 'bg-red-50 border-red-200';
+                      let errorIcon = <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />;
+                      let errorLabel = 'Błąd';
+
+                      if (errorType === 'order_not_found') {
+                        errorColor = 'bg-red-50 border-red-200';
+                        errorLabel = 'Zlecenie nie znalezione';
+                      } else if (errorType === 'duplicate') {
+                        errorColor = 'bg-amber-50 border-amber-200';
+                        errorIcon = <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />;
+                        errorLabel = 'Duplikat';
+                      } else if (errorType === 'parse_error') {
+                        errorColor = 'bg-red-50 border-red-200';
+                        errorLabel = 'Błąd parsowania';
+                      }
+
+                      return (
+                        <div
+                          key={imp.id}
+                          className={`rounded-lg border p-3 ${errorColor}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0 flex-1">
+                              {errorIcon}
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-sm truncate">{imp.filename}</p>
+                                <p className="text-xs text-slate-500 mt-1">
+                                  {formatDate(imp.createdAt)}
+                                </p>
+                                {errorMessage && (
+                                  <p className="text-xs text-slate-600 mt-2 font-medium">
+                                    {errorLabel}: {errorMessage}
+                                  </p>
+                                )}
+                                {errorType === 'duplicate' && metadata?.existingImportDate && (
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    Poprzedni import: {formatDate(metadata.existingImportDate)}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex gap-1 flex-shrink-0">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPreviewId(imp.id)}
+                                title="Podgląd"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => approveMutation.mutate({ id: imp.id, action: 'add_new' })}
+                                disabled={approveMutation.isPending}
+                                title="Importuj mimo wszystko"
+                              >
+                                <Check className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => rejectMutation.mutate(imp.id)}
+                                disabled={rejectMutation.isPending}
+                                title="Odrzuć"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex gap-1 flex-shrink-0">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPreviewId(imp.id)}
-                            title="Podgląd"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => approveMutation.mutate({ id: imp.id, action: 'add_new' })}
-                            disabled={approveMutation.isPending}
-                            title="Importuj"
-                          >
-                            <Check className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => rejectMutation.mutate(imp.id)}
-                            disabled={rejectMutation.isPending}
-                            title="Odrzuć"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-xs text-slate-400 text-center py-4">
-                    Brak oczekujących plików PDF
+                    ✅ Wszystkie pliki PDF zaimportowane automatycznie
                   </p>
                 )}
               </div>
@@ -794,7 +844,7 @@ export default function ImportyPage() {
                 <div className="flex items-center justify-center h-32">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
                 </div>
-              ) : preview ? (
+              ) : preview && preview.import ? (
                 <div className="space-y-4">
                   {/* Nagłówek z numerem zlecenia */}
                   <div className="grid grid-cols-3 gap-4">
