@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "predev": "node scripts/kill-dev-servers.js",
-    "dev": "pnpm run --parallel dev",
+    "dev": "turbo dev",
     "dev:web": "pnpm --filter @akrobud/web dev",
     "dev:api": "pnpm --filter @akrobud/api dev",
-    "build": "pnpm run --parallel build",
+    "build": "turbo build",
     "build:web": "pnpm --filter @akrobud/web build",
     "build:api": "pnpm --filter @akrobud/api build",
     "db:generate": "pnpm --filter @akrobud/api db:generate",
@@ -18,8 +18,8 @@
     "db:seed": "pnpm --filter @akrobud/api db:seed",
     "db:studio": "pnpm --filter @akrobud/api db:studio",
     "db:reset": "pnpm --filter @akrobud/api db:reset",
-    "lint": "pnpm run --parallel lint",
-    "clean": "pnpm run --parallel clean",
+    "lint": "turbo lint",
+    "clean": "turbo clean",
     "kill": "node scripts/kill-dev-servers.js",
     "bd": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe",
     "bd:list": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe list",
@@ -27,6 +27,7 @@
     "bd:info": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe info"
   },
   "devDependencies": {
+    "turbo": "^2.6.3",
     "typescript": "^5.3.3"
   },
   "engines": {
