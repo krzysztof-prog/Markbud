@@ -3,28 +3,30 @@
  */
 
 import { z } from 'zod';
+import {
+  dateSchema,
+  optionalDateSchema,
+  idParamsSchema,
+  dateRangeQuerySchema,
+} from './common.js';
 
 export const createDeliverySchema = z.object({
-  deliveryDate: z.string().datetime().or(z.coerce.date().transform(d => d.toISOString())),
+  deliveryDate: dateSchema,
   deliveryNumber: z.string().optional(),
   notes: z.string().optional(),
 });
 
 export const updateDeliverySchema = z.object({
-  deliveryDate: z.string().datetime().or(z.coerce.date().transform(d => d.toISOString())).optional(),
+  deliveryDate: optionalDateSchema,
   status: z.enum(['pending', 'completed', 'cancelled']).optional(),
   notes: z.string().optional(),
 });
 
-export const deliveryQuerySchema = z.object({
-  from: z.string().optional(),
-  to: z.string().optional(),
+export const deliveryQuerySchema = dateRangeQuerySchema.extend({
   status: z.string().optional(),
 });
 
-export const deliveryParamsSchema = z.object({
-  id: z.string().regex(/^\d+$/, 'Invalid delivery ID'),
-});
+export const deliveryParamsSchema = idParamsSchema('delivery');
 
 export const addOrderSchema = z.object({
   orderId: z.number().int().positive('Invalid order ID'),
@@ -46,7 +48,7 @@ export const addItemSchema = z.object({
 });
 
 export const completeDeliverySchema = z.object({
-  productionDate: z.string().datetime().or(z.coerce.date().transform(d => d.toISOString())),
+  productionDate: dateSchema,
 });
 
 export type CreateDeliveryInput = z.infer<typeof createDeliverySchema>;

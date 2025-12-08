@@ -39,3 +39,6 @@ tmp/
 temp/
 *.tmp
 nul
+
+# Claude Code session state
+.claude/.session-state/

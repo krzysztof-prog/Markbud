@@ -9,27 +9,11 @@ import { Button } from '@/components/ui/button';
 import { ordersApi } from '@/lib/api';
 import type { Order } from '@/types';
 import { useRouter } from 'next/navigation';
+import { useDebounce } from '@/hooks/useDebounce';
 
 interface GlobalSearchProps {
   isOpen: boolean;
   onClose: () => void;
-}
-
-// Custom hook for debouncing
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-
-  return debouncedValue;
 }
 
 export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {

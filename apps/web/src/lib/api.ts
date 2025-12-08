@@ -1,3 +1,10 @@
+/**
+ * Unified API module
+ *
+ * All API methods are centralized here.
+ * Uses shared fetchApi from api-client.ts for consistent error handling.
+ */
+
 import type {
   Color,
   CreateColorData,
@@ -52,49 +59,7 @@ import type {
   CreatePalletTypeRequest,
   UpdatePalletTypeRequest,
 } from '@/types/pallet';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
-interface ApiError extends Error {
-  status?: number;
-  data?: unknown;
-}
-
-async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const url = `${API_URL}${endpoint}`;
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
-    });
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
-      const error: ApiError = new Error(data.message || data.error || `HTTP Error: ${response.status}`);
-      error.status = response.status;
-      error.data = data;
-      throw error;
-    }
-
-    if (response.status === 204) {
-      return {} as T;
-    }
-
-    return response.json();
-  } catch (error) {
-    if (error instanceof TypeError) {
-      // Network error
-      const networkError: ApiError = new Error('Błąd połączenia sieciowego. Sprawdź internetu.');
-      networkError.status = 0;
-      throw networkError;
-    }
-    throw error;
-  }
-}
+import { fetchApi, uploadFile, fetchBlob, checkExists, API_URL, type ApiError } from './api-client';
 
 // Dashboard
 export const dashboardApi = {
@@ -398,45 +363,7 @@ export const importsApi = {
       method: 'POST',
       body: JSON.stringify({ folderPath, deliveryNumber }),
     }),
-  upload: async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-
-      const response = await fetch(`${API_URL}/api/imports/upload`, {
-        method: 'POST',
-        body: formData,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
-        const error: ApiError = new Error(data.error || `HTTP Error: ${response.status}`);
-        error.status = response.status;
-        error.data = data;
-        throw error;
-      }
-
-      return response.json() as Promise<Import>;
-    } catch (error) {
-      if (error instanceof TypeError) {
-        const networkError: ApiError = new Error('Błąd połączenia sieciowego. Sprawdź internetu.');
-        networkError.status = 0;
-        throw networkError;
-      }
-      if (error instanceof Error && error.name === 'AbortError') {
-        const timeoutError: ApiError = new Error('Przekroczono limit czasu przesyłania. Plik może być zbyt duży.');
-        timeoutError.status = 408;
-        throw timeoutError;
-      }
-      throw error;
-    }
-  },
+  upload: (file: File) => uploadFile<Import>('/api/imports/upload', file),
 };
 
 // Ustawienia

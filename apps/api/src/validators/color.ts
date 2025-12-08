@@ -3,6 +3,7 @@
  */
 
 import { z } from 'zod';
+import { idParamsSchema } from './common.js';
 
 export const createColorSchema = z.object({
   code: z.string().min(1).max(50),
@@ -18,9 +19,7 @@ export const updateColorSchema = z.object({
   hexColor: z.string().regex(/^#[0-9A-F]{6}$/i).optional(),
 });
 
-export const colorParamsSchema = z.object({
-  id: z.string().regex(/^\d+$/, 'Invalid color ID'),
-});
+export const colorParamsSchema = idParamsSchema('color');
 
 export type CreateColorInput = z.infer<typeof createColorSchema>;
 export type UpdateColorInput = z.infer<typeof updateColorSchema>;

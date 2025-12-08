@@ -325,4 +325,214 @@ export class DeliveryRepository {
       data,
     });
   }
+
+  /**
+   * Get calendar data for a specific month/year
+   */
+  async getCalendarData(year: number, month: number) {
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0);
+
+    const deliveries = await this.prisma.delivery.findMany({
+      where: {
+        deliveryDate: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      select: {
+        id: true,
+        deliveryDate: true,
+        deliveryNumber: true,
+        status: true,
+        notes: true,
+        createdAt: true,
+        deliveryOrders: {
+          select: {
+            orderId: true,
+            position: true,
+            order: {
+              select: {
+                id: true,
+                orderNumber: true,
+                status: true,
+                totalWindows: true,
+                totalSashes: true,
+                totalGlasses: true,
+              },
+            },
+          },
+          orderBy: { position: 'asc' },
+        },
+        deliveryItems: {
+          select: {
+            id: true,
+            itemType: true,
+            description: true,
+            quantity: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+      orderBy: { deliveryDate: 'asc' },
+    });
+
+    const unassignedOrders = await this.prisma.order.findMany({
+      where: {
+        archivedAt: null,
+        status: { notIn: ['archived'] },
+        deliveryOrders: {
+          none: {},
+        },
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        deliveryDate: true,
+        totalWindows: true,
+        totalSashes: true,
+        totalGlasses: true,
+      },
+      orderBy: { orderNumber: 'asc' },
+    });
+
+    return { deliveries, unassignedOrders };
+  }
+
+  /**
+   * Get deliveries with profile requirements
+   */
+  async getDeliveriesWithRequirements(fromDate?: Date) {
+    const whereCondition: any = {};
+    if (fromDate) {
+      whereCondition.deliveryDate = { gte: fromDate };
+    }
+
+    return this.prisma.delivery.findMany({
+      where: whereCondition,
+      select: {
+        id: true,
+        deliveryDate: true,
+        deliveryOrders: {
+          select: {
+            order: {
+              select: {
+                id: true,
+                requirements: {
+                  select: {
+                    profileId: true,
+                    colorId: true,
+                    beamsCount: true,
+                    meters: true,
+                    color: {
+                      select: { code: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Get deliveries with order windows for stats
+   */
+  async getDeliveriesWithWindows(startDate: Date, endDate?: Date) {
+    const where: any = {
+      deliveryDate: { gte: startDate },
+    };
+    if (endDate) {
+      where.deliveryDate.lte = endDate;
+    }
+
+    return this.prisma.delivery.findMany({
+      where,
+      include: {
+        deliveryOrders: {
+          include: {
+            order: {
+              select: {
+                id: true,
+                orderNumber: true,
+                totalWindows: true,
+                totalSashes: true,
+                totalGlasses: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Get deliveries with profile requirements for stats
+   */
+  async getDeliveriesWithProfileStats(startDate: Date, endDate: Date) {
+    return this.prisma.delivery.findMany({
+      where: {
+        deliveryDate: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        deliveryOrders: {
+          include: {
+            order: {
+              include: {
+                requirements: {
+                  include: {
+                    profile: {
+                      select: { id: true, number: true, name: true },
+                    },
+                    color: {
+                      select: { id: true, code: true, name: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Get delivery for protocol generation
+   */
+  async getDeliveryForProtocol(deliveryId: number) {
+    return this.prisma.delivery.findUnique({
+      where: { id: deliveryId },
+      select: {
+        id: true,
+        deliveryDate: true,
+        deliveryOrders: {
+          select: {
+            orderId: true,
+            position: true,
+            order: {
+              select: {
+                id: true,
+                orderNumber: true,
+                valuePln: true,
+                windows: {
+                  select: {
+                    id: true,
+                    quantity: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { position: 'asc' },
+        },
+      },
+    });
+  }
 }

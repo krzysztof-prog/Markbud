@@ -132,4 +132,57 @@ export async function uploadFile<T>(endpoint: string, file: File): Promise<T> {
   }
 }
 
+/**
+ * Helper do pobierania plików binarnych (PDF, Excel, etc.)
+ */
+export async function fetchBlob(endpoint: string): Promise<Blob> {
+  const url = `${API_URL}${endpoint}`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 210000);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
+      const error: ApiError = new Error(data.error || `HTTP Error: ${response.status}`);
+      error.status = response.status;
+      error.data = data;
+      throw error;
+    }
+
+    return response.blob();
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      const timeoutError: ApiError = new Error('Czas oczekiwania na odpowiedź serwera upłynął.');
+      timeoutError.status = 408;
+      throw timeoutError;
+    }
+
+    if (error instanceof TypeError) {
+      const networkError: ApiError = new Error('Błąd połączenia sieciowego.');
+      networkError.status = 0;
+      throw networkError;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Helper do sprawdzenia czy zasób istnieje (HEAD request)
+ */
+export async function checkExists(endpoint: string): Promise<boolean> {
+  const url = `${API_URL}${endpoint}`;
+  try {
+    const response = await fetch(url, { method: 'HEAD' });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export { API_URL };

@@ -3,6 +3,7 @@
  */
 
 import { z } from 'zod';
+import { idParamsSchema } from './common.js';
 
 export const createProfileSchema = z.object({
   number: z.string().min(1, 'Profile number is required').max(50),
@@ -15,9 +16,7 @@ export const updateProfileSchema = z.object({
   description: z.string().optional(),
 });
 
-export const profileParamsSchema = z.object({
-  id: z.string().regex(/^\d+$/, 'Invalid profile ID'),
-});
+export const profileParamsSchema = idParamsSchema('profile');
 
 export const updateProfileOrderSchema = z.object({
   profileOrders: z.array(

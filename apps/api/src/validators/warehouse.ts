@@ -3,15 +3,14 @@
  */
 
 import { z } from 'zod';
+import { idParamsSchema } from './common.js';
 
 export const warehouseStatsQuerySchema = z.object({
   profileId: z.string().regex(/^\d+$/).optional(),
   colorId: z.string().regex(/^\d+$/).optional(),
 });
 
-export const warehouseOrderParamsSchema = z.object({
-  id: z.string().regex(/^\d+$/, 'Invalid warehouse order ID'),
-});
+export const warehouseOrderParamsSchema = idParamsSchema('warehouse order');
 
 export const updateWarehouseOrderSchema = z.object({
   status: z.enum(['pending', 'received', 'archived']).optional(),

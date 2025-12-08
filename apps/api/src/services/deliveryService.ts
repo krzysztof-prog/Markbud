@@ -10,14 +10,27 @@ import {
   emitDeliveryDeleted,
   emitOrderUpdated,
 } from './event-emitter.js';
+import { deliveryTotalsService } from './deliveryTotalsService.js';
+import {
+  parseDate,
+  parseDateSafe,
+  formatPolishDate,
+  getDayRange,
+  toRomanNumeral,
+  subMonths,
+  startOfMonth,
+  endOfMonth,
+  getDay,
+  POLISH_DAY_NAMES,
+} from '../utils/date-helpers.js';
 
 export class DeliveryService {
   constructor(private repository: DeliveryRepository) {}
 
   async getAllDeliveries(filters: { from?: string; to?: string; status?: string }) {
     const deliveryFilters = {
-      from: filters.from ? new Date(filters.from) : undefined,
-      to: filters.to ? new Date(filters.to) : undefined,
+      from: parseDateSafe(filters.from),
+      to: parseDateSafe(filters.to),
       status: filters.status,
     };
 
@@ -31,11 +44,17 @@ export class DeliveryService {
       throw new NotFoundError('Delivery');
     }
 
-    return delivery;
+    // Add calculated totals
+    const totals = await deliveryTotalsService.getDeliveryTotals(id);
+
+    return {
+      ...delivery,
+      ...totals,
+    };
   }
 
   async createDelivery(data: { deliveryDate: string; deliveryNumber?: string; notes?: string }) {
-    const deliveryDate = new Date(data.deliveryDate);
+    const deliveryDate = parseDate(data.deliveryDate);
 
     // Generate delivery number if not provided: DD.MM.YYYY_X
     let deliveryNumber = data.deliveryNumber;
@@ -59,29 +78,17 @@ export class DeliveryService {
    * where X is I, II, III, IV etc. for multiple deliveries on same day
    */
   private async generateDeliveryNumber(deliveryDate: Date): Promise<string> {
-    // Format: DD.MM.YYYY
-    const day = String(deliveryDate.getDate()).padStart(2, '0');
-    const month = String(deliveryDate.getMonth() + 1).padStart(2, '0');
-    const year = deliveryDate.getFullYear();
-    const datePrefix = `${day}.${month}.${year}`;
-
-    // Get all deliveries on the same day
-    const startOfDay = new Date(deliveryDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(deliveryDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    const datePrefix = formatPolishDate(deliveryDate);
+    const { start, end } = getDayRange(deliveryDate);
 
     const existingDeliveries = await this.repository.findAll({
-      from: startOfDay,
-      to: endOfDay,
+      from: start,
+      to: end,
     });
 
-    // Count existing deliveries on same day
-    const count = existingDeliveries.length;
-
-    // Roman numerals for the sequence
-    const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
-    const suffix = romanNumerals[count] || String(count + 1);
+    // Count existing deliveries on same day (add 1 for the new delivery)
+    const count = existingDeliveries.length + 1;
+    const suffix = toRomanNumeral(count);
 
     return `${datePrefix}_${suffix}`;
   }
@@ -91,7 +98,7 @@ export class DeliveryService {
     await this.getDeliveryById(id);
 
     const delivery = await this.repository.update(id, {
-      deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : undefined,
+      deliveryDate: parseDateSafe(data.deliveryDate),
       status: data.status,
       notes: data.notes,
     });
@@ -184,7 +191,7 @@ export class DeliveryService {
     const orderIds = delivery.deliveryOrders.map((d) => d.orderId);
 
     await this.repository.updateOrdersBatch(orderIds, {
-      productionDate: new Date(productionDate),
+      productionDate: parseDate(productionDate),
       status: 'completed',
     });
 
@@ -195,5 +202,306 @@ export class DeliveryService {
     });
 
     return { success: true, updatedOrders: orderIds.length };
+  }
+
+  /**
+   * Get calendar data for a specific month/year
+   */
+  async getCalendarData(year: number, month: number) {
+    return this.repository.getCalendarData(year, month);
+  }
+
+  /**
+   * Get profile requirements aggregated by delivery
+   */
+  async getProfileRequirements(fromDate?: string) {
+    const deliveries = await this.repository.getDeliveriesWithRequirements(
+      parseDateSafe(fromDate)
+    );
+
+    const result: Array<{
+      deliveryId: number;
+      deliveryDate: string;
+      profileId: number;
+      colorCode: string;
+      totalBeams: number;
+    }> = [];
+
+    deliveries.forEach((delivery) => {
+      const profileMap = new Map<string, { beams: number; meters: number }>();
+
+      delivery.deliveryOrders.forEach((deliveryOrder) => {
+        deliveryOrder.order.requirements.forEach((req) => {
+          const key = `${req.profileId}-${req.color.code}`;
+          const current = profileMap.get(key) || { beams: 0, meters: 0 };
+          profileMap.set(key, {
+            beams: current.beams + req.beamsCount,
+            meters: current.meters + req.meters,
+          });
+        });
+      });
+
+      profileMap.forEach((data, key) => {
+        const [profileIdStr, colorCode] = key.split('-');
+        const profileIdNum = parseInt(profileIdStr, 10);
+
+        if (isNaN(profileIdNum)) {
+          return;
+        }
+
+        // Add beams from meters: sum meters / 6m, rounded up
+        const beamsFromMeters = Math.ceil(data.meters / 6);
+        const totalBeams = data.beams + beamsFromMeters;
+
+        result.push({
+          deliveryId: delivery.id,
+          deliveryDate: delivery.deliveryDate.toISOString(),
+          profileId: profileIdNum,
+          colorCode,
+          totalBeams,
+        });
+      });
+    });
+
+    return result;
+  }
+
+  /**
+   * Get windows/sashes/glasses statistics by weekday
+   */
+  async getWindowsStatsByWeekday(monthsBack: number) {
+    const today = new Date();
+    const startDate = startOfMonth(subMonths(today, monthsBack));
+
+    const deliveries = await this.repository.getDeliveriesWithWindows(startDate);
+
+    // Initialize weekday stats (0 = Sunday, 6 = Saturday)
+    const weekdayStats = new Map<number, {
+      deliveriesCount: number;
+      totalWindows: number;
+      totalSashes: number;
+      totalGlasses: number;
+    }>();
+
+    for (let i = 0; i < 7; i++) {
+      weekdayStats.set(i, {
+        deliveriesCount: 0,
+        totalWindows: 0,
+        totalSashes: 0,
+        totalGlasses: 0,
+      });
+    }
+
+    // Aggregate data
+    deliveries.forEach((delivery) => {
+      const weekday = getDay(delivery.deliveryDate);
+      const stats = weekdayStats.get(weekday)!;
+
+      stats.deliveriesCount += 1;
+
+      delivery.deliveryOrders.forEach((dOrder) => {
+        stats.totalWindows += dOrder.order.totalWindows || 0;
+        stats.totalSashes += dOrder.order.totalSashes || 0;
+        stats.totalGlasses += dOrder.order.totalGlasses || 0;
+      });
+    });
+
+    const stats = Array.from(weekdayStats.entries()).map(([weekday, data]) => ({
+      weekday,
+      weekdayName: POLISH_DAY_NAMES[weekday],
+      ...data,
+      avgWindowsPerDelivery: data.deliveriesCount > 0
+        ? data.totalWindows / data.deliveriesCount
+        : 0,
+      avgSashesPerDelivery: data.deliveriesCount > 0
+        ? data.totalSashes / data.deliveriesCount
+        : 0,
+      avgGlassesPerDelivery: data.deliveriesCount > 0
+        ? data.totalGlasses / data.deliveriesCount
+        : 0,
+    }));
+
+    return {
+      stats,
+      periodStart: startDate,
+      periodEnd: today,
+    };
+  }
+
+  /**
+   * Get monthly windows/sashes/glasses statistics
+   */
+  async getMonthlyWindowsStats(monthsBack: number) {
+    const today = new Date();
+
+    // Prepare date ranges for each month
+    const monthRanges = [];
+    for (let i = 0; i < monthsBack; i++) {
+      const targetMonth = subMonths(today, i);
+      const monthStart = startOfMonth(targetMonth);
+      const monthEnd = endOfMonth(targetMonth);
+      monthRanges.push({
+        month: monthStart.getMonth() + 1,
+        year: monthStart.getFullYear(),
+        startDate: monthStart,
+        endDate: monthEnd,
+      });
+    }
+
+    // Get stats for each month
+    const stats = await Promise.all(
+      monthRanges.map(async (range) => {
+        const deliveries = await this.repository.getDeliveriesWithWindows(
+          range.startDate,
+          range.endDate
+        );
+
+        let totalWindows = 0;
+        let totalSashes = 0;
+        let totalGlasses = 0;
+
+        deliveries.forEach((delivery) => {
+          delivery.deliveryOrders.forEach((dOrder) => {
+            totalWindows += dOrder.order.totalWindows || 0;
+            totalSashes += dOrder.order.totalSashes || 0;
+            totalGlasses += dOrder.order.totalGlasses || 0;
+          });
+        });
+
+        return {
+          month: range.month,
+          year: range.year,
+          monthLabel: `${range.year}-${String(range.month).padStart(2, '0')}`,
+          deliveriesCount: deliveries.length,
+          totalWindows,
+          totalSashes,
+          totalGlasses,
+        };
+      })
+    );
+
+    return { stats: stats.reverse() };
+  }
+
+  /**
+   * Get monthly profile usage statistics
+   */
+  async getMonthlyProfileStats(monthsBack: number) {
+    const today = new Date();
+
+    const monthRanges = [];
+    for (let i = 0; i < monthsBack; i++) {
+      const targetMonth = subMonths(today, i);
+      const monthStart = startOfMonth(targetMonth);
+      const monthEnd = endOfMonth(targetMonth);
+      monthRanges.push({
+        month: monthStart.getMonth() + 1,
+        year: monthStart.getFullYear(),
+        startDate: monthStart,
+        endDate: monthEnd,
+      });
+    }
+
+    const stats = await Promise.all(
+      monthRanges.map(async (range) => {
+        const deliveries = await this.repository.getDeliveriesWithProfileStats(
+          range.startDate,
+          range.endDate
+        );
+
+        const profileUsage = new Map<string, {
+          profileId: number;
+          profileNumber: string;
+          profileName: string;
+          colorId: number;
+          colorCode: string;
+          colorName: string;
+          totalBeams: number;
+          totalMeters: number;
+          deliveryCount: number;
+        }>();
+
+        deliveries.forEach((delivery) => {
+          delivery.deliveryOrders.forEach((dOrder) => {
+            dOrder.order.requirements.forEach((req) => {
+              const key = `${req.profileId}-${req.colorId}`;
+
+              if (!profileUsage.has(key)) {
+                profileUsage.set(key, {
+                  profileId: req.profileId,
+                  profileNumber: req.profile.number,
+                  profileName: req.profile.name,
+                  colorId: req.colorId,
+                  colorCode: req.color.code,
+                  colorName: req.color.name,
+                  totalBeams: 0,
+                  totalMeters: 0,
+                  deliveryCount: 0,
+                });
+              }
+
+              const usage = profileUsage.get(key)!;
+              usage.totalBeams += req.beamsCount;
+              usage.totalMeters += req.meters;
+              usage.deliveryCount += 1;
+            });
+          });
+        });
+
+        return {
+          month: range.month,
+          year: range.year,
+          monthLabel: `${range.year}-${String(range.month).padStart(2, '0')}`,
+          deliveriesCount: deliveries.length,
+          profiles: Array.from(profileUsage.values()).sort(
+            (a, b) => b.totalBeams - a.totalBeams
+          ),
+        };
+      })
+    );
+
+    return { stats: stats.reverse() };
+  }
+
+  /**
+   * Get protocol data for a delivery
+   */
+  async getProtocolData(deliveryId: number) {
+    const delivery = await this.repository.getDeliveryForProtocol(deliveryId);
+
+    if (!delivery) {
+      throw new NotFoundError('Delivery');
+    }
+
+    let totalWindows = 0;
+    let totalValue = 0;
+
+    const orders = delivery.deliveryOrders.map((dOrder) => {
+      const windowsCount = dOrder.order.windows.reduce((sum, w) => sum + w.quantity, 0);
+      totalWindows += windowsCount;
+
+      const value = parseFloat(dOrder.order.valuePln?.toString() || '0');
+      totalValue += value;
+
+      return {
+        orderNumber: dOrder.order.orderNumber,
+        windowsCount,
+        value,
+        isReclamation: false,
+      };
+    });
+
+    // Get total pallets from totals service
+    const totalPallets = await deliveryTotalsService.getTotalPallets(deliveryId);
+
+    return {
+      deliveryId,
+      deliveryDate: delivery.deliveryDate,
+      orders,
+      totalWindows,
+      totalPallets,
+      totalValue,
+      generatedAt: new Date(),
+    };
   }
 }

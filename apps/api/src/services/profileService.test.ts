@@ -32,7 +32,7 @@ describe('ProfileService', () => {
 
       expect(result).toEqual(mockProfiles);
       expect(mockPrisma.profile.findMany).toHaveBeenCalledWith({
-        orderBy: { number: 'asc' },
+        orderBy: [{ sortOrder: 'asc' }, { number: 'asc' }],
       });
     });
   });
@@ -132,7 +132,7 @@ describe('ProfileService', () => {
   });
 
   describe('deleteProfile', () => {
-    it('should delete profile when exists', async () => {
+    it('should delete profile when exists and has no related data', async () => {
       const mockProfile = {
         id: 1,
         number: 'P001',
@@ -144,6 +144,13 @@ describe('ProfileService', () => {
       };
 
       mockPrisma.profile.findUnique.mockResolvedValue(mockProfile);
+      // Mock related counts - all zero
+      mockPrisma.orderRequirement.count.mockResolvedValue(0);
+      mockPrisma.warehouseStock.count.mockResolvedValue(0);
+      mockPrisma.warehouseOrder.count.mockResolvedValue(0);
+      mockPrisma.warehouseHistory.count.mockResolvedValue(0);
+      // Mock deleteMany for profileColor
+      mockPrisma.profileColor.deleteMany.mockResolvedValue({ count: 0 });
       mockPrisma.profile.delete.mockResolvedValue(mockProfile);
 
       await service.deleteProfile(1);

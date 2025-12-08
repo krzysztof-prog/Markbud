@@ -122,6 +122,9 @@ model Order {
   @@index([status])
   @@index([archivedAt])
   @@index([createdAt])
+  @@index([deliveryDate])
+  @@index([completedAt])
+  @@index([status, createdAt])
   @@index([invoiceNumber, createdAt])
   @@index([invoiceNumber, deliveryDate])
   @@index([archivedAt, status])
@@ -233,6 +236,7 @@ model WarehouseHistory {
   @@index([colorId])
   @@index([profileId])
   @@index([recordedAt])
+  @@index([profileId, recordedAt])
   @@map("warehouse_history")
 }
 
@@ -527,6 +531,7 @@ model OkucHistory {
 
   @@index([articleId])
   @@index([recordedAt])
+  @@index([articleId, recordedAt])
   @@map("okuc_history")
 }
 

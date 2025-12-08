@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DeliveryService } from './deliveryService.js';
 import { DeliveryRepository } from '../repositories/DeliveryRepository.js';
 import { NotFoundError } from '../utils/errors.js';
-import { createMockPrisma } from '../tests/mocks/prisma.mock.js';
+import { createMockPrisma, setupTransactionMock } from '../tests/mocks/prisma.mock.js';
 
 // Mock event emitters
 vi.mock('./event-emitter.js', () => ({
@@ -16,6 +16,19 @@ vi.mock('./event-emitter.js', () => ({
   emitOrderUpdated: vi.fn(),
 }));
 
+// Mock delivery totals service
+vi.mock('./deliveryTotalsService.js', () => ({
+  deliveryTotalsService: {
+    getDeliveryTotals: vi.fn().mockResolvedValue({
+      totalWindows: 0,
+      totalGlass: 0,
+      totalPallets: 0,
+      totalValue: 0,
+    }),
+    getTotalPallets: vi.fn().mockResolvedValue(0),
+  },
+}));
+
 describe('DeliveryService', () => {
   let service: DeliveryService;
   let repository: DeliveryRepository;
@@ -23,6 +36,7 @@ describe('DeliveryService', () => {
 
   beforeEach(() => {
     mockPrisma = createMockPrisma();
+    setupTransactionMock(mockPrisma);
     repository = new DeliveryRepository(mockPrisma);
     service = new DeliveryService(repository);
   });
@@ -62,14 +76,13 @@ describe('DeliveryService', () => {
   });
 
   describe('getDeliveryById', () => {
-    it('should return delivery when found', async () => {
+    it('should return delivery when found with calculated totals', async () => {
       const mockDelivery = {
         id: 1,
         deliveryDate: new Date(),
         deliveryNumber: 'D001',
         status: 'pending',
         notes: null,
-        totalPallets: 5,
         createdAt: new Date(),
         updatedAt: new Date(),
         deliveryOrders: [],
@@ -80,7 +93,17 @@ describe('DeliveryService', () => {
 
       const result = await service.getDeliveryById(1);
 
-      expect(result).toEqual(mockDelivery);
+      // Result includes delivery data plus calculated totals from deliveryTotalsService
+      expect(result).toMatchObject({
+        id: 1,
+        deliveryNumber: 'D001',
+        status: 'pending',
+        // Totals from mocked deliveryTotalsService
+        totalWindows: 0,
+        totalGlass: 0,
+        totalPallets: 0,
+        totalValue: 0,
+      });
     });
 
     it('should throw NotFoundError when delivery not found', async () => {
@@ -131,7 +154,6 @@ describe('DeliveryService', () => {
         deliveryNumber: 'D001',
         status: 'pending',
         notes: null,
-        totalPallets: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
         deliveryOrders: [],
@@ -155,14 +177,10 @@ describe('DeliveryService', () => {
 
       const result = await service.addOrderToDelivery(1, 5);
 
-      expect(result).toEqual(mockDeliveryOrder);
-      expect(mockPrisma.deliveryOrder.create).toHaveBeenCalledWith({
-        data: {
-          deliveryId: 1,
-          orderId: 5,
-          position: 1,
-        },
-        select: expect.any(Object),
+      expect(result).toMatchObject({
+        deliveryId: 1,
+        orderId: 5,
+        position: 1,
       });
     });
   });

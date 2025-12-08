@@ -134,4 +134,87 @@ export class DeliveryHandler {
     const result = await this.service.completeDelivery(parseInt(id), productionDate);
     return reply.send(result);
   }
+
+  async getCalendar(
+    request: FastifyRequest<{ Querystring: { month: string; year: string } }>,
+    reply: FastifyReply
+  ) {
+    const { month, year } = request.query;
+
+    const yearNum = parseInt(year, 10);
+    const monthNum = parseInt(month, 10);
+
+    if (isNaN(yearNum) || isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+      return reply.status(400).send({ error: 'Nieprawidłowy rok lub miesiąc' });
+    }
+
+    const data = await this.service.getCalendarData(yearNum, monthNum);
+    return reply.send(data);
+  }
+
+  async getProfileRequirements(
+    request: FastifyRequest<{ Querystring: { from?: string } }>,
+    reply: FastifyReply
+  ) {
+    const { from } = request.query;
+    const result = await this.service.getProfileRequirements(from);
+    return reply.send(result);
+  }
+
+  async getWindowsStatsByWeekday(
+    request: FastifyRequest<{ Querystring: { months?: string } }>,
+    reply: FastifyReply
+  ) {
+    const monthsBack = parseInt(request.query.months || '6', 10);
+
+    if (isNaN(monthsBack) || monthsBack < 1 || monthsBack > 60) {
+      return reply.status(400).send({ error: 'Invalid months parameter (must be between 1 and 60)' });
+    }
+
+    const result = await this.service.getWindowsStatsByWeekday(monthsBack);
+    return reply.send(result);
+  }
+
+  async getMonthlyWindowsStats(
+    request: FastifyRequest<{ Querystring: { months?: string } }>,
+    reply: FastifyReply
+  ) {
+    const monthsBack = parseInt(request.query.months || '6', 10);
+
+    if (isNaN(monthsBack) || monthsBack < 1 || monthsBack > 60) {
+      return reply.status(400).send({ error: 'Invalid months parameter (must be between 1 and 60)' });
+    }
+
+    const result = await this.service.getMonthlyWindowsStats(monthsBack);
+    return reply.send(result);
+  }
+
+  async getMonthlyProfileStats(
+    request: FastifyRequest<{ Querystring: { months?: string } }>,
+    reply: FastifyReply
+  ) {
+    const monthsBack = parseInt(request.query.months || '6', 10);
+
+    if (isNaN(monthsBack) || monthsBack < 1 || monthsBack > 60) {
+      return reply.status(400).send({ error: 'Invalid months parameter (must be between 1 and 60)' });
+    }
+
+    const result = await this.service.getMonthlyProfileStats(monthsBack);
+    return reply.send(result);
+  }
+
+  async getProtocol(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = deliveryParamsSchema.parse(request.params);
+    const deliveryId = parseInt(id, 10);
+
+    if (isNaN(deliveryId)) {
+      return reply.status(400).send({ error: 'Invalid delivery ID' });
+    }
+
+    const protocol = await this.service.getProtocolData(deliveryId);
+    return reply.send(protocol);
+  }
 }

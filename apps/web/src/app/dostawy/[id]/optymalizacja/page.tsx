@@ -181,7 +181,7 @@ function OptimizationContent({ deliveryId }: { deliveryId: number }) {
                 </Label>
                 <Slider
                   value={[options.widthSimilarityThreshold * 100]}
-                  onValueChange={([val]) => updateOption('widthSimilarityThreshold', val / 100)}
+                  onValueChange={([val]: number[]) => updateOption('widthSimilarityThreshold', val / 100)}
                   min={5}
                   max={30}
                   step={1}
@@ -230,7 +230,7 @@ function OptimizationContent({ deliveryId }: { deliveryId: number }) {
                 </Label>
                 <Slider
                   value={[options.maxOverhangMm]}
-                  onValueChange={([val]) => updateOption('maxOverhangMm', val)}
+                  onValueChange={([val]: number[]) => updateOption('maxOverhangMm', val)}
                   min={0}
                   max={1000}
                   step={50}
@@ -258,7 +258,7 @@ function OptimizationContent({ deliveryId }: { deliveryId: number }) {
                 </Label>
                 <Slider
                   value={[options.sideBySideMaxGap]}
-                  onValueChange={([val]) => updateOption('sideBySideMaxGap', val)}
+                  onValueChange={([val]: number[]) => updateOption('sideBySideMaxGap', val)}
                   min={0}
                   max={300}
                   step={10}

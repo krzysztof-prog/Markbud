@@ -3,6 +3,7 @@
  */
 
 import { PrismaClient, Prisma } from '@prisma/client';
+import { profileBasicSelect } from '../utils/prisma-selects.js';
 
 export class WarehouseRepository {
   constructor(private prisma: PrismaClient) {}
@@ -20,7 +21,7 @@ export class WarehouseRepository {
         colorId: true,
         currentStockBeams: true,
         profile: {
-          select: { id: true, number: true, name: true },
+          select: profileBasicSelect,
         },
         color: {
           select: { id: true, code: true, name: true, hexColor: true },

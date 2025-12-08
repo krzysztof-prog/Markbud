@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/codebase-map.sh"
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/codebase-map.ts"
           }
         ]
       }
@@ -25,11 +25,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-context-loader.sh"
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/session-context-loader.ts"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-activation-prompt.sh"
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/skill-activation-prompt.ts"
           }
         ]
       }
@@ -40,15 +40,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/prisma-safety-guard.sh"
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/prisma-safety-guard.ts"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pnpm-enforcer.sh"
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/pnpm-enforcer.ts"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/git-commit-validator.sh"
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/git-commit-validator.ts"
           }
         ]
       },
@@ -57,7 +57,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/tdd-guard.sh"
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/tdd-guard.ts"
           }
         ]
       }
@@ -68,11 +68,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-tool-use-tracker.sh"
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/post-tool-use-tracker.ts"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-checks.sh"
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/post-edit-checks.ts"
           }
         ]
       }
@@ -82,7 +82,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/notification-handler.sh"
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/notification-handler.ts"
           }
         ]
       }
@@ -92,7 +92,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/final-validation.sh"
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/final-validation.ts"
           }
         ]
       }

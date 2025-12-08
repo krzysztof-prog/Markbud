@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { schucoApi } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { useDebounce } from '@/hooks/useDebounce';
 import {
   RefreshCw,
   Search,
@@ -32,18 +33,6 @@ import {
   Calendar
 } from 'lucide-react';
 import type { SchucoDelivery, SchucoFetchLog } from '@/types';
-
-// Custom hook for debouncing
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-
-  return debouncedValue;
-}
 
 export default function SchucoPage() {
   const [currentPage, setCurrentPage] = useState(1);
