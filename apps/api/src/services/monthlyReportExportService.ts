@@ -5,12 +5,18 @@
 
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { MonthlyReportData } from './monthlyReportService.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 export class MonthlyReportExportService {
-  // Fonty wspierające polskie znaki
-  private readonly BOLD_FONT = 'Times-Bold';
-  private readonly REGULAR_FONT = 'Times-Roman';
+  // Ścieżki do fontów wspierających polskie znaki
+  private readonly FONT_DIR = path.join(__dirname, '..', 'assets', 'fonts');
+  private readonly BOLD_FONT = path.join(this.FONT_DIR, 'Roboto-Bold.ttf');
+  private readonly REGULAR_FONT = path.join(this.FONT_DIR, 'Roboto-Regular.ttf');
 
   /**
    * Export monthly report to Excel format
@@ -137,9 +143,13 @@ export class MonthlyReportExportService {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
+      // Rejestracja fontów wspierających polskie znaki
+      doc.registerFont('Roboto', this.REGULAR_FONT);
+      doc.registerFont('Roboto-Bold', this.BOLD_FONT);
+
       // Title
       doc.fontSize(20)
-        .font(this.BOLD_FONT)
+        .font('Roboto-Bold')
         .text(`Zestawienie miesięczne ${reportData.month}/${reportData.year}`, {
           align: 'center',
         });
@@ -160,7 +170,7 @@ export class MonthlyReportExportService {
       ];
 
       // Draw header
-      doc.fontSize(10).font(this.BOLD_FONT);
+      doc.fontSize(10).font('Roboto-Bold');
       columns.forEach((col) => {
         doc.text(col.label, col.x, tableTop, { width: col.width, align: 'center' });
       });
@@ -171,7 +181,7 @@ export class MonthlyReportExportService {
         .stroke();
 
       // Draw data rows
-      doc.font(this.REGULAR_FONT).fontSize(9);
+      doc.font('Roboto').fontSize(9);
       let currentY = tableTop + rowHeight;
 
       reportData.items.forEach((item, index) => {
@@ -207,7 +217,7 @@ export class MonthlyReportExportService {
         .lineTo(610, currentY - 5)
         .stroke();
 
-      doc.font(this.BOLD_FONT);
+      doc.font('Roboto-Bold');
       const totalUnits = reportData.items.reduce((sum, item) => sum + item.unitsCount, 0);
 
       const totalsData = [
@@ -229,11 +239,11 @@ export class MonthlyReportExportService {
 
       // Summary section
       currentY += 50;
-      doc.fontSize(12).font(this.BOLD_FONT);
+      doc.fontSize(12).font('Roboto-Bold');
       doc.text('Podsumowanie:', 50, currentY);
 
       currentY += 25;
-      doc.fontSize(10).font(this.REGULAR_FONT);
+      doc.fontSize(10).font('Roboto');
 
       const summaryLines = [
         `Liczba zleceń: ${reportData.totalOrders}`,
@@ -250,7 +260,7 @@ export class MonthlyReportExportService {
 
       // Footer
       doc.fontSize(8)
-        .font(this.REGULAR_FONT)
+        .font('Roboto')
         .text(
           `Wygenerowano: ${new Date().toLocaleDateString('pl-PL')} ${new Date().toLocaleTimeString('pl-PL')}`,
           50,

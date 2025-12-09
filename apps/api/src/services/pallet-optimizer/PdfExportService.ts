@@ -3,8 +3,13 @@
  */
 
 import PDFDocument from 'pdfkit';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import type { OptimizationResult, OptimizedPallet, OptimizedWindow } from './PalletOptimizerService.js';
 import { logger } from '../../utils/logger.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Stałe dla wizualizacji
 const MAX_OVERHANG_MM = 700;
@@ -36,9 +41,10 @@ export class PdfExportService {
         order: 100,
     };
 
-    // Fonty wspierające polskie znaki
-    private readonly BOLD_FONT = 'Times-Bold';
-    private readonly REGULAR_FONT = 'Times-Roman';
+    // Ścieżki do fontów wspierających polskie znaki
+    private readonly FONT_DIR = path.join(__dirname, '..', '..', 'assets', 'fonts');
+    private readonly BOLD_FONT = path.join(this.FONT_DIR, 'Roboto-Bold.ttf');
+    private readonly REGULAR_FONT = path.join(this.FONT_DIR, 'Roboto-Regular.ttf');
 
     /**
      * Generuj PDF z wynikiem optymalizacji
@@ -65,17 +71,21 @@ export class PdfExportService {
                 doc.on('end', () => resolve(Buffer.concat(chunks)));
                 doc.on('error', reject);
 
+                // Rejestracja fontów wspierających polskie znaki
+                doc.registerFont('Roboto', this.REGULAR_FONT);
+                doc.registerFont('Roboto-Bold', this.BOLD_FONT);
+
                 // ==================== NAGŁÓWEK ====================
                 doc
                     .fontSize(20)
-                    .font(this.BOLD_FONT)
+                    .font('Roboto-Bold')
                     .text('Optymalizacja Pakowania Palet', { align: 'center' });
 
                 doc.moveDown(0.5);
 
                 doc
                     .fontSize(12)
-                    .font(this.REGULAR_FONT)
+                    .font('Roboto')
                     .text(`Dostawa ID: ${result.deliveryId}`, { align: 'center' });
 
                 doc
@@ -86,11 +96,11 @@ export class PdfExportService {
                 doc.moveDown(1);
 
                 // ==================== PODSUMOWANIE ====================
-                doc.fontSize(14).font(this.BOLD_FONT).text('Podsumowanie:', { underline: true });
+                doc.fontSize(14).font('Roboto-Bold').text('Podsumowanie:', { underline: true });
 
                 doc.moveDown(0.3);
 
-                doc.fontSize(11).font(this.REGULAR_FONT);
+                doc.fontSize(11).font('Roboto');
 
                 const summaryY = doc.y;
                 const leftColumn = 70;
@@ -108,7 +118,7 @@ export class PdfExportService {
                 doc.moveDown(1.5);
 
                 // ==================== SZCZEGÓŁY PALET ====================
-                doc.fontSize(14).font(this.BOLD_FONT).text('Szczegóły Palet:', { underline: true });
+                doc.fontSize(14).font('Roboto-Bold').text('Szczegóły Palet:', { underline: true });
 
                 doc.moveDown(0.5);
 
@@ -125,7 +135,7 @@ export class PdfExportService {
                     // Nagłówek palety
                     doc
                         .fontSize(12)
-                        .font(this.BOLD_FONT)
+                        .font('Roboto-Bold')
                         .fillColor('#2563eb') // Niebieski
                         .text(
                             `${pallet.palletType} (${pallet.palletLengthMm}mm) - Wykorzystanie: ${pallet.utilizationPercent.toFixed(1)}%`
@@ -136,7 +146,7 @@ export class PdfExportService {
                     doc.moveDown(0.2);
 
                     // Informacje o palecie
-                    doc.fontSize(10).font(this.REGULAR_FONT);
+                    doc.fontSize(10).font('Roboto');
                     doc.text(`Głębokość: ${pallet.usedDepthMm}mm / ${pallet.maxDepthMm}mm`);
 
                     doc.moveDown(0.3);
@@ -161,7 +171,7 @@ export class PdfExportService {
                     doc.moveDown(0.2);
 
                     // Wiersze z oknami (posortowane od najszerszego)
-                    doc.fontSize(9).font(this.REGULAR_FONT).fillColor('#000000');
+                    doc.fontSize(9).font('Roboto').fillColor('#000000');
 
                     pallet.windows.forEach((window, idx) => {
                         // POPRAWKA: Sprawdź czy jest miejsce na wiersz (jeśli nie - nowa strona z nagłówkami)
@@ -178,7 +188,7 @@ export class PdfExportService {
                                 .lineTo(this.TABLE_LEFT + totalTableWidth, newLineY)
                                 .stroke();
                             doc.moveDown(0.2);
-                            doc.fontSize(9).font(this.REGULAR_FONT).fillColor('#000000');
+                            doc.fontSize(9).font('Roboto').fillColor('#000000');
                         }
 
                         const rowY = doc.y;
@@ -249,7 +259,7 @@ export class PdfExportService {
 
                     doc
                         .fontSize(8)
-                        .font(this.REGULAR_FONT)
+                        .font('Roboto')
                         .fillColor('#6b7280')
                         .text(
                             `Strona ${range.start + i + 1} z ${range.count} | Wygenerowano przez System AKROBUD`,
@@ -279,7 +289,7 @@ export class PdfExportService {
     private drawTableHeaders(doc: PDFKit.PDFDocument): void {
         const tableTop = doc.y;
 
-        doc.fontSize(9).font(this.BOLD_FONT).fillColor('#4b5563'); // Szary
+        doc.fontSize(9).font('Roboto-Bold').fillColor('#4b5563'); // Szary
 
         let currentX = this.TABLE_LEFT;
 
@@ -365,7 +375,7 @@ export class PdfExportService {
             if (windowHeight > 12 && windowWidth > 40) {
                 doc
                     .fontSize(7)
-                    .font(this.REGULAR_FONT)
+                    .font('Roboto')
                     .fillColor('#FFFFFF')
                     .text(
                         `${window.widthMm}`,
@@ -398,7 +408,7 @@ export class PdfExportService {
 
         doc
             .fontSize(7)
-            .font(this.REGULAR_FONT)
+            .font('Roboto')
             .fillColor('#374151')
             .text(
                 `${pallet.palletLengthMm} mm`,
@@ -423,7 +433,7 @@ export class PdfExportService {
         const legendY = startY + 10;
         const legendItemHeight = 12;
 
-        doc.fontSize(7).font(this.BOLD_FONT).fillColor('#374151');
+        doc.fontSize(7).font('Roboto-Bold').fillColor('#374151');
         doc.text('Legenda:', legendX, legendY);
 
         let legendCurrentY = legendY + 14;
@@ -434,7 +444,7 @@ export class PdfExportService {
 
             doc
                 .fontSize(6)
-                .font(this.REGULAR_FONT)
+                .font('Roboto')
                 .fillColor('#374151')
                 .text(type, legendX + 14, legendCurrentY + 1);
 

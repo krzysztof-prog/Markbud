@@ -3,7 +3,12 @@
  */
 
 import PDFDocument from 'pdfkit';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export interface ProtocolOrder {
   orderNumber: string;
@@ -35,9 +40,10 @@ export class DeliveryProtocolService {
     reclamation: 105,
   };
 
-  // Fonty wspierające polskie znaki
-  private readonly BOLD_FONT = 'Times-Bold';
-  private readonly REGULAR_FONT = 'Times-Roman';
+  // Ścieżki do fontów wspierających polskie znaki
+  private readonly FONT_DIR = path.join(__dirname, '..', 'assets', 'fonts');
+  private readonly BOLD_FONT = path.join(this.FONT_DIR, 'Roboto-Bold.ttf');
+  private readonly REGULAR_FONT = path.join(this.FONT_DIR, 'Roboto-Regular.ttf');
 
   /**
    * Generuj PDF protokołu odbioru
@@ -53,12 +59,17 @@ export class DeliveryProtocolService {
             left: 50,
             right: 50,
           },
+          bufferPages: true,
         });
 
         const chunks: Buffer[] = [];
         doc.on('data', (chunk) => chunks.push(chunk));
         doc.on('end', () => resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
+
+        // Rejestracja fontów wspierających polskie znaki
+        doc.registerFont('Roboto', this.REGULAR_FONT);
+        doc.registerFont('Roboto-Bold', this.BOLD_FONT);
 
         // Format daty
         const deliveryDateStr = new Date(data.deliveryDate).toLocaleDateString('pl-PL', {
@@ -71,14 +82,14 @@ export class DeliveryProtocolService {
         // ==================== NAGŁÓWEK ====================
         doc
           .fontSize(22)
-          .font(this.BOLD_FONT)
+          .font('Roboto-Bold')
           .text('PROTOKÓŁ ODBIORU DOSTAWY', { align: 'center' });
 
         doc.moveDown(0.5);
 
         doc
           .fontSize(14)
-          .font(this.REGULAR_FONT)
+          .font('Roboto')
           .fillColor('#2563eb')
           .text(`Dostawa #${data.deliveryId}`, { align: 'center' });
 
@@ -93,11 +104,11 @@ export class DeliveryProtocolService {
         doc.moveDown(1.5);
 
         // ==================== PODSUMOWANIE ====================
-        doc.fontSize(14).font(this.BOLD_FONT).text('Podsumowanie:', { underline: true });
+        doc.fontSize(14).font('Roboto-Bold').text('Podsumowanie:', { underline: true });
 
         doc.moveDown(0.5);
 
-        doc.fontSize(11).font(this.REGULAR_FONT);
+        doc.fontSize(11).font('Roboto');
 
         const leftCol = 70;
         const rightCol = 250;
@@ -117,7 +128,7 @@ export class DeliveryProtocolService {
         doc.moveDown(1.5);
 
         // ==================== TABELA ZLECEŃ ====================
-        doc.fontSize(14).font(this.BOLD_FONT).text('Lista zleceń:', { underline: true });
+        doc.fontSize(14).font('Roboto-Bold').text('Lista zleceń:', { underline: true });
 
         doc.moveDown(0.5);
 
@@ -136,7 +147,7 @@ export class DeliveryProtocolService {
         doc.moveDown(0.3);
 
         // Wiersze
-        doc.fontSize(10).font(this.REGULAR_FONT).fillColor('#000000');
+        doc.fontSize(10).font('Roboto').fillColor('#000000');
 
         data.orders.forEach((order, idx) => {
           // Sprawdź czy jest miejsce (jeśli nie - nowa strona)
@@ -151,7 +162,7 @@ export class DeliveryProtocolService {
               .lineTo(this.TABLE_LEFT + this.TABLE_WIDTH, newLineY)
               .stroke();
             doc.moveDown(0.3);
-            doc.fontSize(10).font(this.REGULAR_FONT).fillColor('#000000');
+            doc.fontSize(10).font('Roboto').fillColor('#000000');
           }
 
           const rowY = doc.y;
@@ -171,11 +182,11 @@ export class DeliveryProtocolService {
           currentX += this.COL_WIDTHS.lp;
 
           // Numer zlecenia
-          doc.font(this.BOLD_FONT).text(order.orderNumber, currentX, rowY, {
+          doc.font('Roboto-Bold').text(order.orderNumber, currentX, rowY, {
             width: this.COL_WIDTHS.orderNumber,
             align: 'left',
           });
-          doc.font(this.REGULAR_FONT);
+          doc.font('Roboto');
           currentX += this.COL_WIDTHS.orderNumber;
 
           // Okna
@@ -223,7 +234,7 @@ export class DeliveryProtocolService {
           doc.addPage();
         }
 
-        doc.fontSize(11).font(this.REGULAR_FONT);
+        doc.fontSize(11).font('Roboto');
 
         // Linia dla podpisu dostawcy
         const signatureY = doc.y + 30;
@@ -252,18 +263,24 @@ export class DeliveryProtocolService {
         doc.text(`Miejsce: ___________________`, 320, doc.y - 13);
 
         // ==================== STOPKA ====================
-        const pageCount = (doc as any).bufferedPageRange().count;
-        for (let i = 0; i < pageCount; i++) {
+        const range = (doc as any).bufferedPageRange();
+        for (let i = 0; i < range.count; i++) {
           doc.switchToPage(i);
+
+          // Zapisz bieżącą pozycję Y
+          const currentY = doc.y;
+
+          // Ustaw stopkę na stałej wysokości (dół strony)
+          const footerY = doc.page.height - 40;
 
           doc
             .fontSize(8)
-            .font(this.REGULAR_FONT)
+            .font('Roboto')
             .fillColor('#6b7280')
             .text(
-              `Strona ${i + 1} z ${pageCount} | Wygenerowano: ${new Date().toLocaleString('pl-PL')} | System AKROBUD`,
+              `Strona ${i + 1} z ${range.count} | Wygenerowano: ${new Date().toLocaleString('pl-PL')} | System AKROBUD`,
               50,
-              doc.page.height - 40,
+              footerY,
               {
                 align: 'center',
                 width: doc.page.width - 100,
@@ -293,7 +310,7 @@ export class DeliveryProtocolService {
       .fillColor('#e5e7eb')
       .fill();
 
-    doc.fontSize(10).font(this.BOLD_FONT).fillColor('#374151');
+    doc.fontSize(10).font('Roboto-Bold').fillColor('#374151');
 
     let currentX = this.TABLE_LEFT;
 

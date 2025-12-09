@@ -1,5 +1,209 @@
 # Changelog - AKROBUD System
 
+## [2025-12-09] - Widok dostaw: Wyświetlanie referencji okien przy zleceniach
+
+### 🎯 Cel
+Dodanie wyświetlania referencji okien przy zleceniach w rozwiniętym widoku dostaw, aby użytkownik mógł szybko zidentyfikować które okna są w danym zleceniu.
+
+### ✅ Zrealizowane
+
+#### 1. Backend - DeliveryRepository
+**Plik:** `apps/api/src/repositories/DeliveryRepository.ts` (linie 54-59)
+
+**Zmiana:**
+```typescript
+windows: {
+  select: {
+    reference: true,
+  },
+  distinct: ['reference'],
+}
+```
+- ✅ Pobieranie referencji okien dla każdego zlecenia w dostawie
+- ✅ Użycie `distinct` do uniknięcia duplikatów
+- ✅ Tylko pole `reference` dla optymalizacji zapytania
+
+#### 2. Frontend - DeliveryDetails Component
+**Plik:** `apps/web/src/app/dostawy/components/DeliveryDetails.tsx`
+
+**Rozszerzenie interfejsu (linie 21-23):**
+```typescript
+windows?: Array<{
+  reference: string | null;
+}>;
+```
+
+**Logika wyświetlania (linie 54-77):**
+```typescript
+// Extract unique non-null references
+const references = order.windows
+  ?.map((w) => w.reference)
+  .filter((ref): ref is string => ref !== null && ref.trim() !== '') ?? [];
+const uniqueReferences = [...new Set(references)];
+
+// Display as badges
+{uniqueReferences.length > 0 && (
+  <div className="flex gap-1 flex-wrap">
+    {uniqueReferences.map((ref) => (
+      <Badge key={ref} variant="outline" className="text-xs">
+        {ref}
+      </Badge>
+    ))}
+  </div>
+)}
+```
+
+**Funkcjonalność:**
+- ✅ Ekstrakcja unikalnych, niepustych referencji
+- ✅ Filtrowanie wartości null i pustych stringów
+- ✅ Deduplikacja przy użyciu Set
+- ✅ Wyświetlanie jako małe badge'y (outline variant)
+- ✅ Pozycja: między numerem zlecenia a statystykami
+
+### 📊 Statystyki zmian
+- **Backend:** 1 plik zmodyfikowany
+  - `apps/api/src/repositories/DeliveryRepository.ts`: +9 linii
+- **Frontend:** 1 plik zmodyfikowany
+  - `apps/web/src/app/dostawy/components/DeliveryDetails.tsx`: +26 linii
+
+### 🧪 Testy
+- ✅ TypeScript kompilacja bez błędów (backend)
+- ✅ TypeScript kompilacja bez błędów (frontend)
+- ✅ Typy zgodne z Prisma schema
+- ✅ Kompatybilność wsteczna (pola opcjonalne)
+
+### 💡 UX Improvements
+- Referencje widoczne od razu po rozwinięciu wiersza dostawy
+- Czytelne wizualne oddzielenie badge'ami
+- Brak duplikatów referencji
+- Nie wyświetla badge'ów gdy brak referencji
+
+---
+
+## [2025-12-09] - Wyszukiwarka globalna: Dodano wyszukiwanie po referencjach okien
+
+### 🎯 Cel
+Rozszerzenie funkcjonalności wyszukiwarki globalnej (Ctrl+K) o możliwość wyszukiwania zleceń po numerach referencyjnych okien.
+
+### ✅ Zrealizowane
+
+#### 1. Frontend - Rozszerzony typ Order
+**Plik:** `apps/web/src/types/order.ts` (linie 47-51)
+
+**Zmiana:**
+```typescript
+windows?: {
+  id?: ID;
+  profileType?: string;
+  reference?: string;
+}[];
+```
+- ✅ Dodano pole `windows` do interfejsu `Order`
+- ✅ Pole `reference` dostępne w typie okna
+- ✅ Wszystkie pola opcjonalne dla kompatybilności
+
+#### 2. Frontend - Logika wyszukiwania
+**Plik:** `apps/web/src/components/search/GlobalSearch.tsx`
+
+**Zmiana w logice filtrowania (linie 48-67):**
+```typescript
+const matchesReference = order.windows?.some(
+  (window) => window.reference?.toLowerCase().includes(query)
+);
+return matchesBasic || matchesReference;
+```
+- ✅ Wyszukiwanie po referencjach okien
+- ✅ Case-insensitive search
+- ✅ Filtrowanie działa na wszystkich oknach w zleceniu
+
+**Wyświetlanie pasujących referencji (linie 228-238):**
+- ✅ Pokazuje do 3 pasujących referencji pod szczegółami zlecenia
+- ✅ Niebieskie oznaczenie referencji dla łatwej identyfikacji
+- ✅ Tylko referencje pasujące do zapytania
+
+**Zaktualizowany placeholder:**
+- "Szukaj zlecenia po numerze, kliencie, projekcie, referencji..."
+
+### 📊 Statystyki zmian
+- **Frontend:** 2 pliki zmodyfikowane
+  - `apps/web/src/types/order.ts`: +5 linii
+  - `apps/web/src/components/search/GlobalSearch.tsx`: +22 linie
+
+### 🔍 Testowanie
+- ✅ TypeScript compilation: PASSED
+- ✅ Backend API już zwracał pole `windows.reference` w `OrderRepository.findAll()`
+- ✅ Kompatybilność z istniejącymi komponentami
+
+### 📝 Przykłady użycia
+1. Wpisz w wyszukiwarkę (Ctrl+K): "REF123"
+2. System znajdzie wszystkie zlecenia zawierające okna z referencją "REF123"
+3. Pasujące referencje będą wyświetlone pod szczegółami zlecenia
+
+---
+
+## [2025-12-09] - Schuco: Historia pobrań i statystyki
+
+### 🎯 Cel
+Naprawa wyświetlania statystyk "NOWE" zamówienia oraz dodanie zakładki "Historia pobrań" na stronie Dostawy Schuco.
+
+### ✅ Zrealizowane
+
+#### 1. Backend - Nowy endpoint statystyk
+**Plik:** `apps/api/src/services/schuco/schucoService.ts` (linie 379-404)
+
+**Nowa metoda `getStatistics()`:**
+- ✅ Liczy rzeczywiste zamówienia według `changeType` (new/updated/null)
+- ✅ Zwraca: `{ total, new, updated, unchanged }`
+- ✅ Używa `Promise.all()` dla wydajności (3 równoległe count)
+
+**Nowy endpoint:** `GET /api/schuco/statistics`
+- Route: `apps/api/src/routes/schuco.ts` (linie 156-174)
+- Handler: `apps/api/src/handlers/schucoHandler.ts` (linie 102-115)
+- Pełna dokumentacja OpenAPI (Fastify schema)
+
+#### 2. Frontend - Zakładka Historia Pobrań
+**Plik:** `apps/web/src/app/magazyn/dostawy-schuco/DostawySchucoPageContent.tsx`
+
+**Dodane funkcjonalności:**
+- ✅ Tabs component z dwoma zakładkami:
+  - **"Dostawy"**: lista zamówień (istniejąca)
+  - **"Historia pobrań"**: tabela z logami (NOWA)
+- ✅ Tabela historii z kolumnami:
+  - Data, Status, Trigger (ręczny/auto), Rekordów
+  - Nowe (zielony badge), Zmienione (pomarańczowy badge)
+  - Czas trwania, Błędy
+- ✅ Empty states i loading skeletons
+- ✅ Badge'e na zakładkach pokazujące liczby
+
+#### 3. Poprawione statystyki
+**Pliki:**
+- `apps/web/src/app/schuco/page.tsx` (linie 69-75, 205-232)
+- `apps/web/src/app/magazyn/dostawy-schuco/DostawySchucoPageContent.tsx` (linie 298-319)
+
+**Zmiany:**
+- ✅ Używają nowego endpointu `getStatistics()` zamiast starego `getTotalChangedCounts()`
+- ✅ Auto-refresh co 30 sekund
+- ✅ Badge'e "NOWE" i "zmian." pojawiają się tylko gdy count > 0
+- ✅ Pełna cache invalidation przy refresh
+
+### 📊 Statystyki zmian
+- **Backend:** +59 linii (3 pliki)
+- **Frontend:** +122 linie (3 pliki)
+- **Total:** 181 nowych linii kodu
+- **Nowe API:** 1 endpoint
+- **Nowe UI:** 1 zakładka z tabelą
+
+### 🧪 Testy
+- ✅ TypeScript compilation: bez błędów
+- ✅ Backend strict mode: passed
+- ✅ Final validation hook: success
+- ✅ Cache invalidation: kompletna
+
+### 📝 Dokumentacja
+Szczegóły: `dev/active/schuco-deliveries-fix.md`
+
+---
+
 ## [2025-12-01] - Operacje odwrotne i transakcje (Spójność danych)
 
 ### 🎯 Cel
