@@ -132,6 +132,9 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
   // Multi-select state
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
 
+  // Right panel collapse state
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+
   // Effect to handle opening order detail modal from prop (passed from page.tsx)
   useEffect(() => {
     if (initialSelectedOrderId) {
@@ -894,16 +897,7 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
                   <CardTitle className="text-lg">
-                    {weekOffset === 0 ? (
-                      viewMode === 'week' ? 'Następne 4 tygodnie: ' :
-                      viewMode === 'month' ? 'Bieżący miesiąc: ' :
-                      'Najbliższe 8 tygodni: '
-                    ) : (
-                      viewMode === 'week' ? '4 tygodnie: ' :
-                      viewMode === 'month' ? 'Miesiąc: ' :
-                      '8 tygodni: '
-                    )}
-                    {startOfWeek.toLocaleDateString('pl-PL', { day: 'numeric', month: 'long' })} - {endDate.toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    {startOfWeek.toLocaleDateString('pl-PL', { day: 'numeric', month: 'numeric', year: 'numeric' })} - {endDate.toLocaleDateString('pl-PL', { day: 'numeric', month: 'numeric', year: 'numeric' })}
                   </CardTitle>
                   <Button
                     variant="outline"
@@ -988,7 +982,7 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
                         return (
                           <div key={weekIndex}>
                             {/* Grid dla tygodnia */}
-                            <div className="grid grid-cols-7 gap-1 mb-2">
+                            <div className="grid gap-1 mb-2" style={{ gridTemplateColumns: 'repeat(5, 1fr) repeat(2, 0.5fr)' }}>
                               {/* Nagłówki dni */}
                               {dayNames.map((day) => (
                                 <div
@@ -1117,27 +1111,27 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
                               const weekEndDate = weekDays[weekDays.length - 1];
 
                               return (
-                                <div className="border border-green-200 rounded-lg p-3 bg-green-50 mb-4">
-                                  <div className="text-xs text-slate-600 mb-2">
+                                <div className="border-2 border-green-600 rounded-lg p-4 bg-green-100 mb-4">
+                                  <div className="text-sm font-semibold text-slate-800 mb-3">
                                     Tydzień {weekIndex + 1}: {weekStartDate.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })} - {weekEndDate.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })}
                                   </div>
                                   {weekStats.windows > 0 ? (
-                                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                                      <div>
-                                        <div className="text-slate-600">Okna</div>
-                                        <div className="text-lg font-bold text-green-700">{weekStats.windows}</div>
+                                    <div className="grid grid-cols-3 gap-3 text-center">
+                                      <div className="bg-white rounded-md p-2 border border-green-300">
+                                        <div className="text-xs font-medium text-slate-700 mb-1">Okna</div>
+                                        <div className="text-2xl font-bold text-green-800">{weekStats.windows}</div>
                                       </div>
-                                      <div>
-                                        <div className="text-slate-600">Skrzydła</div>
-                                        <div className="text-lg font-bold text-green-700">{weekStats.sashes}</div>
+                                      <div className="bg-white rounded-md p-2 border border-green-300">
+                                        <div className="text-xs font-medium text-slate-700 mb-1">Skrzydła</div>
+                                        <div className="text-2xl font-bold text-green-800">{weekStats.sashes}</div>
                                       </div>
-                                      <div>
-                                        <div className="text-slate-600">Szyby</div>
-                                        <div className="text-lg font-bold text-green-700">{weekStats.glasses}</div>
+                                      <div className="bg-white rounded-md p-2 border border-green-300">
+                                        <div className="text-xs font-medium text-slate-700 mb-1">Szyby</div>
+                                        <div className="text-2xl font-bold text-green-800">{weekStats.glasses}</div>
                                       </div>
                                     </div>
                                   ) : (
-                                    <div className="text-xs text-slate-400 text-center">Brak dostaw</div>
+                                    <div className="text-sm text-slate-600 text-center font-medium">Brak dostaw</div>
                                   )}
                                 </div>
                               );
@@ -1148,7 +1142,7 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
                     </div>
                   ) : (
                     /* Dla trybu month i 8weeks - układ jak przed */
-                    <div className="grid grid-cols-7 gap-1">
+                    <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(5, 1fr) repeat(2, 0.5fr)' }}>
                       {/* Nagłówki dni - zawsze 7 kolumn (tydzień) */}
                       {dayNames.map((day) => (
                         <div
@@ -1280,38 +1274,38 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
                     }
 
                     return (
-                      <div className="space-y-2">
-                        <div className="text-sm font-semibold text-slate-700 mb-2">
+                      <div className="space-y-3 mt-6">
+                        <div className="text-base font-bold text-slate-800 mb-3">
                           Podsumowanie tygodniowe
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {weeks.map((week, idx) => {
                             const weekStats = getWeekStats(week);
                             const weekStart = week[0];
                             const weekEnd = week[week.length - 1];
 
                             return (
-                              <div key={idx} className="border border-blue-200 rounded-lg p-3 bg-blue-50">
-                                <div className="text-xs text-slate-600 mb-2">
+                              <div key={idx} className="border-2 border-blue-600 rounded-lg p-4 bg-blue-100">
+                                <div className="text-sm font-semibold text-slate-800 mb-3">
                                   Tydzień {idx + 1}: {weekStart.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })} - {weekEnd.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })}
                                 </div>
                                 {weekStats.windows > 0 ? (
-                                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                                    <div>
-                                      <div className="text-slate-600">Okna</div>
-                                      <div className="text-lg font-bold text-blue-700">{weekStats.windows}</div>
+                                  <div className="grid grid-cols-3 gap-2 text-center">
+                                    <div className="bg-white rounded-md p-2 border border-blue-300">
+                                      <div className="text-xs font-medium text-slate-700 mb-1">Okna</div>
+                                      <div className="text-xl font-bold text-blue-800">{weekStats.windows}</div>
                                     </div>
-                                    <div>
-                                      <div className="text-slate-600">Skrzydła</div>
-                                      <div className="text-lg font-bold text-blue-700">{weekStats.sashes}</div>
+                                    <div className="bg-white rounded-md p-2 border border-blue-300">
+                                      <div className="text-xs font-medium text-slate-700 mb-1">Skrzydła</div>
+                                      <div className="text-xl font-bold text-blue-800">{weekStats.sashes}</div>
                                     </div>
-                                    <div>
-                                      <div className="text-slate-600">Szyby</div>
-                                      <div className="text-lg font-bold text-blue-700">{weekStats.glasses}</div>
+                                    <div className="bg-white rounded-md p-2 border border-blue-300">
+                                      <div className="text-xs font-medium text-slate-700 mb-1">Szyby</div>
+                                      <div className="text-xl font-bold text-blue-800">{weekStats.glasses}</div>
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="text-xs text-slate-400 text-center">Brak dostaw</div>
+                                  <div className="text-sm text-slate-600 text-center font-medium">Brak dostaw</div>
                                 )}
                               </div>
                             );
@@ -1326,19 +1320,45 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
           </Card>
         </div>
 
+        {/* Right panel collapse toggle button (when collapsed) */}
+        {rightPanelCollapsed && (
+          <button
+            onClick={() => setRightPanelCollapsed(false)}
+            className="fixed top-4 right-4 z-50 flex items-center justify-center w-10 h-10 bg-slate-900 text-white rounded-lg shadow-lg hover:bg-slate-800 transition-colors"
+            aria-label="Expand right panel"
+            title="Rozwiń panel zleceń"
+          >
+            <ChevronRight className="h-6 w-6 rotate-180" />
+          </button>
+        )}
+
         {/* Sidebar - stały panel zleceń bez daty */}
         <div className={cn(
-          "w-80 border-l overflow-y-auto transition-colors",
+          "border-l overflow-y-auto transition-all duration-300 ease-in-out",
+          rightPanelCollapsed ? "w-0 border-l-0" : "w-80",
           selectedDelivery ? "bg-blue-50 border-blue-300" : "bg-white"
         )}>
-          <div className="p-4">
-            <h3 className={cn(
-              "font-semibold text-sm uppercase tracking-wide mb-3 flex items-center gap-2",
-              selectedDelivery ? "text-blue-700" : "text-slate-500"
-            )}>
-              <Package className="h-4 w-4" />
-              Zlecenia bez daty
-            </h3>
+          <div className={cn(
+            "p-4 transition-all duration-300",
+            rightPanelCollapsed ? "opacity-0 invisible" : "opacity-100 visible"
+          )}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className={cn(
+                "font-semibold text-sm uppercase tracking-wide flex items-center gap-2",
+                selectedDelivery ? "text-blue-700" : "text-slate-500"
+              )}>
+                <Package className="h-4 w-4" />
+                Zlecenia bez daty
+              </h3>
+              <button
+                onClick={() => setRightPanelCollapsed(true)}
+                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-200 transition-colors flex-shrink-0"
+                aria-label="Collapse right panel"
+                title="Zwiń panel"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
             <p className="text-xs text-slate-400 mb-4">
               Przeciągnij zlecenia na dni w kalendarzu, aby przypisać do dostawy
             </p>
