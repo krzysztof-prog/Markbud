@@ -44,6 +44,11 @@ export interface Order {
   totalWindows?: number;
   totalSashes?: number;
   totalGlasses?: number;
+  windows?: {
+    id?: ID;
+    profileType?: string;
+    reference?: string;
+  }[];
 }
 
 export interface OrderWithRequirements extends Order {
@@ -104,6 +109,7 @@ export interface OrderTableData {
     orderId: ID;
     orderNumber: string;
     requirements: Record<string, { beams: number; meters: number }>; // profileNumber -> {beams, meters}
+    references: string[]; // Unikalne referencje z okien
   }[];
   totals: Record<string, { beams: number; meters: number }>; // profileNumber -> {beams, meters}
 }

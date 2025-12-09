@@ -11,13 +11,20 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ordersApi } from '@/lib/api';
-import { Package, Layers, Grid3X3, Calendar, FileText, FileDown } from 'lucide-react';
+import { Package, Layers, Grid3X3, Calendar, FileText, FileDown, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Order, Window } from '@/types';
 import type { Requirement } from '@/types';
 
 // Extended order with additional fields from PDF/imports
 interface OrderDetail extends Order {
-  windows?: Window[];
+  windows?: {
+    id?: number;
+    widthMm?: number;
+    heightMm?: number;
+    profileType?: string;
+    quantity?: number;
+    reference?: string;
+  }[];
   totalWindows?: number;
   totalSashes?: number;
   totalGlasses?: number;
@@ -47,12 +54,14 @@ export function OrderDetailModal({
   });
 
   const [hasPdf, setHasPdf] = React.useState(false);
+  const [windowsExpanded, setWindowsExpanded] = React.useState(false);
+  const [requirementsExpanded, setRequirementsExpanded] = React.useState(false);
 
-  // Sprawdź czy istnieje PDF dla tego zlecenia
+  // Sprawdź czy istnieje PDF dla tego zlecenia w bazie danych
   React.useEffect(() => {
     if (orderId && open) {
-      ordersApi.getPdf(orderId)
-        .then(() => setHasPdf(true))
+      ordersApi.checkPdf(orderId)
+        .then((result) => setHasPdf(result.hasPdf))
         .catch(() => setHasPdf(false));
     }
   }, [orderId, open]);
@@ -73,17 +82,20 @@ export function OrderDetailModal({
               <Package className="h-5 w-5" />
               Zlecenie {orderNumber || order?.orderNumber || '...'}
             </div>
-            {hasPdf && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleOpenPdf}
-                className="ml-auto"
-              >
-                <FileDown className="h-4 w-4 mr-2" />
-                Otwórz PDF z ceną
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenPdf}
+              disabled={!hasPdf}
+              className={`ml-auto mr-8 ${
+                hasPdf
+                  ? 'border-green-500 text-green-700 hover:bg-green-50'
+                  : 'border-red-500 text-red-700 hover:bg-red-50 opacity-60'
+              }`}
+            >
+              <FileDown className="h-4 w-4 mr-2" />
+              {hasPdf ? 'Otwórz PDF z ceną' : 'Brak ceny'}
+            </Button>
           </DialogTitle>
         </DialogHeader>
 
@@ -97,7 +109,7 @@ export function OrderDetailModal({
             {(() => {
               // Oblicz totals z danych okien jako fallback
               const calculatedWindows = order.windows?.reduce(
-                (sum: number, w: Window) => sum + (w.quantity || 1),
+                (sum: number, w) => sum + (w.quantity || 1),
                 0
               ) || 0;
               const displayWindows = order.totalWindows ?? (calculatedWindows > 0 ? calculatedWindows : '-');
@@ -105,19 +117,19 @@ export function OrderDetailModal({
               const displayGlasses = order.totalGlasses ?? '-';
 
               return (
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-2">
                   <SummaryCard
-                    icon={<Grid3X3 className="h-5 w-5 text-blue-500" />}
+                    icon={<Grid3X3 className="h-3.5 w-3.5 text-blue-500" />}
                     label="Okna/Drzwi"
                     value={displayWindows}
                   />
                   <SummaryCard
-                    icon={<Layers className="h-5 w-5 text-green-500" />}
+                    icon={<Layers className="h-3.5 w-3.5 text-green-500" />}
                     label="Skrzydła"
                     value={displaySashes}
                   />
                   <SummaryCard
-                    icon={<Package className="h-5 w-5 text-purple-500" />}
+                    icon={<Package className="h-3.5 w-3.5 text-purple-500" />}
                     label="Szyby"
                     value={displayGlasses}
                   />
@@ -190,75 +202,103 @@ export function OrderDetailModal({
               )}
             </div>
 
-            {/* Lista okien */}
+            {/* Lista okien - Collapsible */}
             {order.windows && order.windows.length > 0 && (
-              <div>
-                <h4 className="font-medium mb-3">Lista okien i drzwi ({order.windows.length})</h4>
-                <div className="rounded border overflow-hidden max-h-[400px] overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-3 py-2 text-center w-12">Lp.</th>
-                        <th className="px-3 py-2 text-center">Szerokość</th>
-                        <th className="px-3 py-2 text-center">Wysokość</th>
-                        <th className="px-3 py-2 text-left">Typ profilu</th>
-                        <th className="px-3 py-2 text-center">Ilość</th>
-                        <th className="px-3 py-2 text-left">Referencja</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {order.windows.map((win: Window, i: number) => (
-                        <tr key={win.id || i} className={`border-t hover:bg-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
-                          <td className="px-3 py-2 text-center text-slate-500">{i + 1}</td>
-                          <td className="px-3 py-2 text-center font-mono">{win.widthMm} mm</td>
-                          <td className="px-3 py-2 text-center font-mono">{win.heightMm} mm</td>
-                          <td className="px-3 py-2">{win.profileType}</td>
-                          <td className="px-3 py-2 text-center font-medium">{win.quantity}</td>
-                          <td className="px-3 py-2 font-mono text-slate-600">{win.reference || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              <div className="border rounded-lg">
+                <button
+                  onClick={() => setWindowsExpanded(!windowsExpanded)}
+                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                >
+                  <h4 className="font-medium">Lista okien i drzwi ({order.windows.length})</h4>
+                  {windowsExpanded ? (
+                    <ChevronUp className="h-5 w-5 text-slate-500" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-slate-500" />
+                  )}
+                </button>
+                {windowsExpanded && (
+                  <div className="border-t">
+                    <div className="max-h-[400px] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-3 py-2 text-center w-12">Lp.</th>
+                            <th className="px-3 py-2 text-center">Szerokość</th>
+                            <th className="px-3 py-2 text-center">Wysokość</th>
+                            <th className="px-3 py-2 text-left">Typ profilu</th>
+                            <th className="px-3 py-2 text-center">Ilość</th>
+                            <th className="px-3 py-2 text-left">Referencja</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {order.windows.map((win, i: number) => (
+                            <tr key={win.id || i} className={`border-t hover:bg-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
+                              <td className="px-3 py-2 text-center text-slate-500">{i + 1}</td>
+                              <td className="px-3 py-2 text-center font-mono">{win.widthMm} mm</td>
+                              <td className="px-3 py-2 text-center font-mono">{win.heightMm} mm</td>
+                              <td className="px-3 py-2">{win.profileType}</td>
+                              <td className="px-3 py-2 text-center font-medium">{win.quantity}</td>
+                              <td className="px-3 py-2 font-mono text-slate-600">{win.reference || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Lista zapotrzebowania na profile */}
+            {/* Lista zapotrzebowania na profile - Collapsible */}
             {order.requirements && order.requirements.length > 0 && (
-              <div>
-                <h4 className="font-medium mb-3">Zapotrzebowanie na profile ({order.requirements.length})</h4>
-                <div className="rounded border overflow-hidden max-h-[400px] overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Profil</th>
-                        <th className="px-3 py-2 text-left">Kolor</th>
-                        <th className="px-3 py-2 text-center">Bele</th>
-                        <th className="px-3 py-2 text-center">Metry</th>
-                        <th className="px-3 py-2 text-center">Reszta (mm)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {order.requirements.map((req: Requirement & { beamsCount?: number; meters?: number; restMm?: number }, index: number) => (
-                        <tr key={req.id} className={`border-t hover:bg-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
-                          <td className="px-3 py-2 font-mono font-medium">{req.profile?.number}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="w-4 h-4 rounded border"
-                                style={{ backgroundColor: req.color?.hexColor || '#ccc' }}
-                              />
-                              <span className="font-mono text-xs">{req.color?.code}</span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-center font-medium">{req.beamsCount}</td>
-                          <td className="px-3 py-2 text-center">{req.meters?.toFixed(1)}</td>
-                          <td className="px-3 py-2 text-center text-slate-500">{req.restMm}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              <div className="border rounded-lg">
+                <button
+                  onClick={() => setRequirementsExpanded(!requirementsExpanded)}
+                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                >
+                  <h4 className="font-medium">Zapotrzebowanie na profile ({order.requirements.length})</h4>
+                  {requirementsExpanded ? (
+                    <ChevronUp className="h-5 w-5 text-slate-500" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-slate-500" />
+                  )}
+                </button>
+                {requirementsExpanded && (
+                  <div className="border-t">
+                    <div className="max-h-[400px] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Profil</th>
+                            <th className="px-3 py-2 text-left">Kolor</th>
+                            <th className="px-3 py-2 text-center">Bele</th>
+                            <th className="px-3 py-2 text-center">Metry</th>
+                            <th className="px-3 py-2 text-center">Reszta (mm)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {order.requirements.map((req: Requirement & { beamsCount?: number; meters?: number; restMm?: number }, index: number) => (
+                            <tr key={req.id} className={`border-t hover:bg-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
+                              <td className="px-3 py-2 font-mono font-medium">{req.profile?.number}</td>
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="w-4 h-4 rounded border"
+                                    style={{ backgroundColor: req.color?.hexColor || '#ccc' }}
+                                  />
+                                  <span className="font-mono text-xs">{req.color?.code}</span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-center font-medium">{req.beamsCount}</td>
+                              <td className="px-3 py-2 text-center">{req.meters?.toFixed(1)}</td>
+                              <td className="px-3 py-2 text-center text-slate-500">{req.restMm}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -282,10 +322,10 @@ function SummaryCard({
   value: number | string;
 }) {
   return (
-    <div className="bg-slate-50 rounded-lg p-4 text-center">
-      <div className="flex justify-center mb-2">{icon}</div>
-      <div className="text-2xl font-bold">{value}</div>
-      <div className="text-sm text-slate-500">{label}</div>
+    <div className="bg-slate-50 rounded-lg p-2 text-center">
+      <div className="flex justify-center mb-1">{icon}</div>
+      <div className="text-lg font-bold">{value}</div>
+      <div className="text-xs text-slate-500">{label}</div>
     </div>
   );
 }

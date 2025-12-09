@@ -64,6 +64,35 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
     return order;
   });
 
+  // GET /api/orders/:id/has-pdf - check if PDF exists for order
+  fastify.get<{ Params: { id: string } }>('/:id/has-pdf', async (request, reply) => {
+    const { id } = request.params;
+
+    const order = await prisma.order.findUnique({
+      where: { id: parseIntParam(id, 'id') },
+    });
+
+    if (!order) {
+      return reply.status(404).send({ error: 'Zlecenie nie znalezione' });
+    }
+
+    const pdfImport = await prisma.fileImport.findFirst({
+      where: {
+        fileType: 'ceny_pdf',
+        status: 'completed',
+        metadata: {
+          contains: JSON.stringify({ orderId: order.id }),
+        },
+      },
+      orderBy: { processedAt: 'desc' },
+    });
+
+    return reply.send({
+      hasPdf: !!pdfImport && existsSync(pdfImport.filepath),
+      filename: pdfImport?.filename || null
+    });
+  });
+
   // GET /api/orders/:id/pdf - download PDF file for order (inline - specific logic)
   fastify.get<{ Params: { id: string } }>('/:id/pdf', async (request, reply) => {
     const { id } = request.params;
@@ -162,6 +191,11 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
               },
             },
           },
+          windows: {
+            select: {
+              reference: true,
+            },
+          },
         },
         orderBy: { orderNumber: 'asc' },
       });
@@ -176,10 +210,20 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
           };
         }
 
+        // Zbierz unikalne referencje z okien (bez duplikatów)
+        const references = Array.from(
+          new Set(
+            order.windows
+              .map((w) => w.reference)
+              .filter((ref): ref is string => ref !== null && ref !== undefined && ref.trim() !== '')
+          )
+        );
+
         return {
           orderId: order.id,
           orderNumber: order.orderNumber,
           requirements,
+          references,
         };
       });
 

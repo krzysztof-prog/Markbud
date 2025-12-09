@@ -44,6 +44,7 @@ interface ExtendedOrder extends Order {
   deadline?: string;
   archived?: boolean;
   windows?: Array<{
+    id?: number;
     reference?: string;
     profileType?: string;
     [key: string]: any;
@@ -567,12 +568,43 @@ export default function ZestawienieZlecenPage() {
     link.click();
   };
 
+  // Formatuje nazwę klienta zgodnie z zasadami:
+  // - "AKROBUD SOKOŁOWSKI SPÓŁKA KOMANDYTOWA" -> "AKROBUD"
+  // - Imię i nazwisko -> tylko nazwisko
+  const formatClientName = (client: string | null | undefined): string => {
+    if (!client) return '';
+
+    // Skróć AKROBUD do samej nazwy firmy
+    if (client.toUpperCase().includes('AKROBUD')) {
+      return 'AKROBUD';
+    }
+
+    // Sprawdź czy to firma (zawiera sufiks firmowy w dowolnym miejscu)
+    const hasCompanySuffix = /(SP\.?|SPÓŁKA|S\.A\.|LTD|LLC|GMBH|FIRMA|COMPANY|CO\.|INC|CORP|O\.O\.|Z\s+O\.O\.)/i.test(
+      client
+    );
+
+    // Jeśli to firma, zwróć pełną nazwę
+    if (hasCompanySuffix) {
+      return client;
+    }
+
+    // Dla klientów z imieniem i nazwiskiem - zwróć tylko ostatnie słowo (nazwisko)
+    const words = client.trim().split(/\s+/);
+    if (words.length >= 2) {
+      return words[words.length - 1]; // Zwróć samo nazwisko
+    }
+
+    // Pojedyncze słowo - zwróć je
+    return client;
+  };
+
   const getCellValue = (order: ExtendedOrder, columnId: ColumnId): string => {
     switch (columnId) {
       case 'orderNumber':
         return order.orderNumber || '';
       case 'client':
-        return order.client || '';
+        return formatClientName(order.client);
       case 'project':
         // Pobierz wszystkie unikalne referencje z okien
         if (order.windows && order.windows.length > 0) {
