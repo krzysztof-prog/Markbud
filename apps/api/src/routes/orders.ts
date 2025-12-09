@@ -191,11 +191,6 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
               },
             },
           },
-          windows: {
-            select: {
-              reference: true,
-            },
-          },
         },
         orderBy: { orderNumber: 'asc' },
       });
@@ -210,20 +205,10 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
           };
         }
 
-        // Zbierz unikalne referencje z okien (bez duplikatów)
-        const references = Array.from(
-          new Set(
-            order.windows
-              .map((w) => w.reference)
-              .filter((ref): ref is string => ref !== null && ref !== undefined && ref.trim() !== '')
-          )
-        );
-
         return {
           orderId: order.id,
           orderNumber: order.orderNumber,
           requirements,
-          references,
         };
       });
 

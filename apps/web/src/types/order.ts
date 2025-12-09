@@ -109,7 +109,6 @@ export interface OrderTableData {
     orderId: ID;
     orderNumber: string;
     requirements: Record<string, { beams: number; meters: number }>; // profileNumber -> {beams, meters}
-    references: string[]; // Unikalne referencje z okien
   }[];
   totals: Record<string, { beams: number; meters: number }>; // profileNumber -> {beams, meters}
 }

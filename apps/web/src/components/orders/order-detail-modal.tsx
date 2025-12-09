@@ -202,6 +202,39 @@ export function OrderDetailModal({
               )}
             </div>
 
+            {/* Referencje */}
+            {(() => {
+              const references = Array.from(
+                new Set(
+                  order.windows
+                    ?.map((w) => w.reference)
+                    .filter((ref): ref is string => ref !== null && ref !== undefined && ref.trim() !== '') || []
+                )
+              );
+
+              if (references.length > 0) {
+                return (
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <h4 className="font-medium mb-3 flex items-center gap-2 text-blue-900">
+                      <FileText className="h-4 w-4" />
+                      Referencje
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {references.map((ref, i) => (
+                        <span
+                          key={i}
+                          className="inline-block px-3 py-1.5 bg-white border border-blue-200 rounded-md text-sm font-mono text-blue-900 shadow-sm"
+                        >
+                          {ref}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             {/* Lista okien - Collapsible */}
             {order.windows && order.windows.length > 0 && (
               <div className="border rounded-lg">
