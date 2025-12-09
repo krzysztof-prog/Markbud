@@ -78,9 +78,16 @@ export function OrderDetailModal({
       <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              Zlecenie {orderNumber || order?.orderNumber || '...'}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Zlecenie {orderNumber || order?.orderNumber || '...'}
+              </div>
+              {order?.clientName && (
+                <div className="text-sm font-normal text-slate-600">
+                  Klient: {order.clientName}
+                </div>
+              )}
             </div>
             <Button
               variant="outline"
@@ -137,103 +144,106 @@ export function OrderDetailModal({
               );
             })()}
 
-            {/* Informacje o zleceniu */}
-            <div className="bg-slate-50 rounded-lg p-4">
-              <h4 className="font-medium mb-3 flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Informacje o zleceniu
-              </h4>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-slate-500">Status:</span>{' '}
-                  <Badge
-                    variant={
-                      order.status === 'pending'
-                        ? 'secondary'
+            {/* Informacje o zleceniu i Projekty */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Informacje o zleceniu */}
+              <div className="bg-slate-50 rounded-lg p-4">
+                <h4 className="font-medium mb-3 flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Informacje o zleceniu
+                </h4>
+                <div className="grid grid-cols-1 gap-3 text-sm">
+                  <div>
+                    <span className="text-slate-500">Status:</span>{' '}
+                    <Badge
+                      variant={
+                        order.status === 'pending'
+                          ? 'secondary'
+                          : order.status === 'completed'
+                          ? 'default'
+                          : 'outline'
+                      }
+                    >
+                      {order.status === 'pending'
+                        ? 'Oczekujące'
                         : order.status === 'completed'
-                        ? 'default'
-                        : 'outline'
-                    }
-                  >
-                    {order.status === 'pending'
-                      ? 'Oczekujące'
-                      : order.status === 'completed'
-                      ? 'Zakończone'
-                      : order.status === 'archived'
-                      ? 'Zarchiwizowane'
-                      : order.status === 'active'
-                      ? 'Aktywne'
-                      : order.status}
-                  </Badge>
+                        ? 'Zakończone'
+                        : order.status === 'archived'
+                        ? 'Zarchiwizowane'
+                        : order.status === 'active'
+                        ? 'Aktywne'
+                        : order.status}
+                    </Badge>
+                  </div>
+                  {order.deliveryDate && (
+                    <div className="flex items-center gap-1">
+                      <Calendar className="h-4 w-4 text-slate-400" />
+                      <span className="text-slate-500">Data dostawy:</span>{' '}
+                      <span className="font-medium">
+                        {new Date(order.deliveryDate).toLocaleDateString('pl-PL')}
+                      </span>
+                    </div>
+                  )}
+                  {order.valuePln && (
+                    <div>
+                      <span className="text-slate-500">Wartość PLN:</span>{' '}
+                      <span className="font-medium">{parseFloat(order.valuePln).toFixed(2)} zł</span>
+                    </div>
+                  )}
+                  {order.valueEur && (
+                    <div>
+                      <span className="text-slate-500">Wartość EUR:</span>{' '}
+                      <span className="font-medium">{parseFloat(order.valueEur).toFixed(2)} €</span>
+                    </div>
+                  )}
+                  {order.invoiceNumber && (
+                    <div>
+                      <span className="text-slate-500">Nr faktury:</span>{' '}
+                      <span className="font-mono">{order.invoiceNumber}</span>
+                    </div>
+                  )}
                 </div>
-                {order.deliveryDate && (
-                  <div className="flex items-center gap-1">
-                    <Calendar className="h-4 w-4 text-slate-400" />
-                    <span className="text-slate-500">Data dostawy:</span>{' '}
-                    <span className="font-medium">
-                      {new Date(order.deliveryDate).toLocaleDateString('pl-PL')}
-                    </span>
-                  </div>
-                )}
-                {order.valuePln && (
-                  <div>
-                    <span className="text-slate-500">Wartość PLN:</span>{' '}
-                    <span className="font-medium">{parseFloat(order.valuePln).toFixed(2)} zł</span>
-                  </div>
-                )}
-                {order.valueEur && (
-                  <div>
-                    <span className="text-slate-500">Wartość EUR:</span>{' '}
-                    <span className="font-medium">{parseFloat(order.valueEur).toFixed(2)} €</span>
-                  </div>
-                )}
-                {order.invoiceNumber && (
-                  <div>
-                    <span className="text-slate-500">Nr faktury:</span>{' '}
-                    <span className="font-mono">{order.invoiceNumber}</span>
+                {order.notes && (
+                  <div className="mt-3 pt-3 border-t">
+                    <span className="text-slate-500 text-sm">Notatki:</span>
+                    <p className="text-sm mt-1">{order.notes}</p>
                   </div>
                 )}
               </div>
-              {order.notes && (
-                <div className="mt-3 pt-3 border-t">
-                  <span className="text-slate-500 text-sm">Notatki:</span>
-                  <p className="text-sm mt-1">{order.notes}</p>
-                </div>
-              )}
-            </div>
 
-            {/* Referencje */}
-            {(() => {
-              const references = Array.from(
-                new Set(
-                  order.windows
-                    ?.map((w) => w.reference)
-                    .filter((ref): ref is string => ref !== null && ref !== undefined && ref.trim() !== '') || []
-                )
-              );
-
-              if (references.length > 0) {
-                return (
-                  <div className="bg-blue-50 rounded-lg p-4">
-                    <h4 className="font-medium mb-3 flex items-center gap-2 text-blue-900">
-                      <FileText className="h-4 w-4" />
-                      Referencje
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {references.map((ref, i) => (
-                        <span
-                          key={i}
-                          className="inline-block px-3 py-1.5 bg-white border border-blue-200 rounded-md text-sm font-mono text-blue-900 shadow-sm"
-                        >
-                          {ref}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+              {/* Projekty */}
+              {(() => {
+                const references = Array.from(
+                  new Set(
+                    order.windows
+                      ?.map((w) => w.reference)
+                      .filter((ref): ref is string => ref !== null && ref !== undefined && ref.trim() !== '') || []
+                  )
                 );
-              }
-              return null;
-            })()}
+
+                if (references.length > 0) {
+                  return (
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <h4 className="font-medium mb-3 flex items-center gap-2 text-blue-900">
+                        <FileText className="h-4 w-4" />
+                        Projekty
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {references.map((ref, i) => (
+                          <span
+                            key={i}
+                            className="inline-block px-3 py-1.5 bg-white border border-blue-200 rounded-md text-sm font-mono text-blue-900 shadow-sm"
+                          >
+                            {ref}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
 
             {/* Lista okien - Collapsible */}
             {order.windows && order.windows.length > 0 && (
