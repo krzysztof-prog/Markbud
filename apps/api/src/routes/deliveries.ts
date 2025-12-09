@@ -3,15 +3,14 @@ import { prisma } from '../index.js';
 import { DeliveryRepository } from '../repositories/DeliveryRepository.js';
 import { DeliveryService } from '../services/deliveryService.js';
 import { DeliveryHandler } from '../handlers/deliveryHandler.js';
-import { deliveryParamsSchema } from '../validators/delivery.js';
 import { DeliveryProtocolService } from '../services/DeliveryProtocolService.js';
 
 export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
   // Initialize layered architecture
   const deliveryRepository = new DeliveryRepository(prisma);
   const deliveryService = new DeliveryService(deliveryRepository);
-  const handler = new DeliveryHandler(deliveryService);
   const protocolService = new DeliveryProtocolService();
+  const handler = new DeliveryHandler(deliveryService, protocolService);
 
   // Core CRUD routes - delegate to handler
   fastify.get('/', handler.getAll.bind(handler));
@@ -39,28 +38,7 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
   // Complete delivery route - delegate to handler
   fastify.post('/:id/complete', handler.complete.bind(handler));
 
-  // Protocol routes - delegate to handler (JSON)
+  // Protocol routes - delegate to handler
   fastify.get('/:id/protocol', handler.getProtocol.bind(handler));
-
-  // GET /api/deliveries/:id/protocol/pdf - PDF protocol (requires special handling for PDF generation)
-  fastify.get<{ Params: { id: string } }>('/:id/protocol/pdf', async (request, reply) => {
-    const { id } = deliveryParamsSchema.parse(request.params);
-
-    const deliveryId = parseInt(id, 10);
-    if (isNaN(deliveryId)) {
-      return reply.status(400).send({ error: 'Invalid delivery ID' });
-    }
-
-    // Get protocol data from service (includes totalPallets)
-    const protocolData = await deliveryService.getProtocolData(deliveryId);
-
-    // Generate PDF
-    const pdfBuffer = await protocolService.generatePdf(protocolData);
-
-    // Return PDF
-    return reply
-      .header('Content-Type', 'application/pdf')
-      .header('Content-Disposition', `attachment; filename="${protocolService.generateFilename(deliveryId)}"`)
-      .send(pdfBuffer);
-  });
+  fastify.get('/:id/protocol/pdf', handler.getProtocolPdf.bind(handler));
 };

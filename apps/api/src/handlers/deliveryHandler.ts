@@ -4,6 +4,7 @@
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { DeliveryService } from '../services/deliveryService.js';
+import { DeliveryProtocolService } from '../services/DeliveryProtocolService.js';
 import {
   createDeliverySchema,
   updateDeliverySchema,
@@ -17,7 +18,11 @@ import {
 } from '../validators/delivery.js';
 
 export class DeliveryHandler {
-  constructor(private service: DeliveryService) {}
+  private protocolService: DeliveryProtocolService;
+
+  constructor(private service: DeliveryService, protocolService?: DeliveryProtocolService) {
+    this.protocolService = protocolService || new DeliveryProtocolService();
+  }
 
   async getAll(
     request: FastifyRequest<{ Querystring: { from?: string; to?: string; status?: string } }>,
@@ -210,11 +215,30 @@ export class DeliveryHandler {
     const { id } = deliveryParamsSchema.parse(request.params);
     const deliveryId = parseInt(id, 10);
 
-    if (isNaN(deliveryId)) {
-      return reply.status(400).send({ error: 'Invalid delivery ID' });
-    }
-
     const protocol = await this.service.getProtocolData(deliveryId);
     return reply.send(protocol);
+  }
+
+  async getProtocolPdf(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = deliveryParamsSchema.parse(request.params);
+    const deliveryId = parseInt(id, 10);
+
+    // Get protocol data from service (includes totalPallets)
+    const protocolData = await this.service.getProtocolData(deliveryId);
+
+    // Generate PDF
+    const pdfBuffer = await this.protocolService.generatePdf(protocolData);
+
+    // Return PDF with appropriate headers
+    return reply
+      .header('Content-Type', 'application/pdf')
+      .header(
+        'Content-Disposition',
+        `attachment; filename="${this.protocolService.generateFilename(deliveryId)}"`
+      )
+      .send(pdfBuffer);
   }
 }

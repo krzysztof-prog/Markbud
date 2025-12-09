@@ -30,7 +30,7 @@ export const updateOrderSchema = z.object({
 export const patchOrderSchema = z.object({
   valuePln: z.string().nullable().optional(),
   valueEur: z.string().nullable().optional(),
-  deadline: nullableDateSchema,
+  deadline: z.string().nullable().optional().transform((val) => (val ? new Date(val) : null)),
   status: z.string().nullable().optional(),
 });
 
