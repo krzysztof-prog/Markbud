@@ -15,6 +15,7 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
         profileId: true,
         colorId: true,
         currentStockBeams: true,
+        initialStockBeams: true,
         updatedAt: true,
         profile: {
           select: { id: true, number: true },
@@ -115,6 +116,7 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
         profileId: stock.profileId,
         profileNumber: stock.profile.number,
         currentStock: stock.currentStockBeams,
+        initialStock: stock.initialStockBeams,
         demand: demand.beams,
         demandMeters: demand.meters,
         afterDemand,
@@ -225,6 +227,7 @@ export const warehouseRoutes: FastifyPluginAsync = async (fastify) => {
           },
           data: {
             currentStockBeams: update.actualStock,
+            initialStockBeams: calculatedStock,
           },
         });
 

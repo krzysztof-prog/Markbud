@@ -19,6 +19,7 @@ export function RemanentTable({ warehouseData, entries, onChange }: RemanentTabl
       const initialEntries: RemanentFormEntry[] = warehouseData.map((row) => ({
         profileId: row.profileId,
         profileNumber: row.profileNumber,
+        initialStock: row.initialStock || 0,
         calculatedStock: row.currentStock,
         actualStock: '', // Empty initially
         difference: 0,
@@ -57,6 +58,7 @@ export function RemanentTable({ warehouseData, entries, onChange }: RemanentTabl
         <thead className="bg-slate-50 border-b sticky top-0 z-10">
           <tr>
             <th className="px-4 py-3 text-left font-semibold">Profil</th>
+            <th className="px-4 py-3 text-center font-semibold">Stan początkowy</th>
             <th className="px-4 py-3 text-center font-semibold">Stan obliczony</th>
             <th className="px-4 py-3 text-center font-semibold">Stan rzeczywisty</th>
             <th className="px-4 py-3 text-center font-semibold">Różnica</th>
@@ -73,6 +75,7 @@ export function RemanentTable({ warehouseData, entries, onChange }: RemanentTabl
               )}
             >
               <td className="px-4 py-3 font-mono font-semibold">{entry.profileNumber}</td>
+              <td className="px-4 py-3 text-center text-slate-600">{entry.initialStock} bel</td>
               <td className="px-4 py-3 text-center">{entry.calculatedStock} bel</td>
               <td className="px-4 py-3 text-center">
                 <Input

@@ -110,6 +110,7 @@ export interface WarehouseTableRow {
   profileNumber: string;
   profileName?: string;
   currentStock: number;
+  initialStock?: number;
   stock?: number;
   demand: number;
   afterDemand: number;
@@ -144,6 +145,7 @@ export interface WarehouseDataResponse {
 export interface RemanentFormEntry {
   profileId: number;
   profileNumber: string;
+  initialStock: number; // Stan początkowy (na początek miesiąca)
   calculatedStock: number; // Stan obliczony (currentStockBeams)
   actualStock: number | ''; // Stan rzeczywisty (INPUT value)
   difference: number; // actualStock - calculatedStock
