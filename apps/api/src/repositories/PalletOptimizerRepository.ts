@@ -69,7 +69,7 @@ export class PalletOptimizerRepository {
           orderNumber: order.orderNumber,
           widthMm: window.widthMm,
           heightMm: window.heightMm,
-          profileType: window.profileType as 'VLAK' | 'BLOK' | 'szyba',
+          profileType: window.profileType, // Accepts any profile type from database
           quantity: window.quantity,
           reference: window.reference || undefined,
         });

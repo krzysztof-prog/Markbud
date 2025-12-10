@@ -94,9 +94,9 @@ export default function DeliveriesTable({
   onViewOrder,
   protocolLoadingId,
 }: DeliveriesTableProps) {
-  // Sorting state: default by date descending (newest first)
+  // Sorting state: default by date ascending (oldest first)
   const [sorting, setSorting] = useState<SortingState>([
-    { id: 'deliveryDate', desc: true }
+    { id: 'deliveryDate', desc: false }
   ]);
 
   // Static columns - no dependencies on expandedRows
@@ -228,7 +228,7 @@ export default function DeliveriesTable({
     },
     onSortingChange: setSorting,
     initialState: {
-      sorting: [{ id: 'deliveryDate', desc: true }],
+      sorting: [{ id: 'deliveryDate', desc: false }],
     },
   });
 

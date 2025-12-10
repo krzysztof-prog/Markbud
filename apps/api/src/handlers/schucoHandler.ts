@@ -98,4 +98,19 @@ export class SchucoHandler {
       return reply.code(500).send({ error: 'Failed to get logs' });
     }
   };
+
+  /**
+   * GET /api/schuco/statistics
+   * Get delivery statistics by changeType
+   */
+  getStatistics = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const statistics = await this.schucoService.getStatistics();
+
+      return reply.code(200).send(statistics);
+    } catch (error) {
+      logger.error('[SchucoHandler] Error getting statistics:', error);
+      return reply.code(500).send({ error: 'Failed to get statistics' });
+    }
+  };
 }

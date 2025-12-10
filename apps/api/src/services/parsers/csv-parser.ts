@@ -23,7 +23,7 @@ interface UzyteBeleWindow {
   referencja: string;
 }
 
-interface ParsedUzyteBele {
+export interface ParsedUzyteBele {
   orderNumber: string;
   orderNumberParsed?: {
     base: string;
@@ -337,7 +337,23 @@ export class CsvParser {
    * Parsuj plik CSV "użyte bele"
    */
   private async parseUzyteBeleFile(filepath: string): Promise<ParsedUzyteBele> {
-    const content = await fs.promises.readFile(filepath, 'utf-8');
+    // Odczytaj plik jako buffer, następnie dekoduj z Windows-1250
+    const buffer = await fs.promises.readFile(filepath);
+
+    // Próbuj najpierw Windows-1250 (polskie znaki w Windows)
+    let content: string;
+    try {
+      const decoder = new TextDecoder('windows-1250');
+      content = decoder.decode(buffer);
+      // Sprawdź czy są polskie znaki - jeśli nie, spróbuj UTF-8
+      if (!content.match(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/)) {
+        content = buffer.toString('utf-8');
+      }
+    } catch {
+      // Fallback do UTF-8
+      content = buffer.toString('utf-8');
+    }
+
     const lines = content.split('\n').filter((line) => line.trim());
 
     const requirements: ParsedUzyteBele['requirements'] = [];

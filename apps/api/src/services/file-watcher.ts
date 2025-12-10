@@ -465,6 +465,7 @@ export class FileWatcherService {
     watchFolderUzyteBele: string;
     watchFolderCeny: string;
     importsBasePath: string;
+    importsCenyPath: string;
   }> {
     const projectRoot = path.resolve(__dirname, '../../../../');
 
@@ -480,10 +481,15 @@ export class FileWatcherService {
       || process.env.IMPORTS_BASE_PATH
       || 'C:\\Dostawy';
 
+    const importsCenyPath = await this.getSetting('importsCenyPath')
+      || process.env.IMPORTS_CENY_PATH
+      || 'C:\\Ceny';
+
     return {
       watchFolderUzyteBele,
       watchFolderCeny,
       importsBasePath,
+      importsCenyPath,
     };
   }
 }

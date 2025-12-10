@@ -48,6 +48,15 @@ export class DeliveryRepository {
                 orderNumber: true,
                 valuePln: true,
                 valueEur: true,
+                totalWindows: true,
+                totalSashes: true,
+                totalGlasses: true,
+                windows: {
+                  select: {
+                    reference: true,
+                  },
+                  distinct: ['reference'],
+                },
               },
             },
           },

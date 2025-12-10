@@ -153,6 +153,26 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
     handler: schucoHandler.getLogs,
   });
 
+  // GET /api/schuco/statistics - Get delivery statistics
+  fastify.get('/statistics', {
+    schema: {
+      description: 'Get statistics about deliveries by changeType',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            total: { type: 'integer' },
+            new: { type: 'integer' },
+            updated: { type: 'integer' },
+            unchanged: { type: 'integer' },
+          },
+        },
+      },
+    },
+    handler: schucoHandler.getStatistics,
+  });
+
   // DEBUG: Get changed records count
   fastify.get('/debug/changed', async (request, reply) => {
     const [newCount, updatedCount, totalCount] = await Promise.all([

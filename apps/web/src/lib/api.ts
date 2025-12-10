@@ -107,12 +107,15 @@ export const ordersApi = {
   getByNumber: (orderNumber: string) => fetchApi<Order>(`/api/orders/by-number/${orderNumber}`),
   getTable: (colorId: number) => fetchApi<OrderTableData>(`/api/orders/table/${colorId}`),
   getRequirementsTotals: () => fetchApi<Array<{ profileId: number; total: number }>>('/api/orders/requirements/totals'),
-  getPdf: async (id: number) => {
+  checkPdf: async (id: number): Promise<{ hasPdf: boolean; filename: string | null }> => {
     try {
-      const response = await fetch(`${API_URL}/api/orders/${id}/pdf`, { method: 'HEAD' });
-      return response.ok;
+      const response = await fetch(`${API_URL}/api/orders/${id}/has-pdf`);
+      if (!response.ok) {
+        return { hasPdf: false, filename: null };
+      }
+      return await response.json();
     } catch {
-      return false;
+      return { hasPdf: false, filename: null };
     }
   },
   create: (data: CreateOrderData) =>
@@ -419,6 +422,10 @@ export const schucoApi = {
     fetchApi<import('@/types').SchucoFetchLog>('/api/schuco/status'),
   getLogs: () =>
     fetchApi<import('@/types').SchucoFetchLog[]>('/api/schuco/logs'),
+  getStatistics: () =>
+    fetchApi<{ total: number; new: number; updated: number; unchanged: number }>(
+      '/api/schuco/statistics'
+    ),
   getTotalChangedCounts: () =>
     fetchApi<{ newCount: number; updatedCount: number; totalCount: number }>(
       '/api/schuco/debug/changed'

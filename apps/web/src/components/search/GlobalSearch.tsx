@@ -49,12 +49,21 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
     if (debouncedSearchQuery.length < 2) return [];
 
     const query = debouncedSearchQuery.toLowerCase();
-    return allOrders.filter((order) =>
-      order.orderNumber.toLowerCase().includes(query) ||
-      order.client?.toLowerCase().includes(query) ||
-      order.project?.toLowerCase().includes(query) ||
-      order.system?.toLowerCase().includes(query)
-    );
+    return allOrders.filter((order) => {
+      // Podstawowe pola
+      const matchesBasic =
+        order.orderNumber.toLowerCase().includes(query) ||
+        order.client?.toLowerCase().includes(query) ||
+        order.project?.toLowerCase().includes(query) ||
+        order.system?.toLowerCase().includes(query);
+
+      // Wyszukiwanie po referencjach okien
+      const matchesReference = order.windows?.some(
+        (window) => window.reference?.toLowerCase().includes(query)
+      );
+
+      return matchesBasic || matchesReference;
+    });
   }, [allOrders, debouncedSearchQuery]);
 
   // Reset selected index when results change
@@ -125,7 +134,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
             <Input
               ref={inputRef}
               type="text"
-              placeholder="Szukaj zlecenia po numerze, kliencie, projekcie..."
+              placeholder="Szukaj zlecenia po numerze, kliencie, projekcie, referencji..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -216,6 +225,17 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                               <span>{order.system}</span>
                             </div>
                           )}
+                          {/* Pokaż pasujące referencje */}
+                          {order.windows
+                            ?.filter((w) =>
+                              w.reference?.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+                            )
+                            .slice(0, 3)
+                            .map((w, i) => (
+                              <div key={i} className="text-xs text-blue-600">
+                                <span className="font-medium">Referencja:</span> {w.reference}
+                              </div>
+                            ))}
                         </div>
                       </div>
 

@@ -10,6 +10,7 @@ import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { schucoApi } from '@/lib/api';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -88,12 +89,19 @@ export default function DostawySchucoPageContent() {
     refetchOnMount: true,
   });
 
-  // Fetch total changed counts from DB
-  const { data: totalCounts } = useQuery({
-    queryKey: ['schuco-total-counts'],
-    queryFn: () => schucoApi.getTotalChangedCounts(),
+  // Fetch statistics
+  const { data: statistics } = useQuery({
+    queryKey: ['schuco-statistics'],
+    queryFn: () => schucoApi.getStatistics(),
     staleTime: 0,
     refetchOnMount: true,
+  });
+
+  // Fetch logs
+  const { data: logs = [], isLoading: isLoadingLogs } = useQuery({
+    queryKey: ['schuco-logs'],
+    queryFn: () => schucoApi.getLogs(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   // Refresh mutation
@@ -102,7 +110,8 @@ export default function DostawySchucoPageContent() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['schuco-deliveries', 'v2'] });
       queryClient.invalidateQueries({ queryKey: ['schuco-status'] });
-      queryClient.invalidateQueries({ queryKey: ['schuco-total-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['schuco-statistics'] });
+      queryClient.invalidateQueries({ queryKey: ['schuco-logs'] });
       setCurrentPage(1); // Reset to first page
       const changesInfo = data.newRecords || data.updatedRecords
         ? ` (Nowe: ${data.newRecords || 0}, Zmienione: ${data.updatedRecords || 0})`
@@ -295,10 +304,10 @@ export default function DostawySchucoPageContent() {
                   <div>
                     <p className="text-sm text-slate-500">Nowe (łącznie)</p>
                     <div className="flex items-center gap-2 mt-1">
-                      {totalCounts?.newCount != null && totalCounts.newCount > 0 ? (
+                      {statistics?.new != null && statistics.new > 0 ? (
                         <Badge className="bg-green-600">
                           <Sparkles className="h-3 w-3 mr-1" />
-                          +{totalCounts.newCount}
+                          +{statistics.new}
                         </Badge>
                       ) : (
                         <span className="font-semibold text-lg text-slate-400">0</span>
@@ -308,10 +317,10 @@ export default function DostawySchucoPageContent() {
                   <div>
                     <p className="text-sm text-slate-500">Zmienione (łącznie)</p>
                     <div className="flex items-center gap-2 mt-1">
-                      {totalCounts?.updatedCount != null && totalCounts.updatedCount > 0 ? (
+                      {statistics?.updated != null && statistics.updated > 0 ? (
                         <Badge className="bg-orange-500">
                           <PenLine className="h-3 w-3 mr-1" />
-                          {totalCounts.updatedCount}
+                          {statistics.updated}
                         </Badge>
                       ) : (
                         <span className="font-semibold text-lg text-slate-400">0</span>
@@ -339,13 +348,35 @@ export default function DostawySchucoPageContent() {
             </Card>
           )}
 
-          {/* Deliveries Table */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between flex-wrap gap-4">
-                <div className="flex items-center gap-2">
-                  <Truck className="h-5 w-5 text-blue-600" />
-                  <CardTitle>Lista zamówień ({total})</CardTitle>
+          {/* Main Content with Tabs */}
+          <Tabs defaultValue="deliveries" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="deliveries">
+                Dostawy
+                {total > 0 && (
+                  <Badge variant="secondary" className="ml-2 text-xs">
+                    {total}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="logs">
+                Historia pobrań
+                {logs.length > 0 && (
+                  <Badge variant="secondary" className="ml-2 text-xs">
+                    {logs.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Deliveries Tab */}
+            <TabsContent value="deliveries" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-2">
+                      <Truck className="h-5 w-5 text-blue-600" />
+                      <CardTitle>Lista zamówień ({total})</CardTitle>
                   {/* Change indicators */}
                   {(changedCounts.new > 0 || changedCounts.updated > 0) && (
                     <div className="flex items-center gap-2 ml-4">
@@ -570,6 +601,89 @@ export default function DostawySchucoPageContent() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Logs Tab */}
+        <TabsContent value="logs" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Historia pobrań</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoadingLogs ? (
+                <TableSkeleton rows={5} columns={6} />
+              ) : logs.length === 0 ? (
+                <EmptyState
+                  icon={<Clock className="h-12 w-12" />}
+                  title="Brak historii"
+                  description="Nie znaleziono historii pobierań danych ze Schuco."
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-3 font-medium">Data</th>
+                        <th className="text-left p-3 font-medium">Status</th>
+                        <th className="text-left p-3 font-medium">Trigger</th>
+                        <th className="text-left p-3 font-medium">Rekordów</th>
+                        <th className="text-left p-3 font-medium">Nowe</th>
+                        <th className="text-left p-3 font-medium">Zmienione</th>
+                        <th className="text-left p-3 font-medium">Czas</th>
+                        <th className="text-left p-3 font-medium">Błąd</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {logs.map((log) => (
+                        <tr key={log.id} className="border-b hover:bg-slate-50">
+                          <td className="p-3">
+                            {log.startedAt && new Date(log.startedAt).toLocaleString('pl-PL')}
+                          </td>
+                          <td className="p-3">
+                            {log.status === 'success' ? (
+                              <Badge variant="default" className="bg-green-600">Sukces</Badge>
+                            ) : log.status === 'error' ? (
+                              <Badge variant="destructive">Błąd</Badge>
+                            ) : (
+                              <Badge variant="secondary">Pending</Badge>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <Badge variant={log.triggerType === 'manual' ? 'default' : 'secondary'}>
+                              {log.triggerType === 'manual' ? 'Ręczny' : 'Automatyczny'}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-slate-600">{log.recordsCount || '-'}</td>
+                          <td className="p-3">
+                            {log.newRecords != null && log.newRecords > 0 ? (
+                              <Badge className="bg-green-600 text-xs">+{log.newRecords}</Badge>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            {log.updatedRecords != null && log.updatedRecords > 0 ? (
+                              <Badge className="bg-orange-500 text-xs">{log.updatedRecords}</Badge>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-slate-600">
+                            {log.durationMs ? `${(log.durationMs / 1000).toFixed(1)}s` : '-'}
+                          </td>
+                          <td className="p-3 text-red-600 text-xs max-w-xs truncate">
+                            {log.errorMessage || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
         </div>
       </div>
     </TooltipProvider>

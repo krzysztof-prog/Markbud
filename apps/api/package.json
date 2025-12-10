@@ -48,6 +48,7 @@
     "puppeteer": "^24.31.0",
     "socket.io": "^4.7.4",
     "strip-bom-stream": "^5.0.0",
+    "typeface-roboto": "^1.1.13",
     "zod": "^3.22.4"
   },
   "devDependencies": {

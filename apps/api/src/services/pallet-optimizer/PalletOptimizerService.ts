@@ -21,7 +21,7 @@ export interface WindowInput {
   orderNumber: string;
   widthMm: number;
   heightMm: number;
-  profileType: 'VLAK' | 'BLOK' | 'szyba' | 'VARIANT';
+  profileType: string; // Dynamic - supports any profile type configured in ProfileDepth table
   quantity: number;
   reference?: string;
 }
@@ -541,11 +541,8 @@ export class PalletOptimizerService {
         throw new ValidationError(`Window quantity must be positive (order: ${window.orderNumber})`);
       }
 
-      if (!['VLAK', 'BLOK', 'szyba', 'VARIANT'].includes(window.profileType)) {
-        throw new ValidationError(
-          `Invalid profile type: ${window.profileType} (order: ${window.orderNumber})`
-        );
-      }
+      // Note: Profile type validation happens in assignDepth() method
+      // Profile types are dynamic and configured in the ProfileDepth table
     }
   }
 

@@ -23,57 +23,61 @@ import { DeliveryFilters } from './DeliveryFilters';
 import DeliveriesTable from './DeliveriesTable';
 import type { Delivery } from '@/types/delivery';
 
-type DateFilterValue = '30' | '60' | '90' | 'archive';
+type DateFilterValue = '7' | '14' | '30' | 'archive';
 
 interface DeliveriesListViewProps {
   initialDateRange?: DateFilterValue;
 }
 
 // Helper to calculate date ranges
-// For 30/60/90 days: show past AND future deliveries (symmetric range)
+// For 7/14/30 days: show deliveries from customStartDate (or TODAY) forward
 // For archive: only past deliveries older than 90 days
-const getDateRange = (filter: DateFilterValue): { from: string; to: string } => {
+const getDateRange = (
+  filter: DateFilterValue,
+  customStartDate?: string
+): { from: string; to: string } => {
   const today = new Date();
   const formatDate = (d: Date) => d.toISOString().split('T')[0];
 
+  // Use custom start date if provided, otherwise use today
+  const startDate = customStartDate || formatDate(today);
+
   switch (filter) {
+    case '7': {
+      const from = new Date(startDate);
+      const to = new Date(from);
+      to.setDate(from.getDate() + 7);
+      return { from: formatDate(from), to: formatDate(to) };
+    }
+    case '14': {
+      const from = new Date(startDate);
+      const to = new Date(from);
+      to.setDate(from.getDate() + 14);
+      return { from: formatDate(from), to: formatDate(to) };
+    }
     case '30': {
-      const from = new Date(today);
-      from.setDate(today.getDate() - 30);
-      const to = new Date(today);
-      to.setDate(today.getDate() + 30);
-      return { from: formatDate(from), to: formatDate(to) };
-    }
-    case '60': {
-      const from = new Date(today);
-      from.setDate(today.getDate() - 60);
-      const to = new Date(today);
-      to.setDate(today.getDate() + 60);
-      return { from: formatDate(from), to: formatDate(to) };
-    }
-    case '90': {
-      const from = new Date(today);
-      from.setDate(today.getDate() - 90);
-      const to = new Date(today);
-      to.setDate(today.getDate() + 90);
+      const from = new Date(startDate);
+      const to = new Date(from);
+      to.setDate(from.getDate() + 30);
       return { from: formatDate(from), to: formatDate(to) };
     }
     case 'archive': {
       const to = new Date(today);
-      to.setDate(today.getDate() - 90);
+      to.setDate(today.getDate() - 1); // Yesterday
       return { from: '2020-01-01', to: formatDate(to) };
     }
     default:
-      return { from: formatDate(today), to: formatDate(today) };
+      return { from: startDate, to: startDate };
   }
 };
 
-export function DeliveriesListView({ initialDateRange = '60' }: DeliveriesListViewProps) {
+export function DeliveriesListView({ initialDateRange = '14' }: DeliveriesListViewProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
 
   // State
   const [dateFilter, setDateFilter] = useState<DateFilterValue>(initialDateRange);
+  const [customStartDate, setCustomStartDate] = useState<string>('');
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [showCompleteDialog, setShowCompleteDialog] = useState<number | null>(null);
   const [productionDate, setProductionDate] = useState('');
@@ -81,7 +85,10 @@ export function DeliveriesListView({ initialDateRange = '60' }: DeliveriesListVi
   const [protocolLoadingId, setProtocolLoadingId] = useState<number | null>(null);
 
   // Calculate date range
-  const dateRange = useMemo(() => getDateRange(dateFilter), [dateFilter]);
+  const dateRange = useMemo(
+    () => getDateRange(dateFilter, customStartDate),
+    [dateFilter, customStartDate]
+  );
 
   // Fetch deliveries
   const { data: deliveries, isLoading, isError, error } = useQuery({
@@ -193,7 +200,12 @@ export function DeliveriesListView({ initialDateRange = '60' }: DeliveriesListVi
               <List className="h-5 w-5 text-slate-500" />
               <CardTitle className="text-lg">Lista dostaw</CardTitle>
             </div>
-            <DeliveryFilters value={dateFilter} onChange={setDateFilter} />
+            <DeliveryFilters
+              value={dateFilter}
+              onChange={setDateFilter}
+              customStartDate={customStartDate}
+              onCustomStartDateChange={setCustomStartDate}
+            />
           </div>
 
           {/* Summary stats */}
@@ -254,7 +266,7 @@ export function DeliveriesListView({ initialDateRange = '60' }: DeliveriesListVi
               <p className="text-sm text-slate-400">
                 {dateFilter === 'archive'
                   ? 'Nie znaleziono archiwalnych dostaw'
-                  : `Nie ma dostaw w zakresie ±${dateFilter} dni`}
+                  : `Nie ma dostaw w najbliższych ${dateFilter} dniach`}
               </p>
             </div>
           )}

@@ -377,6 +377,33 @@ export class SchucoService {
   }
 
   /**
+   * Get statistics about deliveries by changeType
+   */
+  async getStatistics(): Promise<{
+    total: number;
+    new: number;
+    updated: number;
+    unchanged: number;
+  }> {
+    logger.info('[SchucoService] Getting delivery statistics...');
+
+    const [total, newCount, updatedCount] = await Promise.all([
+      this.prisma.schucoDelivery.count(),
+      this.prisma.schucoDelivery.count({ where: { changeType: 'new' } }),
+      this.prisma.schucoDelivery.count({ where: { changeType: 'updated' } }),
+    ]);
+
+    const unchanged = total - newCount - updatedCount;
+
+    return {
+      total,
+      new: newCount,
+      updated: updatedCount,
+      unchanged,
+    };
+  }
+
+  /**
    * Create fetch log entry
    */
   private async createFetchLog(status: string, triggerType: 'manual' | 'scheduled' = 'manual'): Promise<number> {

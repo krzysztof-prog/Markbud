@@ -582,19 +582,21 @@ export function ProfileDeliveryTable() {
                       strategy={verticalListSortingStrategy}
                     >
                       <tbody>
-                        {colorGroup.profiles.map((profile, idx) => (
-                          <SortableRow
-                            key={profile.id}
-                            profile={profile}
-                            idx={idx}
-                            colorGroupId={colorGroup.id}
-                            deliveries={deliveries}
-                            sumColumns={sumColumns}
-                            getSumForColumns={getSumForColumns}
-                            handleMagValueChange={handleMagValueChange}
-                            handleQuantityChange={handleQuantityChange}
-                          />
-                        ))}
+                        {colorGroup.profiles
+                          .filter((profile) => profile.deliveries.reduce((sum, d) => sum + d.quantity, 0) > 0)
+                          .map((profile, idx) => (
+                            <SortableRow
+                              key={profile.id}
+                              profile={profile}
+                              idx={idx}
+                              colorGroupId={colorGroup.id}
+                              deliveries={deliveries}
+                              sumColumns={sumColumns}
+                              getSumForColumns={getSumForColumns}
+                              handleMagValueChange={handleMagValueChange}
+                              handleQuantityChange={handleQuantityChange}
+                            />
+                          ))}
                       </tbody>
                     </SortableContext>
                   </DndContext>

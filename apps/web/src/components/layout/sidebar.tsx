@@ -16,7 +16,6 @@ import {
   Box,
   Menu,
   X,
-  PackageSearch,
   ChevronLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -33,18 +32,17 @@ type NavigationItem = {
 const navigation: NavigationItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   {
-    name: 'Magazyn',
+    name: 'AKROBUD',
     href: '/magazyn',
-    icon: Package,
+    icon: Warehouse,
     subItems: [
       { name: 'Magazyn Akrobud', href: '/magazyn/akrobud', icon: Warehouse },
       { name: 'Profile na dostawy', href: '/magazyn/profile-na-dostawy', icon: Package },
-      { name: 'Magazyn PVC', href: '/magazyn/pvc', icon: Box },
-      { name: 'Dostawy Schuco', href: '/magazyn/dostawy-schuco', icon: Truck },
+      { name: 'Dostawy', href: '/dostawy', icon: Truck },
     ]
   },
-  { name: 'Dostawy', href: '/dostawy', icon: Truck },
-  { name: 'Schuco Tracking', href: '/schuco', icon: PackageSearch },
+  { name: 'Magazyn PVC', href: '/magazyn/pvc', icon: Box },
+  { name: 'Dostawy Schuco', href: '/magazyn/dostawy-schuco', icon: Truck },
   { name: 'Zestawienie miesięczne', href: '/zestawienia', icon: FileText },
   { name: 'Zestawienie zleceń', href: '/zestawienia/zlecenia', icon: FileText },
   { name: 'Importy', href: '/importy', icon: FolderInput },

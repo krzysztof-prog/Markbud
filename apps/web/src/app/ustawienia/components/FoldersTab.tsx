@@ -20,6 +20,7 @@ interface FileWatcherStatus {
   running: boolean;
   paths?: {
     importsBasePath?: string;
+    importsCenyPath?: string;
     watchFolderUzyteBele?: string;
     watchFolderCeny?: string;
   };
@@ -54,18 +55,26 @@ export function FoldersTab({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileBox className="h-5 w-5" />
-            Folder importów dostaw
+            Foldery importów
           </CardTitle>
           <CardDescription>
-            Główna ścieżka do folderów z danymi dostaw (CSV z programu PROF)
+            Główne ścieżki do folderów z danymi importów
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <FolderBrowser
             value={settings.importsBasePath || ''}
             onChange={(path) => onSettingChange('importsBasePath', path)}
+            label="Folder importów dostaw (CSV z PROF)"
             placeholder="C:\Dostawy"
             description="Folder zawierający podfoldery z datami dostaw (np. 01.12.2025)"
+          />
+          <FolderBrowser
+            value={settings.importsCenyPath || ''}
+            onChange={(path) => onSettingChange('importsCenyPath', path)}
+            label="Folder importu cen"
+            placeholder="C:\Ceny"
+            description="Folder z plikami cenników do importu"
           />
         </CardContent>
       </Card>
@@ -158,9 +167,15 @@ export function FoldersTab({
               </Alert>
               <div className="text-sm space-y-1">
                 <p>
-                  <strong>Folder importów:</strong>{' '}
+                  <strong>Folder importów dostaw:</strong>{' '}
                   <code className="text-xs bg-muted px-1 rounded">
                     {fileWatcherStatus.paths?.importsBasePath || 'nie ustawiono'}
+                  </code>
+                </p>
+                <p>
+                  <strong>Folder importu cen:</strong>{' '}
+                  <code className="text-xs bg-muted px-1 rounded">
+                    {fileWatcherStatus.paths?.importsCenyPath || 'nie ustawiono'}
                   </code>
                 </p>
                 <p>
@@ -170,7 +185,7 @@ export function FoldersTab({
                   </code>
                 </p>
                 <p>
-                  <strong>Folder ceny:</strong>{' '}
+                  <strong>Folder ceny (monitorowany):</strong>{' '}
                   <code className="text-xs bg-muted px-1 rounded">
                     {fileWatcherStatus.paths?.watchFolderCeny || 'nie ustawiono'}
                   </code>
