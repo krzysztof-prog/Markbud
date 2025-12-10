@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { showSuccessToast, showErrorToast, getErrorMessage } from '@/lib/toast-helpers';
-import { glassDeliveriesApi, glassValidationsApi } from '../api/glassDeliveriesApi';
+import { glassDeliveriesApi, glassValidationsApi, glassDeliveriesApi_extended } from '../api/glassDeliveriesApi';
 import type { GlassDeliveryFilters } from '../types';
 
 export const glassDeliveryKeys = {
@@ -67,5 +67,13 @@ export function useValidationDashboard() {
   return useQuery({
     queryKey: validationKeys.dashboard(),
     queryFn: () => glassValidationsApi.getDashboard(),
+  });
+}
+
+export function useLatestImportSummary() {
+  return useQuery({
+    queryKey: ['glass-deliveries', 'latest-import'],
+    queryFn: () => glassDeliveriesApi_extended.getLatestImportSummary(),
+    refetchInterval: 30000, // Refresh every 30 seconds
   });
 }

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GlassDeliveriesTable } from '@/features/glass/components/GlassDeliveriesTable';
 import { GlassValidationPanel } from '@/features/glass/components/GlassValidationPanel';
+import { LatestImportSummary } from '@/features/glass/components/LatestImportSummary';
 import { useImportGlassDelivery } from '@/features/glass/hooks/useGlassDeliveries';
 
 export default function GlassDeliveriesPage() {
@@ -96,8 +97,12 @@ export default function GlassDeliveriesPage() {
               )}
             </CardContent>
           </Card>
+
+          <div className="mt-6">
+            <LatestImportSummary />
+          </div>
         </div>
-        <div>
+        <div className="flex flex-col gap-6">
           <GlassValidationPanel />
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { fetchApi, uploadFile } from '@/lib/api-client';
-import type { GlassDelivery, GlassDeliveryFilters, ValidationDashboard, GlassOrderValidation } from '../types';
+import type { GlassDelivery, GlassDeliveryFilters, ValidationDashboard, GlassOrderValidation, LatestImportSummary } from '../types';
 
 export const glassDeliveriesApi = {
   getAll: (filters?: GlassDeliveryFilters): Promise<GlassDelivery[]> => {
@@ -38,5 +38,11 @@ export const glassValidationsApi = {
       method: 'POST',
       body: JSON.stringify({ resolvedBy, notes }),
     });
+  },
+};
+
+export const glassDeliveriesApi_extended = {
+  getLatestImportSummary: (): Promise<LatestImportSummary> => {
+    return fetchApi('/api/glass-deliveries/latest-import/summary');
   },
 };

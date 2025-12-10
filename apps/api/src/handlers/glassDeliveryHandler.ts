@@ -69,4 +69,17 @@ export class GlassDeliveryHandler {
       return reply.status(400).send({ error: message });
     }
   }
+
+  async getLatestImportSummary(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const summary = await this.service.getLatestImportSummary();
+      if (!summary) {
+        return reply.status(404).send({ error: 'Brak ostatniego importu' });
+      }
+      return reply.send(summary);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Błąd pobierania';
+      return reply.status(500).send({ error: message });
+    }
+  }
 }

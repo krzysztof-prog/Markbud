@@ -114,3 +114,32 @@ export interface GlassDeliveryFilters {
   dateFrom?: string;
   dateTo?: string;
 }
+
+export interface LatestImportSummary {
+  delivery: {
+    id: number;
+    rackNumber: string;
+    customerOrderNumber: string;
+    supplierOrderNumber: string | null;
+    deliveryDate: string;
+    createdAt: string;
+  };
+  stats: {
+    total: number;
+    matched: number;
+    conflict: number;
+    unmatched: number;
+    pending: number;
+  };
+  orderSummary: Array<{
+    orderNumber: string;
+    itemCount: number;
+    quantity: number;
+    matchStatus: {
+      matched: number;
+      conflict: number;
+      unmatched: number;
+      pending: number;
+    };
+  }>;
+}
