@@ -30,10 +30,18 @@ export class FileWatcherService {
     const cenyPath = process.env.WATCH_FOLDER_CENY
       || await this.getSetting('watchFolderCeny')
       || path.join(projectRoot, 'ceny');
+    const glassOrdersPath = process.env.WATCH_FOLDER_GLASS_ORDERS
+      || await this.getSetting('watchFolderGlassOrders')
+      || path.join(projectRoot, 'zamowienia_szyb');
+    const glassDeliveriesPath = process.env.WATCH_FOLDER_GLASS_DELIVERIES
+      || await this.getSetting('watchFolderGlassDeliveries')
+      || path.join(projectRoot, 'dostawy_szyb');
 
     console.log('👀 Uruchamiam File Watcher...');
     console.log(`   📁 Folder "użyte bele": ${uzyteBelePath}`);
     console.log(`   📁 Folder "ceny": ${cenyPath}`);
+    console.log(`   📁 Folder "zamówienia szyb": ${glassOrdersPath}`);
+    console.log(`   📁 Folder "dostawy szyb": ${glassDeliveriesPath}`);
 
     // Najpierw zeskanuj istniejące foldery
     await this.scanExistingFolders(uzyteBelePath);
@@ -43,6 +51,10 @@ export class FileWatcherService {
 
     // Watcher dla folderu "ceny" (PDF) - stary system
     this.watchFolder(cenyPath, 'ceny_pdf', ['*.pdf', '*.PDF']);
+
+    // Watchers dla szyb
+    this.watchGlassOrdersFolder(glassOrdersPath);
+    this.watchGlassDeliveriesFolder(glassDeliveriesPath);
   }
 
   /**
@@ -464,6 +476,8 @@ export class FileWatcherService {
   async getCurrentPaths(): Promise<{
     watchFolderUzyteBele: string;
     watchFolderCeny: string;
+    watchFolderGlassOrders: string;
+    watchFolderGlassDeliveries: string;
     importsBasePath: string;
     importsCenyPath: string;
   }> {
@@ -477,6 +491,14 @@ export class FileWatcherService {
       || await this.getSetting('watchFolderCeny')
       || path.join(projectRoot, 'ceny');
 
+    const watchFolderGlassOrders = process.env.WATCH_FOLDER_GLASS_ORDERS
+      || await this.getSetting('watchFolderGlassOrders')
+      || path.join(projectRoot, 'zamowienia_szyb');
+
+    const watchFolderGlassDeliveries = process.env.WATCH_FOLDER_GLASS_DELIVERIES
+      || await this.getSetting('watchFolderGlassDeliveries')
+      || path.join(projectRoot, 'dostawy_szyb');
+
     const importsBasePath = await this.getSetting('importsBasePath')
       || process.env.IMPORTS_BASE_PATH
       || 'C:\\Dostawy';
@@ -488,8 +510,238 @@ export class FileWatcherService {
     return {
       watchFolderUzyteBele,
       watchFolderCeny,
+      watchFolderGlassOrders,
+      watchFolderGlassDeliveries,
       importsBasePath,
       importsCenyPath,
     };
+  }
+
+  /**
+   * Obserwuj folder zamówień szyb (.txt)
+   * Wykrywa "korekta" w nazwie → zastępuje poprzednie zamówienie
+   */
+  private watchGlassOrdersFolder(basePath: string) {
+    const absolutePath = path.resolve(basePath);
+    const globPatterns = [path.join(absolutePath, '*.txt'), path.join(absolutePath, '*.TXT')];
+
+    const watcher = chokidar.watch(globPatterns, {
+      persistent: true,
+      ignoreInitial: false,
+      awaitWriteFinish: {
+        stabilityThreshold: 2000,
+        pollInterval: 100,
+      },
+    });
+
+    watcher
+      .on('add', async (filePath) => {
+        const filename = path.basename(filePath).toLowerCase();
+        const isCorrection = /korekta|correction/i.test(filename);
+
+        if (isCorrection) {
+          await this.handleCorrectionGlassOrderTxt(filePath);
+        } else {
+          await this.handleNewGlassOrderTxt(filePath);
+        }
+      })
+      .on('error', (error) => {
+        logger.error(`❌ Błąd File Watcher dla zamówień szyb ${basePath}: ${error}`);
+      });
+
+    this.watchers.push(watcher);
+    logger.info(`   👀 Obserwuję zamówienia szyb: ${absolutePath}`);
+  }
+
+  /**
+   * Obserwuj folder dostaw szyb (.csv)
+   */
+  private watchGlassDeliveriesFolder(basePath: string) {
+    const absolutePath = path.resolve(basePath);
+    const globPatterns = [path.join(absolutePath, '*.csv'), path.join(absolutePath, '*.CSV')];
+
+    const watcher = chokidar.watch(globPatterns, {
+      persistent: true,
+      ignoreInitial: false,
+      awaitWriteFinish: {
+        stabilityThreshold: 2000,
+        pollInterval: 100,
+      },
+    });
+
+    watcher
+      .on('add', async (filePath) => {
+        await this.handleNewGlassDeliveryCsv(filePath);
+      })
+      .on('error', (error) => {
+        logger.error(`❌ Błąd File Watcher dla dostaw szyb ${basePath}: ${error}`);
+      });
+
+    this.watchers.push(watcher);
+    logger.info(`   👀 Obserwuję dostawy szyb: ${absolutePath}`);
+  }
+
+  /**
+   * Obsługa KOREKTY zamówienia szyb
+   * Zastępuje poprzednie zamówienie o tym samym numerze
+   */
+  private async handleCorrectionGlassOrderTxt(filePath: string) {
+    const filename = path.basename(filePath);
+
+    try {
+      logger.info(`   📝 KOREKTA zamówienia szyb wykryta: ${filename}`);
+
+      const { readFile } = await import('fs/promises');
+      const { parseGlassOrderTxt } = await import('./parsers/glass-order-txt-parser.js');
+      const { GlassOrderService } = await import('./glassOrderService.js');
+
+      // Parse TXT
+      const buffer = await readFile(filePath);
+      const parsed = parseGlassOrderTxt(buffer);
+      const glassOrderNumber = parsed.metadata.glassOrderNumber;
+
+      logger.info(`   🔍 Sprawdzam zamówienie ${glassOrderNumber}`);
+
+      // Znajdź istniejące
+      const existing = await this.prisma.glassOrder.findUnique({
+        where: { glassOrderNumber },
+      });
+
+      if (existing) {
+        logger.info(`   🔄 Zastępuję zamówienie ${glassOrderNumber} (ID: ${existing.id})`);
+
+        // Usuń stare (reverse counts)
+        const glassOrderService = new GlassOrderService(this.prisma);
+        await glassOrderService.delete(existing.id);
+
+        logger.info(`   ✅ Usunięto stare zamówienie`);
+      } else {
+        logger.warn(`   ⚠️ Nie znaleziono poprzedniego zamówienia - tworzę nowe`);
+      }
+
+      // Utwórz nowe
+      const glassOrderService = new GlassOrderService(this.prisma);
+      const newOrder = await glassOrderService.importFromTxt(buffer, filename);
+
+      logger.info(`   ✨ Utworzono nowe zamówienie (ID: ${newOrder.id})`);
+
+      // Zarejestruj w FileImport
+      await this.prisma.fileImport.create({
+        data: {
+          filename,
+          filepath: filePath,
+          fileType: 'glass_order_correction',
+          status: 'completed',
+          processedAt: new Date(),
+          metadata: JSON.stringify({
+            glassOrderNumber,
+            wasReplaced: !!existing,
+            itemsCount: parsed.items.length,
+          }),
+        },
+      });
+    } catch (error) {
+      logger.error(
+        `   ❌ Błąd korekty ${filename}: ${error instanceof Error ? error.message : 'Unknown'}`
+      );
+
+      await this.prisma.fileImport.create({
+        data: {
+          filename,
+          filepath: filePath,
+          fileType: 'glass_order_correction',
+          status: 'failed',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        },
+      });
+    }
+  }
+
+  /**
+   * Obsługa nowego zamówienia szyb (TXT)
+   */
+  private async handleNewGlassOrderTxt(filePath: string) {
+    const filename = path.basename(filePath);
+
+    try {
+      logger.info(`   📄 Nowe zamówienie szyb: ${filename}`);
+
+      const { readFile } = await import('fs/promises');
+      const { GlassOrderService } = await import('./glassOrderService.js');
+
+      const buffer = await readFile(filePath);
+      const glassOrderService = new GlassOrderService(this.prisma);
+      const order = await glassOrderService.importFromTxt(buffer, filename);
+
+      logger.info(`   ✅ Zaimportowano zamówienie (ID: ${order.id})`);
+
+      await this.prisma.fileImport.create({
+        data: {
+          filename,
+          filepath: filePath,
+          fileType: 'glass_order',
+          status: 'completed',
+          processedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      logger.error(
+        `   ❌ Błąd importu ${filename}: ${error instanceof Error ? error.message : 'Unknown'}`
+      );
+
+      await this.prisma.fileImport.create({
+        data: {
+          filename,
+          filepath: filePath,
+          fileType: 'glass_order',
+          status: 'failed',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        },
+      });
+    }
+  }
+
+  /**
+   * Obsługa nowej dostawy szyb (CSV)
+   */
+  private async handleNewGlassDeliveryCsv(filePath: string) {
+    const filename = path.basename(filePath);
+
+    try {
+      logger.info(`   📦 Nowa dostawa szyb: ${filename}`);
+
+      const { readFile } = await import('fs/promises');
+      const { GlassDeliveryService } = await import('./glassDeliveryService.js');
+
+      const content = await readFile(filePath, 'utf-8');
+      const glassDeliveryService = new GlassDeliveryService(this.prisma);
+      const delivery = await glassDeliveryService.importFromCsv(content, filename);
+
+      logger.info(`   ✅ Zaimportowano dostawę (ID: ${delivery.id})`);
+
+      await this.prisma.fileImport.create({
+        data: {
+          filename,
+          filepath: filePath,
+          fileType: 'glass_delivery',
+          status: 'completed',
+          processedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      logger.error(
+        `   ❌ Błąd importu ${filename}: ${error instanceof Error ? error.message : 'Unknown'}`
+      );
+
+      await this.prisma.fileImport.create({
+        data: {
+          filename,
+          filepath: filePath,
+          fileType: 'glass_delivery',
+          status: 'failed',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        },
+      });
+    }
   }
 }

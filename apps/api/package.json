@@ -38,6 +38,7 @@
     "dotenv": "^16.3.1",
     "exceljs": "^4.4.0",
     "fastify": "^4.25.2",
+    "iconv-lite": "^0.7.0",
     "jsonwebtoken": "^9.0.2",
     "node-cache": "^5.1.2",
     "node-cron": "^4.2.1",

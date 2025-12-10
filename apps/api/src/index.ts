@@ -23,6 +23,9 @@ import { palletRoutes } from './routes/pallets.js';
 import { currencyConfigRoutes } from './routes/currency-config.js';
 import { monthlyReportsRoutes } from './routes/monthly-reports.js';
 import { profileDepthRoutes } from './routes/profileDepths.js';
+import { glassOrderRoutes } from './routes/glass-orders.js';
+import { glassDeliveryRoutes } from './routes/glass-deliveries.js';
+import { glassValidationRoutes } from './routes/glass-validations.js';
 
 // Services
 import { FileWatcherService } from './services/file-watcher.js';
@@ -139,6 +142,11 @@ await fastify.register(palletRoutes, { prefix: '/api/pallets' });
 await fastify.register(currencyConfigRoutes, { prefix: '/api/currency-config' });
 await fastify.register(monthlyReportsRoutes, { prefix: '/api/monthly-reports' });
 await fastify.register(profileDepthRoutes, { prefix: '/api/profile-depths' });
+
+// Glass Tracking Routes
+await fastify.register(glassOrderRoutes, { prefix: '/api/glass-orders' });
+await fastify.register(glassDeliveryRoutes, { prefix: '/api/glass-deliveries' });
+await fastify.register(glassValidationRoutes, { prefix: '/api/glass-validations' });
 
 // Health checks
 fastify.get('/api/health', {

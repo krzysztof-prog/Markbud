@@ -1,0 +1,11 @@
+{
+  "count": 21,
+  "files": [
+    "c:\\dev\\Markbud\\apps\\api\\src\\services\\DeliveryProtocolService.ts",
+    "c:\\dev\\Markbud\\apps\\api\\test-pdf.ts",
+    "c:\\dev\\Markbud\\apps\\api\\test-font.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\services\\pallet-optimizer\\PdfExportService.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\services\\monthlyReportExportService.ts"
+  ],
+  "lastReminder": 20
+}

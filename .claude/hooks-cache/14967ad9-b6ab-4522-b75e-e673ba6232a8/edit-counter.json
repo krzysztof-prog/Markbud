@@ -1,0 +1,10 @@
+{
+  "count": 11,
+  "files": [
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\dostawy\\components\\DeliveriesTable.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\dostawy\\components\\DeliveriesListView.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\dostawy\\components\\DeliveryFilters.tsx",
+    "c:\\dev\\Markbud\\apps\\api\\src\\repositories\\DeliveryRepository.ts"
+  ],
+  "lastReminder": 10
+}

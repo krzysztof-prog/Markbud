@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   ChevronLeft,
+  GlassWater,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -43,6 +44,15 @@ const navigation: NavigationItem[] = [
   },
   { name: 'Magazyn PVC', href: '/magazyn/pvc', icon: Box },
   { name: 'Dostawy Schuco', href: '/magazyn/dostawy-schuco', icon: Truck },
+  {
+    name: 'Szyby',
+    href: '/szyby',
+    icon: GlassWater,
+    subItems: [
+      { name: 'Zamówienia szyb', href: '/zamowienia-szyb', icon: FileText },
+      { name: 'Dostawy szyb', href: '/dostawy-szyb', icon: Truck },
+    ]
+  },
   { name: 'Zestawienie miesięczne', href: '/zestawienia', icon: FileText },
   { name: 'Zestawienie zleceń', href: '/zestawienia/zlecenia', icon: FileText },
   { name: 'Importy', href: '/importy', icon: FolderInput },

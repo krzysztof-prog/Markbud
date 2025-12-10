@@ -34,6 +34,7 @@ interface Profile {
   number: string;
   name: string;
   description?: string | null;
+  articleNumber?: string | null;
 }
 
 // Pallet Dialog
@@ -374,10 +375,18 @@ export function ProfileDialog({
             </div>
           </div>
           <div>
+            <label className="text-sm font-medium block mb-1">Numer artykułu (opcjonalny)</label>
+            <Input
+              value={data?.articleNumber || ''}
+              onChange={(e) => onDataChange({ ...data, articleNumber: e.target.value || null })}
+              placeholder="np. 123456"
+            />
+          </div>
+          <div>
             <label className="text-sm font-medium block mb-1">Opis (opcjonalny)</label>
             <Input
               value={data?.description || ''}
-              onChange={(e) => onDataChange({ ...data, description: e.target.value })}
+              onChange={(e) => onDataChange({ ...data, description: e.target.value || null })}
               placeholder="np. Profil ramowy okienny"
             />
           </div>

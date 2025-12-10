@@ -113,13 +113,20 @@ model Order {
   completedAt       DateTime? @map("completed_at")
   archivedAt        DateTime? @map("archived_at")
 
+  // Glass Tracking fields
+  orderedGlassCount   Int?    @default(0) @map("ordered_glass_count")
+  deliveredGlassCount Int?    @default(0) @map("delivered_glass_count")
+  glassOrderStatus    String? @default("not_ordered") @map("glass_order_status")
+
   requirements       OrderRequirement[]
   windows            OrderWindow[]
   deliveryOrders     DeliveryOrder[]
   orderNotes         Note[]
   monthlyReportItems MonthlyReportItem[]
+  glassOrderItems    GlassOrderItem[]
 
   @@index([status])
+  @@index([glassOrderStatus])
   @@index([archivedAt])
   @@index([createdAt])
   @@index([deliveryDate])
@@ -181,6 +188,7 @@ model WarehouseStock {
   profileId         Int      @map("profile_id")
   colorId           Int      @map("color_id")
   currentStockBeams Int      @default(0) @map("current_stock_beams") // Nie może być ujemna
+  initialStockBeams Int      @default(0) @map("initial_stock_beams") // Stan początkowy dla remanent
   updatedAt         DateTime @updatedAt @map("updated_at")
   updatedById       Int?     @map("updated_by_id")
 
@@ -380,6 +388,8 @@ model FileImport {
   metadata     String?
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  glassDeliveries GlassDelivery[]
 
   @@index([status])
   @@index([createdAt])
@@ -685,4 +695,127 @@ model CurrencyConfig {
 
   @@index([effectiveDate])
   @@map("currency_config")
+}
+
+// ==================== ZAMÓWIENIA SZYB ====================
+
+model GlassOrder {
+  id                   Int       @id @default(autoincrement())
+  glassOrderNumber     String    @unique @map("glass_order_number")
+  orderDate            DateTime  @map("order_date")
+  supplier             String
+  orderedBy            String?   @map("ordered_by")
+  expectedDeliveryDate DateTime? @map("expected_delivery_date")
+  actualDeliveryDate   DateTime? @map("actual_delivery_date")
+  status               String    @default("ordered")
+  notes                String?
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  items             GlassOrderItem[]
+  deliveryItems     GlassDeliveryItem[]
+  validationResults GlassOrderValidation[]
+
+  @@index([glassOrderNumber])
+  @@index([orderDate])
+  @@index([status])
+  @@index([expectedDeliveryDate])
+  @@map("glass_orders")
+}
+
+model GlassOrderItem {
+  id           Int      @id @default(autoincrement())
+  glassOrderId Int      @map("glass_order_id")
+  orderNumber  String   @map("order_number")
+  orderSuffix  String?  @map("order_suffix")
+  position     String
+  glassType    String   @map("glass_type")
+  widthMm      Int      @map("width_mm")
+  heightMm     Int      @map("height_mm")
+  quantity     Int
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  glassOrder GlassOrder @relation(fields: [glassOrderId], references: [id], onDelete: Cascade)
+  order      Order?     @relation(fields: [orderNumber], references: [orderNumber])
+
+  @@index([glassOrderId])
+  @@index([orderNumber])
+  @@index([orderNumber, orderSuffix])
+  @@index([widthMm, heightMm])
+  @@map("glass_order_items")
+}
+
+// ==================== DOSTAWY SZYB ====================
+
+model GlassDelivery {
+  id                  Int      @id @default(autoincrement())
+  rackNumber          String   @map("rack_number")
+  customerOrderNumber String   @map("customer_order_number")
+  supplierOrderNumber String?  @map("supplier_order_number")
+  deliveryDate        DateTime @map("delivery_date")
+  fileImportId        Int?     @map("file_import_id")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  items      GlassDeliveryItem[]
+  fileImport FileImport?         @relation(fields: [fileImportId], references: [id])
+
+  @@index([rackNumber])
+  @@index([customerOrderNumber])
+  @@index([deliveryDate])
+  @@map("glass_deliveries")
+}
+
+model GlassDeliveryItem {
+  id               Int      @id @default(autoincrement())
+  glassDeliveryId  Int      @map("glass_delivery_id")
+  glassOrderId     Int?     @map("glass_order_id")
+  orderNumber      String   @map("order_number")
+  orderSuffix      String?  @map("order_suffix")
+  position         String
+  widthMm          Int      @map("width_mm")
+  heightMm         Int      @map("height_mm")
+  quantity         Int
+  glassComposition String?  @map("glass_composition")
+  serialNumber     String?  @map("serial_number")
+  clientCode       String?  @map("client_code")
+  matchStatus      String   @default("pending") @map("match_status")
+  matchedItemId    Int?     @map("matched_item_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  glassDelivery GlassDelivery @relation(fields: [glassDeliveryId], references: [id], onDelete: Cascade)
+  glassOrder    GlassOrder?   @relation(fields: [glassOrderId], references: [id])
+
+  @@index([glassDeliveryId])
+  @@index([orderNumber])
+  @@index([orderNumber, orderSuffix])
+  @@index([matchStatus])
+  @@index([widthMm, heightMm])
+  @@map("glass_delivery_items")
+}
+
+// ==================== WALIDACJA ZAMÓWIEŃ SZYB ====================
+
+model GlassOrderValidation {
+  id                Int       @id @default(autoincrement())
+  glassOrderId      Int?      @map("glass_order_id")
+  orderNumber       String    @map("order_number")
+  validationType    String    @map("validation_type")
+  severity          String
+  expectedQuantity  Int?      @map("expected_quantity")
+  orderedQuantity   Int?      @map("ordered_quantity")
+  deliveredQuantity Int?      @map("delivered_quantity")
+  message           String
+  details           String?
+  resolved          Boolean   @default(false)
+  resolvedAt        DateTime? @map("resolved_at")
+  resolvedBy        String?   @map("resolved_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  glassOrder GlassOrder? @relation(fields: [glassOrderId], references: [id], onDelete: Cascade)
+
+  @@index([glassOrderId])
+  @@index([orderNumber])
+  @@index([severity])
+  @@index([resolved])
+  @@map("glass_order_validations")
 }

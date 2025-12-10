@@ -20,6 +20,7 @@ export class ProfileRepository {
       select: {
         id: true,
         number: true,
+        articleNumber: true,
         name: true,
         description: true,
         sortOrder: true,
@@ -51,13 +52,19 @@ export class ProfileRepository {
     });
   }
 
-  async create(data: { number: string; name: string; description?: string }): Promise<Profile> {
+  async findByArticleNumber(articleNumber: string): Promise<Profile | null> {
+    return this.prisma.profile.findUnique({
+      where: { articleNumber },
+    });
+  }
+
+  async create(data: { number: string; name: string; description?: string | null; articleNumber?: string | null }): Promise<Profile> {
     return this.prisma.profile.create({
       data,
     });
   }
 
-  async update(id: number, data: { name?: string; description?: string }): Promise<Profile> {
+  async update(id: number, data: { name?: string; description?: string | null; articleNumber?: string | null }): Promise<Profile> {
     return this.prisma.profile.update({
       where: { id },
       data,

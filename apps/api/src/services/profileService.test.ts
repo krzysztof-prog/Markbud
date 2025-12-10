@@ -166,5 +166,232 @@ describe('ProfileService', () => {
       await expect(service.deleteProfile(999)).rejects.toThrow(NotFoundError);
       expect(mockPrisma.profile.delete).not.toHaveBeenCalled();
     });
+
+    it('should throw ConflictError when profile has related order requirements', async () => {
+      const mockProfile = {
+        id: 1,
+        number: 'P001',
+        name: 'Profile 1',
+        description: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        profileColors: [],
+      };
+
+      mockPrisma.profile.findUnique.mockResolvedValue(mockProfile);
+      // Mock related counts - with order requirements
+      mockPrisma.orderRequirement.count.mockResolvedValue(2);
+      mockPrisma.warehouseStock.count.mockResolvedValue(0);
+      mockPrisma.warehouseOrder.count.mockResolvedValue(0);
+      mockPrisma.warehouseHistory.count.mockResolvedValue(0);
+
+      await expect(service.deleteProfile(1)).rejects.toThrow(ConflictError);
+      expect(mockPrisma.profile.delete).not.toHaveBeenCalled();
+    });
+
+    it('should throw ConflictError when profile has warehouse stock', async () => {
+      const mockProfile = {
+        id: 1,
+        number: 'P001',
+        name: 'Profile 1',
+        description: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        profileColors: [],
+      };
+
+      mockPrisma.profile.findUnique.mockResolvedValue(mockProfile);
+      // Mock related counts - with warehouse stock
+      mockPrisma.orderRequirement.count.mockResolvedValue(0);
+      mockPrisma.warehouseStock.count.mockResolvedValue(5);
+      mockPrisma.warehouseOrder.count.mockResolvedValue(0);
+      mockPrisma.warehouseHistory.count.mockResolvedValue(0);
+
+      await expect(service.deleteProfile(1)).rejects.toThrow(ConflictError);
+      expect(mockPrisma.profile.delete).not.toHaveBeenCalled();
+    });
+
+    it('should throw ConflictError when profile has multiple types of related data', async () => {
+      const mockProfile = {
+        id: 1,
+        number: 'P001',
+        name: 'Profile 1',
+        description: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        profileColors: [],
+      };
+
+      mockPrisma.profile.findUnique.mockResolvedValue(mockProfile);
+      // Mock related counts - with multiple types
+      mockPrisma.orderRequirement.count.mockResolvedValue(2);
+      mockPrisma.warehouseStock.count.mockResolvedValue(3);
+      mockPrisma.warehouseOrder.count.mockResolvedValue(1);
+      mockPrisma.warehouseHistory.count.mockResolvedValue(5);
+
+      await expect(service.deleteProfile(1)).rejects.toThrow(ConflictError);
+      expect(mockPrisma.profile.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createProfile - articleNumber uniqueness', () => {
+    it('should throw ConflictError when articleNumber already exists', async () => {
+      const input = {
+        number: 'P001',
+        name: 'New Profile',
+        articleNumber: 'ART123',
+      };
+
+      const existingArticle = {
+        id: 99,
+        number: 'P999',
+        name: 'Existing',
+        description: null,
+        articleNumber: 'ART123',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // First call for number check returns null
+      mockPrisma.profile.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(existingArticle);
+
+      await expect(service.createProfile(input)).rejects.toThrow(ConflictError);
+      expect(mockPrisma.profile.create).not.toHaveBeenCalled();
+    });
+
+    it('should create profile when articleNumber is unique', async () => {
+      const input = {
+        number: 'P001',
+        name: 'New Profile',
+        articleNumber: 'ART123',
+      };
+      const mockCreated = {
+        id: 1,
+        ...input,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Both uniqueness checks return null
+      mockPrisma.profile.findUnique.mockResolvedValue(null);
+      mockPrisma.profile.create.mockResolvedValue(mockCreated);
+
+      const result = await service.createProfile(input);
+
+      expect(result).toEqual(mockCreated);
+      expect(mockPrisma.profile.findUnique).toHaveBeenCalledTimes(2);
+    });
+
+    it('should create profile without articleNumber', async () => {
+      const input = {
+        number: 'P001',
+        name: 'New Profile',
+      };
+      const mockCreated = {
+        id: 1,
+        ...input,
+        description: null,
+        articleNumber: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockPrisma.profile.findUnique.mockResolvedValue(null);
+      mockPrisma.profile.create.mockResolvedValue(mockCreated);
+
+      const result = await service.createProfile(input);
+
+      expect(result).toEqual(mockCreated);
+      // Should only check for number, not articleNumber
+      expect(mockPrisma.profile.findUnique).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('updateProfile - articleNumber uniqueness', () => {
+    it('should throw ConflictError when updating to existing articleNumber', async () => {
+      const mockProfile = {
+        id: 1,
+        number: 'P001',
+        name: 'Profile 1',
+        description: null,
+        articleNumber: 'ART001',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        profileColors: [],
+      };
+
+      const existingArticle = {
+        id: 2,
+        number: 'P002',
+        name: 'Profile 2',
+        description: null,
+        articleNumber: 'ART123',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const updateData = { articleNumber: 'ART123' };
+
+      mockPrisma.profile.findUnique
+        .mockResolvedValueOnce(mockProfile)
+        .mockResolvedValueOnce(existingArticle);
+
+      await expect(service.updateProfile(1, updateData)).rejects.toThrow(ConflictError);
+      expect(mockPrisma.profile.update).not.toHaveBeenCalled();
+    });
+
+    it('should allow updating articleNumber to same profile value', async () => {
+      const mockProfile = {
+        id: 1,
+        number: 'P001',
+        name: 'Profile 1',
+        description: null,
+        articleNumber: 'ART123',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        profileColors: [],
+      };
+
+      const updateData = { articleNumber: 'ART123' };
+      const mockUpdated = { ...mockProfile, ...updateData };
+
+      mockPrisma.profile.findUnique
+        .mockResolvedValueOnce(mockProfile)
+        .mockResolvedValueOnce(mockProfile);
+      mockPrisma.profile.update.mockResolvedValue(mockUpdated);
+
+      const result = await service.updateProfile(1, updateData);
+
+      expect(result).toEqual(mockUpdated);
+      expect(mockPrisma.profile.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('updateProfileOrders', () => {
+    it('should update profile sort orders using transaction', async () => {
+      const profileOrders = [
+        { id: 1, sortOrder: 1 },
+        { id: 2, sortOrder: 2 },
+        { id: 3, sortOrder: 3 },
+      ];
+
+      const { setupTransactionMock } = await import('../tests/mocks/prisma.mock.js');
+      setupTransactionMock(mockPrisma);
+
+      await service.updateProfileOrders({ profileOrders });
+
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('should handle empty profile orders array', async () => {
+      const { setupTransactionMock } = await import('../tests/mocks/prisma.mock.js');
+      setupTransactionMock(mockPrisma);
+
+      await service.updateProfileOrders({ profileOrders: [] });
+
+      expect(mockPrisma.$transaction).toHaveBeenCalledWith([]);
+    });
   });
 });

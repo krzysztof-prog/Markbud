@@ -51,6 +51,9 @@ export class OrderRepository {
         totalWindows: true,
         totalSashes: true,
         totalGlasses: true,
+        orderedGlassCount: true,
+        deliveredGlassCount: true,
+        glassOrderStatus: true,
         createdAt: true,
         archivedAt: true,
         windows: {

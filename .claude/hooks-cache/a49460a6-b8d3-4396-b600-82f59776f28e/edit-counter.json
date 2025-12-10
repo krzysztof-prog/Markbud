@@ -1,0 +1,18 @@
+{
+  "count": 21,
+  "files": [
+    "c:\\dev\\Markbud\\apps\\api\\src\\services\\parsers\\glass-order-txt-parser.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\services\\parsers\\glass-delivery-csv-parser.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\services\\glassOrderService.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\services\\glassDeliveryService.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\services\\glassValidationService.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\handlers\\glassOrderHandler.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\handlers\\glassDeliveryHandler.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\routes\\glass-orders.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\routes\\glass-deliveries.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\routes\\glass-validations.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\index.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\validators\\glass.ts"
+  ],
+  "lastReminder": 20
+}

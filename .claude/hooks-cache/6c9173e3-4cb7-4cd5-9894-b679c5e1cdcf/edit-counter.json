@@ -1,0 +1,12 @@
+{
+  "count": 14,
+  "files": [
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\ustawienia\\components\\SettingsDialogs.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\ustawienia\\components\\ProfilesTab.tsx",
+    "c:\\dev\\Markbud\\apps\\api\\src\\validators\\profile.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\repositories\\ProfileRepository.ts",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\ustawienia\\page.tsx",
+    "c:\\dev\\Markbud\\apps\\api\\src\\services\\profileService.ts"
+  ],
+  "lastReminder": 10
+}

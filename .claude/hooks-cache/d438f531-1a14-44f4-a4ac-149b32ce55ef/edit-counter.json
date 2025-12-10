@@ -1,0 +1,16 @@
+{
+  "count": 19,
+  "files": [
+    "apps/api/src/repositories/OrderRepository.ts",
+    "apps/api/src/services/parsers/csv-parser.ts",
+    "c:\\dev\\Markbud\\check-encoding.ts",
+    "c:\\dev\\Markbud\\fix-encoding.ts",
+    "c:\\dev\\Markbud\\check-current-state.ts",
+    "c:\\dev\\Markbud\\fix-final.ts",
+    "c:\\dev\\Markbud\\check-other-clients.ts",
+    "c:\\dev\\Markbud\\final-verification.ts",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\zestawienia\\zlecenia\\page.tsx",
+    "c:\\dev\\Markbud\\test-client-format.ts"
+  ],
+  "lastReminder": 15
+}

@@ -1,0 +1,8 @@
+{
+  "count": 4,
+  "files": [
+    "apps/web/src/app/ustawienia/components/FoldersTab.tsx",
+    "apps/api/src/services/file-watcher.ts"
+  ],
+  "lastReminder": 0
+}

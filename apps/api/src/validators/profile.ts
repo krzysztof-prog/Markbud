@@ -8,12 +8,14 @@ import { idParamsSchema } from './common.js';
 export const createProfileSchema = z.object({
   number: z.string().min(1, 'Profile number is required').max(50),
   name: z.string().min(1, 'Profile name is required').max(255),
-  description: z.string().optional(),
+  description: z.string().optional().nullable(),
+  articleNumber: z.string().max(100).optional().nullable(),
 });
 
 export const updateProfileSchema = z.object({
   name: z.string().min(1, 'Profile name is required').max(255).optional(),
-  description: z.string().optional(),
+  description: z.string().optional().nullable(),
+  articleNumber: z.string().max(100).optional().nullable(),
 });
 
 export const profileParamsSchema = idParamsSchema('profile');

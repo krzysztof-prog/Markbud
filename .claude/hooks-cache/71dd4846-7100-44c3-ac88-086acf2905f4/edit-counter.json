@@ -1,0 +1,11 @@
+{
+  "count": 9,
+  "files": [
+    "check-profiles.ts",
+    "apps/api/src/services/pallet-optimizer/PalletOptimizerService.ts",
+    "apps/api/src/repositories/PalletOptimizerRepository.ts",
+    "add-missing-profile-depths.ts",
+    "cleanup-invalid-windows.ts"
+  ],
+  "lastReminder": 5
+}

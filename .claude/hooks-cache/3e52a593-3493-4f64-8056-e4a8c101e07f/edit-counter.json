@@ -1,0 +1,21 @@
+{
+  "count": 32,
+  "files": [
+    "c:\\dev\\Markbud\\apps\\web\\src\\features\\glass\\types.ts",
+    "c:\\dev\\Markbud\\apps\\web\\src\\features\\glass\\api\\glassOrdersApi.ts",
+    "c:\\dev\\Markbud\\apps\\web\\src\\features\\glass\\api\\glassDeliveriesApi.ts",
+    "c:\\dev\\Markbud\\apps\\web\\src\\features\\glass\\hooks\\useGlassOrders.ts",
+    "c:\\dev\\Markbud\\apps\\web\\src\\features\\glass\\hooks\\useGlassDeliveries.ts",
+    "c:\\dev\\Markbud\\apps\\web\\src\\features\\glass\\components\\GlassValidationBadge.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\features\\glass\\components\\GlassOrderImportSection.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\features\\glass\\components\\GlassOrdersTable.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\features\\glass\\components\\GlassOrderDetailModal.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\features\\glass\\components\\GlassDeliveriesTable.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\features\\glass\\components\\GlassValidationPanel.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\zamowienia-szyb\\page.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\dostawy-szyb\\page.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\features\\glass\\index.ts",
+    "c:\\dev\\Markbud\\apps\\web\\src\\components\\ui\\dropdown-menu.tsx"
+  ],
+  "lastReminder": 30
+}

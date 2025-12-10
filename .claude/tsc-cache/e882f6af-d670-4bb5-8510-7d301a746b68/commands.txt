@@ -1,0 +1,4 @@
+apps/web:build:cd "c:\dev\Markbud\apps\web" && npm run build
+apps/web:tsc:cd "c:\dev\Markbud\apps\web" && npx tsc --noEmit
+apps/api:build:cd "c:\dev\Markbud\apps\api" && npm run build
+apps/api:tsc:cd "c:\dev\Markbud\apps\api" && npx tsc --noEmit

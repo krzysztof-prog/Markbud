@@ -37,6 +37,8 @@ interface ExtendedOrder extends Order {
   totalGlasses?: number;
   glassDelivery?: string;
   glassDeliveryDate?: string;
+  orderedGlassCount?: number;
+  deliveredGlassCount?: number;
   invoiceNumber?: string;
   orderStatus?: string;
   pvcDelivery?: string;
@@ -63,7 +65,7 @@ type ColumnId =
   | 'totalWindows'
   | 'totalSashes'
   | 'glasses'
-  | 'glassDelivery'
+  | 'glassDeliveryDate'
   | 'valuePln'
   | 'valueEur'
   | 'orderStatus'
@@ -93,7 +95,7 @@ const DEFAULT_COLUMNS: Column[] = [
   { id: 'totalWindows', label: 'Okna', sortable: false, align: 'center', visible: true },
   { id: 'totalSashes', label: 'Skrzydeł', sortable: false, align: 'center', visible: true },
   { id: 'glasses', label: 'Szkleń', sortable: false, align: 'center', visible: true },
-  { id: 'glassDelivery', label: 'Dostawa szyb', sortable: false, align: 'left', visible: true },
+  { id: 'glassDeliveryDate', label: 'Data szyb', sortable: false, align: 'center', visible: true },
   { id: 'valuePln', label: 'Wartość PLN', sortable: false, align: 'right', visible: true },
   { id: 'valueEur', label: 'Wartość EUR', sortable: false, align: 'right', visible: true },
   { id: 'orderStatus', label: 'Status zamówienia', sortable: false, align: 'center', visible: true },
@@ -298,8 +300,14 @@ export default function ZestawienieZlecenPage() {
         return String(order.totalSashes || 0);
       case 'glasses':
         return String(order.totalGlasses || 0);
-      case 'glassDelivery':
-        return order.glassDeliveryDate ? formatDate(order.glassDeliveryDate) : '';
+      case 'glassDeliveryDate':
+        const ordered = order.orderedGlassCount || 0;
+        const delivered = order.deliveredGlassCount || 0;
+        if (ordered === 0) return '';
+        if (delivered === ordered) return 'Dostarczono';
+        if (delivered > 0) return `${delivered}/${ordered}`;
+        if (order.glassDeliveryDate) return formatDate(order.glassDeliveryDate);
+        return '-';
       case 'valuePln':
         return order.valuePln || '';
       case 'valueEur':
@@ -673,13 +681,43 @@ export default function ZestawienieZlecenPage() {
         );
 
       case 'pvcDelivery':
-      case 'glassDelivery':
-        const dateValue = column.id === 'pvcDelivery'
-          ? order.pvcDeliveryDate
-          : order.glassDeliveryDate;
         return (
           <td key={column.id} className={`px-4 py-3 text-muted-foreground ${alignClass}`}>
-            {dateValue ? formatDate(dateValue) : '-'}
+            {order.pvcDeliveryDate ? formatDate(order.pvcDeliveryDate) : '-'}
+          </td>
+        );
+
+      case 'glassDeliveryDate':
+        const ordered = order.orderedGlassCount || 0;
+        const delivered = order.deliveredGlassCount || 0;
+
+        let content: string;
+        let colorClass: string;
+
+        if (ordered === 0) {
+          content = '-';
+          colorClass = 'text-slate-400';
+        } else if (delivered === ordered) {
+          content = 'Dostarczono';
+          colorClass = 'bg-green-100 text-green-700';
+        } else if (delivered > 0) {
+          content = `Częściowo: ${delivered}/${ordered}`;
+          colorClass = 'bg-yellow-100 text-yellow-700';
+        } else if (order.glassDeliveryDate) {
+          const deliveryDate = new Date(order.glassDeliveryDate);
+          const isOverdue = deliveryDate < new Date() && delivered === 0;
+          content = formatDate(order.glassDeliveryDate);
+          colorClass = isOverdue ? 'bg-red-100 text-red-700' : 'text-slate-700';
+        } else {
+          content = '-';
+          colorClass = 'text-slate-400';
+        }
+
+        return (
+          <td key={column.id} className="px-4 py-3 text-center">
+            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${colorClass}`}>
+              {content}
+            </span>
           </td>
         );
 

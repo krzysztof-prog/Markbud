@@ -1,0 +1,16 @@
+{
+  "count": 21,
+  "files": [
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\page.tsx",
+    "c:\\dev\\Markbud\\apps\\api\\src\\services\\file-watcher.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\services\\glassDeliveryService.ts",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\szyby\\page.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\components\\layout\\sidebar.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\ustawienia\\components\\GlassWatchTab.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\ustawienia\\components\\index.ts",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\ustawienia\\page.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\zestawienia\\zlecenia\\page.tsx",
+    "c:\\dev\\Markbud\\apps\\api\\src\\repositories\\OrderRepository.ts"
+  ],
+  "lastReminder": 20
+}

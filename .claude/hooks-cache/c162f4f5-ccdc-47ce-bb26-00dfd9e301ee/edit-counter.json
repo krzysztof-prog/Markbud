@@ -1,0 +1,8 @@
+{
+  "count": 3,
+  "files": [
+    "apps/api/src/repositories/DeliveryRepository.ts",
+    "apps/web/src/app/dostawy/components/DeliveryDetails.tsx"
+  ],
+  "lastReminder": 0
+}

@@ -9,6 +9,7 @@ interface Profile {
   number: string;
   name: string;
   description?: string | null;
+  articleNumber?: string | null;
 }
 
 interface ProfilesTabProps {
@@ -37,6 +38,7 @@ export function ProfilesTab({ profiles, onAdd, onEdit, onDelete }: ProfilesTabPr
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-4 py-3 text-left">Numer</th>
+                <th className="px-4 py-3 text-left">Nr artykułu</th>
                 <th className="px-4 py-3 text-left">Nazwa</th>
                 <th className="px-4 py-3 text-left">Opis</th>
                 <th className="px-4 py-3 text-center">Akcje</th>
@@ -49,6 +51,7 @@ export function ProfilesTab({ profiles, onAdd, onEdit, onDelete }: ProfilesTabPr
                   className={`border-t hover:bg-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
                 >
                   <td className="px-4 py-3 font-mono font-medium">{profile.number}</td>
+                  <td className="px-4 py-3 font-mono text-muted-foreground">{profile.articleNumber || '-'}</td>
                   <td className="px-4 py-3">{profile.name}</td>
                   <td className="px-4 py-3 text-muted-foreground">{profile.description || '-'}</td>
                   <td className="px-4 py-3 text-center">
@@ -65,7 +68,7 @@ export function ProfilesTab({ profiles, onAdd, onEdit, onDelete }: ProfilesTabPr
               ))}
               {(!profiles || profiles.length === 0) && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     Brak profili
                   </td>
                 </tr>

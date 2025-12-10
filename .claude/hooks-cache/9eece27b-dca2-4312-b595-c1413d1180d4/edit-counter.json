@@ -1,0 +1,12 @@
+{
+  "count": 13,
+  "files": [
+    "c:\\dev\\Markbud\\apps\\api\\src\\services\\schuco\\schucoService.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\handlers\\schucoHandler.ts",
+    "c:\\dev\\Markbud\\apps\\api\\src\\routes\\schuco.ts",
+    "c:\\dev\\Markbud\\apps\\web\\src\\lib\\api.ts",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\schuco\\page.tsx",
+    "c:\\dev\\Markbud\\apps\\web\\src\\app\\magazyn\\dostawy-schuco\\DostawySchucoPageContent.tsx"
+  ],
+  "lastReminder": 10
+}

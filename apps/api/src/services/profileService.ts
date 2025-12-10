@@ -37,6 +37,14 @@ export class ProfileService {
       throw new ConflictError('Profile with this number already exists');
     }
 
+    // Check if articleNumber is unique (if provided)
+    if (data.articleNumber) {
+      const existingArticle = await this.repository.findByArticleNumber(data.articleNumber);
+      if (existingArticle) {
+        throw new ConflictError('Profil z tym numerem artykułu już istnieje');
+      }
+    }
+
     const created = await this.repository.create(data);
 
     // Invalidate all profiles cache
@@ -48,6 +56,14 @@ export class ProfileService {
   async updateProfile(id: number, data: UpdateProfileInput) {
     // Verify profile exists
     await this.getProfileById(id);
+
+    // Check if articleNumber is unique (if being changed)
+    if (data.articleNumber) {
+      const existingArticle = await this.repository.findByArticleNumber(data.articleNumber);
+      if (existingArticle && existingArticle.id !== id) {
+        throw new ConflictError('Profil z tym numerem artykułu już istnieje');
+      }
+    }
 
     const updated = await this.repository.update(id, data);
 

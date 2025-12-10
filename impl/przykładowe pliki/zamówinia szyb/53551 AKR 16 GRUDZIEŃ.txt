@@ -1,0 +1,24 @@
+Data 28.11.2025    Godzina 11:57
+
+Numer 53551 AKR 16 GRUDZIEÑ 
+
+PILKINGTON
+
+Symbol                                   Iloœæ   Szer     Wys    Poz   Zlecenie           
+4/16/4S3 Ug=1.1 ALU                         1     560     907     1      53551 poz.1             
+4/16/4S3 Ug=1.1 ALU                         1     707    1011     1      53551 poz.1             
+4/16/4S3 Ug=1.1 ALU                         1     560     907     1      53551 poz.1             
+4/16/4S3 Ug=1.1 ALU                         1     707    1011     1      53551 poz.1             
+4/16/4S3 Ug=1.1 ALU                         1     596     907     2      53551 poz.2             
+4/16/4S3 Ug=1.1 ALU                         1     702    1011     2      53551 poz.2             
+4/16/4S3 Ug=1.1 ALU                         1     596     907     3      53551 poz.3             
+4/16/4S3 Ug=1.1 ALU                         1     702    1011     3      53551 poz.3             
+4/16/4S3 Ug=1.1 ALU                         1     560     907     4      53551 poz.4             
+4/16/4S3 Ug=1.1 ALU                         1     707    1011     4      53551 poz.4             
+4/16/4S3 Ug=1.1 ALU                         1     560     907     4      53551 poz.4             
+4/16/4S3 Ug=1.1 ALU                         1     707    1011     4      53551 poz.4             
+
+
+                              W.Kania
+
+ Dostawa na  5 12 25 PIATEK

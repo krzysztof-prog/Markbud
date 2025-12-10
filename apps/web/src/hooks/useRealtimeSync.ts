@@ -175,11 +175,8 @@ export function useRealtimeSync() {
 
       wsRef.current.onmessage = handleMessage;
 
-      wsRef.current.onerror = (error) => {
-        // Don't log empty error objects (happens in React Strict Mode)
-        if (error && typeof error === 'object' && Object.keys(error).length > 0) {
-          wsLogger.error('Error:', error);
-        }
+      wsRef.current.onerror = () => {
+        wsLogger.warn('WebSocket error occurred, attempting to reconnect');
         isConnectedRef.current = false;
       };
 

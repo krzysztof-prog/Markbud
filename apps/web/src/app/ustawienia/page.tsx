@@ -9,6 +9,7 @@ import { useFormValidation } from '@/hooks/useFormValidation';
 import {
   GeneralSettingsTab,
   FoldersTab,
+  GlassWatchTab,
   PalletTypesTab,
   ColorsTab,
   ProfilesTab,
@@ -46,6 +47,7 @@ interface Profile {
   number: string;
   name: string;
   description?: string | null;
+  articleNumber?: string | null;
 }
 
 type DialogState<T> = {
@@ -355,6 +357,7 @@ export default function UstawieniaPage() {
           <TabsList className="mb-6">
             <TabsTrigger value="general">Ogólne</TabsTrigger>
             <TabsTrigger value="folders">Foldery</TabsTrigger>
+            <TabsTrigger value="glass">Auto-watch Szyb</TabsTrigger>
             <TabsTrigger value="pallets">Palety</TabsTrigger>
             <TabsTrigger value="colors">Kolory</TabsTrigger>
             <TabsTrigger value="profiles">Profile PVC</TabsTrigger>
@@ -372,6 +375,20 @@ export default function UstawieniaPage() {
 
           <TabsContent value="folders">
             <FoldersTab
+              settings={settings}
+              hasChanges={hasChanges}
+              onSettingChange={handleSettingChange}
+              onSave={handleSave}
+              onSaveAndRestart={handleSaveAndRestartWatcher}
+              onRestart={() => restartFileWatcherMutation.mutate()}
+              fileWatcherStatus={fileWatcherStatus}
+              isUpdatePending={updateSettingsMutation.isPending}
+              isRestartPending={restartFileWatcherMutation.isPending}
+            />
+          </TabsContent>
+
+          <TabsContent value="glass">
+            <GlassWatchTab
               settings={settings}
               hasChanges={hasChanges}
               onSettingChange={handleSettingChange}

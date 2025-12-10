@@ -1,0 +1,26 @@
+Data 19.11.2025    Godzina 12:19
+
+Numer 53481 AKR 8 GRUDZIEÑ
+
+PILKINGTON
+
+Symbol                                   Iloœæ   Szer     Wys    Poz   Zlecenie           
+4/16/4S3 Ug=1.1 ALU                         1     663     951     1      53481 poz.1             
+4/16/4S3 Ug=1.1 ALU                         1     795     990     1      53481 poz.1             
+4/16/4S3 Ug=1.1 ALU                         1     691     951     1      53481 poz.1             
+4/16/4S3 Ug=1.1 ALU                         1     768    1055     1      53481 poz.1             
+4/16/4S3 Ug=1.1 ALU                         1     668     951     2      53481 poz.2             
+4/16/4S3 Ug=1.1 ALU                         1     773    1055     2      53481 poz.2             
+4/16/4S3 Ug=1.1 ALU                         1     656     951     3      53481 poz.3             
+4/16/4S3 Ug=1.1 ALU                         1     740     951     4      53481 poz.4             
+4/16/4S3 Ug=1.1 ALU                         1     871    1055     4      53481 poz.4             
+4/16/4S3 Ug=1.1 ALU                         1     845    1055     4      53481 poz.4             
+4/16/4S3 Ug=1.1 ALU                         1     663     951     5      53481 poz.5             
+4/16/4S3 Ug=1.1 ALU                         1     795     990     5      53481 poz.5             
+4/16/4S3 Ug=1.1 ALU                         1     691     951     5      53481 poz.5             
+4/16/4S3 Ug=1.1 ALU                         1     768    1055     5      53481 poz.5             
+
+
+                              W.Kania
+
+ Dostawa na  28 11 25 PIATEK
