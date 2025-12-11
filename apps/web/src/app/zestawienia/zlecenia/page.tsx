@@ -392,7 +392,7 @@ export default function ZestawienieZlecenPage() {
           aValue = a.pvcDeliveryDate ? new Date(a.pvcDeliveryDate).getTime() : 0;
           bValue = b.pvcDeliveryDate ? new Date(b.pvcDeliveryDate).getTime() : 0;
           break;
-        case 'glassDelivery':
+        case 'glassDeliveryDate':
           aValue = a.glassDeliveryDate ? new Date(a.glassDeliveryDate).getTime() : 0;
           bValue = b.glassDeliveryDate ? new Date(b.glassDeliveryDate).getTime() : 0;
           break;
@@ -647,7 +647,7 @@ export default function ZestawienieZlecenPage() {
         return order.status || '';
       case 'pvcDelivery':
         return order.pvcDeliveryDate ? formatDate(order.pvcDeliveryDate) : '';
-      case 'glassDelivery':
+      case 'glassDeliveryDate':
         return order.glassDeliveryDate ? formatDate(order.glassDeliveryDate) : '';
       case 'deadline':
         return order.deadline ? formatDate(order.deadline) : '';
@@ -908,9 +908,16 @@ export default function ZestawienieZlecenPage() {
 
       default:
         const cellValue = getCellValue(order, column.id);
+        const isProjectColumn = column.id === 'project';
         return (
-          <td key={column.id} className={`px-4 py-3 text-muted-foreground ${alignClass}`}>
-            {cellValue || '-'}
+          <td
+            key={column.id}
+            className={`px-4 py-3 text-muted-foreground ${alignClass}`}
+            title={isProjectColumn ? cellValue : undefined}
+          >
+            <div className={isProjectColumn ? 'max-w-xs truncate' : undefined}>
+              {cellValue || '-'}
+            </div>
           </td>
         );
     }
