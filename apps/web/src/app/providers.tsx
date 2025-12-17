@@ -6,6 +6,7 @@ import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persist
 import { useState, useEffect } from 'react';
 import { Toaster } from '@/components/ui/toaster';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
+import { AuthInitializer } from '@/components/auth-initializer';
 
 function RealtimeSyncWrapper({ children }: { children: React.ReactNode }) {
   useRealtimeSync();
@@ -72,7 +73,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
           },
         }}
       >
-        <RealtimeSyncWrapper>{children}</RealtimeSyncWrapper>
+        <AuthInitializer>
+          <RealtimeSyncWrapper>{children}</RealtimeSyncWrapper>
+        </AuthInitializer>
         <Toaster />
       </PersistQueryClientProvider>
     );
@@ -81,7 +84,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // Initial render (SSR and first client render) - use regular QueryClientProvider
   return (
     <QueryClientProvider client={queryClient}>
-      <RealtimeSyncWrapper>{children}</RealtimeSyncWrapper>
+      <AuthInitializer>
+        <RealtimeSyncWrapper>{children}</RealtimeSyncWrapper>
+      </AuthInitializer>
       <Toaster />
     </QueryClientProvider>
   );
