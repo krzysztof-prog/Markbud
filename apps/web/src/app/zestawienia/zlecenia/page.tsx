@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { ordersApi, settingsApi } from '@/lib/api';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { useDebounce } from '@/hooks/useDebounce';
-import type { Order } from '@/types';
+import type { Order, SchucoDeliveryLink } from '@/types';
 import {
   Download,
   FileText,
@@ -25,6 +25,19 @@ import {
   Pencil,
 } from 'lucide-react';
 import { OrderDetailModal } from '@/components/orders/order-detail-modal';
+import { OrdersStatsModal } from '@/components/orders/orders-stats-modal';
+
+// Window interface for extended order data
+interface OrderWindow {
+  id?: number;
+  reference?: string;
+  profileType?: string;
+}
+
+// Count interface for aggregated data
+interface OrderCount {
+  windows?: number;
+}
 
 // Extended order type with additional properties from PDF import
 interface ExtendedOrder extends Order {
@@ -45,17 +58,59 @@ interface ExtendedOrder extends Order {
   pvcDeliveryDate?: string;
   deadline?: string;
   archived?: boolean;
-  windows?: Array<{
-    id?: number;
-    reference?: string;
-    profileType?: string;
-    [key: string]: any;
-  }>;
-  _count?: {
-    windows?: number;
-    [key: string]: any;
-  };
+  windows?: OrderWindow[];
+  _count?: OrderCount;
+  schucoLinks?: SchucoDeliveryLink[];
 }
+
+// Funkcja pomocnicza do agregacji statusu Schuco (zwraca "najgorszy" status)
+const aggregateSchucoStatus = (links: SchucoDeliveryLink[] | undefined): string => {
+  if (!links || links.length === 0) return '';
+
+  const statuses = links.map(l => l.schucoDelivery.shippingStatus.toLowerCase());
+
+  // Priorytet: otwarte (najgorszy) > wysłane > dostarczone (najlepszy)
+  if (statuses.some(s => s.includes('otwart'))) return 'Otwarte';
+  if (statuses.some(s => s.includes('wysłan') || s.includes('wyslan'))) return 'Wysłane';
+  if (statuses.some(s => s.includes('dostarcz'))) return 'Dostarczone';
+
+  // Zwróć pierwszy status jeśli nie pasuje do znanych
+  return links[0].schucoDelivery.shippingStatus;
+};
+
+// Funkcja pomocnicza do pobrania najwcześniejszej daty dostawy Schuco
+const getEarliestSchucoDelivery = (links: SchucoDeliveryLink[] | undefined): string | null => {
+  if (!links || links.length === 0) return null;
+
+  // Filtruj tylko te z datą dostawy
+  const withDelivery = links
+    .filter(l => l.schucoDelivery.deliveryWeek)
+    .map(l => l.schucoDelivery.deliveryWeek as string);
+
+  if (withDelivery.length === 0) return null;
+
+  // Sortuj i zwróć najwcześniejszą
+  return withDelivery.sort()[0];
+};
+
+// Funkcja do formatowania tygodnia dostawy (KW 03/2026 -> Tyg. 3/2026)
+const formatDeliveryWeek = (week: string | null): string => {
+  if (!week) return '-';
+  const match = week.match(/KW\s*(\d+)\/(\d+)/i);
+  if (match) {
+    return `Tyg. ${parseInt(match[1])}/${match[2]}`;
+  }
+  return week;
+};
+
+// Funkcja do określenia koloru statusu Schuco
+const getSchucoStatusColor = (status: string): string => {
+  const lowerStatus = status.toLowerCase();
+  if (lowerStatus.includes('dostarcz')) return 'bg-green-100 text-green-700';
+  if (lowerStatus.includes('wysłan') || lowerStatus.includes('wyslan')) return 'bg-blue-100 text-blue-700';
+  if (lowerStatus.includes('otwart')) return 'bg-yellow-100 text-yellow-700';
+  return 'bg-slate-100 text-slate-600';
+};
 
 type ColumnId =
   | 'orderNumber'
@@ -121,6 +176,7 @@ export default function ZestawienieZlecenPage() {
   const debouncedColumnFilters = useDebounce(columnFilters, 300); // 300ms debounce for column filters
   const [editingCell, setEditingCell] = useState<{ orderId: number; field: 'valuePln' | 'valueEur' | 'deadline' | 'orderStatus' } | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const [showStatsModal, setShowStatsModal] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -258,12 +314,20 @@ export default function ZestawienieZlecenPage() {
   // Pobierz wszystkie zlecenia (w tym zarchiwizowane)
   const { data: activeOrders, isLoading: isLoadingActive } = useQuery({
     queryKey: ['orders', 'all-active'],
-    queryFn: () => ordersApi.getAll({ archived: 'false' }),
+    queryFn: async () => {
+      const response = await ordersApi.getAll({ archived: 'false' });
+      // API zwraca {data: [...]} zamiast samej tablicy
+      return (response as any)?.data || response;
+    },
   });
 
   const { data: archivedOrders, isLoading: isLoadingArchived } = useQuery({
     queryKey: ['orders', 'all-archived'],
-    queryFn: () => ordersApi.getAll({ archived: 'true' }),
+    queryFn: async () => {
+      const response = await ordersApi.getAll({ archived: 'true' });
+      // API zwraca {data: [...]} zamiast samej tablicy
+      return (response as any)?.data || response;
+    },
   });
 
   // Pobierz kurs EUR
@@ -278,8 +342,10 @@ export default function ZestawienieZlecenPage() {
 
   // Połącz wszystkie zlecenia
   const allOrders = useMemo(() => {
-    const active = activeOrders || [];
-    const archived = archivedOrders || [];
+    if (!activeOrders || !archivedOrders) return [];
+
+    const active = Array.isArray(activeOrders) ? activeOrders : [];
+    const archived = Array.isArray(archivedOrders) ? archivedOrders : [];
     return [...active, ...archived];
   }, [activeOrders, archivedOrders]);
 
@@ -313,8 +379,13 @@ export default function ZestawienieZlecenPage() {
       case 'valueEur':
         return order.valueEur || '';
       case 'orderStatus':
-        return order.status || '';
+        // Użyj statusu Schuco jeśli są powiązane zamówienia
+        const schucoStatusVal = aggregateSchucoStatus(order.schucoLinks);
+        return schucoStatusVal || order.status || '';
       case 'pvcDelivery':
+        // Użyj tygodnia dostawy Schuco jeśli są powiązane zamówienia
+        const schucoWeekVal = getEarliestSchucoDelivery(order.schucoLinks);
+        if (schucoWeekVal) return formatDeliveryWeek(schucoWeekVal);
         return order.pvcDeliveryDate ? formatDate(order.pvcDeliveryDate) : '';
       case 'deadline':
         return order.deadline ? formatDate(order.deadline) : '';
@@ -627,7 +698,7 @@ export default function ZestawienieZlecenPage() {
         // Pobierz wszystkie unikalne typy profili z okien
         if (order.windows && order.windows.length > 0) {
           const profileTypes = order.windows
-            .map((w: { reference?: string; profileType?: string; [key: string]: any }) => w.profileType)
+            .map((w) => w.profileType)
             .filter((type): type is string => !!type)
             .filter((type, index, self) => self.indexOf(type) === index);
           return profileTypes.join(', ');
@@ -644,8 +715,13 @@ export default function ZestawienieZlecenPage() {
       case 'valueEur':
         return order.valueEur ? formatCurrency(parseFloat(order.valueEur), 'EUR') : '';
       case 'orderStatus':
-        return order.status || '';
+        // Użyj statusu Schuco jeśli są powiązane zamówienia (eksport CSV)
+        const schucoStatusCsv = aggregateSchucoStatus(order.schucoLinks);
+        return schucoStatusCsv || order.status || '';
       case 'pvcDelivery':
+        // Użyj tygodnia dostawy Schuco jeśli są powiązane zamówienia (eksport CSV)
+        const schucoWeekCsv = getEarliestSchucoDelivery(order.schucoLinks);
+        if (schucoWeekCsv) return formatDeliveryWeek(schucoWeekCsv);
         return order.pvcDeliveryDate ? formatDate(order.pvcDeliveryDate) : '';
       case 'glassDeliveryDate':
         return order.glassDeliveryDate ? formatDate(order.glassDeliveryDate) : '';
@@ -681,9 +757,29 @@ export default function ZestawienieZlecenPage() {
         );
 
       case 'pvcDelivery':
+        // Wyświetl datę dostawy Schuco jeśli są powiązane zamówienia
+        const schucoDeliveryWeek = getEarliestSchucoDelivery(order.schucoLinks);
+        const hasSchucoLinks = order.schucoLinks && order.schucoLinks.length > 0;
+        const schucoCount = order.schucoLinks?.length || 0;
+
         return (
-          <td key={column.id} className={`px-4 py-3 text-muted-foreground ${alignClass}`}>
-            {order.pvcDeliveryDate ? formatDate(order.pvcDeliveryDate) : '-'}
+          <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
+            {hasSchucoLinks ? (
+              <div className="flex flex-col items-start gap-1">
+                <span className="text-sm font-medium text-slate-700">
+                  {formatDeliveryWeek(schucoDeliveryWeek)}
+                </span>
+                {schucoCount > 1 && (
+                  <span className="text-xs text-slate-400">
+                    ({schucoCount} zamówień)
+                  </span>
+                )}
+              </div>
+            ) : order.pvcDeliveryDate ? (
+              <span className="text-muted-foreground">{formatDate(order.pvcDeliveryDate)}</span>
+            ) : (
+              <span className="text-slate-400">-</span>
+            )}
           </td>
         );
 
@@ -845,7 +941,22 @@ export default function ZestawienieZlecenPage() {
         );
 
       case 'orderStatus':
-        // Edytowalne pole - Status zamówienia
+        // Wyświetl status Schuco jeśli są powiązane zamówienia
+        const schucoStatus = aggregateSchucoStatus(order.schucoLinks);
+        const hasSchucoStatus = schucoStatus !== '';
+
+        if (hasSchucoStatus) {
+          // Wyświetl status Schuco jako badge (bez możliwości edycji)
+          return (
+            <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
+              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getSchucoStatusColor(schucoStatus)}`}>
+                {schucoStatus}
+              </span>
+            </td>
+          );
+        }
+
+        // Edytowalne pole - Status zamówienia (gdy brak powiązań Schuco)
         if (isEditing && editingCell?.field === 'orderStatus') {
           return (
             <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
@@ -965,6 +1076,13 @@ export default function ZestawienieZlecenPage() {
               <Settings className="h-4 w-4 mr-2" />
               Kolumny
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowStatsModal(true)}
+            >
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Statystyki
+            </Button>
             <Button onClick={exportToCSV}>
               <Download className="h-4 w-4 mr-2" />
               Eksport CSV
@@ -1023,53 +1141,6 @@ export default function ZestawienieZlecenPage() {
           </Card>
         )}
 
-        {/* Statystyki */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Wszystkie zlecenia</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalOrders}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Suma okien</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalWindows}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Suma wartości (PLN)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency(stats.totalValuePln, 'PLN')}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Suma wartości (EUR)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency(stats.totalValueEur, 'EUR')}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Kurs: {eurRate} PLN
-              </p>
-            </CardContent>
-          </Card>
-        </div>
 
         {/* Tabela zleceń */}
         {isLoading ? (
@@ -1174,6 +1245,15 @@ export default function ZestawienieZlecenPage() {
         onOpenChange={(open) => {
           if (!open) setSelectedOrder(null);
         }}
+      />
+
+      {/* Modal ze statystykami */}
+      <OrdersStatsModal
+        open={showStatsModal}
+        onOpenChange={setShowStatsModal}
+        stats={stats}
+        allOrders={allOrders}
+        eurRate={eurRate}
       />
     </div>
   );
