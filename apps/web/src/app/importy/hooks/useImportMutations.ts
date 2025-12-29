@@ -15,6 +15,11 @@ interface FolderScanResult {
     orderNumber: string;
     requirementsCount: number;
     windowsCount: number;
+    existingDeliveryInfo?: {
+      deliveryId: number;
+      deliveryNumber: string | null;
+      deliveryDate: string;
+    };
   }>;
   existingDeliveries: Array<{
     id: number;
@@ -25,6 +30,7 @@ interface FolderScanResult {
 interface ImportFolderResult {
   summary: {
     successCount: number;
+    skippedCount: number;
     failCount: number;
     totalFiles: number;
   };
@@ -32,6 +38,14 @@ interface ImportFolderResult {
     deliveryNumber: string;
     created: boolean;
   };
+  archivedPath: string | null;
+  results: Array<{
+    filename: string;
+    success: boolean;
+    skipped?: boolean;
+    skipReason?: string;
+    orderNumber?: string;
+  }>;
 }
 
 /**
@@ -100,10 +114,18 @@ export function useImportActionMutations(callbacks?: {
   const queryClient = useQueryClient();
 
   const approveMutation = useMutation({
-    mutationFn: ({ id, action }: { id: number; action: 'overwrite' | 'add_new' }) =>
-      importsApi.approve(id, action),
+    mutationFn: ({
+      id,
+      action,
+      resolution,
+    }: {
+      id: number;
+      action: 'overwrite' | 'add_new';
+      resolution?: { type: 'keep_existing' | 'use_latest'; deleteOlder?: boolean };
+    }) => importsApi.approve(id, action, resolution),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['imports'] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
       toast({
         title: 'Import zatwierdzony',
         description: 'Plik zostal pomyslnie zaimportowany',
@@ -173,6 +195,7 @@ export function useFolderImportMutations(callbacks?: {
   onScanSuccess?: (data: FolderScanResult) => void;
   onScanError?: () => void;
   onImportSuccess?: () => void;
+  onImportConflict?: (conflictInfo: { folderPath: string; lockedBy: string; lockedAt: Date }) => void;
 }) {
   const queryClient = useQueryClient();
 
@@ -208,21 +231,61 @@ export function useFolderImportMutations(callbacks?: {
   const importFolderMutation = useMutation({
     mutationFn: ({ path, deliveryNumber }: { path: string; deliveryNumber: 'I' | 'II' | 'III' }) =>
       importsApi.importFolder(path, deliveryNumber),
-    onSuccess: (data: ImportFolderResult) => {
+    onSuccess: (data: ImportFolderResult, variables) => {
       queryClient.invalidateQueries({ queryKey: ['imports'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['deliveries'] });
+      // Refresh folder list after import (folder was moved to archive)
+      queryClient.invalidateQueries({ queryKey: ['available-folders'] });
 
-      const { summary, delivery } = data;
+      const { summary, delivery, results } = data;
+
+      // Build description with skipped info
+      let description = `Zaimportowano ${summary.successCount}/${summary.totalFiles} plikow do dostawy ${delivery.deliveryNumber}${delivery.created ? ' (nowa)' : ''}`;
+
+      if (summary.skippedCount > 0) {
+        description += `. Pominieto ${summary.skippedCount} (duplikaty)`;
+        // Show details of skipped orders
+        const skippedOrders = results.filter((r) => r.skipped);
+        if (skippedOrders.length > 0) {
+          const skippedDetails = skippedOrders
+            .map((r) => r.skipReason || `${r.orderNumber} - juz przypisane`)
+            .join('\n');
+          toast({
+            title: 'Pominięte zamówienia',
+            description: skippedDetails,
+            variant: 'warning',
+          });
+        }
+      }
+
       toast({
         title: 'Import zakonczony',
-        description: `Zaimportowano ${summary.successCount}/${summary.totalFiles} plikow do dostawy ${delivery.deliveryNumber}${delivery.created ? ' (nowa)' : ''}`,
-        variant: summary.failCount > 0 ? 'destructive' : 'success',
+        description,
+        variant: summary.failCount > 0 ? 'destructive' : summary.skippedCount > 0 ? 'info' : 'success',
       });
 
       callbacks?.onImportSuccess?.();
     },
-    onError: (error: unknown) => {
+    onError: (error: unknown, variables) => {
+      // Check if this is a conflict error (409)
+      if (error && typeof error === 'object' && 'status' in error && error.status === 409) {
+        // Extract conflict details from error.data
+        const errorData = 'data' in error ? (error.data as Record<string, unknown>) : {};
+        const details = errorData.details as { userName?: string; lockedAt?: string } | undefined;
+
+        if (details?.userName && details?.lockedAt) {
+          // Parse the conflict info and call the callback
+          callbacks?.onImportConflict?.({
+            folderPath: (errorData.folderPath as string) || variables.path || 'Unknown folder',
+            lockedBy: details.userName,
+            lockedAt: new Date(details.lockedAt),
+          });
+          return; // Don't show toast - modal will handle UI
+        }
+      }
+
+      // For non-conflict errors, show toast
       const message = error instanceof Error ? error.message : 'Nie udalo sie zaimportowac plikow';
       toast({
         title: 'Blad importu',

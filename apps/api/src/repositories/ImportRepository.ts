@@ -186,10 +186,90 @@ export class ImportRepository {
     return setting?.value || null;
   }
 
+  // Add order to delivery if not already linked (for File Watcher imports)
+  async addOrderToDeliveryIfNotExists(deliveryId: number, orderId: number): Promise<void> {
+    const delivery = await this.prisma.delivery.findUnique({
+      where: { id: deliveryId },
+    });
+
+    if (!delivery) {
+      console.warn(`   Dostawa ID ${deliveryId} nie istnieje, pominieto dodanie do dostawy`);
+      return;
+    }
+
+    const existingDeliveryOrder = await this.prisma.deliveryOrder.findUnique({
+      where: {
+        deliveryId_orderId: {
+          deliveryId,
+          orderId,
+        },
+      },
+    });
+
+    if (!existingDeliveryOrder) {
+      const maxPosition = await this.getMaxDeliveryOrderPosition(deliveryId);
+
+      await this.addOrderToDelivery(deliveryId, orderId, maxPosition + 1);
+
+      console.log(`   Dodano zlecenie do dostawy ID: ${deliveryId}`);
+    }
+  }
+
   // Transaction wrapper for complex operations
   async executeTransaction<T>(
     fn: (tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>) => Promise<T>
   ): Promise<T> {
-    return this.prisma.$transaction(fn);
+    return this.prisma.$transaction(fn, {
+      timeout: 60000, // 60 seconds timeout for large imports
+      maxWait: 10000, // Max 10s waiting for transaction slot
+    });
+  }
+
+  /**
+   * Find if order is already assigned to any delivery (different from excludeDeliveryId)
+   * Returns delivery info if found, null otherwise
+   */
+  async findOrderInOtherDelivery(orderId: number, excludeDeliveryId?: number) {
+    const where: Record<string, unknown> = { orderId };
+    if (excludeDeliveryId) {
+      where.deliveryId = { not: excludeDeliveryId };
+    }
+
+    return this.prisma.deliveryOrder.findFirst({
+      where,
+      include: {
+        delivery: {
+          select: {
+            id: true,
+            deliveryDate: true,
+            deliveryNumber: true,
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Find order by order number (for duplicate check)
+   */
+  async findOrderByOrderNumber(orderNumber: string) {
+    return this.prisma.order.findUnique({
+      where: { orderNumber },
+      select: {
+        id: true,
+        orderNumber: true,
+        deliveryOrders: {
+          include: {
+            delivery: {
+              select: {
+                id: true,
+                deliveryDate: true,
+                deliveryNumber: true,
+              },
+            },
+          },
+        },
+      },
+    });
   }
 }

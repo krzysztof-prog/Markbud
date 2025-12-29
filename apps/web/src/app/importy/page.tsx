@@ -20,6 +20,7 @@ import {
   useImportActionMutations,
   useFolderImportMutations,
 } from './hooks/useImportMutations';
+import { ImportConflictModal } from '@/components/imports/ImportConflictModal';
 
 // Types for folder scan result
 interface FolderScanResult {
@@ -31,6 +32,11 @@ interface FolderScanResult {
     orderNumber: string;
     requirementsCount: number;
     windowsCount: number;
+    existingDeliveryInfo?: {
+      deliveryId: number;
+      deliveryNumber: string | null;
+      deliveryDate: string;
+    };
   }>;
   existingDeliveries: Array<{
     id: number;
@@ -47,8 +53,16 @@ export default function ImportyPage() {
   const [selectedDeliveryNumber, setSelectedDeliveryNumber] = useState<'I' | 'II' | 'III' | null>(null);
   const [folderScanResult, setFolderScanResult] = useState<FolderScanResult | null>(null);
 
+  // Conflict modal state
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [conflictInfo, setConflictInfo] = useState<{
+    folderPath: string;
+    lockedBy: string;
+    lockedAt: Date;
+  } | null>(null);
+
   // Queries
-  const { data: imports, isLoading } = useQuery({
+  const { data: imports, isLoading, error } = useQuery({
     queryKey: ['imports'],
     queryFn: () => importsApi.getAll(),
   });
@@ -93,9 +107,13 @@ export default function ImportyPage() {
       setFolderScanResult(null);
       setSelectedDeliveryNumber(null);
     },
+    onImportConflict: (conflict) => {
+      setConflictInfo(conflict);
+      setConflictModalOpen(true);
+    },
   });
 
-  // Filter imports by type
+  // Filter imports by type - with error handling
   const csvImports = imports?.filter((i: Import) => i.fileType === 'uzyte_bele') || [];
   const pdfImports = imports?.filter((i: Import) => i.fileType === 'ceny_pdf') || [];
 
@@ -179,6 +197,56 @@ export default function ImportyPage() {
     }
   };
 
+  const handleCancelScan = () => {
+    setFolderPath('');
+    setFolderScanResult(null);
+    setSelectedDeliveryNumber(null);
+  };
+
+  const handleRetryImport = () => {
+    setConflictModalOpen(false);
+    // Retry the import with same parameters
+    if (folderPath && selectedDeliveryNumber) {
+      importFolderMutation.mutate({
+        path: folderPath,
+        deliveryNumber: selectedDeliveryNumber,
+      });
+    }
+  };
+
+  const handleCloseConflictModal = () => {
+    setConflictModalOpen(false);
+    setConflictInfo(null);
+  };
+
+  // Show error state if query failed
+  if (error) {
+    return (
+      <div className="flex flex-col h-full">
+        <Header title="Importy plikow" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center max-w-md">
+            <div className="text-red-600 mb-4">
+              <svg className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Błąd wczytywania importów</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              {(error as Error)?.message || 'Nie udało się pobrać listy importów'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Odśwież stronę
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
       <Header title="Importy plikow" />
@@ -194,6 +262,7 @@ export default function ImportyPage() {
           onSelectDeliveryNumber={setSelectedDeliveryNumber}
           onScanFolder={(path) => scanFolderMutation.mutate(path)}
           onImportFolder={handleImportFolder}
+          onCancelScan={handleCancelScan}
           isScanPending={scanFolderMutation.isPending}
           isImportPending={importFolderMutation.isPending}
         />
@@ -235,7 +304,9 @@ export default function ImportyPage() {
             preview={preview || null}
             isLoading={previewLoading}
             isPending={approveMutation.isPending}
-            onApprove={() => approveMutation.mutate({ id: previewId, action: 'add_new' })}
+            onApprove={(resolution) =>
+              approveMutation.mutate({ id: previewId, action: 'add_new', resolution })
+            }
             onClose={() => setPreviewId(null)}
           />
         )}
@@ -249,6 +320,14 @@ export default function ImportyPage() {
           isDeletePending={deleteMutation.isPending}
         />
       </div>
+
+      {/* Conflict Modal */}
+      <ImportConflictModal
+        isOpen={conflictModalOpen}
+        onClose={handleCloseConflictModal}
+        onRetry={handleRetryImport}
+        conflictInfo={conflictInfo}
+      />
     </div>
   );
 }
