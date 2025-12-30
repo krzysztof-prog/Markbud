@@ -23,7 +23,7 @@ import { formatDate, cn } from '@/lib/utils';
 import { OrderDetailModal } from '@/components/orders/order-detail-modal';
 import { WindowStatsDialog } from '@/components/window-stats-dialog';
 import { useFormValidation } from '@/hooks/useFormValidation';
-import type { ActiveDragItem, Delivery } from '@/types/delivery';
+import type { ActiveDragItem, Delivery, DeliveryCalendarData } from '@/types/delivery';
 import type { Holiday, WorkingDay } from '@/types/settings';
 import type { Order } from '@/types/order';
 import {
@@ -250,52 +250,17 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
     return months;
   }, [startOfWeek, endDate]); // Tylko gdy się zmienią daty
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['deliveries-calendar-continuous', monthsToFetch],
+  // Batch query - combines deliveries, working days, and holidays in a single API call
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['deliveries-calendar-batch', monthsToFetch],
     queryFn: async () => {
-      // Pobierz dane dla wszystkich miesięcy i połącz
-      const results = await Promise.all(
-        monthsToFetch.map(({ month, year }) => deliveriesApi.getCalendar(month, year))
-      );
-
-      // Połącz wszystkie dostawy
-      const allDeliveries = results.flatMap(r => r.deliveries || []);
-      const allHolidays = results.flatMap(r => r.holidays || []);
-
-      return {
-        deliveries: allDeliveries,
-        holidays: allHolidays,
-        unassignedOrders: results[0]?.unassignedOrders || [],
-      };
-    },
-  });
-
-  const { data: workingDaysData } = useQuery({
-    queryKey: ['working-days-continuous', monthsToFetch],
-    queryFn: async () => {
-      const results = await Promise.all(
-        monthsToFetch.map(({ month, year }) => workingDaysApi.getAll({ month, year }))
-      );
-      return results.flat();
-    },
-  });
-
-  // Pobierz święta dla wszystkich lat w zakresie
-  const yearsToFetch = Array.from(new Set(monthsToFetch.map(m => m.year)));
-
-  const { data: holidaysData } = useQuery({
-    queryKey: ['holidays', yearsToFetch],
-    queryFn: async () => {
-      const results = await Promise.all(
-        yearsToFetch.map(year => workingDaysApi.getHolidays(year))
-      );
-      return results.flat();
+      return deliveriesApi.getCalendarBatch(monthsToFetch);
     },
   });
 
   const deliveries = data?.deliveries || [];
   const unassignedOrders = data?.unassignedOrders || [];
-  const workingDays = workingDaysData || [];
+  const workingDays = data?.workingDays || [];
   const holidays = data?.holidays || [];
 
   // Mutations
@@ -305,14 +270,14 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
 
     // Optimistic update - show new delivery immediately
     onMutate: async (newDelivery) => {
-      await queryClient.cancelQueries({ queryKey: ['deliveries-calendar-continuous'] });
+      await queryClient.cancelQueries({ queryKey: ['deliveries-calendar-batch'] });
 
-      const previousData = queryClient.getQueryData(['deliveries-calendar-continuous']);
+      const previousData = queryClient.getQueryData(['deliveries-calendar-batch']);
 
       // Generate temporary ID for optimistic delivery
       const tempId = `temp-${Date.now()}`;
 
-      queryClient.setQueryData(['deliveries-calendar-continuous'], (old: any) => {
+      queryClient.setQueryData(['deliveries-calendar-batch'], (old: DeliveryCalendarData | undefined) => {
         if (!old) return old;
 
         return {
@@ -336,7 +301,7 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
     },
 
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-continuous'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
       setShowNewDeliveryDialog(false);
       setNewDeliveryDate('');
       setNewDeliveryNotes('');
@@ -345,20 +310,20 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
 
     onError: (error, _variables, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(['deliveries-calendar-continuous'], context.previousData);
+        queryClient.setQueryData(['deliveries-calendar-batch'], context.previousData);
       }
       showErrorToast('Błąd tworzenia dostawy', getErrorMessage(error));
     },
 
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-continuous'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
     },
   });
 
   const deleteDeliveryMutation = useMutation({
     mutationFn: (id: number) => deliveriesApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-continuous'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
       setSelectedDelivery(null);
       setShowDeleteConfirm(null);
       showSuccessToast('Dostawa usunięta', 'Pomyślnie usunięto dostawę');
@@ -371,8 +336,24 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
   const removeOrderFromDeliveryMutation = useMutation({
     mutationFn: ({ deliveryId, orderId }: { deliveryId: number; orderId: number }) =>
       deliveriesApi.removeOrder(deliveryId, orderId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-continuous'] });
+    onSuccess: async (_result, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+
+      // Odśwież selectedDelivery z nowych danych
+      if (selectedDelivery) {
+        const updatedData = queryClient.getQueryData<{
+          deliveries: Delivery[];
+          unassignedOrders: any[];
+        }>(['deliveries-calendar-batch', monthsToFetch]);
+
+        if (updatedData) {
+          const updatedDelivery = updatedData.deliveries.find(d => d.id === variables.deliveryId);
+          if (updatedDelivery) {
+            setSelectedDelivery(updatedDelivery);
+          }
+        }
+      }
+
       showSuccessToast('Zlecenie usunięte', 'Zlecenie zostało usunięte z dostawy');
     },
     onError: (error) => {
@@ -385,21 +366,21 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
       deliveriesApi.moveOrder(sourceDeliveryId, orderId, targetDeliveryId),
 
     onMutate: async ({ sourceDeliveryId, targetDeliveryId, orderId }) => {
-      await queryClient.cancelQueries({ queryKey: ['deliveries-calendar-continuous'] });
-      const previousData = queryClient.getQueryData(['deliveries-calendar-continuous']);
+      await queryClient.cancelQueries({ queryKey: ['deliveries-calendar-batch'] });
+      const previousData = queryClient.getQueryData(['deliveries-calendar-batch']);
 
       // Optimistically move order between deliveries
-      queryClient.setQueryData(['deliveries-calendar-continuous'], (old: any) => {
+      queryClient.setQueryData(['deliveries-calendar-batch'], (old: DeliveryCalendarData | undefined) => {
         if (!old) return old;
 
         return {
           ...old,
-          deliveries: old.deliveries?.map((delivery: any) => {
+          deliveries: old.deliveries?.map((delivery) => {
             // Remove from source
             if (delivery.id === sourceDeliveryId) {
               return {
                 ...delivery,
-                orders: (delivery.orders || []).filter((o: any) => o.id !== orderId),
+                orders: (delivery.orders || []).filter((o) => o.id !== orderId),
               };
             }
             // Add to target
@@ -408,7 +389,7 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
                 ...delivery,
                 orders: [
                   ...(delivery.orders || []),
-                  { id: orderId, _optimistic: true },
+                  { id: orderId, _optimistic: true } as unknown as Order,
                 ],
               };
             }
@@ -421,19 +402,19 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
     },
 
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-continuous'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
       showSuccessToast('Zlecenie przeniesione', 'Zlecenie zostało przeniesione między dostawami');
     },
 
     onError: (error, _variables, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(['deliveries-calendar-continuous'], context.previousData);
+        queryClient.setQueryData(['deliveries-calendar-batch'], context.previousData);
       }
       showErrorToast('Błąd przenoszenia zlecenia', getErrorMessage(error));
     },
 
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-continuous'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
     },
   });
 
@@ -444,18 +425,18 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
     // Optimistic update - update UI immediately before server responds
     onMutate: async ({ deliveryId, orderId }) => {
       // Cancel any outgoing refetches so they don't overwrite our optimistic update
-      await queryClient.cancelQueries({ queryKey: ['deliveries-calendar-continuous'] });
+      await queryClient.cancelQueries({ queryKey: ['deliveries-calendar-batch'] });
 
       // Snapshot the previous value
-      const previousData = queryClient.getQueryData(['deliveries-calendar-continuous']);
+      const previousData = queryClient.getQueryData(['deliveries-calendar-batch']);
 
       // Optimistically update the cache
-      queryClient.setQueryData(['deliveries-calendar-continuous'], (old: any) => {
+      queryClient.setQueryData(['deliveries-calendar-batch'], (old: DeliveryCalendarData | undefined) => {
         if (!old) return old;
 
         return {
           ...old,
-          deliveries: old.deliveries?.map((delivery: any) =>
+          deliveries: old.deliveries?.map((delivery) =>
             delivery.id === deliveryId
               ? {
                   ...delivery,
@@ -464,7 +445,7 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
                     {
                       id: orderId,
                       _optimistic: true, // Mark as optimistic
-                    },
+                    } as unknown as Order,
                   ],
                 }
               : delivery
@@ -477,7 +458,7 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
     },
 
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-continuous'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
       setOrderToAssign(null);
       showSuccessToast('Zlecenie dodane', 'Zlecenie zostało dodane do dostawy');
     },
@@ -485,14 +466,14 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
     onError: (error, _variables, context) => {
       // Rollback to the previous state on error
       if (context?.previousData) {
-        queryClient.setQueryData(['deliveries-calendar-continuous'], context.previousData);
+        queryClient.setQueryData(['deliveries-calendar-batch'], context.previousData);
       }
       showErrorToast('Błąd dodawania zlecenia', getErrorMessage(error));
     },
 
     // Always refetch after error or success to ensure we have the latest data
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-continuous'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
     },
   });
 
@@ -504,14 +485,14 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
         quantity: data.quantity,
       }),
     onSuccess: async (_result, variables) => {
-      await queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-continuous'] });
+      await queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
 
       // Odśwież selectedDelivery z nowych danych
       if (selectedDelivery) {
         const updatedData = queryClient.getQueryData<{
           deliveries: Delivery[];
           unassignedOrders: any[];
-        }>(['deliveries-calendar-continuous', monthsToFetch]);
+        }>(['deliveries-calendar-batch', monthsToFetch]);
 
         if (updatedData) {
           const updatedDelivery = updatedData.deliveries.find(d => d.id === variables.deliveryId);
@@ -534,14 +515,14 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
     mutationFn: ({ deliveryId, itemId }: { deliveryId: number; itemId: number }) =>
       deliveriesApi.deleteItem(deliveryId, itemId),
     onSuccess: async (_result, variables) => {
-      await queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-continuous'] });
+      await queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
 
       // Odśwież selectedDelivery z nowych danych
       if (selectedDelivery) {
         const updatedData = queryClient.getQueryData<{
           deliveries: Delivery[];
           unassignedOrders: any[];
-        }>(['deliveries-calendar-continuous', monthsToFetch]);
+        }>(['deliveries-calendar-batch', monthsToFetch]);
 
         if (updatedData) {
           const updatedDelivery = updatedData.deliveries.find(d => d.id === variables.deliveryId);
@@ -562,7 +543,7 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
     mutationFn: ({ deliveryId, productionDate }: { deliveryId: number; productionDate: string }) =>
       deliveriesApi.completeOrders(deliveryId, productionDate),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-continuous'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
       setShowCompleteDialog(false);
       setProductionDate('');
       setSelectedDelivery(null);
@@ -663,12 +644,23 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
       return;
     }
 
-    const activeData = active.data.current as any;
-    const overData = over.data.current as any;
+    interface DragDropData {
+      orderId: number;
+      deliveryId?: number;
+      isUnassigned?: boolean;
+    }
 
-    const orderId = activeData.orderId;
-    const sourceDeliveryId = activeData.deliveryId;
+    const activeData = active.data.current as DragDropData | undefined;
+    const overData = over.data.current as DragDropData | undefined;
+
+    const orderId = activeData?.orderId;
+    const sourceDeliveryId = activeData?.deliveryId;
     const targetDeliveryId = overData?.deliveryId;
+
+    if (!orderId) {
+      setActiveDragItem(null);
+      return;
+    }
 
     // Sprawdź czy przeciągamy wiele zleceń
     const ordersToMove = selectedOrderIds.has(orderId)
@@ -969,6 +961,23 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
             <CardContent>
               {isLoading ? (
                 <TableSkeleton rows={10} columns={7} />
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="text-red-600 mb-2">
+                    <X className="h-12 w-12 mx-auto" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-1">Błąd wczytywania danych</h3>
+                  <p className="text-sm text-slate-500 max-w-md">
+                    {getErrorMessage(error)}
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] })}
+                  >
+                    Spróbuj ponownie
+                  </Button>
+                </div>
               ) : (
                 <div className="space-y-4">
                   {/* Dla trybu week - pokaż 4 tygodnie z podsumowaniami */}
