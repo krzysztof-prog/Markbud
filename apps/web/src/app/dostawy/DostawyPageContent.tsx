@@ -1901,8 +1901,8 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
         open={!!selectedOrderId}
         onOpenChange={(open) => {
           if (!open) {
-            // Clear the order query param when closing modal
-            router.push('/dostawy');
+            setSelectedOrderId(null);
+            setSelectedOrderNumber(null);
           }
         }}
       />

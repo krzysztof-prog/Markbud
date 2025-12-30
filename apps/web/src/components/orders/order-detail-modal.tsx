@@ -11,8 +11,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ordersApi } from '@/lib/api';
-import { Package, Layers, Grid3X3, Calendar, FileText, FileDown, ChevronDown, ChevronUp } from 'lucide-react';
-import type { Order, Window } from '@/types';
+import { toast } from '@/hooks/useToast';
+import { Package, Layers, Grid3X3, Calendar, FileText, FileDown, ChevronDown, ChevronUp, Truck } from 'lucide-react';
+import type { Order, Window, SchucoDeliveryLink } from '@/types';
 import type { Requirement } from '@/types';
 
 // Extended order with additional fields from PDF/imports
@@ -32,6 +33,7 @@ interface OrderDetail extends Order {
   invoiceNumber?: string;
   notes?: string;
   requirements?: Requirement[];
+  schucoLinks?: SchucoDeliveryLink[];
 }
 
 interface OrderDetailModalProps {
@@ -56,6 +58,7 @@ export function OrderDetailModal({
   const [hasPdf, setHasPdf] = React.useState(false);
   const [windowsExpanded, setWindowsExpanded] = React.useState(false);
   const [requirementsExpanded, setRequirementsExpanded] = React.useState(false);
+  const [schucoExpanded, setSchucoExpanded] = React.useState(true); // Domyślnie rozwinięte
 
   // Sprawdź czy istnieje PDF dla tego zlecenia w bazie danych
   React.useEffect(() => {
@@ -66,10 +69,27 @@ export function OrderDetailModal({
     }
   }, [orderId, open]);
 
-  const handleOpenPdf = () => {
-    if (orderId) {
-      // Otwórz PDF przez endpoint API
-      window.open(`http://localhost:4000/api/orders/${orderId}/pdf`, '_blank');
+  const handleOpenPdf = async () => {
+    if (!orderId) return;
+
+    try {
+      // Pobierz PDF przez fetchBlob (z tokenem autoryzacyjnym)
+      const { fetchBlob } = await import('@/lib/api-client');
+      const blob = await fetchBlob(`/api/orders/${orderId}/pdf`);
+
+      // Utwórz URL dla blob i otwórz w nowej karcie
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+
+      // Zwolnij URL po otwarciu (po 1 sekundzie dla pewności)
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      console.error('Błąd podczas otwierania PDF:', error);
+      toast({
+        title: 'Błąd',
+        description: error instanceof Error ? error.message : 'Nie udało się otworzyć pliku PDF',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -77,7 +97,7 @@ export function OrderDetailModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between gap-2">
+          <DialogTitle className="flex items-center justify-between gap-2 pr-12">
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-2">
                 <Package className="h-5 w-5" />
@@ -94,14 +114,13 @@ export function OrderDetailModal({
               size="sm"
               onClick={handleOpenPdf}
               disabled={!hasPdf}
-              className={`ml-auto mr-8 ${
-                hasPdf
+              className={hasPdf
                   ? 'border-green-500 text-green-700 hover:bg-green-50'
-                  : 'border-red-500 text-red-700 hover:bg-red-50 opacity-60'
-              }`}
+                  : 'border-slate-300 text-slate-500 hover:bg-slate-50 opacity-60'
+              }
             >
               <FileDown className="h-4 w-4 mr-2" />
-              {hasPdf ? 'Otwórz PDF z ceną' : 'Brak ceny'}
+              {hasPdf ? 'Otwórz PDF' : 'Brak PDF'}
             </Button>
           </DialogTitle>
         </DialogHeader>
@@ -187,13 +206,13 @@ export function OrderDetailModal({
                   {order.valuePln && (
                     <div>
                       <span className="text-slate-500">Wartość PLN:</span>{' '}
-                      <span className="font-medium">{parseFloat(order.valuePln).toFixed(2)} zł</span>
+                      <span className="font-medium">{parseFloat(String(order.valuePln)).toFixed(2)} zł</span>
                     </div>
                   )}
                   {order.valueEur && (
                     <div>
                       <span className="text-slate-500">Wartość EUR:</span>{' '}
-                      <span className="font-medium">{parseFloat(order.valueEur).toFixed(2)} €</span>
+                      <span className="font-medium">{parseFloat(String(order.valueEur)).toFixed(2)} €</span>
                     </div>
                   )}
                   {order.invoiceNumber && (
@@ -244,6 +263,75 @@ export function OrderDetailModal({
                 return null;
               })()}
             </div>
+
+            {/* Zamówienia Schuco - Collapsible */}
+            {order.schucoLinks && order.schucoLinks.length > 0 && (
+              <div className="border rounded-lg border-orange-200 bg-orange-50/30">
+                <button
+                  onClick={() => setSchucoExpanded(!schucoExpanded)}
+                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-orange-50 transition-colors rounded-t-lg"
+                >
+                  <h4 className="font-medium flex items-center gap-2 text-orange-900">
+                    <Truck className="h-4 w-4" />
+                    Zamówienia Schuco ({order.schucoLinks.length})
+                  </h4>
+                  {schucoExpanded ? (
+                    <ChevronUp className="h-5 w-5 text-orange-500" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-orange-500" />
+                  )}
+                </button>
+                {schucoExpanded && (
+                  <div className="border-t border-orange-200">
+                    <div className="max-h-[300px] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-orange-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Nr zamówienia</th>
+                            <th className="px-3 py-2 text-left">Nazwa</th>
+                            <th className="px-3 py-2 text-center">Status</th>
+                            <th className="px-3 py-2 text-center">Tydzień dostawy</th>
+                            <th className="px-3 py-2 text-right">Wartość</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {order.schucoLinks.map((link, index) => {
+                            const delivery = link.schucoDelivery;
+                            const statusColor = delivery.shippingStatus.toLowerCase().includes('dostarcz')
+                              ? 'bg-green-100 text-green-700'
+                              : delivery.shippingStatus.toLowerCase().includes('wysłan') || delivery.shippingStatus.toLowerCase().includes('wyslan')
+                              ? 'bg-blue-100 text-blue-700'
+                              : delivery.shippingStatus.toLowerCase().includes('otwart')
+                              ? 'bg-yellow-100 text-yellow-700'
+                              : 'bg-slate-100 text-slate-600';
+
+                            return (
+                              <tr key={link.id} className={`border-t border-orange-100 hover:bg-orange-50/50 ${index % 2 === 0 ? 'bg-white' : 'bg-orange-50/20'}`}>
+                                <td className="px-3 py-2 font-mono font-medium">{delivery.orderNumber}</td>
+                                <td className="px-3 py-2 text-slate-600 max-w-[200px] truncate" title={delivery.orderName || ''}>
+                                  {delivery.orderName || '-'}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
+                                    {delivery.shippingStatus}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-center font-mono">
+                                  {delivery.deliveryWeek || '-'}
+                                </td>
+                                <td className="px-3 py-2 text-right font-mono">
+                                  {delivery.totalAmount ? `${delivery.totalAmount} €` : '-'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Lista okien - Collapsible */}
             {order.windows && order.windows.length > 0 && (
