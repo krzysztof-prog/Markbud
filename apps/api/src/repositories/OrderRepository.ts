@@ -3,6 +3,7 @@
  */
 
 import { PrismaClient, Prisma } from '@prisma/client';
+import { PaginationParams, PaginatedResponse } from '../validators/common';
 
 export interface OrderFilters {
   status?: string;
@@ -13,7 +14,7 @@ export interface OrderFilters {
 export class OrderRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async findAll(filters: OrderFilters = {}) {
+  async findAll(filters: OrderFilters = {}, pagination?: PaginationParams): Promise<PaginatedResponse<any>> {
     const where: Prisma.OrderWhereInput = {};
 
     if (filters.status) {
@@ -34,7 +35,11 @@ export class OrderRepository {
       };
     }
 
-    return this.prisma.order.findMany({
+    // Get total count for pagination
+    const total = await this.prisma.order.count({ where });
+
+    // Get paginated data
+    const rawData = await this.prisma.order.findMany({
       where,
       select: {
         id: true,
@@ -63,12 +68,78 @@ export class OrderRepository {
             reference: true,
           },
         },
+        glassOrderItems: {
+          select: {
+            glassOrder: {
+              select: {
+                expectedDeliveryDate: true,
+                actualDeliveryDate: true,
+              },
+            },
+          },
+          take: 1, // Only need first one for delivery date
+        },
+        deliveryDate: true,
+        schucoLinks: {
+          select: {
+            id: true,
+            linkedAt: true,
+            linkedBy: true,
+            schucoDelivery: {
+              select: {
+                id: true,
+                orderNumber: true,
+                shippingStatus: true,
+                deliveryWeek: true,
+                totalAmount: true,
+                isWarehouseItem: true,
+              },
+            },
+          },
+        },
+        deliveryOrders: {
+          select: {
+            id: true,
+            deliveryId: true,
+            delivery: {
+              select: {
+                id: true,
+                deliveryDate: true,
+                deliveryNumber: true,
+                status: true,
+              },
+            },
+          },
+        },
         _count: {
           select: { windows: true, requirements: true },
         },
       },
       orderBy: { createdAt: 'desc' },
+      skip: pagination?.skip ?? 0,
+      take: pagination?.take ?? 50,
     });
+
+    // Populate glassDeliveryDate from related glass order if not set
+    const data = rawData.map(order => {
+      const glassDeliveryDate = order.glassDeliveryDate ||
+        (order.glassOrderItems?.[0]?.glassOrder?.expectedDeliveryDate ?? null);
+
+      // Remove glassOrderItems from response (internal use only)
+      const { glassOrderItems, ...orderData } = order as any;
+
+      return {
+        ...orderData,
+        glassDeliveryDate,
+      };
+    });
+
+    return {
+      data,
+      total,
+      skip: pagination?.skip ?? 0,
+      take: pagination?.take ?? 50,
+    };
   }
 
   async findById(id: number) {
@@ -133,6 +204,26 @@ export class OrderRepository {
         },
         orderNotes: {
           select: { id: true, content: true, createdAt: true },
+        },
+        schucoLinks: {
+          select: {
+            id: true,
+            linkedAt: true,
+            linkedBy: true,
+            schucoDelivery: {
+              select: {
+                id: true,
+                orderNumber: true,
+                orderName: true,
+                shippingStatus: true,
+                deliveryWeek: true,
+                totalAmount: true,
+                isWarehouseItem: true,
+                orderDateParsed: true,
+              },
+            },
+          },
+          orderBy: { linkedAt: 'desc' },
         },
       },
     });
@@ -204,6 +295,24 @@ export class OrderRepository {
       where: { id },
       data,
     });
+  }
+
+  async getOrderDeliveries(orderId: number) {
+    const deliveryOrders = await this.prisma.deliveryOrder.findMany({
+      where: { orderId },
+      include: {
+        delivery: {
+          select: {
+            id: true,
+            status: true,
+            deliveryDate: true,
+            deliveryNumber: true,
+          },
+        },
+      },
+    });
+
+    return deliveryOrders.map(d => d.delivery);
   }
 
   async delete(id: number): Promise<void> {

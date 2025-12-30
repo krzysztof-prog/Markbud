@@ -6,7 +6,7 @@ import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ordersApi, settingsApi } from '@/lib/api';
+import { ordersApi, settingsApi, currencyConfigApi } from '@/lib/api';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { useDebounce } from '@/hooks/useDebounce';
 import type { Order, SchucoDeliveryLink } from '@/types';
@@ -24,6 +24,12 @@ import {
   X,
   Pencil,
 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { OrderDetailModal } from '@/components/orders/order-detail-modal';
 import { OrdersStatsModal } from '@/components/orders/orders-stats-modal';
 
@@ -37,6 +43,19 @@ interface OrderWindow {
 // Count interface for aggregated data
 interface OrderCount {
   windows?: number;
+}
+
+// Delivery order interface
+interface DeliveryOrderInfo {
+  id?: number;
+  deliveryId: number;
+  position: number;
+  delivery?: {
+    id?: number;
+    deliveryDate?: string;
+    deliveryNumber?: string;
+    status?: string;
+  };
 }
 
 // Extended order type with additional properties from PDF import
@@ -56,11 +75,13 @@ interface ExtendedOrder extends Order {
   orderStatus?: string;
   pvcDelivery?: string;
   pvcDeliveryDate?: string;
+  deliveryDate?: string;
   deadline?: string;
   archived?: boolean;
   windows?: OrderWindow[];
   _count?: OrderCount;
   schucoLinks?: SchucoDeliveryLink[];
+  deliveryOrders?: DeliveryOrderInfo[];
 }
 
 // Funkcja pomocnicza do agregacji statusu Schuco (zwraca "najgorszy" status)
@@ -101,6 +122,30 @@ const formatDeliveryWeek = (week: string | null): string => {
     return `Tyg. ${parseInt(match[1])}/${match[2]}`;
   }
   return week;
+};
+
+// Funkcja do formatowania daty bez roku (DD.MM)
+const formatDateShort = (dateString: string | null | undefined): string => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${day}.${month}`;
+};
+
+// Funkcja pomocnicza do pobrania najwcześniejszej daty dostawy Akrobud
+const getAkrobudDeliveryDate = (deliveryOrders: DeliveryOrderInfo[] | undefined): string | null => {
+  if (!deliveryOrders || deliveryOrders.length === 0) return null;
+
+  // Filtruj tylko te z datą dostawy
+  const withDelivery = deliveryOrders
+    .filter(d => d.delivery?.deliveryDate)
+    .map(d => d.delivery!.deliveryDate as string);
+
+  if (withDelivery.length === 0) return null;
+
+  // Sortuj i zwróć najwcześniejszą
+  return withDelivery.sort()[0];
 };
 
 // Funkcja do określenia koloru statusu Schuco
@@ -372,12 +417,12 @@ export default function ZestawienieZlecenPage() {
         if (ordered === 0) return '';
         if (delivered === ordered) return 'Dostarczono';
         if (delivered > 0) return `${delivered}/${ordered}`;
-        if (order.glassDeliveryDate) return formatDate(order.glassDeliveryDate);
+        if (order.glassDeliveryDate) return formatDateShort(order.glassDeliveryDate);
         return '-';
       case 'valuePln':
-        return order.valuePln || '';
+        return order.valuePln != null ? String(order.valuePln) : '';
       case 'valueEur':
-        return order.valueEur || '';
+        return order.valueEur != null ? String(order.valueEur) : '';
       case 'orderStatus':
         // Użyj statusu Schuco jeśli są powiązane zamówienia
         const schucoStatusVal = aggregateSchucoStatus(order.schucoLinks);
@@ -386,8 +431,15 @@ export default function ZestawienieZlecenPage() {
         // Użyj tygodnia dostawy Schuco jeśli są powiązane zamówienia
         const schucoWeekVal = getEarliestSchucoDelivery(order.schucoLinks);
         if (schucoWeekVal) return formatDeliveryWeek(schucoWeekVal);
+        // Użyj daty faktycznej dostawy (deliveryDate) jeśli jest ustawiona
+        if (order.deliveryDate) {
+          return formatDate(order.deliveryDate);
+        }
         return order.pvcDeliveryDate ? formatDate(order.pvcDeliveryDate) : '';
       case 'deadline':
+        // Priorytet: data dostawy Akrobud > ręcznie ustawiony deadline
+        const akrobudDeliveryDateVal = getAkrobudDeliveryDate(order.deliveryOrders);
+        if (akrobudDeliveryDateVal) return formatDateShort(akrobudDeliveryDateVal);
         return order.deadline ? formatDate(order.deadline) : '';
       case 'archived':
         return order.archivedAt ? 'Archiwum' : 'Aktywne';
@@ -448,12 +500,12 @@ export default function ZestawienieZlecenPage() {
           bValue = b.totalWindows || b._count?.windows || 0;
           break;
         case 'valuePln':
-          aValue = parseFloat(a.valuePln || '0');
-          bValue = parseFloat(b.valuePln || '0');
+          aValue = a.valuePln != null ? (typeof a.valuePln === 'number' ? a.valuePln : parseFloat(a.valuePln)) : 0;
+          bValue = b.valuePln != null ? (typeof b.valuePln === 'number' ? b.valuePln : parseFloat(b.valuePln)) : 0;
           break;
         case 'valueEur':
-          aValue = parseFloat(a.valueEur || '0');
-          bValue = parseFloat(b.valueEur || '0');
+          aValue = a.valueEur != null ? (typeof a.valueEur === 'number' ? a.valueEur : parseFloat(a.valueEur)) : 0;
+          bValue = b.valueEur != null ? (typeof b.valueEur === 'number' ? b.valueEur : parseFloat(b.valueEur)) : 0;
           break;
         case 'orderStatus':
           aValue = a.orderStatus || '';
@@ -468,8 +520,11 @@ export default function ZestawienieZlecenPage() {
           bValue = b.glassDeliveryDate ? new Date(b.glassDeliveryDate).getTime() : 0;
           break;
         case 'deadline':
-          aValue = a.deadline ? new Date(a.deadline).getTime() : 0;
-          bValue = b.deadline ? new Date(b.deadline).getTime() : 0;
+          // Sortowanie: priorytet data dostawy Akrobud > deadline
+          const aDelivery = getAkrobudDeliveryDate(a.deliveryOrders);
+          const bDelivery = getAkrobudDeliveryDate(b.deliveryOrders);
+          aValue = aDelivery ? new Date(aDelivery).getTime() : (a.deadline ? new Date(a.deadline).getTime() : 0);
+          bValue = bDelivery ? new Date(bDelivery).getTime() : (b.deadline ? new Date(b.deadline).getTime() : 0);
           break;
         case 'archived':
           aValue = a.archivedAt ? 1 : 0;
@@ -503,8 +558,8 @@ export default function ZestawienieZlecenPage() {
     return allOrders.reduce(
       (acc: StatsAccumulator, order: ExtendedOrder) => {
         acc.totalOrders++;
-        acc.totalValuePln += parseFloat(order.valuePln || '0');
-        acc.totalValueEur += parseFloat(order.valueEur || '0');
+        acc.totalValuePln += order.valuePln != null ? (typeof order.valuePln === 'number' ? order.valuePln : parseFloat(order.valuePln)) : 0;
+        acc.totalValueEur += order.valueEur != null ? (typeof order.valueEur === 'number' ? order.valueEur : parseFloat(order.valueEur)) : 0;
         acc.totalWindows += order.totalWindows || order._count?.windows || 0;
         acc.totalSashes += order.totalSashes || 0;
         acc.totalGlasses += order.totalGlasses || 0;
@@ -711,9 +766,9 @@ export default function ZestawienieZlecenPage() {
       case 'glasses':
         return String(order.totalGlasses || 0);
       case 'valuePln':
-        return order.valuePln ? formatCurrency(parseFloat(order.valuePln), 'PLN') : '';
+        return order.valuePln != null ? formatCurrency(typeof order.valuePln === 'number' ? order.valuePln : parseFloat(order.valuePln), 'PLN') : '';
       case 'valueEur':
-        return order.valueEur ? formatCurrency(parseFloat(order.valueEur), 'EUR') : '';
+        return order.valueEur != null ? formatCurrency(typeof order.valueEur === 'number' ? order.valueEur : parseFloat(order.valueEur), 'EUR') : '';
       case 'orderStatus':
         // Użyj statusu Schuco jeśli są powiązane zamówienia (eksport CSV)
         const schucoStatusCsv = aggregateSchucoStatus(order.schucoLinks);
@@ -722,10 +777,22 @@ export default function ZestawienieZlecenPage() {
         // Użyj tygodnia dostawy Schuco jeśli są powiązane zamówienia (eksport CSV)
         const schucoWeekCsv = getEarliestSchucoDelivery(order.schucoLinks);
         if (schucoWeekCsv) return formatDeliveryWeek(schucoWeekCsv);
+        // Użyj daty faktycznej dostawy (deliveryDate) jeśli jest ustawiona
+        if (order.deliveryDate) {
+          return formatDate(order.deliveryDate);
+        }
         return order.pvcDeliveryDate ? formatDate(order.pvcDeliveryDate) : '';
       case 'glassDeliveryDate':
-        return order.glassDeliveryDate ? formatDate(order.glassDeliveryDate) : '';
+        const orderedCsv = order.orderedGlassCount ?? 0;
+        const deliveredCsv = order.deliveredGlassCount ?? 0;
+        if (orderedCsv === 0) return '';
+        if (deliveredCsv >= orderedCsv) return 'Dostarczono';
+        if (order.glassDeliveryDate) return formatDateShort(order.glassDeliveryDate);
+        return 'Brak daty';
       case 'deadline':
+        // Priorytet: data dostawy Akrobud > ręcznie ustawiony deadline (eksport CSV)
+        const akrobudDeliveryDateCsv = getAkrobudDeliveryDate(order.deliveryOrders);
+        if (akrobudDeliveryDateCsv) return formatDateShort(akrobudDeliveryDateCsv);
         return order.deadline ? formatDate(order.deadline) : '';
       case 'archived':
         return order.archivedAt ? 'Archiwum' : 'Aktywne';
@@ -775,6 +842,10 @@ export default function ZestawienieZlecenPage() {
                   </span>
                 )}
               </div>
+            ) : order.deliveryDate ? (
+              <span className="text-sm font-medium text-green-700">
+                {formatDate(order.deliveryDate)}
+              </span>
             ) : order.pvcDeliveryDate ? (
               <span className="text-muted-foreground">{formatDate(order.pvcDeliveryDate)}</span>
             ) : (
@@ -784,29 +855,59 @@ export default function ZestawienieZlecenPage() {
         );
 
       case 'glassDeliveryDate':
-        const ordered = order.orderedGlassCount || 0;
-        const delivered = order.deliveredGlassCount || 0;
+        const ordered = order.orderedGlassCount ?? 0;
+        const delivered = order.deliveredGlassCount ?? 0;
 
         let content: string;
         let colorClass: string;
+        let tooltipDate: string | null = null;
 
         if (ordered === 0) {
           content = '-';
           colorClass = 'text-slate-400';
-        } else if (delivered === ordered) {
+        } else if (delivered >= ordered) {
+          // Wszystkie szkła dostarczone (lub więcej) - zielone tło
           content = 'Dostarczono';
           colorClass = 'bg-green-100 text-green-700';
-        } else if (delivered > 0) {
-          content = `Częściowo: ${delivered}/${ordered}`;
-          colorClass = 'bg-yellow-100 text-yellow-700';
+          // Pobierz datę dostawy dla tooltipa
+          if (order.glassDeliveryDate) {
+            const formattedDate = formatDate(order.glassDeliveryDate);
+            // Ustaw tooltipDate tylko jeśli formatDate zwróciło niepustą wartość
+            if (formattedDate) {
+              tooltipDate = formattedDate;
+            }
+          }
         } else if (order.glassDeliveryDate) {
+          // Jest data przewidywanej dostawy - pomarańczowe tło
           const deliveryDate = new Date(order.glassDeliveryDate);
           const isOverdue = deliveryDate < new Date() && delivered === 0;
-          content = formatDate(order.glassDeliveryDate);
-          colorClass = isOverdue ? 'bg-red-100 text-red-700' : 'text-slate-700';
+          content = formatDateShort(order.glassDeliveryDate);
+          // Jeśli przeterminowane - czerwone, jeśli oczekiwane - pomarańczowe
+          colorClass = isOverdue ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700';
         } else {
-          content = '-';
-          colorClass = 'text-slate-400';
+          // Zamówiono szkła, ale brak daty dostawy
+          content = 'Brak daty';
+          colorClass = 'bg-slate-100 text-slate-600';
+        }
+
+        // Jeśli jest prawidłowa data dostawy i status "Dostarczono", pokaż tooltip z datą
+        if (tooltipDate) {
+          return (
+            <td key={column.id} className="px-4 py-3 text-center">
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium cursor-help ${colorClass}`}>
+                      {content}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Data dostawy: {tooltipDate}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </td>
+          );
         }
 
         return (
@@ -818,7 +919,30 @@ export default function ZestawienieZlecenPage() {
         );
 
       case 'deadline':
-        // Edytowalne pole - Termin realizacji
+        // Termin realizacji - priorytet: data dostawy Akrobud > ręcznie ustawiony deadline
+        const akrobudDeliveryDate = getAkrobudDeliveryDate(order.deliveryOrders);
+        const hasAkrobudDelivery = akrobudDeliveryDate !== null;
+        const deliveryCount = order.deliveryOrders?.length || 0;
+
+        // Jeśli zlecenie jest przypisane do dostawy - pokaż datę dostawy (bez możliwości edycji)
+        if (hasAkrobudDelivery) {
+          return (
+            <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
+              <div className="flex flex-col items-start gap-1">
+                <span className="text-sm font-medium text-blue-700">
+                  {formatDateShort(akrobudDeliveryDate)}
+                </span>
+                {deliveryCount > 1 && (
+                  <span className="text-xs text-slate-400">
+                    ({deliveryCount} dostaw)
+                  </span>
+                )}
+              </div>
+            </td>
+          );
+        }
+
+        // Edytowalne pole - Termin realizacji (tylko jeśli nie ma przypisanej dostawy)
         if (isEditing && editingCell?.field === 'deadline') {
           return (
             <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
@@ -866,13 +990,8 @@ export default function ZestawienieZlecenPage() {
         );
 
       case 'valuePln':
-      case 'valueEur':
-        const value = column.id === 'valuePln' ? order.valuePln : order.valueEur;
-        const currency = column.id === 'valuePln' ? 'PLN' : 'EUR';
-        const fieldName = column.id as 'valuePln' | 'valueEur';
-
-        // Edytowalne pole
-        if (isEditing && editingCell?.field === fieldName) {
+        // Edytowalne pole PLN - pokazuje wartość PLN lub przeliczoną z EUR
+        if (isEditing && editingCell?.field === 'valuePln') {
           return (
             <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
               <div className="flex items-center gap-1">
@@ -906,14 +1025,74 @@ export default function ZestawienieZlecenPage() {
             </td>
           );
         }
+        // Jeśli jest valuePln - pokaż bezpośrednio, jeśli nie ma ale jest valueEur - przelicz
+        const plnValue = order.valuePln != null ? (typeof order.valuePln === 'number' ? order.valuePln : parseFloat(order.valuePln)) : null;
+        const eurForPln = order.valueEur != null ? (typeof order.valueEur === 'number' ? order.valueEur : parseFloat(order.valueEur)) : null;
+        const plnFromEur = plnValue == null && eurForPln != null ? eurForPln * eurRate : null;
         return (
           <td
             key={column.id}
             className={`px-4 py-3 ${alignClass} group cursor-pointer hover:bg-slate-50`}
-            onClick={() => startEdit(order.id, fieldName, value || '')}
+            onClick={() => startEdit(order.id, 'valuePln', order.valuePln != null ? String(order.valuePln) : '')}
           >
             <div className="flex items-center gap-2 justify-between">
-              <span>{value ? formatCurrency(parseFloat(value), currency) : '-'}</span>
+              {plnValue != null ? (
+                <span>{formatCurrency(plnValue, 'PLN')}</span>
+              ) : plnFromEur != null ? (
+                <span className="text-muted-foreground">~{formatCurrency(plnFromEur, 'PLN')}</span>
+              ) : (
+                <span>-</span>
+              )}
+              <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50" />
+            </div>
+          </td>
+        );
+
+      case 'valueEur':
+        // Edytowalne pole EUR
+        if (isEditing && editingCell?.field === 'valueEur') {
+          return (
+            <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
+              <div className="flex items-center gap-1">
+                <Input
+                  type="text"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  className="h-8 text-sm"
+                  placeholder="0.00"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveEdit();
+                    if (e.key === 'Escape') cancelEdit();
+                  }}
+                />
+                <button
+                  onClick={saveEdit}
+                  className="p-1 hover:bg-green-100 rounded text-green-600"
+                  title="Zapisz"
+                >
+                  <Check className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={cancelEdit}
+                  className="p-1 hover:bg-red-100 rounded text-red-600"
+                  title="Anuluj"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </td>
+          );
+        }
+        const eurValue = order.valueEur != null ? (typeof order.valueEur === 'number' ? order.valueEur : parseFloat(order.valueEur)) : null;
+        return (
+          <td
+            key={column.id}
+            className={`px-4 py-3 ${alignClass} group cursor-pointer hover:bg-slate-50`}
+            onClick={() => startEdit(order.id, 'valueEur', order.valueEur != null ? String(order.valueEur) : '')}
+          >
+            <div className="flex items-center gap-2 justify-between">
+              <span>{eurValue != null ? formatCurrency(eurValue, 'EUR') : '-'}</span>
               <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50" />
             </div>
           </td>

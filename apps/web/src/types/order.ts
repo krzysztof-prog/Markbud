@@ -1,5 +1,6 @@
 import type { ID, Timestamp, Status } from './common';
 import type { Requirement } from './requirement';
+import type { SchucoDeliveryLink } from './schuco';
 
 /**
  * Okno/drzwi w zleceniu
@@ -30,17 +31,23 @@ export interface Order {
   system?: string;
   deadline?: Timestamp;
   pvcDeliveryDate?: Timestamp;
+  deliveryDate?: Timestamp;
+  productionDate?: Timestamp;
   clientName?: string;
   deliveryId?: ID;
   priority?: number;
   status: Status;
-  valuePln?: string;
-  valueEur?: string;
+  valuePln?: number | string | null;
+  valueEur?: number | string | null;
   invoiceNumber?: string;
   glassDeliveryDate?: Timestamp;
+  orderedGlassCount?: number;
+  deliveredGlassCount?: number;
+  glassOrderStatus?: string;
+  notes?: string;
   archivedAt?: Timestamp;
   createdAt: Timestamp;
-  updatedAt: Timestamp;
+  updatedAt?: Timestamp;
   totalWindows?: number;
   totalSashes?: number;
   totalGlasses?: number;
@@ -49,6 +56,18 @@ export interface Order {
     profileType?: string;
     reference?: string;
   }[];
+  schucoLinks?: SchucoDeliveryLink[];
+  deliveryOrders?: Array<{
+    id?: number;
+    deliveryId: number;
+    position?: number;
+    delivery?: {
+      id?: number;
+      deliveryDate?: string;
+      deliveryNumber?: string;
+      status?: string;
+    };
+  }>;
 }
 
 export interface OrderWithRequirements extends Order {
