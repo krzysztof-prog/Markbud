@@ -19,6 +19,7 @@ import {
   useUploadMutation,
   useImportActionMutations,
   useFolderImportMutations,
+  useFolderManagementMutations,
 } from './hooks/useImportMutations';
 import { ImportConflictModal } from '@/components/imports/ImportConflictModal';
 
@@ -112,6 +113,8 @@ export default function ImportyPage() {
       setConflictModalOpen(true);
     },
   });
+
+  const { archiveFolderMutation, deleteFolderMutation } = useFolderManagementMutations();
 
   // Filter imports by type - with error handling
   const csvImports = imports?.filter((i: Import) => i.fileType === 'uzyte_bele') || [];
@@ -219,6 +222,18 @@ export default function ImportyPage() {
     setConflictInfo(null);
   };
 
+  const handleArchiveFolder = (path: string) => {
+    if (confirm('Czy na pewno chcesz zarchiwizowac ten folder? Zostanie przeniesiony do podkatalogu "archiwum".')) {
+      archiveFolderMutation.mutate(path);
+    }
+  };
+
+  const handleDeleteFolder = (path: string) => {
+    if (confirm('Czy na pewno chcesz TRWALE USUNAC ten folder? Ta operacja jest nieodwracalna!')) {
+      deleteFolderMutation.mutate(path);
+    }
+  };
+
   // Show error state if query failed
   if (error) {
     return (
@@ -265,6 +280,10 @@ export default function ImportyPage() {
           onCancelScan={handleCancelScan}
           isScanPending={scanFolderMutation.isPending}
           isImportPending={importFolderMutation.isPending}
+          onArchiveFolder={handleArchiveFolder}
+          onDeleteFolder={handleDeleteFolder}
+          isArchivePending={archiveFolderMutation.isPending}
+          isDeletePending={deleteFolderMutation.isPending}
         />
 
         {/* Two panels side by side */}
@@ -301,19 +320,18 @@ export default function ImportyPage() {
         />
 
         {/* Preview card */}
-        {previewId && (
-          <ImportPreviewCard
-            preview={preview || null}
-            isLoading={previewLoading}
-            isPending={approveMutation.isPending}
-            isRejectPending={rejectMutation.isPending}
-            onApprove={(resolution) =>
-              approveMutation.mutate({ id: previewId, action: 'add_new', resolution })
-            }
-            onReject={(id) => rejectMutation.mutate(id)}
-            onClose={() => setPreviewId(null)}
-          />
-        )}
+        <ImportPreviewCard
+          preview={preview || null}
+          isLoading={previewLoading}
+          isPending={approveMutation.isPending}
+          isRejectPending={rejectMutation.isPending}
+          onApprove={(resolution) =>
+            approveMutation.mutate({ id: previewId, action: 'add_new', resolution })
+          }
+          onReject={(id) => rejectMutation.mutate(id)}
+          open={!!previewId}
+          onOpenChange={(open) => !open && setPreviewId(null)}
+        />
 
         {/* Import history */}
         <ImportHistoryTable

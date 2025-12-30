@@ -333,3 +333,57 @@ export function useFolderImportMutations(callbacks?: {
 
   return { scanFolderMutation, importFolderMutation };
 }
+
+/**
+ * Hook for folder management mutations (archive/delete)
+ */
+export function useFolderManagementMutations(callbacks?: {
+  onArchiveSuccess?: () => void;
+  onDeleteSuccess?: () => void;
+}) {
+  const queryClient = useQueryClient();
+
+  const archiveFolderMutation = useMutation({
+    mutationFn: (folderPath: string) => importsApi.archiveFolder(folderPath),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['available-folders'] });
+      toast({
+        title: 'Folder zarchiwizowany',
+        description: `Folder przeniesiony do archiwum: ${data.archivedPath}`,
+        variant: 'success',
+      });
+      callbacks?.onArchiveSuccess?.();
+    },
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Nie udalo sie zarchiwizowac folderu';
+      toast({
+        title: 'Blad archiwizacji',
+        description: message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const deleteFolderMutation = useMutation({
+    mutationFn: (folderPath: string) => importsApi.deleteFolder(folderPath),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['available-folders'] });
+      toast({
+        title: 'Folder usuniety',
+        description: 'Folder zostal trwale usuniety',
+        variant: 'success',
+      });
+      callbacks?.onDeleteSuccess?.();
+    },
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Nie udalo sie usunac folderu';
+      toast({
+        title: 'Blad usuwania',
+        description: message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  return { archiveFolderMutation, deleteFolderMutation };
+}

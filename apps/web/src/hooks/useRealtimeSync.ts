@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { showInfoToast } from '@/lib/toast-helpers';
 import { wsLogger } from '@/lib/logger';
+import { getAuthToken } from '@/lib/auth-token';
 
 interface DataChangeEvent {
   type: string;
@@ -40,12 +41,12 @@ export function useRealtimeSync() {
 
       // Mapowanie event types do React Query query keys
       const queryKeyMap: Record<string, string[]> = {
-        'delivery:created': ['deliveries-calendar-continuous'],
-        'delivery:updated': ['deliveries-calendar-continuous', 'deliveries'],
-        'delivery:deleted': ['deliveries-calendar-continuous', 'deliveries'],
-        'order:created': ['orders', 'deliveries-calendar-continuous'],
-        'order:updated': ['orders', 'deliveries-calendar-continuous'],
-        'order:deleted': ['orders', 'deliveries-calendar-continuous'],
+        'delivery:created': ['deliveries-calendar-continuous', 'deliveries-calendar-batch'],
+        'delivery:updated': ['deliveries-calendar-continuous', 'deliveries-calendar-batch', 'deliveries'],
+        'delivery:deleted': ['deliveries-calendar-continuous', 'deliveries-calendar-batch', 'deliveries'],
+        'order:created': ['orders', 'deliveries-calendar-continuous', 'deliveries-calendar-batch'],
+        'order:updated': ['orders', 'deliveries-calendar-continuous', 'deliveries-calendar-batch'],
+        'order:deleted': ['orders', 'deliveries-calendar-continuous', 'deliveries-calendar-batch'],
         'warehouse:stock_updated': ['warehouse'],
         'warehouse:stock_changed': ['warehouse'],
         'okuc:stock_updated': ['okuc-stock', 'okuc-articles'],
@@ -154,14 +155,23 @@ export function useRealtimeSync() {
   // Funkcja do nawiązania połączenia WebSocket - używamy stabilnej referencji
   const connectRef = useRef<(() => void) | undefined>(undefined);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return; // Już połączeni
     }
 
     try {
-      const wsUrl = `${WS_URL}/ws`;
-      wsLogger.log('Connecting to:', wsUrl);
+      // Get authentication token
+      const token = await getAuthToken();
+
+      if (!token) {
+        wsLogger.error('No authentication token available, cannot connect to WebSocket');
+        return;
+      }
+
+      // Include token in WebSocket URL as query parameter
+      const wsUrl = `${WS_URL}/ws?token=${encodeURIComponent(token)}`;
+      wsLogger.log('Connecting to WebSocket with authentication...');
 
       wsRef.current = new WebSocket(wsUrl);
 
@@ -196,6 +206,7 @@ export function useRealtimeSync() {
           );
 
           reconnectTimeoutRef.current = setTimeout(() => {
+            // Call async connect function
             connectRef.current?.();
           }, RECONNECT_INTERVAL);
         } else {
@@ -210,6 +221,7 @@ export function useRealtimeSync() {
       if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttemptsRef.current++;
         reconnectTimeoutRef.current = setTimeout(() => {
+          // Call async connect function
           connectRef.current?.();
         }, RECONNECT_INTERVAL);
       }

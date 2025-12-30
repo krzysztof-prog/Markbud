@@ -29,6 +29,8 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { userId?: number } }>('/list-folders', { preHandler: verifyAuth }, handler.listFolders.bind(handler));
   fastify.get<{ Querystring: { folderPath: string; userId?: number } }>('/scan-folder', { preHandler: verifyAuth }, handler.scanFolder.bind(handler));
   fastify.post<{ Body: { folderPath: string; deliveryNumber: 'I' | 'II' | 'III'; userId?: number } }>('/folder', { preHandler: verifyAuth }, handler.importFolder.bind(handler));
+  fastify.post<{ Body: { folderPath: string; userId?: number } }>('/archive-folder', { preHandler: verifyAuth }, handler.archiveFolder.bind(handler));
+  fastify.delete<{ Body: { folderPath: string; userId?: number } }>('/delete-folder', { preHandler: verifyAuth }, handler.deleteFolder.bind(handler));
 
   // Preview and process by filepath (with variant conflict detection)
   fastify.get<{ Querystring: { filepath: string } }>('/preview', { preHandler: verifyAuth }, handler.previewByFilepath.bind(handler));

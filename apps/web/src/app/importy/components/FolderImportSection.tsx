@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { FolderOpen, Loader2, Upload, Calendar, AlertTriangle, X, Eye } from 'lucide-react';
+import { FolderOpen, Loader2, Upload, Calendar, AlertTriangle, X, Eye, Archive, Trash2 } from 'lucide-react';
 
 interface AvailableFolder {
   path: string;
@@ -46,6 +46,10 @@ interface FolderImportSectionProps {
   onCancelScan: () => void;
   isScanPending: boolean;
   isImportPending: boolean;
+  onArchiveFolder: (path: string) => void;
+  onDeleteFolder: (path: string) => void;
+  isArchivePending: boolean;
+  isDeletePending: boolean;
 }
 
 export function FolderImportSection({
@@ -60,6 +64,10 @@ export function FolderImportSection({
   onCancelScan,
   isScanPending,
   isImportPending,
+  onArchiveFolder,
+  onDeleteFolder,
+  isArchivePending,
+  isDeletePending,
 }: FolderImportSectionProps) {
   return (
     <Card className="border-purple-200">
@@ -83,32 +91,75 @@ export function FolderImportSection({
                 const isSelected = folderPath === folder.path;
 
                 return (
-                  <Button
+                  <div
                     key={folder.path}
-                    variant={isSelected ? 'default' : 'outline'}
-                    className="justify-start h-auto py-3 px-4"
-                    onClick={() => {
-                      onFolderPathChange(folder.path);
-                      onScanFolder(folder.path);
-                    }}
-                    disabled={isScanPending}
+                    className="flex gap-2 items-center justify-between bg-slate-100 p-3 rounded-lg border border-slate-200 hover:bg-slate-150"
                   >
-                    <div className="flex flex-col items-start gap-1 w-full">
+                    <button
+                      onClick={() => {
+                        onFolderPathChange(folder.path);
+                        onScanFolder(folder.path);
+                      }}
+                      disabled={isScanPending}
+                      className="flex flex-col items-start gap-1 flex-1 text-left"
+                    >
                       <div className="flex items-center gap-2">
                         {isScanning ? (
                           <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" />
                         ) : (
                           <FolderOpen className="h-4 w-4 flex-shrink-0" />
                         )}
-                        <span className="font-medium text-sm">{folder.name}</span>
+                        <span className={`font-medium text-sm ${isSelected ? 'text-blue-600' : 'text-slate-900'}`}>
+                          {folder.name}
+                        </span>
                       </div>
                       {folder.date && (
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-slate-500 ml-6">
                           {new Date(folder.date).toLocaleDateString('pl-PL')}
                         </span>
                       )}
+                    </button>
+
+                    <div className="flex gap-1">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => onArchiveFolder(folder.path)}
+                              disabled={isArchivePending || isDeletePending || isScanPending}
+                              className="h-8 w-8 hover:bg-slate-200"
+                            >
+                              <Archive className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Archiwizuj folder</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => onDeleteFolder(folder.path)}
+                              disabled={isArchivePending || isDeletePending || isScanPending}
+                              className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Usun folder</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </div>
-                  </Button>
+                  </div>
                 );
               })}
             </div>

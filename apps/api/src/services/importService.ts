@@ -2,7 +2,7 @@
  * Import Service - Business logic layer
  */
 
-import { writeFile, mkdir, readdir, copyFile, rename } from 'fs/promises';
+import { writeFile, mkdir, readdir, copyFile, rename, rm } from 'fs/promises';
 import { existsSync, statSync } from 'fs';
 import path from 'path';
 import { ImportRepository } from '../repositories/ImportRepository.js';
@@ -898,6 +898,71 @@ export class ImportService {
         folders: [],
       };
     }
+  }
+
+  /**
+   * Archive a folder to the "archiwum" subdirectory
+   * @param folderPath - Full path to the folder to archive
+   * @param userId - Optional user ID for per-user folder settings
+   * @returns The new path to the archived folder
+   */
+  async archiveFolder(folderPath: string, userId?: number): Promise<string> {
+    const basePath = await this.getImportsBasePath(userId);
+    const normalizedBase = path.resolve(basePath);
+    const normalizedFolder = path.resolve(folderPath);
+
+    // Ensure folder is within allowed base path (case-insensitive on Windows)
+    if (!normalizedFolder.toLowerCase().startsWith(normalizedBase.toLowerCase())) {
+      throw new ForbiddenError('Folder musi znajdowac sie w dozwolonej lokalizacji');
+    }
+
+    // Check if folder exists
+    if (!existsSync(normalizedFolder)) {
+      throw new NotFoundError('Folder');
+    }
+
+    // Check if it's actually a directory
+    const stats = statSync(normalizedFolder);
+    if (!stats.isDirectory()) {
+      throw new ValidationError('Sciezka nie jest folderem');
+    }
+
+    // Use the existing moveFolderToArchive method
+    const archivedPath = await this.moveFolderToArchive(normalizedFolder);
+    logger.info(`Folder ${path.basename(normalizedFolder)} zarchiwizowany: ${archivedPath}`);
+
+    return archivedPath;
+  }
+
+  /**
+   * Delete a folder permanently
+   * @param folderPath - Full path to the folder to delete
+   * @param userId - Optional user ID for per-user folder settings
+   */
+  async deleteFolder(folderPath: string, userId?: number): Promise<void> {
+    const basePath = await this.getImportsBasePath(userId);
+    const normalizedBase = path.resolve(basePath);
+    const normalizedFolder = path.resolve(folderPath);
+
+    // Ensure folder is within allowed base path (case-insensitive on Windows)
+    if (!normalizedFolder.toLowerCase().startsWith(normalizedBase.toLowerCase())) {
+      throw new ForbiddenError('Folder musi znajdowac sie w dozwolonej lokalizacji');
+    }
+
+    // Check if folder exists
+    if (!existsSync(normalizedFolder)) {
+      throw new NotFoundError('Folder');
+    }
+
+    // Check if it's actually a directory
+    const stats = statSync(normalizedFolder);
+    if (!stats.isDirectory()) {
+      throw new ValidationError('Sciezka nie jest folderem');
+    }
+
+    // Delete folder recursively
+    await rm(normalizedFolder, { recursive: true, force: true });
+    logger.info(`Folder ${path.basename(normalizedFolder)} usuniety: ${normalizedFolder}`);
   }
 
   /**

@@ -206,6 +206,30 @@ export class ImportHandler {
   }
 
   /**
+   * POST /api/imports/archive-folder - archive a folder to the archiwum subdirectory
+   */
+  async archiveFolder(
+    request: FastifyRequest<{ Body: { folderPath: string; userId?: number } }>,
+    reply: FastifyReply
+  ) {
+    const { folderPath, userId } = request.body;
+    const archivedPath = await this.service.archiveFolder(folderPath, userId);
+    return reply.send({ success: true, archivedPath });
+  }
+
+  /**
+   * DELETE /api/imports/delete-folder - delete a folder permanently
+   */
+  async deleteFolder(
+    request: FastifyRequest<{ Body: { folderPath: string; userId?: number } }>,
+    reply: FastifyReply
+  ) {
+    const { folderPath, userId } = request.body;
+    await this.service.deleteFolder(folderPath, userId);
+    return reply.send({ success: true });
+  }
+
+  /**
    * GET /api/imports/preview - preview file by filepath with variant conflict detection
    */
   async previewByFilepath(

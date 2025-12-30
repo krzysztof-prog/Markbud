@@ -405,6 +405,16 @@ export const importsApi = {
       method: 'POST',
       body: JSON.stringify({ folderPath, deliveryNumber }),
     }),
+  archiveFolder: (folderPath: string) =>
+    fetchApi<{ success: boolean; archivedPath: string }>('/api/imports/archive-folder', {
+      method: 'POST',
+      body: JSON.stringify({ folderPath }),
+    }),
+  deleteFolder: (folderPath: string) =>
+    fetchApi<{ success: boolean }>('/api/imports/delete-folder', {
+      method: 'DELETE',
+      body: JSON.stringify({ folderPath }),
+    }),
   upload: (file: File) => uploadFile<Import>('/api/imports/upload', file),
   bulkAction: (ids: number[], action: 'approve' | 'reject') =>
     fetchApi<{
