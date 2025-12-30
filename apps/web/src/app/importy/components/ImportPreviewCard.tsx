@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Check, AlertTriangle, X } from 'lucide-react';
@@ -46,7 +46,8 @@ interface ImportPreviewCardProps {
   isRejectPending?: boolean;
   onApprove: (resolution?: { type: 'keep_existing' | 'use_latest'; deleteOlder?: boolean }) => void;
   onReject?: (id: number) => void;
-  onClose: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 export function ImportPreviewCard({
@@ -56,7 +57,8 @@ export function ImportPreviewCard({
   isRejectPending,
   onApprove,
   onReject,
-  onClose,
+  open,
+  onOpenChange,
 }: ImportPreviewCardProps) {
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
 
@@ -87,13 +89,14 @@ export function ImportPreviewCard({
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Podglad importu - Zlecenie {metadata?.orderNumber || '...'}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="pr-12">
+              Podglad importu - Zlecenie {metadata?.orderNumber || '...'}
+            </DialogTitle>
+          </DialogHeader>
+
           {isLoading ? (
             <div className="flex items-center justify-center h-48">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
@@ -102,7 +105,7 @@ export function ImportPreviewCard({
             <div className="text-center py-8">
               <p className="text-sm text-muted-foreground">Nie mozna zaladowac podgladu</p>
               <div className="flex gap-2 justify-center pt-4 mt-4">
-                <Button variant="outline" onClick={onClose}>
+                <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Zamknij
                 </Button>
               </div>
@@ -110,7 +113,7 @@ export function ImportPreviewCard({
           ) : (
             <div className="space-y-4">
             {/* Naglowek z numerem zlecenia */}
-            <PreviewHeader metadata={metadata || {}} requirementCount={requirementItems.length} windowCount={windowItems.length} />
+            <PreviewHeader metadata={metadata} requirementCount={requirementItems.length} windowCount={windowItems.length} />
 
             {/* Konflikt wariantow - warning */}
             {hasConflict && (
@@ -194,14 +197,14 @@ export function ImportPreviewCard({
                   )}
                 </>
               )}
-              <Button variant="outline" onClick={onClose}>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Zamknij
               </Button>
             </div>
           </div>
           )}
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal konfliktu wariantow */}
       <OrderVariantConflictModal
@@ -248,7 +251,7 @@ function PreviewHeader({ metadata, requirementCount, windowCount }: {
   );
 }
 
-function PdfSummary({ metadata }: { metadata: ImportMetadata }) {
+function PdfSummary({ metadata }: { metadata: ImportMetadata | undefined }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-green-50 rounded-lg border border-green-200">
       <div className="text-center">
@@ -281,7 +284,7 @@ function PdfSummary({ metadata }: { metadata: ImportMetadata }) {
   );
 }
 
-function CsvSummary({ metadata }: { metadata: ImportMetadata }) {
+function CsvSummary({ metadata }: { metadata: ImportMetadata | undefined }) {
   return (
     <div className="grid grid-cols-3 gap-4 p-4 bg-blue-50 rounded-lg">
       <div className="text-center">

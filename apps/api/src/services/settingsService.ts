@@ -48,7 +48,7 @@ export class SettingsService {
     return this.repository.createPalletType(data);
   }
 
-  async updatePalletType(id: number, data: any) {
+  async updatePalletType(id: number, data: Partial<{ name: string; lengthMm: number; widthMm: number; heightMm: number; loadWidthMm: number }>) {
     return this.repository.updatePalletType(id, data);
   }
 
@@ -82,5 +82,33 @@ export class SettingsService {
 
   async deletePackingRule(id: number) {
     return this.repository.deletePackingRule(id);
+  }
+
+  // User Folder Settings
+  async getUserFolderPath(userId: number) {
+    // Try to get user-specific settings first
+    const userSettings = await this.repository.findUserFolderSettings(userId);
+    
+    if (userSettings && userSettings.isActive) {
+      return { importsBasePath: userSettings.importsBasePath };
+    }
+
+    // Fallback to global settings
+    const globalSettings = await this.repository.findGlobalFolderSettings();
+    
+    if (globalSettings && globalSettings.isActive) {
+      return { importsBasePath: globalSettings.importsBasePath };
+    }
+
+    // No settings found
+    throw new NotFoundError('Folder settings not configured');
+  }
+
+  async updateUserFolderPath(userId: number, importsBasePath: string) {
+    return this.repository.upsertUserFolderSettings(userId, importsBasePath);
+  }
+
+  async updateGlobalFolderPath(importsBasePath: string) {
+    return this.repository.upsertGlobalFolderSettings(importsBasePath);
   }
 }

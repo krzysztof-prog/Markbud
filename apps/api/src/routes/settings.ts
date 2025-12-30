@@ -1,10 +1,11 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, RouteShorthandOptions } from 'fastify';
 import { prisma, fileWatcher } from '../index.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { SettingsRepository } from '../repositories/SettingsRepository.js';
 import { SettingsService } from '../services/settingsService.js';
 import { SettingsHandler } from '../handlers/settingsHandler.js';
+import { verifyAuth } from '../middleware/auth.js';
 
 export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   // Initialize layered architecture
@@ -12,28 +13,39 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   const service = new SettingsService(repository);
   const handler = new SettingsHandler(service);
 
-  // Core settings routes - delegate to handler
-  fastify.get('/', handler.getAll.bind(handler));
-  fastify.get('/:key', handler.getByKey.bind(handler));
-  fastify.put('/:key', handler.upsertOne.bind(handler));
-  fastify.put('/', handler.upsertMany.bind(handler));
+  // Core settings routes - delegate to handler - all require authentication
+  fastify.get('/', { preHandler: verifyAuth }, handler.getAll.bind(handler));
+  fastify.get<{ Params: { key: string } }>('/:key', { preHandler: verifyAuth }, handler.getByKey.bind(handler));
+  fastify.put<{ Params: { key: string }; Body: { value: string } }>('/:key', { preHandler: verifyAuth }, handler.upsertOne.bind(handler));
+  fastify.put<{ Body: Record<string, string> }>('/', { preHandler: verifyAuth }, handler.upsertMany.bind(handler));
 
   // Pallet types - delegate to handler
-  fastify.get('/pallet-types', handler.getAllPalletTypes.bind(handler));
-  fastify.post('/pallet-types', handler.createPalletType.bind(handler));
-  fastify.put('/pallet-types/:id', handler.updatePalletType.bind(handler));
-  fastify.delete('/pallet-types/:id', handler.deletePalletType.bind(handler));
+  fastify.get('/pallet-types', { preHandler: verifyAuth }, handler.getAllPalletTypes.bind(handler));
+  fastify.post<{ Body: { name: string; lengthMm: number; widthMm: number; heightMm: number; loadWidthMm: number } }>('/pallet-types', { preHandler: verifyAuth }, handler.createPalletType.bind(handler));
+  fastify.put<{ Params: { id: string }; Body: { name?: string; lengthMm?: number; widthMm?: number; heightMm?: number; loadWidthMm?: number } }>('/pallet-types/:id', { preHandler: verifyAuth }, handler.updatePalletType.bind(handler));
+  fastify.delete<{ Params: { id: string } }>('/pallet-types/:id', { preHandler: verifyAuth }, handler.deletePalletType.bind(handler));
 
   // Packing rules - delegate to handler
-  fastify.get('/packing-rules', handler.getAllPackingRules.bind(handler));
-  fastify.post('/packing-rules', handler.createPackingRule.bind(handler));
-  fastify.put('/packing-rules/:id', handler.updatePackingRule.bind(handler));
-  fastify.delete('/packing-rules/:id', handler.deletePackingRule.bind(handler));
+  fastify.get('/packing-rules', { preHandler: verifyAuth }, handler.getAllPackingRules.bind(handler));
+  fastify.post<{ Body: { name: string; description?: string; isActive?: boolean; ruleConfig: Record<string, unknown> } }>('/packing-rules', { preHandler: verifyAuth }, handler.createPackingRule.bind(handler));
+  fastify.put<{ Params: { id: string }; Body: { name?: string; description?: string; isActive?: boolean; ruleConfig?: Record<string, unknown> } }>('/packing-rules/:id', { preHandler: verifyAuth }, handler.updatePackingRule.bind(handler));
+  fastify.delete<{ Params: { id: string } }>('/packing-rules/:id', { preHandler: verifyAuth }, handler.deletePackingRule.bind(handler));
 
+
+  // User Folder Settings routes
+  // GET /api/settings/user-folder-path - get user's folder path (with fallback to global)
+  fastify.get('/user-folder-path', { preHandler: verifyAuth }, handler.getUserFolderPath.bind(handler));
+
+  // PUT /api/settings/user-folder-path - update user's folder path
+  fastify.put<{ Body: { importsBasePath: string } }>(
+    '/user-folder-path',
+    { preHandler: verifyAuth },
+    handler.updateUserFolderPath.bind(handler)
+  );
   // GET /api/settings/browse-folders - przeglądaj foldery Windows
   fastify.get<{
     Querystring: { path?: string };
-  }>('/browse-folders', async (request, reply) => {
+  }>('/browse-folders', { preHandler: verifyAuth }, async (request, reply) => {
     const requestedPath = request.query.path || '';
 
     // Jeśli pusta ścieżka - zwróć dyski Windows
@@ -121,7 +133,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /api/settings/validate-folder - sprawdź czy folder istnieje
   fastify.post<{
     Body: { path: string };
-  }>('/validate-folder', async (request, reply) => {
+  }>('/validate-folder', { preHandler: verifyAuth }, async (request, reply) => {
     const { path: folderPath } = request.body;
 
     if (!folderPath) {
@@ -147,7 +159,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // GET /api/settings/file-watcher/status - status i sciezki file watchera
-  fastify.get('/file-watcher/status', async () => {
+  fastify.get('/file-watcher/status', { preHandler: verifyAuth }, async () => {
     if (!fileWatcher) {
       return {
         running: false,
@@ -163,7 +175,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // POST /api/settings/file-watcher/restart - restartuj file watcher
-  fastify.post('/file-watcher/restart', async (request, reply) => {
+  fastify.post('/file-watcher/restart', { preHandler: verifyAuth }, async (request, reply) => {
     if (!fileWatcher) {
       return reply.status(503).send({ error: 'File watcher nie jest uruchomiony' });
     }

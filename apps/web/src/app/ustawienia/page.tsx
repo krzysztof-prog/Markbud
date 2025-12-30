@@ -4,11 +4,13 @@ import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/header';
 import { settingsApi, colorsApi, profilesApi } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useFormValidation } from '@/hooks/useFormValidation';
 import {
   GeneralSettingsTab,
   FoldersTab,
+  UserFolderTab,
   GlassWatchTab,
   PalletTypesTab,
   ColorsTab,
@@ -24,7 +26,9 @@ import {
   useColorMutations,
   useProfileMutations,
   useFileWatcher,
+  useUserFolderPath,
 } from './hooks/useSettingsMutations';
+import { toast } from '@/hooks/useToast';
 
 // Types
 interface PalletType {
@@ -66,6 +70,8 @@ type DeleteDialogState = {
 export default function UstawieniaPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
+  const [userFolderPath, setUserFolderPath] = useState<string>('');
+  const [userFolderHasChanges, setUserFolderHasChanges] = useState(false);
 
   // Dialog states
   const [palletDialog, setPalletDialog] = useState<DialogState<PalletType>>({
@@ -142,22 +148,22 @@ export default function UstawieniaPage() {
   });
 
   // Queries
-  const { data: initialSettings, isLoading } = useQuery({
+  const { data: initialSettings, isLoading, error: settingsError } = useQuery({
     queryKey: ['settings'],
     queryFn: settingsApi.getAll,
   });
 
-  const { data: palletTypes } = useQuery({
+  const { data: palletTypes, error: palletTypesError } = useQuery({
     queryKey: ['pallet-types'],
     queryFn: settingsApi.getPalletTypes,
   });
 
-  const { data: colors } = useQuery({
+  const { data: colors, error: colorsError } = useQuery({
     queryKey: ['colors'],
     queryFn: () => colorsApi.getAll(),
   });
 
-  const { data: profiles } = useQuery({
+  const { data: profiles, error: profilesError } = useQuery({
     queryKey: ['profiles'],
     queryFn: profilesApi.getAll,
   });
@@ -165,11 +171,22 @@ export default function UstawieniaPage() {
   const { data: fileWatcherStatus, refetch: refetchFileWatcherStatus } = useQuery({
     queryKey: ['file-watcher-status'],
     queryFn: async () => {
+      const token = await getAuthToken();
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/settings/file-watcher/status`
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/settings/file-watcher/status`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
       );
       return res.json();
     },
+  });
+
+  const { data: userFolderData, isLoading: isLoadingUserFolder } = useQuery({
+    queryKey: ['user-folder-path'],
+    queryFn: settingsApi.getUserFolderPath,
   });
 
   useEffect(() => {
@@ -177,6 +194,12 @@ export default function UstawieniaPage() {
       setSettings(initialSettings);
     }
   }, [initialSettings]);
+
+  useEffect(() => {
+    if (userFolderData) {
+      setUserFolderPath(userFolderData.path || '');
+    }
+  }, [userFolderData]);
 
   // Mutations
   const updateSettingsMutation = useUpdateSettings({
@@ -232,6 +255,17 @@ export default function UstawieniaPage() {
     onRestartSuccess: () => refetchFileWatcherStatus(),
   });
 
+  const { updateMutation: updateUserFolderMutation } = useUserFolderPath({
+    onUpdateSuccess: () => {
+      setUserFolderHasChanges(false);
+      toast({
+        variant: 'success',
+        title: 'Zapisano',
+        description: 'Ścieżka folderu użytkownika została zaktualizowana',
+      });
+    },
+  });
+
   // Handlers
   const handleSettingChange = (key: string, value: string) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
@@ -245,6 +279,15 @@ export default function UstawieniaPage() {
   const handleSaveAndRestartWatcher = async () => {
     await updateSettingsMutation.mutateAsync(settings);
     restartFileWatcherMutation.mutate();
+  };
+
+  const handleUserFolderPathChange = (path: string) => {
+    setUserFolderPath(path);
+    setUserFolderHasChanges(true);
+  };
+
+  const handleSaveUserFolder = () => {
+    updateUserFolderMutation.mutate(userFolderPath);
   };
 
   // Pallet handlers
@@ -348,6 +391,39 @@ export default function UstawieniaPage() {
     );
   }
 
+  // Handle errors from any query
+  const hasError = settingsError || palletTypesError || colorsError || profilesError;
+  if (hasError) {
+    return (
+      <div className="flex flex-col h-full">
+        <Header title="Ustawienia" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center max-w-md">
+            <div className="text-red-600 mb-4">
+              <svg className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Błąd wczytywania ustawień</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              {(settingsError as Error)?.message ||
+               (palletTypesError as Error)?.message ||
+               (colorsError as Error)?.message ||
+               (profilesError as Error)?.message ||
+               'Nie udało się pobrać danych'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Odśwież stronę
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
       <Header title="Ustawienia" />
@@ -357,6 +433,7 @@ export default function UstawieniaPage() {
           <TabsList className="mb-6">
             <TabsTrigger value="general">Ogólne</TabsTrigger>
             <TabsTrigger value="folders">Foldery</TabsTrigger>
+            <TabsTrigger value="user-folder">Mój folder</TabsTrigger>
             <TabsTrigger value="glass">Auto-watch Szyb</TabsTrigger>
             <TabsTrigger value="pallets">Palety</TabsTrigger>
             <TabsTrigger value="colors">Kolory</TabsTrigger>
@@ -384,6 +461,17 @@ export default function UstawieniaPage() {
               fileWatcherStatus={fileWatcherStatus}
               isUpdatePending={updateSettingsMutation.isPending}
               isRestartPending={restartFileWatcherMutation.isPending}
+            />
+          </TabsContent>
+
+          <TabsContent value="user-folder">
+            <UserFolderTab
+              userFolderPath={userFolderPath}
+              globalFolderPath={settings.importsBasePath || ''}
+              hasChanges={userFolderHasChanges}
+              onPathChange={handleUserFolderPathChange}
+              onSave={handleSaveUserFolder}
+              isPending={updateUserFolderMutation.isPending}
             />
           </TabsContent>
 

@@ -19,6 +19,28 @@ export interface Import {
   metadata?: Record<string, any>;
 }
 
+export interface OrderVariant {
+  id?: number;
+  orderNumber: string;
+  windowCount?: number;
+  requirementCount?: number;
+  delivery?: {
+    deliveryNumber: string;
+    deliveryDate: Date | string;
+  };
+}
+
+export interface VariantConflict {
+  type: 'base_exists' | 'variant_exists' | 'multiple_variants';
+  newOrder: OrderVariant;
+  existingOrders: OrderVariant[];
+  comparisonMetrics: {
+    windowCountDiff: number;
+    requirementCountDiff: number;
+  };
+  recommendation?: string;
+}
+
 export interface ImportPreview {
   import: Import;
   data: Record<string, unknown>[];
@@ -28,7 +50,9 @@ export interface ImportPreview {
     invalidRecords: number;
     warnings?: string[];
   };
+  metadata?: Record<string, any>; // Additional metadata from parsers
   message?: string;
+  variantConflict?: VariantConflict | null;
 }
 
 export interface UploadImportResponse {
@@ -38,4 +62,8 @@ export interface UploadImportResponse {
 
 export interface ApproveImportData {
   action?: 'overwrite' | 'add_new';
+  resolution?: {
+    type: 'keep_existing' | 'use_latest';
+    deleteOlder?: boolean;
+  };
 }

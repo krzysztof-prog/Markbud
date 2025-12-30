@@ -4,30 +4,10 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { settingsApi, colorsApi, profilesApi } from '@/lib/api';
+import type { UpdateColorData, UpdateProfileData, PalletType } from '@/types';
+import { getAuthToken } from '@/lib/auth-token';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
-interface PalletType {
-  id?: number;
-  name: string;
-  lengthMm: number;
-  loadDepthMm: number;
-}
-
-interface Color {
-  id?: number;
-  code: string;
-  name: string;
-  type: 'typical' | 'atypical';
-  hexColor?: string;
-}
-
-interface Profile {
-  id?: number;
-  number: string;
-  name: string;
-  description?: string | null;
-}
 
 /**
  * Hook for updating settings
@@ -101,8 +81,8 @@ export function useColorMutations(callbacks?: {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Color> }) =>
-      colorsApi.update(id, data as any),
+    mutationFn: ({ id, data }: { id: number; data: UpdateColorData }) =>
+      colorsApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['colors'] });
       callbacks?.onUpdateSuccess?.();
@@ -140,8 +120,8 @@ export function useProfileMutations(callbacks?: {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Profile> }) =>
-      profilesApi.update(id, data as any),
+    mutationFn: ({ id, data }: { id: number; data: UpdateProfileData }) =>
+      profilesApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
       callbacks?.onUpdateSuccess?.();
@@ -168,8 +148,12 @@ export function useProfileMutations(callbacks?: {
 export function useFileWatcher(callbacks?: { onRestartSuccess?: () => void }) {
   const restartMutation = useMutation({
     mutationFn: async () => {
+      const token = await getAuthToken();
       const res = await fetch(`${API_URL}/api/settings/file-watcher/restart`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
       if (!res.ok) throw new Error('Błąd restartu file watchera');
       return res.json();
@@ -180,4 +164,21 @@ export function useFileWatcher(callbacks?: { onRestartSuccess?: () => void }) {
   });
 
   return { restartMutation };
+}
+
+/**
+ * Hook for user folder path mutations
+ */
+export function useUserFolderPath(callbacks?: { onUpdateSuccess?: () => void }) {
+  const queryClient = useQueryClient();
+
+  const updateMutation = useMutation({
+    mutationFn: settingsApi.updateUserFolderPath,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-folder-path'] });
+      callbacks?.onUpdateSuccess?.();
+    },
+  });
+
+  return { updateMutation };
 }

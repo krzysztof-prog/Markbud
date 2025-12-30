@@ -80,6 +80,19 @@ export const packingRuleIdSchema = z.object({
   }),
 });
 
+// User Folder Settings validators
+export const updateUserFolderPathSchema = z.object({
+  body: z.object({
+    importsBasePath: z.string().min(1, 'Folder path is required').max(500, 'Path too long'),
+  }),
+});
+
+export const validateFolderSchema = z.object({
+  body: z.object({
+    path: z.string().min(1, 'Path is required'),
+  }),
+});
+
 // Type exports for TypeScript
 export type SettingKeyParams = z.infer<typeof settingKeySchema>;
 export type SettingValueBody = z.infer<typeof settingValueSchema>;
@@ -87,3 +100,5 @@ export type CreatePalletTypeBody = z.infer<typeof createPalletTypeSchema>['body'
 export type UpdatePalletTypeBody = z.infer<typeof updatePalletTypeSchema>['body'];
 export type CreatePackingRuleBody = z.infer<typeof createPackingRuleSchema>['body'];
 export type UpdatePackingRuleBody = z.infer<typeof updatePackingRuleSchema>['body'];
+export type UpdateUserFolderPathBody = z.infer<typeof updateUserFolderPathSchema>['body'];
+export type ValidateFolderBody = z.infer<typeof validateFolderSchema>['body'];

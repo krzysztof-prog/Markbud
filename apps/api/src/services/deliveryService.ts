@@ -3,7 +3,7 @@
  */
 
 import { DeliveryRepository } from '../repositories/DeliveryRepository.js';
-import { NotFoundError } from '../utils/errors.js';
+import { NotFoundError, ValidationError } from '../utils/errors.js';
 import {
   emitDeliveryCreated,
   emitDeliveryUpdated,
@@ -23,9 +23,19 @@ import {
   getDay,
   POLISH_DAY_NAMES,
 } from '../utils/date-helpers.js';
+import { OrderVariantService } from './orderVariantService.js';
+import { CsvParser } from './parsers/csv-parser.js';
+import { logger } from '../utils/logger.js';
+import { prisma } from '../index.js';
 
 export class DeliveryService {
-  constructor(private repository: DeliveryRepository) {}
+  private variantService: OrderVariantService;
+  private csvParser: CsvParser;
+
+  constructor(private repository: DeliveryRepository) {
+    this.variantService = new OrderVariantService(prisma);
+    this.csvParser = new CsvParser();
+  }
 
   async getAllDeliveries(filters: { from?: string; to?: string; status?: string }) {
     const deliveryFilters = {
@@ -76,21 +86,28 @@ export class DeliveryService {
   /**
    * Generate delivery number in format DD.MM.YYYY_X
    * where X is I, II, III, IV etc. for multiple deliveries on same day
+   * Uses transaction with row locking to prevent race conditions
    */
   private async generateDeliveryNumber(deliveryDate: Date): Promise<string> {
     const datePrefix = formatPolishDate(deliveryDate);
     const { start, end } = getDayRange(deliveryDate);
 
-    const existingDeliveries = await this.repository.findAll({
-      from: start,
-      to: end,
+    // Use raw query with FOR UPDATE to lock rows and prevent race conditions
+    // This ensures only one transaction at a time can count deliveries for this day
+    return prisma.$transaction(async (tx) => {
+      const existingDeliveries = await tx.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*) as count
+        FROM deliveries
+        WHERE delivery_date >= ${start.getTime()}
+          AND delivery_date <= ${end.getTime()}
+        FOR UPDATE
+      `;
+
+      const count = Number(existingDeliveries[0]?.count || 0n) + 1;
+      const suffix = toRomanNumeral(count);
+
+      return `${datePrefix}_${suffix}`;
     });
-
-    // Count existing deliveries on same day (add 1 for the new delivery)
-    const count = existingDeliveries.length + 1;
-    const suffix = toRomanNumeral(count);
-
-    return `${datePrefix}_${suffix}`;
   }
 
   async updateDelivery(id: number, data: { deliveryDate?: string; status?: string; notes?: string }) {
@@ -119,7 +136,53 @@ export class DeliveryService {
 
   async addOrderToDelivery(deliveryId: number, orderId: number) {
     // Verify delivery exists
-    await this.getDeliveryById(deliveryId);
+    const delivery = await this.getDeliveryById(deliveryId);
+
+    // Get order details to extract order number
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, orderNumber: true },
+    });
+
+    if (!order) {
+      throw new NotFoundError('Order');
+    }
+
+    // Parse order number to get base number
+    const { base: baseNumber } = this.csvParser.parseOrderNumber(order.orderNumber);
+
+    logger.info('Checking for order variant conflicts before adding to delivery', {
+      orderId,
+      orderNumber: order.orderNumber,
+      baseNumber,
+      deliveryId,
+      deliveryNumber: delivery.deliveryNumber,
+    });
+
+    // Check if any variant of this order is already in a delivery
+    const variantCheck = await this.variantService.checkVariantInDelivery(baseNumber);
+
+    if (variantCheck.hasConflict && variantCheck.conflictingOrder) {
+      const conflictingOrder = variantCheck.conflictingOrder;
+      const conflictingDelivery = conflictingOrder.deliveryAssignment;
+
+      logger.warn('Order variant conflict detected', {
+        newOrder: order.orderNumber,
+        conflictingOrder: conflictingOrder.orderNumber,
+        deliveryNumber: conflictingDelivery?.deliveryNumber,
+        deliveryId: conflictingDelivery?.deliveryId,
+      });
+
+      throw new ValidationError(
+        `Zlecenie ${conflictingOrder.orderNumber} (wariant tego samego zlecenia bazowego ${baseNumber}) jest już przypisane do dostawy ${conflictingDelivery?.deliveryNumber || conflictingDelivery?.deliveryId}`
+      );
+    }
+
+    logger.info('No variant conflicts found, proceeding to add order to delivery', {
+      orderId,
+      orderNumber: order.orderNumber,
+      deliveryId,
+    });
 
     // Add order with atomic position calculation to prevent race conditions
     const deliveryOrder = await this.repository.addOrderToDeliveryAtomic(deliveryId, orderId);
@@ -140,7 +203,33 @@ export class DeliveryService {
   }
 
   async reorderDeliveryOrders(deliveryId: number, orderIds: number[]) {
-    await this.repository.reorderDeliveryOrders(deliveryId, orderIds);
+    // Walidacja 1: Usuń duplikaty
+    const uniqueOrderIds = [...new Set(orderIds)];
+
+    if (uniqueOrderIds.length !== orderIds.length) {
+      throw new ValidationError('Lista zleceń zawiera duplikaty');
+    }
+
+    // Walidacja 2: Pobierz istniejące zlecenia w tej dostawie
+    const delivery = await this.getDeliveryById(deliveryId);
+    const existingOrderIds = new Set(delivery.deliveryOrders.map(d => d.orderId));
+
+    // Walidacja 3: Sprawdź czy wszystkie orderIds należą do tej dostawy
+    const invalidOrders = uniqueOrderIds.filter(id => !existingOrderIds.has(id));
+    if (invalidOrders.length > 0) {
+      throw new ValidationError(
+        `Następujące zlecenia nie należą do tej dostawy: ${invalidOrders.join(', ')}`
+      );
+    }
+
+    // Walidacja 4: Czy wszystkie zlecenia są uwzględnione?
+    if (uniqueOrderIds.length !== existingOrderIds.size) {
+      throw new ValidationError(
+        `Lista zleceń jest niepełna. Oczekiwano ${existingOrderIds.size} zleceń, otrzymano ${uniqueOrderIds.length}`
+      );
+    }
+
+    await this.repository.reorderDeliveryOrders(deliveryId, uniqueOrderIds);
     return { success: true };
   }
 
@@ -209,6 +298,45 @@ export class DeliveryService {
    */
   async getCalendarData(year: number, month: number) {
     return this.repository.getCalendarData(year, month);
+  }
+
+  /**
+   * Get batched calendar data for multiple months
+   * Combines deliveries, working days, and holidays into a single query
+   */
+  async getCalendarDataBatch(months: Array<{ month: number; year: number }>) {
+    // Fetch all calendar data in parallel
+    const calendarPromises = months.map(({ month, year }) =>
+      this.repository.getCalendarData(year, month)
+    );
+
+    const calendarResults = await Promise.all(calendarPromises);
+
+    // Combine deliveries and unassigned orders
+    const allDeliveries = calendarResults.flatMap(r => r.deliveries || []);
+    const unassignedOrders = calendarResults[0]?.unassignedOrders || [];
+
+    // Get working days for all months
+    const workingDaysPromises = months.map(({ month, year }) =>
+      this.repository.getWorkingDays(month, year)
+    );
+    const workingDaysResults = await Promise.all(workingDaysPromises);
+    const workingDays = workingDaysResults.flat();
+
+    // Get holidays for all unique years
+    const uniqueYears = Array.from(new Set(months.map(m => m.year)));
+    const holidaysPromises = uniqueYears.map(year =>
+      this.repository.getHolidays(year)
+    );
+    const holidaysResults = await Promise.all(holidaysPromises);
+    const holidays = holidaysResults.flat();
+
+    return {
+      deliveries: allDeliveries,
+      unassignedOrders,
+      workingDays,
+      holidays,
+    };
   }
 
   /**

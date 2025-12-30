@@ -92,4 +92,41 @@ export class SettingsRepository {
       where: { id },
     });
   }
+
+  // User Folder Settings
+  async findUserFolderSettings(userId: number) {
+    return this.prisma.userFolderSettings.findUnique({
+      where: { userId },
+    });
+  }
+
+  async findGlobalFolderSettings() {
+    return this.prisma.userFolderSettings.findFirst({
+      where: { userId: null },
+    });
+  }
+
+  async upsertUserFolderSettings(userId: number, importsBasePath: string) {
+    return this.prisma.userFolderSettings.upsert({
+      where: { userId },
+      update: { importsBasePath, isActive: true },
+      create: { userId, importsBasePath, isActive: true },
+    });
+  }
+
+  async upsertGlobalFolderSettings(importsBasePath: string) {
+    // Find existing global settings
+    const existing = await this.findGlobalFolderSettings();
+
+    if (existing) {
+      return this.prisma.userFolderSettings.update({
+        where: { id: existing.id },
+        data: { importsBasePath, isActive: true },
+      });
+    }
+
+    return this.prisma.userFolderSettings.create({
+      data: { userId: null, importsBasePath, isActive: true },
+    });
+  }
 }

@@ -325,9 +325,11 @@ export default function ImportyPage() {
           isLoading={previewLoading}
           isPending={approveMutation.isPending}
           isRejectPending={rejectMutation.isPending}
-          onApprove={(resolution) =>
-            approveMutation.mutate({ id: previewId, action: 'add_new', resolution })
-          }
+          onApprove={(resolution) => {
+            if (previewId !== null) {
+              approveMutation.mutate({ id: previewId, action: 'add_new', resolution });
+            }
+          }}
           onReject={(id) => rejectMutation.mutate(id)}
           open={!!previewId}
           onOpenChange={(open) => !open && setPreviewId(null)}

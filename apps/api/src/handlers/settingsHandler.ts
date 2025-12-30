@@ -125,4 +125,45 @@ export class SettingsHandler {
     await this.service.deletePackingRule(id);
     return reply.status(204).send();
   }
+
+  // User Folder Settings
+  async getUserFolderPath(request: FastifyRequest, reply: FastifyReply) {
+    // Get userId from authenticated request
+    const userId = (request as any).user?.userId;
+    
+    if (!userId) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    try {
+      const settings = await this.service.getUserFolderPath(Number(userId));
+      return reply.send(settings);
+    } catch (error) {
+      // If no settings found, return 404
+      return reply.status(404).send({ error: 'Folder settings not configured' });
+    }
+  }
+
+  async updateUserFolderPath(
+    request: FastifyRequest<{ Body: { importsBasePath: string } }>,
+    reply: FastifyReply
+  ) {
+    const userId = (request as any).user?.userId;
+    
+    if (!userId) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const { importsBasePath } = request.body;
+
+    try {
+      const settings = await this.service.updateUserFolderPath(Number(userId), importsBasePath);
+      return reply.send(settings);
+    } catch (error) {
+      return reply.status(500).send({ 
+        error: 'Failed to update folder settings',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
 }
