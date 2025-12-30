@@ -5,6 +5,22 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Rozpoczynam seedowanie bazy danych...');
 
+  // ==================== UŻYTKOWNICY ====================
+  // Simple hash for seeding - in production, use proper password hashing
+  const systemPasswordHash = 'system'; // Placeholder - authentication will be implemented later
+
+  const systemUser = await prisma.user.upsert({
+    where: { email: 'system@akrobud.local' },
+    update: {},
+    create: {
+      email: 'system@akrobud.local',
+      passwordHash: systemPasswordHash,
+      name: 'System',
+      role: 'admin',
+    },
+  });
+  console.log('✅ Użytkownik systemowy utworzony (ID:', systemUser.id, ')');
+
   // ==================== PROFILE ====================
   const profiles = [
     { number: '9016', name: 'Profil 9016' },
