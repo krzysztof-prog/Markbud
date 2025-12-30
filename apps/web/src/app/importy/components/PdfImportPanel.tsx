@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileText, AlertCircle, Eye, Check, X } from 'lucide-react';
+import { FileText, AlertCircle, Eye, Check, X, CheckCheck } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import type { Import } from '@/types';
 
@@ -13,8 +13,10 @@ interface PdfImportPanelProps {
   onPreview: (id: number) => void;
   onApprove: (id: number) => void;
   onReject: (id: number) => void;
+  onBulkApprove?: (ids: number[]) => void;
   isApprovePending: boolean;
   isRejectPending: boolean;
+  isBulkPending?: boolean;
 }
 
 export function PdfImportPanel({
@@ -23,8 +25,10 @@ export function PdfImportPanel({
   onPreview,
   onApprove,
   onReject,
+  onBulkApprove,
   isApprovePending,
   isRejectPending,
+  isBulkPending,
 }: PdfImportPanelProps) {
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,10 +92,25 @@ export function PdfImportPanel({
 
         {/* Oczekujace importy PDF */}
         <div>
-          <h4 className="text-sm font-medium text-slate-500 mb-2 flex items-center gap-1">
-            <AlertCircle className="h-4 w-4" />
-            Wymagajace uwagi ({pendingImports.length})
-          </h4>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-medium text-slate-500 flex items-center gap-1">
+              <AlertCircle className="h-4 w-4" />
+              Wymagajace uwagi ({pendingImports.length})
+            </h4>
+            {pendingImports.length > 1 && onBulkApprove && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onBulkApprove(pendingImports.map((imp) => imp.id))}
+                disabled={isBulkPending}
+                className="text-xs gap-1"
+                title="Zapisz wszystkie ceny - zostaną automatycznie przypisane do zleceń gdy się pojawią"
+              >
+                <CheckCheck className="h-3.5 w-3.5" />
+                Zapisz wszystkie ({pendingImports.length})
+              </Button>
+            )}
+          </div>
           {pendingImports.length > 0 ? (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {pendingImports.map((imp: Import) => (

@@ -44,6 +44,9 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
     };
   }>('/process', { preHandler: verifyAuth }, handler.processImport.bind(handler));
 
+  // Bulk operations
+  fastify.post<{ Body: { ids: number[]; action: 'approve' | 'reject' } }>('/bulk', { preHandler: verifyAuth }, handler.bulkAction.bind(handler));
+
   // Single import operations
   fastify.get<{ Params: { id: string } }>('/:id', { preHandler: verifyAuth }, handler.getById.bind(handler));
   fastify.get<{ Params: { id: string } }>('/:id/preview', { preHandler: verifyAuth }, handler.getPreview.bind(handler));

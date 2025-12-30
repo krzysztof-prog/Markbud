@@ -185,7 +185,43 @@ export function useImportActionMutations(callbacks?: {
     },
   });
 
-  return { approveMutation, rejectMutation, deleteMutation };
+  const bulkActionMutation = useMutation({
+    mutationFn: ({ ids, action }: { ids: number[]; action: 'approve' | 'reject' }) =>
+      importsApi.bulkAction(ids, action),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['imports'] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+
+      const { summary } = data;
+      const actionLabel = variables.action === 'approve' ? 'zatwierdzono' : 'odrzucono';
+
+      if (summary.failCount === 0) {
+        toast({
+          title: `Pomyslnie ${actionLabel} ${summary.successCount} importow`,
+          description: variables.action === 'approve'
+            ? 'Ceny zostaly zapisane i beda automatycznie przypisane do zlecen'
+            : 'Importy zostaly odrzucone',
+          variant: 'success',
+        });
+      } else {
+        toast({
+          title: `Czesciowo ${actionLabel}`,
+          description: `${summary.successCount} pomyslnie, ${summary.failCount} z bledami`,
+          variant: 'destructive',
+        });
+      }
+    },
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Nie udalo sie przetworzyc importow';
+      toast({
+        title: 'Blad przetwarzania',
+        description: message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  return { approveMutation, rejectMutation, deleteMutation, bulkActionMutation };
 }
 
 /**

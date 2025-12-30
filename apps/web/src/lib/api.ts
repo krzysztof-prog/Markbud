@@ -60,6 +60,7 @@ import type {
   UpdatePalletTypeRequest,
 } from '@/types/pallet';
 import { fetchApi, uploadFile, fetchBlob, checkExists, API_URL, type ApiError } from './api-client';
+import { getAuthToken } from './auth-token';
 
 // Dashboard
 export const dashboardApi = {
@@ -109,7 +110,12 @@ export const ordersApi = {
   getRequirementsTotals: () => fetchApi<Array<{ profileId: number; total: number }>>('/api/orders/requirements/totals'),
   checkPdf: async (id: number): Promise<{ hasPdf: boolean; filename: string | null }> => {
     try {
-      const response = await fetch(`${API_URL}/api/orders/${id}/has-pdf`);
+      const token = await getAuthToken();
+      const response = await fetch(`${API_URL}/api/orders/${id}/has-pdf`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       if (!response.ok) {
         return { hasPdf: false, filename: null };
       }
@@ -169,12 +175,21 @@ export const warehouseOrdersApi = {
 
 // Dostawy
 export const deliveriesApi = {
-  getAll: (params?: { from?: string; to?: string; status?: string }) => {
+  getAll: async (params?: { from?: string; to?: string; status?: string }): Promise<Delivery[]> => {
     const query = new URLSearchParams(params as Record<string, string>).toString();
-    return fetchApi<Delivery[]>(`/api/deliveries${query ? `?${query}` : ''}`);
+    const response = await fetchApi<{ data: Delivery[]; total: number } | Delivery[]>(`/api/deliveries${query ? `?${query}` : ''}`);
+    // Handle both paginated response { data: [...] } and direct array response
+    return Array.isArray(response) ? response : response.data;
   },
   getCalendar: (month: number, year: number) =>
     fetchApi<DeliveryCalendarData>(`/api/deliveries/calendar?month=${month}&year=${year}`),
+  getCalendarBatch: (months: Array<{ month: number; year: number }>) =>
+    fetchApi<{
+      deliveries: any[];
+      unassignedOrders: any[];
+      workingDays: any[];
+      holidays: any[];
+    }>(`/api/deliveries/calendar-batch?months=${encodeURIComponent(JSON.stringify(months))}`),
   getById: (id: number) => fetchApi<Delivery>(`/api/deliveries/${id}`),
   getProfileRequirements: (params?: { from?: string }) => {
     console.log('[API] getProfileRequirements called with params:', params);
@@ -211,7 +226,18 @@ export const deliveriesApi = {
     const url = `${API_URL}/api/deliveries/${deliveryId}/protocol/pdf`;
 
     try {
-      const response = await fetch(url);
+      const token = await getAuthToken();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 210000); // 3.5 minutes
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
@@ -312,6 +338,11 @@ interface FolderScanResult {
     orderNumber: string;
     requirementsCount: number;
     windowsCount: number;
+    existingDeliveryInfo?: {
+      deliveryId: number;
+      deliveryNumber: string | null;
+      deliveryDate: string;
+    };
   }>;
   existingDeliveries: Array<{
     id: number;
@@ -330,6 +361,7 @@ interface FolderImportResult {
   summary: {
     totalFiles: number;
     successCount: number;
+    skippedCount: number;
     failCount: number;
   };
   results: Array<{
@@ -339,7 +371,10 @@ interface FolderImportResult {
     orderId?: number;
     orderNumber?: string;
     error?: string;
+    skipped?: boolean;
+    skipReason?: string;
   }>;
+  archivedPath: string | null;
 }
 
 // Importy
@@ -348,10 +383,14 @@ export const importsApi = {
   getAll: (status?: string) =>
     fetchApi<Import[]>(`/api/imports${status ? `?status=${status}` : ''}`),
   getPreview: (id: number) => fetchApi<ImportPreview>(`/api/imports/${id}/preview`),
-  approve: (id: number, action?: 'overwrite' | 'add_new') =>
+  approve: (
+    id: number,
+    action?: 'overwrite' | 'add_new',
+    resolution?: { type: 'keep_existing' | 'use_latest'; deleteOlder?: boolean }
+  ) =>
     fetchApi<Import>(`/api/imports/${id}/approve`, {
       method: 'POST',
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ action, resolution }),
     }),
   reject: (id: number) =>
     fetchApi<Import>(`/api/imports/${id}/reject`, { method: 'POST', body: JSON.stringify({}) }),
@@ -367,6 +406,15 @@ export const importsApi = {
       body: JSON.stringify({ folderPath, deliveryNumber }),
     }),
   upload: (file: File) => uploadFile<Import>('/api/imports/upload', file),
+  bulkAction: (ids: number[], action: 'approve' | 'reject') =>
+    fetchApi<{
+      success: boolean;
+      summary: { total: number; successCount: number; failCount: number };
+      results: Array<{ id: number; success: boolean; error?: string }>;
+    }>('/api/imports/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ ids, action }),
+    }),
 };
 
 // Ustawienia
@@ -381,6 +429,11 @@ export const settingsApi = {
     fetchApi<PalletType>(`/api/settings/pallet-types/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deletePalletType: (id: number) =>
     fetchApi<void>(`/api/settings/pallet-types/${id}`, { method: 'DELETE' }),
+  getUserFolderPath: () => fetchApi<{ path: string }>('/api/settings/user-folder-path'),
+  updateUserFolderPath: (path: string) =>
+    fetchApi<{ path: string }>('/api/settings/user-folder-path', { method: 'PUT', body: JSON.stringify({ path }) }),
+  validateFolder: (path: string) =>
+    fetchApi<{ valid: boolean; error?: string }>('/api/settings/validate-folder', { method: 'POST', body: JSON.stringify({ path }) }),
 };
 
 // Dni wolne od pracy
@@ -467,7 +520,18 @@ export const palletsApi = {
     const url = `${API_URL}/api/pallets/export/${deliveryId}`;
 
     try {
-      const response = await fetch(url);
+      const token = await getAuthToken();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 210000); // 3.5 minutes
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
@@ -606,9 +670,38 @@ export const monthlyReportsApi = {
    */
   exportExcel: async (year: number, month: number): Promise<Blob> => {
     const url = `${API_URL}/api/monthly-reports/${year}/${month}/export/excel`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to export Excel');
-    return response.blob();
+
+    try {
+      const token = await getAuthToken();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 210000); // 3.5 minutes
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
+        const error: ApiError = new Error(data.error || 'Failed to export Excel');
+        error.status = response.status;
+        error.data = data;
+        throw error;
+      }
+
+      return response.blob();
+    } catch (error) {
+      if (error instanceof TypeError) {
+        const networkError: ApiError = new Error('Błąd połączenia sieciowego');
+        networkError.status = 0;
+        throw networkError;
+      }
+      throw error;
+    }
   },
 
   /**
@@ -617,9 +710,38 @@ export const monthlyReportsApi = {
    */
   exportPdf: async (year: number, month: number): Promise<Blob> => {
     const url = `${API_URL}/api/monthly-reports/${year}/${month}/export/pdf`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to export PDF');
-    return response.blob();
+
+    try {
+      const token = await getAuthToken();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 210000); // 3.5 minutes
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
+        const error: ApiError = new Error(data.error || 'Failed to export PDF');
+        error.status = response.status;
+        error.data = data;
+        throw error;
+      }
+
+      return response.blob();
+    } catch (error) {
+      if (error instanceof TypeError) {
+        const networkError: ApiError = new Error('Błąd połączenia sieciowego');
+        networkError.status = 0;
+        throw networkError;
+      }
+      throw error;
+    }
   },
 
   /**

@@ -10,6 +10,8 @@ import {
   approveImportSchema,
   folderImportSchema,
   scanFolderQuerySchema,
+  previewByFilepathQuerySchema,
+  processImportSchema,
 } from '../validators/import.js';
 import { parseIntParam } from '../utils/errors.js';
 
@@ -30,10 +32,11 @@ export class ImportHandler {
     }
 
     const filename = data.filename;
+    const mimeType = data.mimetype;
     const buffer = await data.toBuffer();
 
     try {
-      const result = await this.service.uploadFile(filename, buffer);
+      const result = await this.service.uploadFile(filename, buffer, mimeType);
 
       reply.status(201);
 
@@ -156,12 +159,15 @@ export class ImportHandler {
    */
   async importFolder(
     request: FastifyRequest<{
-      Body: { folderPath: string; deliveryNumber: 'I' | 'II' | 'III' };
+      Body: { folderPath: string; deliveryNumber: 'I' | 'II' | 'III'; userId?: number };
     }>,
     reply: FastifyReply
   ) {
     const validated = folderImportSchema.parse(request.body);
-    const result = await this.service.importFromFolder(validated.folderPath, validated.deliveryNumber);
+    // Use provided userId or default to 1 (system user)
+    // TODO: Replace with actual authenticated user ID when auth is implemented
+    const userId = validated.userId || 1;
+    const result = await this.service.importFromFolder(validated.folderPath, validated.deliveryNumber, userId);
     return reply.status(200).send({ success: true, ...result });
   }
 
@@ -169,10 +175,11 @@ export class ImportHandler {
    * GET /api/imports/list-folders - list folders with dates in names
    */
   async listFolders(
-    request: FastifyRequest,
+    request: FastifyRequest<{ Querystring: { userId?: number } }>,
     reply: FastifyReply
   ) {
-    const result = await this.service.listFolders();
+    const userId = request.query.userId;
+    const result = await this.service.listFolders(userId);
 
     if ('error' in result && result.error === 'Folder bazowy nie istnieje') {
       return reply.status(404).send(result);
@@ -189,11 +196,100 @@ export class ImportHandler {
    * GET /api/imports/scan-folder - scan folder and return info about CSV files
    */
   async scanFolder(
-    request: FastifyRequest<{ Querystring: { folderPath: string } }>,
+    request: FastifyRequest<{ Querystring: { folderPath: string; userId?: number } }>,
     reply: FastifyReply
   ) {
     const validated = scanFolderQuerySchema.parse(request.query);
-    const result = await this.service.scanFolder(validated.folderPath);
+    const userId = request.query.userId;
+    const result = await this.service.scanFolder(validated.folderPath, userId);
     return reply.send(result);
+  }
+
+  /**
+   * GET /api/imports/preview - preview file by filepath with variant conflict detection
+   */
+  async previewByFilepath(
+    request: FastifyRequest<{ Querystring: { filepath: string } }>,
+    reply: FastifyReply
+  ) {
+    const validated = previewByFilepathQuerySchema.parse(request.query);
+    const result = await this.service.previewByFilepath(validated.filepath);
+    return reply.send(result);
+  }
+
+  /**
+   * POST /api/imports/process - process import with optional variant resolution
+   */
+  async processImport(
+    request: FastifyRequest<{
+      Body: {
+        filepath: string;
+        deliveryNumber?: 'I' | 'II' | 'III';
+        resolution?: {
+          type: 'merge' | 'replace' | 'use_latest' | 'keep_both' | 'cancel';
+          targetOrderNumber?: string;
+          deleteOlder?: boolean;
+        };
+      };
+    }>,
+    reply: FastifyReply
+  ) {
+    const validated = processImportSchema.parse(request.body);
+    const result = await this.service.processImport(
+      validated.filepath,
+      validated.deliveryNumber,
+      validated.resolution
+    );
+    return reply.status(200).send(result);
+  }
+
+  /**
+   * POST /api/imports/bulk - perform bulk action on multiple imports
+   * Domyślna akcja dla PDF z błędem order_not_found: zapisz cenę do pending_order_prices
+   */
+  async bulkAction(
+    request: FastifyRequest<{
+      Body: { ids: number[]; action: 'approve' | 'reject' };
+    }>,
+    reply: FastifyReply
+  ) {
+    const { ids, action } = request.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return reply.status(400).send({ error: 'Brak ID do przetworzenia' });
+    }
+
+    const results: Array<{ id: number; success: boolean; error?: string }> = [];
+
+    for (const id of ids) {
+      try {
+        if (action === 'approve') {
+          await this.service.approveImport(id, 'add_new');
+          results.push({ id, success: true });
+        } else if (action === 'reject') {
+          await this.service.rejectImport(id);
+          results.push({ id, success: true });
+        }
+      } catch (error) {
+        results.push({
+          id,
+          success: false,
+          error: error instanceof Error ? error.message : 'Nieznany błąd',
+        });
+      }
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    const failCount = results.filter((r) => !r.success).length;
+
+    return reply.send({
+      success: failCount === 0,
+      summary: {
+        total: ids.length,
+        successCount,
+        failCount,
+      },
+      results,
+    });
   }
 }

@@ -151,21 +151,40 @@ export class ImportService {
       const order = await this.repository.findOrderByNumber(preview.orderNumber);
 
       if (!order) {
+        // Zapisz cenę do pending_order_prices - będzie automatycznie przypisana gdy zlecenie się pojawi
+        await prisma.pendingOrderPrice.create({
+          data: {
+            orderNumber: preview.orderNumber,
+            reference: preview.reference || null,
+            currency: preview.currency,
+            valueNetto: preview.valueNetto,
+            valueBrutto: preview.valueBrutto || null,
+            filename,
+            filepath,
+            importId,
+            status: 'pending',
+          },
+        });
+
+        // Oznacz import jako completed (cena została zapisana do pending)
         await this.repository.update(importId, {
-          status: 'pending',
+          status: 'completed',
+          processedAt: new Date(),
           metadata: JSON.stringify({
-            autoImportError: true,
-            errorType: 'order_not_found',
+            savedAsPending: true,
+            orderNumber: preview.orderNumber,
             parsed: preview,
-            message: `Zlecenie ${preview.orderNumber} nie istnieje w bazie danych`,
+            message: `Cena dla ${preview.orderNumber} zapisana - zostanie automatycznie przypisana gdy zlecenie sie pojawi`,
           }),
         });
 
+        logger.info(`PDF price saved as pending: ${filename} -> ${preview.orderNumber} (${preview.currency} ${preview.valueNetto})`);
+
         const fileImport = await this.repository.findById(importId);
         return {
-          fileImport,
-          autoImportStatus: 'error',
-          autoImportError: `Zlecenie ${preview.orderNumber} nie istnieje - wymaga recznego zatwierdzenia`,
+          fileImport: { ...fileImport, status: 'completed' },
+          autoImportStatus: 'pending_order',
+          autoImportMessage: `Cena dla ${preview.orderNumber} zapisana. Zostanie automatycznie przypisana gdy zlecenie się pojawi.`,
         };
       }
 
@@ -335,7 +354,40 @@ export class ImportService {
         result = await this.processUzyteBeleImport(fileImport, action, replaceBase);
       } else if (fileImport.fileType === 'ceny_pdf') {
         const parser = new PdfParser();
-        result = await parser.processCenyPdf(fileImport.filepath);
+
+        // Najpierw sprawdź czy zlecenie istnieje
+        const preview = await parser.previewCenyPdf(fileImport.filepath);
+        const order = await this.repository.findOrderByNumber(preview.orderNumber);
+
+        if (order) {
+          // Zlecenie istnieje - przypisz cenę bezpośrednio
+          result = await parser.processCenyPdf(fileImport.filepath);
+        } else {
+          // Zlecenie nie istnieje - zapisz do PendingOrderPrice
+          await prisma.pendingOrderPrice.create({
+            data: {
+              orderNumber: preview.orderNumber,
+              reference: preview.reference || null,
+              currency: preview.currency,
+              valueNetto: preview.valueNetto,
+              valueBrutto: preview.valueBrutto || null,
+              filename: fileImport.filename,
+              filepath: fileImport.filepath,
+              importId: id,
+              status: 'pending',
+            },
+          });
+
+          logger.info(`PDF price saved as pending (manual approve): ${fileImport.filename} -> ${preview.orderNumber}`);
+
+          result = {
+            savedAsPending: true,
+            orderNumber: preview.orderNumber,
+            currency: preview.currency,
+            valueNetto: preview.valueNetto,
+            message: `Cena zapisana - zostanie automatycznie przypisana gdy zlecenie ${preview.orderNumber} sie pojawi`,
+          };
+        }
       } else {
         throw new ValidationError('Nieobslugiwany typ pliku');
       }

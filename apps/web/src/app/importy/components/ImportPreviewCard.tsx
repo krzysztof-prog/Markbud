@@ -1,8 +1,16 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState } from 'react';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Check } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Check, AlertTriangle, X } from 'lucide-react';
+import { OrderVariantConflictModal } from '@/components/orders/order-variant-conflict-modal';
 import type { ImportPreview } from '@/types';
 
 // Typy pomocnicze dla danych importu
@@ -35,7 +43,9 @@ interface ImportPreviewCardProps {
   preview: ImportPreview | null;
   isLoading: boolean;
   isPending: boolean;
-  onApprove: () => void;
+  isRejectPending?: boolean;
+  onApprove: (resolution?: { type: 'keep_existing' | 'use_latest'; deleteOlder?: boolean }) => void;
+  onReject?: (id: number) => void;
   onClose: () => void;
 }
 
@@ -43,103 +53,170 @@ export function ImportPreviewCard({
   preview,
   isLoading,
   isPending,
+  isRejectPending,
   onApprove,
+  onReject,
   onClose,
 }: ImportPreviewCardProps) {
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Podglad importu</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center h-32">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
 
-  if (!preview || !preview.import) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Podglad importu</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Nie mozna zaladowac podgladu</p>
-          <div className="flex gap-2 pt-4 border-t mt-4">
-            <Button variant="outline" onClick={onClose}>
-              Zamknij
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const hasConflict = preview?.variantConflict?.type && preview.variantConflict.existingOrders.length > 0;
 
-  const metadata = preview.import.metadata as ImportMetadata;
-  const data = preview.data as unknown as ImportDataItem[];
-  const requirementItems = data?.filter((d) => d.type === 'requirement') || [];
-  const windowItems = data?.filter((d) => d.type === 'window') || [];
+  const handleApprove = () => {
+    if (hasConflict) {
+      setConflictModalOpen(true);
+    } else {
+      onApprove();
+    }
+  };
+
+  const handleResolveConflict = (
+    resolutionType: 'keep_existing' | 'use_latest',
+    deleteOlder?: boolean
+  ) => {
+    const resolution = { type: resolutionType, deleteOlder };
+    onApprove(resolution);
+    setConflictModalOpen(false);
+  };
+
+  // Metadata can be in preview.metadata (new format) or preview.import.metadata (legacy)
+  const metadata = (preview?.metadata || preview?.import?.metadata) as ImportMetadata | undefined;
+  const data = (preview?.data as ImportDataItem[]) || [];
+  const requirementItems = data.filter((d) => d.type === 'requirement');
+  const windowItems = data.filter((d) => d.type === 'window');
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Podglad importu</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {/* Naglowek z numerem zlecenia */}
-          <PreviewHeader metadata={metadata} requirementCount={requirementItems.length} windowCount={windowItems.length} />
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            Podglad importu - Zlecenie {metadata?.orderNumber || '...'}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center h-48">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            </div>
+          ) : !preview || !preview.import ? (
+            <div className="text-center py-8">
+              <p className="text-sm text-muted-foreground">Nie mozna zaladowac podgladu</p>
+              <div className="flex gap-2 justify-center pt-4 mt-4">
+                <Button variant="outline" onClick={onClose}>
+                  Zamknij
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+            {/* Naglowek z numerem zlecenia */}
+            <PreviewHeader metadata={metadata || {}} requirementCount={requirementItems.length} windowCount={windowItems.length} />
 
-          {/* Podsumowanie z PDF - wartosc i waluta */}
-          {(metadata?.valueNetto || metadata?.currency) && (
-            <PdfSummary metadata={metadata} />
-          )}
-
-          {/* Podsumowanie z CSV */}
-          {(metadata?.totals?.windows || metadata?.totals?.sashes || metadata?.totals?.glasses) && (
-            <CsvSummary metadata={metadata} />
-          )}
-
-          {/* Lista wymaganych materialow */}
-          {requirementItems.length > 0 && (
-            <RequirementsTable items={requirementItems} />
-          )}
-
-          {/* Lista okien */}
-          {windowItems.length > 0 && (
-            <WindowsTable items={windowItems} />
-          )}
-
-          {preview.message && (
-            <p className="text-sm text-slate-500">{preview.message}</p>
-          )}
-
-          <div className="flex gap-2 pt-4 border-t">
-            {preview.import.status === 'pending' && (
-              <Button
-                onClick={onApprove}
-                disabled={isPending}
-              >
-                <Check className="h-4 w-4 mr-1" />
-                Zatwierdz import
-              </Button>
+            {/* Konflikt wariantow - warning */}
+            {hasConflict && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-medium text-orange-900 mb-1">Wykryto konflikt wariantow</h4>
+                    <p className="text-sm text-orange-800 mb-3">
+                      W systemie istnieja juz zlecenia z tym numerem bazowym.
+                      Kliknij "Rozwiaz konflikt" aby zdecydowac jak obsluzyc import.
+                    </p>
+                    <div className="flex gap-2">
+                      <Badge variant="outline" className="text-orange-700 border-orange-300">
+                        Typ: {preview.variantConflict?.type}
+                      </Badge>
+                      <Badge variant="outline" className="text-orange-700 border-orange-300">
+                        Istniejace: {preview.variantConflict?.existingOrders.length}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
-            <Button variant="outline" onClick={onClose}>
-              Zamknij
-            </Button>
+
+            {/* Podsumowanie z PDF - wartosc i waluta */}
+            {(metadata?.valueNetto || metadata?.currency) && (
+              <PdfSummary metadata={metadata} />
+            )}
+
+            {/* Podsumowanie z CSV */}
+            {(metadata?.totals?.windows || metadata?.totals?.sashes || metadata?.totals?.glasses) && (
+              <CsvSummary metadata={metadata} />
+            )}
+
+            {/* Lista wymaganych materialow */}
+            {requirementItems.length > 0 && (
+              <RequirementsTable items={requirementItems} />
+            )}
+
+            {/* Lista okien */}
+            {windowItems.length > 0 && (
+              <WindowsTable items={windowItems} />
+            )}
+
+            {preview.message && (
+              <p className="text-sm text-slate-500">{preview.message}</p>
+            )}
+
+            <div className="flex gap-2 pt-4 border-t">
+              {preview.import.status === 'pending' && (
+                <>
+                  {hasConflict ? (
+                    <Button
+                      onClick={() => setConflictModalOpen(true)}
+                      variant="outline"
+                      className="border-orange-400 text-orange-700 hover:bg-orange-50"
+                      disabled={isPending}
+                    >
+                      <AlertTriangle className="h-4 w-4 mr-1" />
+                      Rozwiaz konflikt
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleApprove}
+                      disabled={isPending}
+                    >
+                      <Check className="h-4 w-4 mr-1" />
+                      Zatwierdz import
+                    </Button>
+                  )}
+                  {onReject && (
+                    <Button
+                      variant="destructive"
+                      onClick={() => onReject(preview.import.id)}
+                      disabled={isRejectPending}
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Odrzuc
+                    </Button>
+                  )}
+                </>
+              )}
+              <Button variant="outline" onClick={onClose}>
+                Zamknij
+              </Button>
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Modal konfliktu wariantow */}
+      <OrderVariantConflictModal
+        open={conflictModalOpen}
+        onOpenChange={setConflictModalOpen}
+        conflict={preview?.variantConflict || null}
+        onResolve={handleResolveConflict}
+        isResolving={isPending}
+      />
+    </>
   );
 }
 
 function PreviewHeader({ metadata, requirementCount, windowCount }: {
-  metadata: ImportMetadata;
+  metadata: ImportMetadata | undefined;
   requirementCount: number;
   windowCount: number;
 }) {

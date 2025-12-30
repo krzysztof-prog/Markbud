@@ -18,13 +18,24 @@ export class SchucoScraper {
   private page: Page | null = null;
 
   constructor(config: Partial<SchucoScraperConfig> = {}) {
+    // Validate required environment variables
+    const schucoEmail = process.env.SCHUCO_EMAIL;
+    const schucoPassword = process.env.SCHUCO_PASSWORD;
+
+    if (!schucoEmail || !schucoPassword) {
+      throw new Error(
+        'SCHUCO_EMAIL and SCHUCO_PASSWORD must be set in environment variables. ' +
+        'Please configure these values in your .env file.'
+      );
+    }
+
     this.config = {
-      email: process.env.SCHUCO_EMAIL || 'krzysztof@markbud.pl',
-      password: process.env.SCHUCO_PASSWORD || 'Markbud2020',
+      email: schucoEmail,
+      password: schucoPassword,
       baseUrl: process.env.SCHUCO_BASE_URL || 'https://connect.schueco.com/',
       headless: process.env.SCHUCO_HEADLESS === 'true' || false,
       downloadPath: process.env.SCHUCO_DOWNLOAD_PATH || path.join(process.cwd(), 'downloads', 'schuco'),
-      timeout: 60000,
+      timeout: 120000, // Increased from 60s to 120s - Schuco pages are slow
       ...config,
     };
 
@@ -71,80 +82,147 @@ export class SchucoScraper {
   private async initializeBrowser(): Promise<void> {
     logger.info('[SchucoScraper] Initializing browser...');
 
-    // Find Chrome executable
-    const chromeExecutablePath = this.findChromeExecutable();
+    try {
+      // Find Chrome executable
+      const chromeExecutablePath = this.findChromeExecutable();
 
-    // Resolve absolute path for download directory
-    const absoluteDownloadPath = path.resolve(this.config.downloadPath);
-    logger.info(`[SchucoScraper] Download path: ${absoluteDownloadPath}`);
+      // Resolve absolute path for download directory
+      const absoluteDownloadPath = path.resolve(this.config.downloadPath);
+      logger.info(`[SchucoScraper] Download path: ${absoluteDownloadPath}`);
 
-    const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
-      headless: this.config.headless,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--start-maximized',
-        '--disable-notifications',
-        // Allow downloads
-        '--safebrowsing-disable-download-protection',
-        '--disable-features=SafeBrowsingEnhancedProtection',
-        `--download.default_directory=${absoluteDownloadPath}`,
-      ],
-    };
+      const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
+        headless: this.config.headless,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--disable-gpu',
+          '--start-maximized',
+          '--disable-notifications',
+          // Allow downloads
+          '--safebrowsing-disable-download-protection',
+          '--disable-features=SafeBrowsingEnhancedProtection',
+          `--download.default_directory=${absoluteDownloadPath}`,
+        ],
+      };
 
-    // Add executablePath or channel based on whether Chrome was found
-    if (chromeExecutablePath) {
-      launchOptions.executablePath = chromeExecutablePath;
-    } else {
-      // Use 'chrome' channel to let puppeteer find Chrome automatically
-      launchOptions.channel = 'chrome';
+      // Add executablePath or channel based on whether Chrome was found
+      if (chromeExecutablePath) {
+        launchOptions.executablePath = chromeExecutablePath;
+      } else {
+        // Use 'chrome' channel to let puppeteer find Chrome automatically
+        launchOptions.channel = 'chrome';
+      }
+
+      this.browser = await puppeteer.launch(launchOptions);
+
+      this.page = await this.browser.newPage();
+
+      // Close the default blank page that Puppeteer creates
+      const pages = await this.browser.pages();
+      if (pages.length > 1) {
+        // Close the first page (default blank), keep our newly created one
+        await pages[0].close();
+      }
+
+      // Set viewport - like Python: driver.set_window_size() is implicit with --start-maximized
+      await this.page.setViewport({ width: 1920, height: 1080 });
+
+      // Set user agent
+      await this.page.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      );
+
+      // Configure download behavior using CDP
+      const client = await this.page.createCDPSession();
+
+      // Use Browser.setDownloadBehavior for newer Chrome versions
+      await client.send('Browser.setDownloadBehavior', {
+        behavior: 'allow',
+        downloadPath: absoluteDownloadPath,
+        eventsEnabled: true,
+      });
+
+      // Also set Page download behavior as fallback
+      await client.send('Page.setDownloadBehavior', {
+        behavior: 'allow',
+        downloadPath: absoluteDownloadPath,
+      });
+
+      logger.info(`[SchucoScraper] Browser initialized with download path: ${absoluteDownloadPath}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('[SchucoScraper] Failed to initialize browser', {
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
+      // Cleanup any partially initialized resources
+      if (this.browser) {
+        try {
+          await this.browser.close();
+        } catch (closeError) {
+          logger.warn('[SchucoScraper] Error closing browser during cleanup', {
+            error: closeError instanceof Error ? closeError.message : String(closeError),
+          });
+        }
+        this.browser = null;
+      }
+      this.page = null;
+
+      // Throw a more user-friendly error
+      throw new Error(
+        `Failed to initialize Schuco scraper: ${errorMessage}. ` +
+        'Please ensure Chrome/Chromium is installed and accessible. ' +
+        'You can set CHROME_PATH environment variable to specify Chrome location.'
+      );
     }
-
-    this.browser = await puppeteer.launch(launchOptions);
-
-    this.page = await this.browser.newPage();
-
-    // Close the default blank page that Puppeteer creates
-    const pages = await this.browser.pages();
-    if (pages.length > 1) {
-      // Close the first page (default blank), keep our newly created one
-      await pages[0].close();
-    }
-
-    // Set viewport - like Python: driver.set_window_size() is implicit with --start-maximized
-    await this.page.setViewport({ width: 1920, height: 1080 });
-
-    // Set user agent
-    await this.page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    );
-
-    // Configure download behavior using CDP
-    const client = await this.page.createCDPSession();
-
-    // Use Browser.setDownloadBehavior for newer Chrome versions
-    await client.send('Browser.setDownloadBehavior', {
-      behavior: 'allow',
-      downloadPath: absoluteDownloadPath,
-      eventsEnabled: true,
-    });
-
-    // Also set Page download behavior as fallback
-    await client.send('Page.setDownloadBehavior', {
-      behavior: 'allow',
-      downloadPath: absoluteDownloadPath,
-    });
-
-    logger.info(`[SchucoScraper] Browser initialized with download path: ${absoluteDownloadPath}`);
   }
 
   /**
-   * Login to Schuco website
+   * Login to Schuco website with retry logic
    */
   private async login(): Promise<void> {
+    if (!this.page) throw new Error('Browser not initialized');
+
+    const maxRetries = 3;
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        logger.info(`[SchucoScraper] Login attempt ${attempt}/${maxRetries}...`);
+        await this.performLogin();
+        return; // Success
+      } catch (error) {
+        lastError = error as Error;
+        logger.warn(`[SchucoScraper] Login attempt ${attempt} failed: ${lastError.message}`);
+
+        if (attempt < maxRetries) {
+          logger.info('[SchucoScraper] Waiting 5s before retry...');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+
+          // Reload page for fresh attempt
+          try {
+            await this.page.goto(this.config.baseUrl, {
+              waitUntil: 'domcontentloaded',
+              timeout: this.config.timeout,
+            });
+          } catch (reloadError) {
+            logger.warn('[SchucoScraper] Page reload failed, continuing...');
+          }
+        }
+      }
+    }
+
+    throw lastError || new Error('Login failed after all retries');
+  }
+
+  /**
+   * Perform single login attempt
+   */
+  private async performLogin(): Promise<void> {
     if (!this.page) throw new Error('Browser not initialized');
 
     logger.info('[SchucoScraper] Navigating to login page...');
@@ -153,84 +231,145 @@ export class SchucoScraper {
       timeout: this.config.timeout,
     });
 
+    // Wait for page to be interactive
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     logger.info('[SchucoScraper] Filling login form...');
 
-    // Wait for username input (ID: username) - based on working Python script
-    await this.page.waitForSelector('#username', {
+    // Wait for username input with visibility check
+    const usernameSelector = '#username';
+    await this.page.waitForSelector(usernameSelector, {
       timeout: this.config.timeout,
-    });
-    await this.page.type('#username', this.config.email, {
-      delay: 50, // Reduced from 100ms to 50ms
+      visible: true,
     });
 
-    // Wait for password input (ID: password) - based on working Python script
-    await this.page.waitForSelector('#password', {
+    // Clear any existing value and type new one
+    await this.page.click(usernameSelector, { clickCount: 3 }); // Select all
+    await this.page.type(usernameSelector, this.config.email, {
+      delay: 30, // Faster typing
+    });
+
+    // Small delay between fields
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Wait for password input with visibility check
+    const passwordSelector = '#password';
+    await this.page.waitForSelector(passwordSelector, {
       timeout: this.config.timeout,
+      visible: true,
     });
-    await this.page.type('#password', this.config.password, {
-      delay: 50, // Reduced from 100ms to 50ms
+
+    // Clear any existing value and type new one
+    await this.page.click(passwordSelector, { clickCount: 3 }); // Select all
+    await this.page.type(passwordSelector, this.config.password, {
+      delay: 30, // Faster typing
     });
+
+    // Small delay before submit
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     // Find and click submit button
     logger.info('[SchucoScraper] Submitting login form...');
-    const submitButton = await this.page.$('button[type="submit"]');
+
+    // Try multiple selectors for submit button
+    const submitSelectors = [
+      'button[type="submit"]',
+      'input[type="submit"]',
+      'button.login-btn',
+      '#kc-login',
+    ];
+
+    let submitButton = null;
+    for (const selector of submitSelectors) {
+      submitButton = await this.page.$(selector);
+      if (submitButton) {
+        logger.info(`[SchucoScraper] Found submit button with selector: ${selector}`);
+        break;
+      }
+    }
+
     if (!submitButton) {
+      // Take screenshot for debugging
+      await this.page.screenshot({
+        path: path.join(this.config.downloadPath, 'login-no-submit-button.png'),
+      });
       throw new Error('Login submit button not found');
     }
 
-    // Click and wait for navigation - like Python script waits for login
+    // Click and wait for navigation
     await Promise.all([
       this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: this.config.timeout }),
       submitButton.click(),
     ]);
 
-    // Python: wait.until(EC.invisibility_of_element_located((By.ID, "username")))
     // Wait for login form to disappear (means login successful)
     try {
-      await this.page.waitForSelector('#username', { hidden: true, timeout: 10000 });
+      await this.page.waitForSelector('#username', { hidden: true, timeout: 15000 });
       logger.info('[SchucoScraper] Login form disappeared - login successful');
     } catch (error) {
-      logger.warn('[SchucoScraper] Could not verify login form disappeared, continuing...');
+      // Check if we're on a different page (login might have succeeded)
+      const currentUrl = this.page.url();
+      if (currentUrl.includes('purchaseOrders') || currentUrl.includes('dashboard')) {
+        logger.info('[SchucoScraper] Redirected to app - login successful');
+      } else {
+        logger.warn('[SchucoScraper] Could not verify login, current URL: ' + currentUrl);
+      }
     }
 
-    // Python: time.sleep(2) after login
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Wait for page to stabilize
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     logger.info('[SchucoScraper] Login completed');
 
     // Take screenshot for debugging
-    if (!this.config.headless) {
-      await this.page.screenshot({
-        path: path.join(this.config.downloadPath, 'after-login.png'),
-      });
-    }
+    await this.page.screenshot({
+      path: path.join(this.config.downloadPath, 'after-login.png'),
+    });
   }
 
   /**
-   * Navigate to orders page with date filter (6 months back)
+   * Navigate to orders page with date filter (6 months back) and retry logic
    */
   private async navigateToOrders(): Promise<void> {
     if (!this.page) throw new Error('Browser not initialized');
 
-    logger.info('[SchucoScraper] Navigating to orders page...');
-
-    // Use the orders URL from working Python script - with default filters
     const ordersUrl = `https://connect.schueco.com/schueco/pl/purchaseOrders/orders?filters=default&sort=code,false&view=default`;
+    const maxRetries = 3;
 
-    logger.info(`[SchucoScraper] Orders URL: ${ordersUrl}`);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        logger.info(`[SchucoScraper] Navigating to orders page (attempt ${attempt}/${maxRetries})...`);
+        logger.info(`[SchucoScraper] Orders URL: ${ordersUrl}`);
 
-    await this.page.goto(ordersUrl, {
-      waitUntil: 'networkidle2', // Like Python - wait for page to fully load
-      timeout: this.config.timeout,
-    });
+        await this.page.goto(ordersUrl, {
+          waitUntil: 'networkidle2',
+          timeout: this.config.timeout,
+        });
 
-    logger.info('[SchucoScraper] Orders page loaded');
+        // Verify we're on the orders page
+        const pageContent = await this.page.content();
+        if (pageContent.includes('Zamówienia') || pageContent.includes('purchaseOrders')) {
+          logger.info('[SchucoScraper] Orders page loaded successfully');
 
-    // Take screenshot for debugging
-    if (!this.config.headless) {
-      await this.page.screenshot({
-        path: path.join(this.config.downloadPath, 'orders-page.png'),
-      });
+          // Take screenshot for debugging
+          await this.page.screenshot({
+            path: path.join(this.config.downloadPath, 'orders-page.png'),
+          });
+
+          return; // Success
+        }
+
+        throw new Error('Orders page content not found');
+      } catch (error) {
+        logger.warn(`[SchucoScraper] Navigation attempt ${attempt} failed: ${(error as Error).message}`);
+
+        if (attempt < maxRetries) {
+          logger.info('[SchucoScraper] Waiting 5s before retry...');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        } else {
+          throw error;
+        }
+      }
     }
   }
 
@@ -266,7 +405,7 @@ export class SchucoScraper {
           const loadingText = document.body.innerText.includes('Ładowanie danych');
           return !loadingText;
         },
-        { timeout: 60000 } // 60 seconds for data to load
+        { timeout: 120000 } // Increased to 120 seconds - Schuco data loads very slowly
       );
       logger.info('[SchucoScraper] Loading spinner disappeared');
     } catch (error) {
@@ -340,7 +479,7 @@ export class SchucoScraper {
   /**
    * Wait for file download to complete
    */
-  private async waitForDownload(maxWait = 120000): Promise<void> {
+  private async waitForDownload(maxWait = 180000): Promise<void> {
     const checkInterval = 300; // Reduced from 500ms to 300ms - check more frequently
     let elapsed = 0;
 

@@ -7,140 +7,119 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ==================== UŻYTKOWNICY (przygotowane na przyszłość) ====================
-
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  name         String
-  role         String   @default("user")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
+  id                     Int                 @id @default(autoincrement())
+  email                  String              @unique
+  passwordHash           String              @map("password_hash")
+  name                   String
+  role                   String              @default("user")
+  createdAt              DateTime            @default(now()) @map("created_at")
+  updatedAt              DateTime            @updatedAt @map("updated_at")
   notes                  Note[]
-  warehouseUpdates       WarehouseStock[]   @relation("UpdatedBy")
-  warehouseHistory       WarehouseHistory[] @relation("RecordedBy")
-  warehouseOrdersCreated WarehouseOrder[]   @relation("WarehouseOrderCreatedBy")
-  okucStockUpdates       OkucStock[]        @relation("OkucUpdatedBy")
-  okucOrdersCreated      OkucOrder[]        @relation("OkucCreatedBy")
-  okucRequirements       OkucRequirement[]  @relation("OkucRecordedBy")
-  okucHistory            OkucHistory[]      @relation("OkucRecordedBy")
-  okucImports            OkucImport[]       @relation("OkucImportedBy")
+  okucHistory            OkucHistory[]       @relation("OkucRecordedBy")
+  okucImports            OkucImport[]        @relation("OkucImportedBy")
+  okucOrdersCreated      OkucOrder[]         @relation("OkucCreatedBy")
+  okucRequirements       OkucRequirement[]   @relation("OkucRecordedBy")
+  okucStockUpdates       OkucStock[]         @relation("OkucUpdatedBy")
+  warehouseHistory       WarehouseHistory[]  @relation("RecordedBy")
+  warehouseOrdersCreated WarehouseOrder[]    @relation("WarehouseOrderCreatedBy")
+  warehouseUpdates       WarehouseStock[]    @relation("UpdatedBy")
+  folderSettings         UserFolderSettings?
+  importLocks            ImportLock[]
 
   @@map("users")
 }
 
-// ==================== PROFILE ALUMINIOWE ====================
-
 model Profile {
-  id            Int      @id @default(autoincrement())
-  number        String   @unique
-  articleNumber String?  @unique @map("article_number")
-  name          String
-  description   String?
-  sortOrder     Int      @default(0) @map("sort_order")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  profileColors     ProfileColor[]
+  id                Int                @id @default(autoincrement())
+  number            String             @unique
+  articleNumber     String?            @unique @map("article_number")
+  name              String
+  description       String?
+  sortOrder         Int                @default(0) @map("sort_order")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
   orderRequirements OrderRequirement[]
-  warehouseStock    WarehouseStock[]
+  profileColors     ProfileColor[]
   warehouseHistory  WarehouseHistory[]
   warehouseOrders   WarehouseOrder[]
+  warehouseStock    WarehouseStock[]
 
   @@map("profiles")
 }
 
-// ==================== KOLORY ====================
-
 model Color {
-  id        Int      @id @default(autoincrement())
-  code      String   @unique
-  name      String
-  type      String
-  hexColor  String?  @map("hex_color")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  profileColors     ProfileColor[]
+  id                Int                @id @default(autoincrement())
+  code              String             @unique
+  name              String
+  type              String
+  hexColor          String?            @map("hex_color")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
   orderRequirements OrderRequirement[]
-  warehouseStock    WarehouseStock[]
+  profileColors     ProfileColor[]
   warehouseHistory  WarehouseHistory[]
   warehouseOrders   WarehouseOrder[]
+  warehouseStock    WarehouseStock[]
 
   @@map("colors")
 }
-
-// ==================== POWIĄZANIE PROFIL-KOLOR ====================
 
 model ProfileColor {
   id        Int     @id @default(autoincrement())
   profileId Int     @map("profile_id")
   colorId   Int     @map("color_id")
   isVisible Boolean @default(true) @map("is_visible")
-
-  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  color   Color   @relation(fields: [colorId], references: [id], onDelete: Cascade)
+  color     Color   @relation(fields: [colorId], references: [id], onDelete: Cascade)
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@unique([profileId, colorId])
   @@map("profile_colors")
 }
 
-// ==================== ZLECENIA ====================
-
 model Order {
-  id                Int       @id @default(autoincrement())
-  orderNumber       String    @unique @map("order_number")
-  status            String    @default("new")
-  client            String?
-  project           String?
-  system            String?
-  deadline          DateTime?
-  pvcDeliveryDate   DateTime? @map("pvc_delivery_date")
-  valuePln          Float?    @map("value_pln")
-  valueEur          Float?    @map("value_eur")
-  invoiceNumber     String?   @map("invoice_number")
-  deliveryDate      DateTime? @map("delivery_date")
-  productionDate    DateTime? @map("production_date")
-  glassDeliveryDate DateTime? @map("glass_delivery_date")
-  notes             String?
-  totalWindows      Int?      @map("total_windows")
-  totalSashes       Int?      @map("total_sashes")
-  totalGlasses      Int?      @map("total_glasses")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-  completedAt       DateTime? @map("completed_at")
-  archivedAt        DateTime? @map("archived_at")
-
-  // Glass Tracking fields
-  orderedGlassCount   Int?    @default(0) @map("ordered_glass_count")
-  deliveredGlassCount Int?    @default(0) @map("delivered_glass_count")
-  glassOrderStatus    String? @default("not_ordered") @map("glass_order_status")
-
-  requirements       OrderRequirement[]
-  windows            OrderWindow[]
-  deliveryOrders     DeliveryOrder[]
-  orderNotes         Note[]
-  monthlyReportItems MonthlyReportItem[]
-  glassOrderItems    GlassOrderItem[]
+  id                  Int                 @id @default(autoincrement())
+  orderNumber         String              @unique @map("order_number")
+  status              String              @default("new")
+  client              String?
+  project             String?
+  system              String?
+  deadline            DateTime?
+  pvcDeliveryDate     DateTime?           @map("pvc_delivery_date")
+  valuePln            Float?              @map("value_pln")
+  valueEur            Float?              @map("value_eur")
+  invoiceNumber       String?             @map("invoice_number")
+  deliveryDate        DateTime?           @map("delivery_date")
+  productionDate      DateTime?           @map("production_date")
+  glassDeliveryDate   DateTime?           @map("glass_delivery_date")
+  notes               String?
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  archivedAt          DateTime?           @map("archived_at")
+  totalGlasses        Int?                @map("total_glasses")
+  totalSashes         Int?                @map("total_sashes")
+  totalWindows        Int?                @map("total_windows")
+  completedAt         DateTime?           @map("completed_at")
+  orderedGlassCount   Int?                @default(0) @map("ordered_glass_count")
+  deliveredGlassCount Int?                @default(0) @map("delivered_glass_count")
+  glassOrderStatus    String?             @default("not_ordered") @map("glass_order_status")
+  deliveryOrders      DeliveryOrder[]
+  glassOrderItems     GlassOrderItem[]
+  monthlyReportItems  MonthlyReportItem[]
+  orderNotes          Note[]
+  requirements        OrderRequirement[]
+  windows             OrderWindow[]
+  schucoLinks         OrderSchucoLink[]
 
   @@index([status])
-  @@index([glassOrderStatus])
   @@index([archivedAt])
   @@index([createdAt])
-  @@index([deliveryDate])
-  @@index([completedAt])
-  @@index([status, createdAt])
   @@index([invoiceNumber, createdAt])
   @@index([invoiceNumber, deliveryDate])
-  @@index([archivedAt, status])
-  @@index([createdAt, archivedAt])
   @@index([status, archivedAt])
+  @@index([glassOrderStatus])
   @@map("orders")
 }
-
-// ==================== ZAPOTRZEBOWANIE NA PROFILE ====================
 
 model OrderRequirement {
   id         Int      @id @default(autoincrement())
@@ -151,20 +130,18 @@ model OrderRequirement {
   meters     Float
   restMm     Int      @map("rest_mm")
   createdAt  DateTime @default(now()) @map("created_at")
-
-  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  profile Profile @relation(fields: [profileId], references: [id])
-  color   Color   @relation(fields: [colorId], references: [id])
+  color      Color    @relation(fields: [colorId], references: [id], onDelete: Restrict)
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@unique([orderId, profileId, colorId])
   @@index([colorId])
   @@index([profileId])
   @@index([orderId])
+  @@index([orderId, colorId])
   @@index([createdAt])
   @@map("order_requirements")
 }
-
-// ==================== WYMIARY OKIEN (do pakowania) ====================
 
 model OrderWindow {
   id          Int      @id @default(autoincrement())
@@ -175,26 +152,24 @@ model OrderWindow {
   quantity    Int
   reference   String?
   createdAt   DateTime @default(now()) @map("created_at")
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
+  @@index([profileType])
   @@map("order_windows")
 }
 
-// ==================== STAN MAGAZYNOWY ====================
-
 model WarehouseStock {
-  id                Int      @id @default(autoincrement())
-  profileId         Int      @map("profile_id")
-  colorId           Int      @map("color_id")
-  currentStockBeams Int      @default(0) @map("current_stock_beams") // Nie może być ujemna
-  initialStockBeams Int      @default(0) @map("initial_stock_beams") // Stan początkowy dla remanent
-  updatedAt         DateTime @updatedAt @map("updated_at")
-  updatedById       Int?     @map("updated_by_id")
-
-  profile   Profile @relation(fields: [profileId], references: [id])
-  color     Color   @relation(fields: [colorId], references: [id])
-  updatedBy User?   @relation("UpdatedBy", fields: [updatedById], references: [id])
+  id                  Int      @id @default(autoincrement())
+  profileId           Int      @map("profile_id")
+  colorId             Int      @map("color_id")
+  currentStockBeams   Int      @default(0) @map("current_stock_beams")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  updatedById         Int?     @map("updated_by_id")
+  initialStockBeams   Int      @default(0) @map("initial_stock_beams")
+  version             Int      @default(0)
+  updatedBy           User?    @relation("UpdatedBy", fields: [updatedById], references: [id])
+  color               Color    @relation(fields: [colorId], references: [id], onDelete: Restrict)
+  profile             Profile  @relation(fields: [profileId], references: [id], onDelete: Restrict)
 
   @@unique([profileId, colorId])
   @@index([colorId])
@@ -202,30 +177,26 @@ model WarehouseStock {
   @@map("warehouse_stock")
 }
 
-// ==================== ZAMÓWIENIA MAGAZYNOWE ====================
-
 model WarehouseOrder {
   id                   Int      @id @default(autoincrement())
   profileId            Int      @map("profile_id")
   colorId              Int      @map("color_id")
   orderedBeams         Int      @map("ordered_beams")
   expectedDeliveryDate DateTime @map("expected_delivery_date")
-  status               String   @default("pending") // pending, received, cancelled
+  status               String   @default("pending")
   notes                String?
   createdAt            DateTime @default(now()) @map("created_at")
   createdById          Int?     @map("created_by_id")
+  createdBy            User?    @relation("WarehouseOrderCreatedBy", fields: [createdById], references: [id])
+  color                Color    @relation(fields: [colorId], references: [id], onDelete: Restrict)
+  profile              Profile  @relation(fields: [profileId], references: [id], onDelete: Restrict)
 
-  profile   Profile @relation(fields: [profileId], references: [id])
-  color     Color   @relation(fields: [colorId], references: [id])
-  createdBy User?   @relation("WarehouseOrderCreatedBy", fields: [createdById], references: [id])
-
+  @@unique([profileId, colorId, expectedDeliveryDate])
   @@index([status])
   @@index([colorId])
   @@index([profileId])
   @@map("warehouse_orders")
 }
-
-// ==================== HISTORIA MAGAZYNU ====================
 
 model WarehouseHistory {
   id              Int      @id @default(autoincrement())
@@ -234,33 +205,33 @@ model WarehouseHistory {
   calculatedStock Int      @map("calculated_stock")
   actualStock     Int      @map("actual_stock")
   difference      Int
+  previousStock   Int?     @map("previous_stock")
+  currentStock    Int?     @map("current_stock")
+  changeType      String?  @map("change_type")
+  notes           String?
   recordedAt      DateTime @default(now()) @map("recorded_at")
   recordedById    Int?     @map("recorded_by_id")
-
-  profile    Profile @relation(fields: [profileId], references: [id])
-  color      Color   @relation(fields: [colorId], references: [id])
-  recordedBy User?   @relation("RecordedBy", fields: [recordedById], references: [id])
+  recordedBy      User?    @relation("RecordedBy", fields: [recordedById], references: [id])
+  color           Color    @relation(fields: [colorId], references: [id], onDelete: Restrict)
+  profile         Profile  @relation(fields: [profileId], references: [id], onDelete: Restrict)
 
   @@index([colorId])
   @@index([profileId])
   @@index([recordedAt])
-  @@index([profileId, recordedAt])
+  @@index([changeType])
   @@map("warehouse_history")
 }
 
-// ==================== DOSTAWY ====================
-
 model Delivery {
-  id             Int      @id @default(autoincrement())
-  deliveryDate   DateTime @map("delivery_date")
-  deliveryNumber String?  @map("delivery_number") // I, II, III
-  status         String   @default("planned")
+  id             Int                 @id @default(autoincrement())
+  deliveryDate   DateTime            @map("delivery_date")
+  deliveryNumber String?             @map("delivery_number")
+  status         String              @default("planned")
   notes          String?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  deliveryOrders DeliveryOrder[]
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
   deliveryItems  DeliveryItem[]
+  deliveryOrders DeliveryOrder[]
   optimization   PalletOptimization?
 
   @@index([status])
@@ -271,50 +242,41 @@ model Delivery {
   @@map("deliveries")
 }
 
-// ==================== ZLECENIA W DOSTAWIE ====================
-
 model DeliveryOrder {
-  id         Int @id @default(autoincrement())
-  deliveryId Int @map("delivery_id")
-  orderId    Int @map("order_id")
+  id         Int      @id @default(autoincrement())
+  deliveryId Int      @map("delivery_id")
+  orderId    Int      @map("order_id")
   position   Int
-
-  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
-  order    Order    @relation(fields: [orderId], references: [id])
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
   @@unique([deliveryId, orderId])
+  @@index([deliveryId])
   @@map("delivery_orders")
 }
-
-// ==================== DODATKOWE ARTYKUŁY W DOSTAWIE ====================
 
 model DeliveryItem {
   id          Int      @id @default(autoincrement())
   deliveryId  Int      @map("delivery_id")
-  itemType    String   @map("item_type") // glass, sash, frame, other
+  itemType    String   @map("item_type")
   description String
   quantity    Int
   createdAt   DateTime @default(now()) @map("created_at")
-
-  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  delivery    Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
   @@map("delivery_items")
 }
 
-// ==================== TYPY PALET ====================
-
 model PalletType {
   id          Int      @id @default(autoincrement())
   name        String
-  lengthMm    Int      @map("length_mm") // Długość palety (odpowiada szerokości okna)
-  loadDepthMm Int      @default(6000) @map("load_depth_mm") // Głębokość załadunku (poprzednio loadWidthMm)
+  lengthMm    Int      @map("length_mm")
+  loadDepthMm Int      @default(6000) @map("load_depth_mm")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("pallet_types")
 }
-
-// ==================== GŁĘBOKOŚCI PROFILI ====================
 
 model ProfileDepth {
   id          Int      @id @default(autoincrement())
@@ -326,8 +288,6 @@ model ProfileDepth {
 
   @@map("profile_depths")
 }
-
-// ==================== REGUŁY PAKOWANIA ====================
 
 model PackingRule {
   id          Int      @id @default(autoincrement())
@@ -341,63 +301,55 @@ model PackingRule {
   @@map("packing_rules")
 }
 
-// ==================== OPTYMALIZACJA PALET ====================
-
 model PalletOptimization {
-  id               Int      @id @default(autoincrement())
-  deliveryId       Int      @unique @map("delivery_id")
-  totalPallets     Int      @map("total_pallets")
-  optimizationData String   @map("optimization_data") // JSON z pełnym wynikiem
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
-
-  delivery Delivery          @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
-  pallets  OptimizedPallet[]
+  id               Int               @id @default(autoincrement())
+  deliveryId       Int               @unique @map("delivery_id")
+  totalPallets     Int               @map("total_pallets")
+  optimizationData String            @map("optimization_data")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  pallets          OptimizedPallet[]
+  delivery         Delivery          @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
   @@index([deliveryId])
   @@map("pallet_optimizations")
 }
 
 model OptimizedPallet {
-  id                 Int    @id @default(autoincrement())
-  optimizationId     Int    @map("optimization_id")
-  palletNumber       Int    @map("pallet_number")
-  palletTypeName     String @map("pallet_type_name")
-  palletWidth        Int    @map("pallet_width")
-  usedDepthMm        Int    @map("used_depth_mm")
-  maxDepthMm         Int    @map("max_depth_mm")
-  utilizationPercent Float  @map("utilization_percent")
-  windowsData        String @map("windows_data") // JSON z listą okien
-
-  optimization PalletOptimization @relation(fields: [optimizationId], references: [id], onDelete: Cascade)
+  id                 Int                @id @default(autoincrement())
+  optimizationId     Int                @map("optimization_id")
+  palletNumber       Int                @map("pallet_number")
+  palletTypeName     String             @map("pallet_type_name")
+  palletWidth        Int                @map("pallet_width")
+  usedDepthMm        Int                @map("used_depth_mm")
+  maxDepthMm         Int                @map("max_depth_mm")
+  utilizationPercent Float              @map("utilization_percent")
+  windowsData        String             @map("windows_data")
+  optimization       PalletOptimization @relation(fields: [optimizationId], references: [id], onDelete: Cascade)
 
   @@index([optimizationId])
   @@map("optimized_pallets")
 }
 
-// ==================== IMPORT PLIKÓW ====================
-
 model FileImport {
-  id           Int       @id @default(autoincrement())
-  filename     String
-  filepath     String
-  fileType     String    @map("file_type")
-  status       String    @default("pending")
-  processedAt  DateTime? @map("processed_at")
-  errorMessage String?   @map("error_message")
-  metadata     String?
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-
-  glassDeliveries GlassDelivery[]
+  id                 Int                  @id @default(autoincrement())
+  filename           String
+  filepath           String
+  fileType           String               @map("file_type")
+  status             String               @default("pending")
+  processedAt        DateTime?            @map("processed_at")
+  errorMessage       String?              @map("error_message")
+  metadata           String?
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+  glassDeliveries    GlassDelivery[]
+  pendingOrderPrices PendingOrderPrice[]
 
   @@index([status])
   @@index([createdAt])
   @@index([status, createdAt])
   @@map("file_imports")
 }
-
-// ==================== USTAWIENIA ====================
 
 model Setting {
   key       String   @id
@@ -407,8 +359,6 @@ model Setting {
   @@map("settings")
 }
 
-// ==================== NOTATKI ====================
-
 model Note {
   id          Int      @id @default(autoincrement())
   orderId     Int?     @map("order_id")
@@ -416,57 +366,51 @@ model Note {
   createdAt   DateTime @default(now()) @map("created_at")
   createdById Int?     @map("created_by_id")
   updatedAt   DateTime @updatedAt @map("updated_at")
-
-  order     Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  createdBy User?  @relation(fields: [createdById], references: [id])
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+  order       Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("notes")
 }
 
-// ==================== DNI WOLNE OD PRACY ====================
-
 model WorkingDay {
   id          Int      @id @default(autoincrement())
   date        DateTime @unique
-  isWorking   Boolean  @default(true) @map("is_working") // false = dzień wolny
-  description String? // np. "Boże Narodzenie", "Dzień wolny"
-  isHoliday   Boolean  @default(false) @map("is_holiday") // true = święto
-  country     String? // "PL" lub "DE"
+  isWorking   Boolean  @default(true) @map("is_working")
+  description String?
+  isHoliday   Boolean  @default(false) @map("is_holiday")
+  country     String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("working_days")
 }
 
-// ==================== MAGAZYN OKUĆ ====================
-
 model OkucArticle {
-  id                 Int      @id @default(autoincrement())
-  articleNumber      String   @unique
+  id                 Int                @id @default(autoincrement())
+  articleNumber      String             @unique
   name               String
   description        String?
-  group              String   @default("UCHWYTY")
+  group              String             @default("UCHWYTY")
   warehouse          String?
-  price              Float?   @default(0)
+  price              Float?             @default(0)
   priceHistory       String?
-  minStock           Int      @default(0) @map("min_stock")
-  maxStock           Int      @default(100) @map("max_stock")
-  avgMonthlyUsage    Float    @default(0) @map("avg_monthly_usage")
-  proportion         Float    @default(1.0)
-  doNotOrder         Boolean  @default(false) @map("do_not_order")
-  hidden             Boolean  @default(false)
-  orderType          String   @default("Po RW") @map("order_type")
-  packageSize        Float    @default(1.0) @map("package_size")
+  minStock           Int                @default(0) @map("min_stock")
+  maxStock           Int                @default(100) @map("max_stock")
+  avgMonthlyUsage    Float              @default(0) @map("avg_monthly_usage")
+  proportion         Float              @default(1.0)
+  doNotOrder         Boolean            @default(false) @map("do_not_order")
+  hidden             Boolean            @default(false)
+  orderType          String             @default("Po RW") @map("order_type")
+  packageSize        Float              @default(1.0) @map("package_size")
   notes              String?
   alternativeNumbers String?
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-
-  stock        OkucStock[]
-  orders       OkucOrder[]
-  requirements OkucRequirement[]
-  history      OkucHistory[]
-  images       OkucProductImage[]
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+  history            OkucHistory[]
+  orders             OkucOrder[]
+  images             OkucProductImage[]
+  requirements       OkucRequirement[]
+  stock              OkucStock?
 
   @@index([group])
   @@index([warehouse])
@@ -474,31 +418,29 @@ model OkucArticle {
 }
 
 model OkucStock {
-  id              Int      @id @default(autoincrement())
-  articleId       Int      @unique @map("article_id")
-  currentQuantity Int      @default(0) @map("current_quantity") // Nie może być ujemna
-  status          String   @default("OK")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  updatedById     Int?     @map("updated_by_id")
-
-  article   OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  updatedBy User?       @relation("OkucUpdatedBy", fields: [updatedById], references: [id])
+  id              Int         @id @default(autoincrement())
+  articleId       Int         @unique @map("article_id")
+  currentQuantity Int         @default(0) @map("current_quantity")
+  status          String      @default("OK")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  updatedById     Int?        @map("updated_by_id")
+  updatedBy       User?       @relation("OkucUpdatedBy", fields: [updatedById], references: [id])
+  article         OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@map("okuc_stock")
 }
 
 model OkucOrder {
-  id                   Int      @id @default(autoincrement())
-  articleId            Int      @map("article_id")
-  orderedQuantity      Int      @map("ordered_quantity")
-  expectedDeliveryDate DateTime @map("expected_delivery_date")
-  status               String   @default("pending")
+  id                   Int         @id @default(autoincrement())
+  articleId            Int         @map("article_id")
+  orderedQuantity      Int         @map("ordered_quantity")
+  expectedDeliveryDate DateTime    @map("expected_delivery_date")
+  status               String      @default("pending")
   notes                String?
-  createdAt            DateTime @default(now()) @map("created_at")
-  createdById          Int?     @map("created_by_id")
-
-  article   OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  createdBy User?       @relation("OkucCreatedBy", fields: [createdById], references: [id])
+  createdAt            DateTime    @default(now()) @map("created_at")
+  createdById          Int?        @map("created_by_id")
+  createdBy            User?       @relation("OkucCreatedBy", fields: [createdById], references: [id])
+  article              OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([articleId])
@@ -506,18 +448,17 @@ model OkucOrder {
 }
 
 model OkucRequirement {
-  id             Int      @id @default(autoincrement())
-  articleId      Int      @map("article_id")
-  documentType   String   @map("document_type")
-  documentNumber String   @map("document_number")
+  id             Int         @id @default(autoincrement())
+  articleId      Int         @map("article_id")
+  documentType   String      @map("document_type")
+  documentNumber String      @map("document_number")
   quantity       Int
-  sourceGroup    String?  @map("source_group")
-  sourceFile     String?  @map("source_file")
-  recordedAt     DateTime @default(now()) @map("recorded_at")
-  recordedById   Int?     @map("recorded_by_id")
-
-  article    OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  recordedBy User?       @relation("OkucRecordedBy", fields: [recordedById], references: [id])
+  sourceGroup    String?     @map("source_group")
+  sourceFile     String?     @map("source_file")
+  recordedAt     DateTime    @default(now()) @map("recorded_at")
+  recordedById   Int?        @map("recorded_by_id")
+  recordedBy     User?       @relation("OkucRecordedBy", fields: [recordedById], references: [id])
+  article        OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@index([articleId])
   @@index([documentType])
@@ -527,21 +468,19 @@ model OkucRequirement {
 }
 
 model OkucHistory {
-  id              Int      @id @default(autoincrement())
-  articleId       Int      @map("article_id")
-  calculatedStock Int      @map("calculated_stock")
-  actualStock     Int      @map("actual_stock")
+  id              Int         @id @default(autoincrement())
+  articleId       Int         @map("article_id")
+  calculatedStock Int         @map("calculated_stock")
+  actualStock     Int         @map("actual_stock")
   difference      Int
-  remanentNumber  String?  @map("remanent_number")
-  recordedAt      DateTime @default(now()) @map("recorded_at")
-  recordedById    Int?     @map("recorded_by_id")
-
-  article    OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  recordedBy User?       @relation("OkucRecordedBy", fields: [recordedById], references: [id])
+  remanentNumber  String?     @map("remanent_number")
+  recordedAt      DateTime    @default(now()) @map("recorded_at")
+  recordedById    Int?        @map("recorded_by_id")
+  recordedBy      User?       @relation("OkucRecordedBy", fields: [recordedById], references: [id])
+  article         OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@index([articleId])
   @@index([recordedAt])
-  @@index([articleId, recordedAt])
   @@map("okuc_history")
 }
 
@@ -556,8 +495,7 @@ model OkucImport {
   previewData  String?
   createdAt    DateTime  @default(now()) @map("created_at")
   createdById  Int?      @map("created_by_id")
-
-  createdBy User? @relation("OkucImportedBy", fields: [createdById], references: [id])
+  createdBy    User?     @relation("OkucImportedBy", fields: [createdById], references: [id])
 
   @@index([status])
   @@index([createdAt])
@@ -565,12 +503,11 @@ model OkucImport {
 }
 
 model OkucProductImage {
-  id        Int      @id @default(autoincrement())
-  articleId Int      @map("article_id")
-  imageUrl  String   @map("image_url")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  article OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  id        Int         @id @default(autoincrement())
+  articleId Int         @map("article_id")
+  imageUrl  String      @map("image_url")
+  createdAt DateTime    @default(now()) @map("created_at")
+  article   OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@map("okuc_product_images")
 }
@@ -584,33 +521,31 @@ model OkucSettings {
   @@map("okuc_settings")
 }
 
-// ==================== DOSTAWY SCHUCO ====================
-
 model SchucoDelivery {
-  id              Int       @id @default(autoincrement())
-  orderDate       String    @map("order_date") // Kolumna 1: Data zamówienia (DD.MM.YYYY)
-  orderDateParsed DateTime? @map("order_date_parsed") // Data sparsowana do DateTime dla sortowania
-  orderNumber     String    @unique @map("order_number") // Kolumna 2: Nr zamówienia
-  projectNumber   String    @map("project_number") // Kolumna 3: Numer projektu
-  orderName       String    @map("order_name") // Kolumna 4: Zlecenie
-  shippingStatus  String    @map("shipping_status") // Kolumna 5: Status wysyłki
-  deliveryWeek    String?   @map("delivery_week") // Kolumna 6: Tydzień dostawy
-  deliveryType    String?   @map("delivery_type") // Kolumna 7: Rodzaj dostawy
-  tracking        String? // Kolumna 8: Śledzenie
-  complaint       String? // Kolumna 9: Reklamacja
-  orderType       String?   @map("order_type") // Kolumna 10: rodzaj zamówienia
-  totalAmount     String?   @map("total_amount") // Kolumna 11: Suma
-  rawData         String?   @map("raw_data") // Cały wiersz jako backup JSON
-
-  // Change tracking fields
-  changeType     String?   @map("change_type") // 'new' | 'updated' | null (bez zmian)
-  changedAt      DateTime? @map("changed_at") // Kiedy wykryto zmianę
-  changedFields  String?   @map("changed_fields") // JSON lista pól które się zmieniły
-  previousValues String?   @map("previous_values") // JSON poprzednich wartości
-
-  fetchedAt DateTime @default(now()) @map("fetched_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                 Int               @id @default(autoincrement())
+  orderDate          String            @map("order_date")
+  orderNumber        String            @unique @map("order_number")
+  projectNumber      String            @map("project_number")
+  orderName          String            @map("order_name")
+  shippingStatus     String            @map("shipping_status")
+  deliveryWeek       String?           @map("delivery_week")
+  deliveryType       String?           @map("delivery_type")
+  tracking           String?
+  complaint          String?
+  orderType          String?           @map("order_type")
+  totalAmount        String?           @map("total_amount")
+  rawData            String?           @map("raw_data")
+  fetchedAt          DateTime          @default(now()) @map("fetched_at")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+  orderDateParsed    DateTime?         @map("order_date_parsed")
+  changeType         String?           @map("change_type")
+  changedAt          DateTime?         @map("changed_at")
+  changedFields      String?           @map("changed_fields")
+  previousValues     String?           @map("previous_values")
+  isWarehouseItem    Boolean           @default(false) @map("is_warehouse_item")
+  extractedOrderNums String?           @map("extracted_order_nums")
+  orderLinks         OrderSchucoLink[]
 
   @@index([fetchedAt])
   @@index([orderNumber])
@@ -621,17 +556,19 @@ model SchucoDelivery {
   @@index([changeType, changedAt])
   @@index([orderDateParsed, shippingStatus])
   @@index([shippingStatus, orderDateParsed])
+  @@index([isWarehouseItem])
+  @@index([orderNumber, fetchedAt])
   @@map("schuco_deliveries")
 }
 
 model SchucoFetchLog {
   id               Int       @id @default(autoincrement())
-  status           String // 'success' | 'error' | 'pending'
-  triggerType      String    @default("manual") @map("trigger_type") // 'manual' | 'scheduled'
+  status           String
+  triggerType      String    @default("manual") @map("trigger_type")
   recordsCount     Int?      @map("records_count")
-  newRecords       Int?      @map("new_records") // Liczba nowych rekordów
-  updatedRecords   Int?      @map("updated_records") // Liczba zaktualizowanych
-  unchangedRecords Int?      @map("unchanged_records") // Liczba bez zmian
+  newRecords       Int?      @map("new_records")
+  updatedRecords   Int?      @map("updated_records")
+  unchangedRecords Int?      @map("unchanged_records")
   errorMessage     String?   @map("error_message")
   startedAt        DateTime  @default(now()) @map("started_at")
   completedAt      DateTime? @map("completed_at")
@@ -642,22 +579,19 @@ model SchucoFetchLog {
   @@map("schuco_fetch_logs")
 }
 
-// ==================== ZESTAWIENIA MIESIĘCZNE ====================
-
 model MonthlyReport {
-  id            Int      @id @default(autoincrement())
+  id            Int                 @id @default(autoincrement())
   year          Int
-  month         Int // 1-12
-  reportDate    DateTime @default(now()) @map("report_date")
-  totalOrders   Int      @default(0) @map("total_orders")
-  totalWindows  Int      @default(0) @map("total_windows")
-  totalSashes   Int      @default(0) @map("total_sashes")
-  totalValuePln Float    @default(0) @map("total_value_pln")
-  totalValueEur Float    @default(0) @map("total_value_eur")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  reportItems MonthlyReportItem[]
+  month         Int
+  reportDate    DateTime            @default(now()) @map("report_date")
+  totalOrders   Int                 @default(0) @map("total_orders")
+  totalWindows  Int                 @default(0) @map("total_windows")
+  totalSashes   Int                 @default(0) @map("total_sashes")
+  totalValuePln Float               @default(0) @map("total_value_pln")
+  totalValueEur Float               @default(0) @map("total_value_eur")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+  reportItems   MonthlyReportItem[]
 
   @@unique([year, month])
   @@index([year, month])
@@ -666,20 +600,19 @@ model MonthlyReport {
 }
 
 model MonthlyReportItem {
-  id            Int      @id @default(autoincrement())
-  reportId      Int      @map("report_id")
-  orderId       Int      @map("order_id")
-  orderNumber   String   @map("order_number")
-  invoiceNumber String?  @map("invoice_number")
-  windowsCount  Int      @default(0) @map("windows_count")
-  sashesCount   Int      @default(0) @map("sashes_count")
-  unitsCount    Int      @default(0) @map("units_count")
-  valuePln      Float?   @map("value_pln")
-  valueEur      Float?   @map("value_eur")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  report MonthlyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  order  Order         @relation(fields: [orderId], references: [id])
+  id            Int           @id @default(autoincrement())
+  reportId      Int           @map("report_id")
+  orderId       Int           @map("order_id")
+  orderNumber   String        @map("order_number")
+  invoiceNumber String?       @map("invoice_number")
+  windowsCount  Int           @default(0) @map("windows_count")
+  sashesCount   Int           @default(0) @map("sashes_count")
+  unitsCount    Int           @default(0) @map("units_count")
+  valuePln      Float?        @map("value_pln")
+  valueEur      Float?        @map("value_eur")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  report        MonthlyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
   @@index([reportId])
   @@index([orderId])
@@ -697,125 +630,187 @@ model CurrencyConfig {
   @@map("currency_config")
 }
 
-// ==================== ZAMÓWIENIA SZYB ====================
-
-model GlassOrder {
-  id                   Int       @id @default(autoincrement())
-  glassOrderNumber     String    @unique @map("glass_order_number")
-  orderDate            DateTime  @map("order_date")
-  supplier             String
-  orderedBy            String?   @map("ordered_by")
-  expectedDeliveryDate DateTime? @map("expected_delivery_date")
-  actualDeliveryDate   DateTime? @map("actual_delivery_date")
-  status               String    @default("ordered")
-  notes                String?
-  createdAt            DateTime  @default(now()) @map("created_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
-
-  items             GlassOrderItem[]
-  deliveryItems     GlassDeliveryItem[]
-  validationResults GlassOrderValidation[]
-
-  @@index([glassOrderNumber])
-  @@index([orderDate])
-  @@index([status])
-  @@index([expectedDeliveryDate])
-  @@map("glass_orders")
-}
-
-model GlassOrderItem {
-  id           Int      @id @default(autoincrement())
-  glassOrderId Int      @map("glass_order_id")
-  orderNumber  String   @map("order_number")
-  orderSuffix  String?  @map("order_suffix")
-  position     String
-  glassType    String   @map("glass_type")
-  widthMm      Int      @map("width_mm")
-  heightMm     Int      @map("height_mm")
-  quantity     Int
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  glassOrder GlassOrder @relation(fields: [glassOrderId], references: [id], onDelete: Cascade)
-  order      Order?     @relation(fields: [orderNumber], references: [orderNumber])
-
-  @@index([glassOrderId])
-  @@index([orderNumber])
-  @@index([orderNumber, orderSuffix])
-  @@index([widthMm, heightMm])
-  @@map("glass_order_items")
-}
-
-// ==================== DOSTAWY SZYB ====================
-
 model GlassDelivery {
-  id                  Int      @id @default(autoincrement())
-  rackNumber          String   @map("rack_number")
-  customerOrderNumber String   @map("customer_order_number")
-  supplierOrderNumber String?  @map("supplier_order_number")
-  deliveryDate        DateTime @map("delivery_date")
-  fileImportId        Int?     @map("file_import_id")
-  createdAt           DateTime @default(now()) @map("created_at")
+  id                    Int                 @id @default(autoincrement())
+  rackNumber            String              @map("rack_number")
+  customerOrderNumber   String              @map("customer_order_number")
+  supplierOrderNumber   String?             @map("supplier_order_number")
+  deliveryDate          DateTime            @map("delivery_date")
+  fileImportId          Int?                @map("file_import_id")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  fileImport            FileImport?         @relation(fields: [fileImportId], references: [id])
+  items                 GlassDeliveryItem[]
 
-  items      GlassDeliveryItem[]
-  fileImport FileImport?         @relation(fields: [fileImportId], references: [id])
-
-  @@index([rackNumber])
-  @@index([customerOrderNumber])
   @@index([deliveryDate])
+  @@index([customerOrderNumber])
+  @@index([rackNumber])
   @@map("glass_deliveries")
 }
 
 model GlassDeliveryItem {
-  id               Int      @id @default(autoincrement())
-  glassDeliveryId  Int      @map("glass_delivery_id")
-  glassOrderId     Int?     @map("glass_order_id")
-  orderNumber      String   @map("order_number")
-  orderSuffix      String?  @map("order_suffix")
+  id               Int             @id @default(autoincrement())
+  glassDeliveryId  Int             @map("glass_delivery_id")
+  glassOrderId     Int?            @map("glass_order_id")
+  orderNumber      String          @map("order_number")
+  orderSuffix      String?         @map("order_suffix")
   position         String
-  widthMm          Int      @map("width_mm")
-  heightMm         Int      @map("height_mm")
+  widthMm          Int             @map("width_mm")
+  heightMm         Int             @map("height_mm")
   quantity         Int
-  glassComposition String?  @map("glass_composition")
-  serialNumber     String?  @map("serial_number")
-  clientCode       String?  @map("client_code")
-  matchStatus      String   @default("pending") @map("match_status")
-  matchedItemId    Int?     @map("matched_item_id")
-  createdAt        DateTime @default(now()) @map("created_at")
+  glassComposition String?         @map("glass_composition")
+  serialNumber     String?         @map("serial_number")
+  clientCode       String?         @map("client_code")
+  matchStatus      String          @default("pending") @map("match_status")
+  matchedItemId    Int?            @map("matched_item_id")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  glassOrder       GlassOrder?     @relation(fields: [glassOrderId], references: [id], onDelete: SetNull)
+  glassDelivery    GlassDelivery   @relation(fields: [glassDeliveryId], references: [id], onDelete: Cascade)
 
-  glassDelivery GlassDelivery @relation(fields: [glassDeliveryId], references: [id], onDelete: Cascade)
-  glassOrder    GlassOrder?   @relation(fields: [glassOrderId], references: [id])
-
-  @@index([glassDeliveryId])
-  @@index([orderNumber])
-  @@index([orderNumber, orderSuffix])
-  @@index([matchStatus])
+  @@unique([glassDeliveryId, position])
   @@index([widthMm, heightMm])
+  @@index([matchStatus])
+  @@index([orderNumber, orderSuffix])
+  @@index([orderNumber])
+  @@index([glassDeliveryId])
   @@map("glass_delivery_items")
 }
 
-// ==================== WALIDACJA ZAMÓWIEŃ SZYB ====================
+model GlassOrderItem {
+  id           Int        @id @default(autoincrement())
+  glassOrderId Int        @map("glass_order_id")
+  orderNumber  String     @map("order_number")
+  orderSuffix  String?    @map("order_suffix")
+  position     String
+  glassType    String     @map("glass_type")
+  widthMm      Int        @map("width_mm")
+  heightMm     Int        @map("height_mm")
+  quantity     Int
+  createdAt    DateTime   @default(now()) @map("created_at")
+  order        Order?     @relation(fields: [orderNumber], references: [orderNumber], onDelete: Cascade)
+  glassOrder   GlassOrder @relation(fields: [glassOrderId], references: [id], onDelete: Cascade)
+
+  @@unique([glassOrderId, position])
+  @@index([widthMm, heightMm])
+  @@index([orderNumber, orderSuffix])
+  @@index([orderNumber])
+  @@index([glassOrderId])
+  @@map("glass_order_items")
+}
 
 model GlassOrderValidation {
-  id                Int       @id @default(autoincrement())
-  glassOrderId      Int?      @map("glass_order_id")
-  orderNumber       String    @map("order_number")
-  validationType    String    @map("validation_type")
+  id                Int         @id @default(autoincrement())
+  glassOrderId      Int?        @map("glass_order_id")
+  orderNumber       String      @map("order_number")
+  validationType    String      @map("validation_type")
   severity          String
-  expectedQuantity  Int?      @map("expected_quantity")
-  orderedQuantity   Int?      @map("ordered_quantity")
-  deliveredQuantity Int?      @map("delivered_quantity")
+  expectedQuantity  Int?        @map("expected_quantity")
+  orderedQuantity   Int?        @map("ordered_quantity")
+  deliveredQuantity Int?        @map("delivered_quantity")
   message           String
   details           String?
-  resolved          Boolean   @default(false)
-  resolvedAt        DateTime? @map("resolved_at")
-  resolvedBy        String?   @map("resolved_by")
-  createdAt         DateTime  @default(now()) @map("created_at")
+  resolved          Boolean     @default(false)
+  resolvedAt        DateTime?   @map("resolved_at")
+  resolvedBy        String?     @map("resolved_by")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  glassOrder        GlassOrder? @relation(fields: [glassOrderId], references: [id], onDelete: Cascade)
 
-  glassOrder GlassOrder? @relation(fields: [glassOrderId], references: [id], onDelete: Cascade)
-
-  @@index([glassOrderId])
-  @@index([orderNumber])
-  @@index([severity])
   @@index([resolved])
+  @@index([severity])
+  @@index([orderNumber])
+  @@index([glassOrderId])
   @@map("glass_order_validations")
+}
+
+model GlassOrder {
+  id                   Int                    @id @default(autoincrement())
+  glassOrderNumber     String                 @unique @map("glass_order_number")
+  orderDate            DateTime               @map("order_date")
+  supplier             String
+  orderedBy            String?                @map("ordered_by")
+  expectedDeliveryDate DateTime?              @map("expected_delivery_date")
+  actualDeliveryDate   DateTime?              @map("actual_delivery_date")
+  status               String                 @default("ordered")
+  notes                String?
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+  deliveryItems        GlassDeliveryItem[]
+  items                GlassOrderItem[]
+  validationResults    GlassOrderValidation[]
+
+  @@index([expectedDeliveryDate])
+  @@index([status])
+  @@index([orderDate])
+  @@index([glassOrderNumber])
+  @@map("glass_orders")
+}
+
+model OrderSchucoLink {
+  id               Int            @id @default(autoincrement())
+  orderId          Int            @map("order_id")
+  schucoDeliveryId Int            @map("schuco_delivery_id")
+  linkedAt         DateTime       @default(now()) @map("linked_at")
+  linkedBy         String?        @map("linked_by")
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  schucoDelivery   SchucoDelivery @relation(fields: [schucoDeliveryId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, schucoDeliveryId])
+  @@index([orderId])
+  @@index([schucoDeliveryId])
+  @@map("order_schuco_links")
+}
+
+model UserFolderSettings {
+  id              Int      @id @default(autoincrement())
+  userId          Int?     @unique @map("user_id")
+  importsBasePath String   @map("imports_base_path")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@map("user_folder_settings")
+}
+
+model ImportLock {
+  id          Int      @id @default(autoincrement())
+  folderPath  String   @unique @map("folder_path")
+  userId      Int      @map("user_id")
+  lockedAt    DateTime @default(now()) @map("locked_at")
+  expiresAt   DateTime @map("expires_at")
+  processId   String?  @map("process_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([userId])
+  @@map("import_locks")
+}
+
+// Ceny profili oczekujące na powiązanie ze zleceniem
+// Gdy importujemy PDF z ceną ale zlecenie jeszcze nie istnieje,
+// zapisujemy tu cenę i automatycznie przypisujemy gdy zlecenie się pojawi
+model PendingOrderPrice {
+  id            Int      @id @default(autoincrement())
+  orderNumber   String   @map("order_number")
+  reference     String?
+  currency      String   // EUR lub PLN
+  valueNetto    Float    @map("value_netto")
+  valueBrutto   Float?   @map("value_brutto")
+  filename      String   // oryginalny nazwa pliku PDF
+  filepath      String   // ścieżka do pliku
+  importId      Int?     @map("import_id")
+  status        String   @default("pending") // pending, applied, expired
+  appliedAt     DateTime? @map("applied_at")
+  appliedToOrderId Int?  @map("applied_to_order_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  fileImport    FileImport? @relation(fields: [importId], references: [id], onDelete: SetNull)
+
+  @@index([orderNumber])
+  @@index([status])
+  @@index([orderNumber, status])
+  @@map("pending_order_prices")
 }

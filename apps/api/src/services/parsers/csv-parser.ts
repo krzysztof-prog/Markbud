@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import csvParser from 'csv-parser';
 import { prisma } from '../../index.js';
+import { GlassDeliveryService } from '../glassDeliveryService.js';
+import { logger } from '../../utils/logger.js';
 
 // Stałe z specyfikacji
 const BEAM_LENGTH_MM = 6000;
@@ -59,6 +61,31 @@ export interface ParsedUzyteBele {
 
 export class CsvParser {
   /**
+   * Parse EUR amount from Schuco format
+   * Converts "62,30 €" to 62.30
+   * Converts "2 321,02 €" to 2321.02
+   */
+  parseEurAmountFromSchuco(amountStr: string): number | null {
+    if (!amountStr) return null;
+
+    try {
+      // Remove currency symbol and spaces
+      let cleaned = amountStr.replace(/€/g, '').trim();
+
+      // Remove thousands separator (space)
+      cleaned = cleaned.replace(/\s/g, '');
+
+      // Replace comma with dot for decimal separator
+      cleaned = cleaned.replace(/,/g, '.');
+
+      const amount = parseFloat(cleaned);
+      return isNaN(amount) ? null : amount;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Parsuje numer zlecenia i wyciąga numer bazowy oraz sufiks
    * Przykłady:
    * - "54222" → { base: "54222", suffix: null }
@@ -69,29 +96,46 @@ export class CsvParser {
    * - "54222 a" → { base: "54222", suffix: "a" }
    */
   parseOrderNumber(orderNumber: string): { base: string; suffix: string | null; full: string } {
+    // Walidacja podstawowa
+    if (!orderNumber || orderNumber.trim().length === 0) {
+      throw new Error('Numer zlecenia nie może być pusty');
+    }
+
+    const trimmed = orderNumber.trim();
+
+    // Limit długości
+    if (trimmed.length > 20) {
+      throw new Error('Numer zlecenia zbyt długi (max 20 znaków)');
+    }
+
+    // Wzorce
     // Wzorzec 1: cyfry + separator (myślnik/spacja) + 1-3 znaki alfanumeryczne
+    const matchWithSeparator = trimmed.match(/^(\d+)[-\s]([a-zA-Z0-9]{1,3})$/);
     // Wzorzec 2: cyfry + 1-3 litery BEZ separatora (dla formatu "54222a")
-    const matchWithSeparator = orderNumber.match(/^(\d+)[-\s]([a-zA-Z0-9]{1,3})$/);
-    const matchWithoutSeparator = orderNumber.match(/^(\d+)([a-zA-Z]{1,3})$/);
-    const matchPlain = orderNumber.match(/^(\d+)$/);
+    const matchWithoutSeparator = trimmed.match(/^(\d+)([a-zA-Z]{1,3})$/);
+    // Wzorzec 3: same cyfry
+    const matchPlain = trimmed.match(/^(\d+)$/);
 
     if (matchWithSeparator) {
       const [, base, suffix] = matchWithSeparator;
-      return { base, suffix, full: orderNumber };
+      return { base, suffix, full: trimmed };
     }
 
     if (matchWithoutSeparator) {
       const [, base, suffix] = matchWithoutSeparator;
-      return { base, suffix, full: orderNumber };
+      return { base, suffix, full: trimmed };
     }
 
     if (matchPlain) {
       const [, base] = matchPlain;
-      return { base, suffix: null, full: orderNumber };
+      return { base, suffix: null, full: trimmed };
     }
 
-    // Nie pasuje do żadnego wzorca - zwróć jako jest
-    return { base: orderNumber, suffix: null, full: orderNumber };
+    // Nieprawidłowy format - rzuć błąd zamiast fallback
+    throw new Error(
+      `Nieprawidłowy format numeru zlecenia: "${trimmed}". ` +
+      `Oczekiwany format: cyfry lub cyfry-sufiks (np. "54222" lub "54222-a")`
+    );
   }
 
   /**
@@ -118,18 +162,47 @@ export class CsvParser {
    * - reszta2 = 6000mm - zaokrąglona reszta → na metry
    */
   calculateBeamsAndMeters(originalBeams: number, restMm: number): { beams: number; meters: number } {
+    // Walidacja inputów
+    if (!Number.isFinite(originalBeams) || !Number.isFinite(restMm)) {
+      throw new Error('Wartości muszą być liczbami skończonymi');
+    }
+
+    if (originalBeams < 0) {
+      throw new Error('Liczba bel nie może być ujemna');
+    }
+
+    if (restMm < 0) {
+      throw new Error('Reszta nie może być ujemna');
+    }
+
+    if (restMm > BEAM_LENGTH_MM) {
+      throw new Error(`Reszta (${restMm}mm) nie może być większa niż długość beli (${BEAM_LENGTH_MM}mm)`);
+    }
+
     if (restMm === 0) {
       return { beams: originalBeams, meters: 0 };
+    }
+
+    // Sprawdź czy można odjąć belę
+    if (originalBeams < 1) {
+      throw new Error('Brak bel do odjęcia (oryginalna liczba < 1, ale reszta > 0)');
     }
 
     // Zaokrąglij resztę w górę do wielokrotności 500mm
     const roundedRest = Math.ceil(restMm / REST_ROUNDING_MM) * REST_ROUNDING_MM;
 
-    // Odjąć 1 belę (bo reszta > 0)
+    // Odjąć 1 belę
     const beams = originalBeams - 1;
 
-    // reszta2 = 6000 - roundedRest, przelicz na metry
+    // reszta2 = 6000 - roundedRest
     const reszta2Mm = BEAM_LENGTH_MM - roundedRest;
+
+    // Walidacja wyniku (ochrona przed błędami obliczeniowymi)
+    if (reszta2Mm < 0) {
+      console.warn(`Negative reszta2Mm: ${reszta2Mm}, roundedRest: ${roundedRest}`);
+      return { beams, meters: 0 }; // Bezpieczny fallback
+    }
+
     const meters = reszta2Mm / 1000;
 
     return { beams, meters };
@@ -175,10 +248,8 @@ export class CsvParser {
   ): Promise<{ orderId: number; requirementsCount: number; windowsCount: number }> {
     const parsed = await this.parseUzyteBeleFile(filepath);
 
-    // Parsuj numer zlecenia
+    // Parsuj numer zlecenia (przed transakcją)
     const orderNumberParsed = this.parseOrderNumber(parsed.orderNumber);
-
-    // Określ który numer zlecenia użyć (bazowy vs pełny)
     let targetOrderNumber = parsed.orderNumber;
 
     // Jeśli zlecenie ma sufiks i użytkownik chce zamienić bazowe
@@ -187,150 +258,226 @@ export class CsvParser {
       console.log(`   🔄 Zamienianie zlecenia bazowego ${orderNumberParsed.base} (zamiast tworzenia ${parsed.orderNumber})`);
     }
 
-    // Znajdź lub utwórz zlecenie
-    let order = await prisma.order.findUnique({
-      where: { orderNumber: targetOrderNumber },
-    });
-
-    if (order && action === 'overwrite') {
-      // Usuń istniejące requirements i windows
-      await prisma.orderRequirement.deleteMany({
-        where: { orderId: order.id },
-      });
-      await prisma.orderWindow.deleteMany({
-        where: { orderId: order.id },
-      });
-      // Zaktualizuj zlecenie o nowe dane z CSV
-      order = await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          client: parsed.client || undefined,
-          project: parsed.project || undefined,
-          system: parsed.system || undefined,
-          deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
-          pvcDeliveryDate: parsed.pvcDeliveryDate ? new Date(parsed.pvcDeliveryDate) : undefined,
-          totalWindows: parsed.totals.windows || undefined,
-          totalSashes: parsed.totals.sashes || undefined,
-          totalGlasses: parsed.totals.glasses || undefined,
-        },
-      });
-    } else if (!order) {
-      order = await prisma.order.create({
-        data: {
-          orderNumber: targetOrderNumber, // Używa targetOrderNumber zamiast parsed.orderNumber
-          client: parsed.client || undefined,
-          project: parsed.project || undefined,
-          system: parsed.system || undefined,
-          deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
-          pvcDeliveryDate: parsed.pvcDeliveryDate ? new Date(parsed.pvcDeliveryDate) : undefined,
-          totalWindows: parsed.totals.windows || undefined,
-          totalSashes: parsed.totals.sashes || undefined,
-          totalGlasses: parsed.totals.glasses || undefined,
-        },
-      });
-    } else if (action === 'add_new') {
-      // Zaktualizuj istniejące zlecenie o nowe dane z CSV (jeśli action to add_new)
-      order = await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          client: parsed.client || undefined,
-          project: parsed.project || undefined,
-          system: parsed.system || undefined,
-          deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
-          pvcDeliveryDate: parsed.pvcDeliveryDate ? new Date(parsed.pvcDeliveryDate) : undefined,
-          totalWindows: parsed.totals.windows || undefined,
-          totalSashes: parsed.totals.sashes || undefined,
-          totalGlasses: parsed.totals.glasses || undefined,
-        },
-      });
-    }
-
-    // Dodaj requirements
-    for (const req of parsed.requirements) {
-      // Znajdź lub utwórz profil z articleNumber
-      let profile = await prisma.profile.findUnique({
-        where: { number: req.profileNumber },
+    // Całość w transakcji dla atomicity
+    return prisma.$transaction(async (tx) => {
+      // Znajdź lub utwórz zlecenie
+      let order = await tx.order.findUnique({
+        where: { orderNumber: targetOrderNumber },
       });
 
-      if (!profile) {
-        // Spróbuj znaleźć po articleNumber
-        profile = await prisma.profile.findUnique({
-          where: { articleNumber: req.articleNumber },
+      if (order && action === 'overwrite') {
+        // Atomowo usuń istniejące requirements i windows
+        await tx.orderRequirement.deleteMany({
+          where: { orderId: order.id },
+        });
+        await tx.orderWindow.deleteMany({
+          where: { orderId: order.id },
+        });
+        // Zaktualizuj zlecenie o nowe dane z CSV
+        order = await tx.order.update({
+          where: { id: order.id },
+          data: {
+            client: parsed.client || undefined,
+            project: parsed.project || undefined,
+            system: parsed.system || undefined,
+            deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
+            pvcDeliveryDate: parsed.pvcDeliveryDate ? new Date(parsed.pvcDeliveryDate) : undefined,
+            totalWindows: parsed.totals.windows || undefined,
+            totalSashes: parsed.totals.sashes || undefined,
+            totalGlasses: parsed.totals.glasses || undefined,
+          },
+        });
+      } else if (!order) {
+        // Try to get EUR value from linked Schuco delivery if available
+        const schucoLink = await tx.orderSchucoLink.findFirst({
+          where: {
+            order: {
+              orderNumber: targetOrderNumber,
+            },
+          },
+          include: {
+            schucoDelivery: {
+              select: { totalAmount: true },
+            },
+          },
+        });
+
+        let eurValue: number | undefined;
+        if (schucoLink?.schucoDelivery?.totalAmount) {
+          const parsedAmount = this.parseEurAmountFromSchuco(schucoLink.schucoDelivery.totalAmount);
+          if (parsedAmount !== null) {
+            eurValue = parsedAmount;
+          }
+        }
+
+        // Sprawdź czy jest oczekująca cena dla tego zlecenia
+        const pendingPrice = await tx.pendingOrderPrice.findFirst({
+          where: {
+            orderNumber: targetOrderNumber,
+            status: 'pending',
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        let valueEurFromPending: number | undefined;
+        let valuePlnFromPending: number | undefined;
+
+        if (pendingPrice) {
+          if (pendingPrice.currency === 'EUR') {
+            valueEurFromPending = pendingPrice.valueNetto;
+          } else {
+            valuePlnFromPending = pendingPrice.valueNetto;
+          }
+          logger.info(`Found pending price for ${targetOrderNumber}: ${pendingPrice.currency} ${pendingPrice.valueNetto}`);
+        }
+
+        order = await tx.order.create({
+          data: {
+            orderNumber: targetOrderNumber,
+            client: parsed.client || undefined,
+            project: parsed.project || undefined,
+            system: parsed.system || undefined,
+            deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
+            pvcDeliveryDate: parsed.pvcDeliveryDate ? new Date(parsed.pvcDeliveryDate) : undefined,
+            totalWindows: parsed.totals.windows || undefined,
+            totalSashes: parsed.totals.sashes || undefined,
+            totalGlasses: parsed.totals.glasses || undefined,
+            valueEur: eurValue ?? valueEurFromPending,
+            valuePln: valuePlnFromPending,
+          },
+        });
+
+        // Oznacz pending price jako zastosowaną
+        if (pendingPrice) {
+          await tx.pendingOrderPrice.update({
+            where: { id: pendingPrice.id },
+            data: {
+              status: 'applied',
+              appliedAt: new Date(),
+              appliedToOrderId: order.id,
+            },
+          });
+          logger.info(`Applied pending price to order ${targetOrderNumber} (ID: ${order.id})`);
+        }
+      } else if (action === 'add_new') {
+        // Zaktualizuj istniejące zlecenie o nowe dane z CSV
+        order = await tx.order.update({
+          where: { id: order.id },
+          data: {
+            client: parsed.client || undefined,
+            project: parsed.project || undefined,
+            system: parsed.system || undefined,
+            deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
+            pvcDeliveryDate: parsed.pvcDeliveryDate ? new Date(parsed.pvcDeliveryDate) : undefined,
+            totalWindows: parsed.totals.windows || undefined,
+            totalSashes: parsed.totals.sashes || undefined,
+            totalGlasses: parsed.totals.glasses || undefined,
+          },
+        });
+      }
+
+      // Dodaj requirements (w tej samej transakcji)
+      for (const req of parsed.requirements) {
+        // Znajdź lub utwórz profil z articleNumber
+        let profile = await tx.profile.findUnique({
+          where: { number: req.profileNumber },
         });
 
         if (!profile) {
-          // Utwórz nowy profil jeśli nie istnieje
-          profile = await prisma.profile.create({
-            data: {
-              number: req.profileNumber,
-              name: req.profileNumber,
-              articleNumber: req.articleNumber,
-            },
+          // Spróbuj znaleźć po articleNumber
+          profile = await tx.profile.findUnique({
+            where: { articleNumber: req.articleNumber },
           });
-          console.log(`Utworzony nowy profil ${req.profileNumber} z numerem artykułu ${req.articleNumber}`);
+
+          if (!profile) {
+            // Utwórz nowy profil jeśli nie istnieje
+            profile = await tx.profile.create({
+              data: {
+                number: req.profileNumber,
+                name: req.profileNumber,
+                articleNumber: req.articleNumber,
+              },
+            });
+            console.log(`Utworzony nowy profil ${req.profileNumber} z numerem artykułu ${req.articleNumber}`);
+          }
+        } else if (!profile.articleNumber) {
+          // Jeśli profil istnieje ale nie ma articleNumber, zaktualizuj go
+          profile = await tx.profile.update({
+            where: { id: profile.id },
+            data: { articleNumber: req.articleNumber },
+          });
         }
-      } else if (!profile.articleNumber) {
-        // Jeśli profil istnieje ale nie ma articleNumber, zaktualizuj go
-        profile = await prisma.profile.update({
-          where: { id: profile.id },
-          data: { articleNumber: req.articleNumber },
+
+        // Znajdź kolor
+        const color = await tx.color.findUnique({
+          where: { code: req.colorCode },
         });
-      }
 
-      // Znajdź kolor
-      const color = await prisma.color.findUnique({
-        where: { code: req.colorCode },
-      });
+        if (!color) {
+          console.warn(`Kolor ${req.colorCode} nie znaleziony, pomijam`);
+          continue;
+        }
 
-      if (!color) {
-        console.warn(`Kolor ${req.colorCode} nie znaleziony, pomijam`);
-        continue;
-      }
-
-      // Utwórz lub zaktualizuj requirement
-      await prisma.orderRequirement.upsert({
-        where: {
-          orderId_profileId_colorId: {
+        // Utwórz lub zaktualizuj requirement
+        await tx.orderRequirement.upsert({
+          where: {
+            orderId_profileId_colorId: {
+              orderId: order.id,
+              profileId: profile.id,
+              colorId: color.id,
+            },
+          },
+          update: {
+            beamsCount: req.calculatedBeams,
+            meters: req.calculatedMeters,
+            restMm: req.originalRest,
+          },
+          create: {
             orderId: order.id,
             profileId: profile.id,
             colorId: color.id,
+            beamsCount: req.calculatedBeams,
+            meters: req.calculatedMeters,
+            restMm: req.originalRest,
           },
-        },
-        update: {
-          beamsCount: req.calculatedBeams,
-          meters: req.calculatedMeters,
-          restMm: req.originalRest,
-        },
-        create: {
-          orderId: order.id,
-          profileId: profile.id,
-          colorId: color.id,
-          beamsCount: req.calculatedBeams,
-          meters: req.calculatedMeters,
-          restMm: req.originalRest,
-        },
-      });
-    }
+        });
+      }
 
-    // Dodaj windows
-    for (const win of parsed.windows) {
-      await prisma.orderWindow.create({
-        data: {
-          orderId: order.id,
-          widthMm: win.szer,
-          heightMm: win.wys,
-          profileType: win.typProfilu,
-          quantity: win.ilosc,
-          reference: win.referencja,
-        },
-      });
-    }
+      // Dodaj windows (w tej samej transakcji)
+      for (const win of parsed.windows) {
+        await tx.orderWindow.create({
+          data: {
+            orderId: order.id,
+            widthMm: win.szer,
+            heightMm: win.wys,
+            profileType: win.typProfilu,
+            quantity: win.ilosc,
+            reference: win.referencja,
+          },
+        });
+      }
 
-    return {
-      orderId: order.id,
-      requirementsCount: parsed.requirements.length,
-      windowsCount: parsed.windows.length,
-    };
+      return {
+        orderId: order.id,
+        requirementsCount: parsed.requirements.length,
+        windowsCount: parsed.windows.length,
+      };
+    }, {
+      timeout: 30000, // 30s dla dużych importów
+    }).then(async (result) => {
+      // Re-match unmatched glass delivery items AFTER transaction completes
+      try {
+        const glassDeliveryService = new GlassDeliveryService(prisma);
+        const rematchResult = await glassDeliveryService.rematchUnmatchedForOrders([targetOrderNumber]);
+        if (rematchResult.rematched > 0) {
+          logger.info(`Re-match dostaw szyb dla ${targetOrderNumber}: ${rematchResult.rematched} dopasowanych, ${rematchResult.stillUnmatched} nadal niedopasowanych`);
+        }
+      } catch (error) {
+        logger.warn(`Błąd re-matchingu dostaw szyb dla ${targetOrderNumber}: ${error instanceof Error ? error.message : 'Nieznany błąd'}`);
+      }
+
+      return result;
+    });
   }
 
   /**

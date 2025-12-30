@@ -32,11 +32,11 @@ export default function ZestawieniaPage() {
   // Obliczenia statystyk
   const stats = {
     totalOrders: orders?.length || 0,
-    completedOrders: orders?.filter((o: { status: string; archivedAt?: string }) => o.status === 'completed' || o.archivedAt).length || 0,
-    activeOrders: orders?.filter((o: { status: string; archivedAt?: string }) => o.status !== 'completed' && !o.archivedAt).length || 0,
-    totalValuePln: orders?.reduce((sum: number, o: { valuePln?: string }) => sum + (parseFloat(o.valuePln || '0') || 0), 0) || 0,
-    totalValueEur: orders?.reduce((sum: number, o: { valueEur?: string }) => sum + (parseFloat(o.valueEur || '0') || 0), 0) || 0,
-    totalWindows: orders?.reduce((sum: number, o: { totalWindows?: number; _count?: { windows?: number } }) => sum + (o.totalWindows || o._count?.windows || 0), 0) || 0,
+    completedOrders: orders?.filter((o) => o.status === 'completed' || o.archivedAt).length || 0,
+    activeOrders: orders?.filter((o) => o.status !== 'completed' && !o.archivedAt).length || 0,
+    totalValuePln: orders?.reduce((sum, o) => sum + (parseFloat(String(o.valuePln || '0')) || 0), 0) || 0,
+    totalValueEur: orders?.reduce((sum, o) => sum + (parseFloat(String(o.valueEur || '0')) || 0), 0) || 0,
+    totalWindows: orders?.reduce((sum, o) => sum + (o.totalWindows || 0), 0) || 0,
   };
 
   const handleExportCsv = async () => {
@@ -44,15 +44,15 @@ export default function ZestawieniaPage() {
       if (!orders) return;
 
       const headers = ['Nr zlecenia', 'Data', 'Klient', 'Projekt', 'System', 'Okna', 'Wartość PLN', 'Wartość EUR', 'Status'];
-      const rows = orders.map((order: { orderNumber: string; createdAt: string; client?: string; project?: string; system?: string; totalWindows?: number; _count?: { windows?: number }; valuePln?: string; valueEur?: string; status: string }) => [
+      const rows = orders.map((order) => [
         order.orderNumber,
         formatDate(order.createdAt),
         order.client || '-',
         order.project || '-',
         order.system || '-',
-        order.totalWindows || order._count?.windows || 0,
-        parseFloat(order.valuePln || '0').toFixed(2),
-        parseFloat(order.valueEur || '0').toFixed(2),
+        order.totalWindows || 0,
+        parseFloat(String(order.valuePln || '0')).toFixed(2),
+        parseFloat(String(order.valueEur || '0')).toFixed(2),
         order.status,
       ]);
 

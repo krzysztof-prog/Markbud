@@ -94,7 +94,7 @@ export default function ImportyPage() {
     },
   });
 
-  const { approveMutation, rejectMutation, deleteMutation } = useImportActionMutations({
+  const { approveMutation, rejectMutation, deleteMutation, bulkActionMutation } = useImportActionMutations({
     onApproveSuccess: () => setPreviewId(null),
     onRejectSuccess: () => setPreviewId(null),
   });
@@ -285,8 +285,10 @@ export default function ImportyPage() {
             onPreview={setPreviewId}
             onApprove={(id) => approveMutation.mutate({ id, action: 'add_new' })}
             onReject={(id) => rejectMutation.mutate(id)}
+            onBulkApprove={(ids) => bulkActionMutation.mutate({ ids, action: 'approve' })}
             isApprovePending={approveMutation.isPending}
             isRejectPending={rejectMutation.isPending}
+            isBulkPending={bulkActionMutation.isPending}
           />
         </div>
 
@@ -304,9 +306,11 @@ export default function ImportyPage() {
             preview={preview || null}
             isLoading={previewLoading}
             isPending={approveMutation.isPending}
+            isRejectPending={rejectMutation.isPending}
             onApprove={(resolution) =>
               approveMutation.mutate({ id: previewId, action: 'add_new', resolution })
             }
+            onReject={(id) => rejectMutation.mutate(id)}
             onClose={() => setPreviewId(null)}
           />
         )}
