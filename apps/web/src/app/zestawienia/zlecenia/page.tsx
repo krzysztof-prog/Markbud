@@ -198,7 +198,7 @@ const DEFAULT_COLUMNS: Column[] = [
   { id: 'glassDeliveryDate', label: 'Data szyb', sortable: false, align: 'center', visible: true },
   { id: 'valuePln', label: 'Wartość PLN', sortable: false, align: 'right', visible: true },
   { id: 'valueEur', label: 'Wartość EUR', sortable: false, align: 'right', visible: true },
-  { id: 'orderStatus', label: 'Status zamówienia', sortable: false, align: 'center', visible: true },
+  { id: 'orderStatus', label: 'Status Schuco', sortable: false, align: 'center', visible: true },
   { id: 'pvcDelivery', label: 'Dostawa PVC', sortable: false, align: 'left', visible: true },
   { id: 'deadline', label: 'Termin realizacji', sortable: false, align: 'left', visible: true },
   { id: 'archived', label: 'Status', sortable: false, align: 'center', visible: true },
@@ -219,7 +219,7 @@ export default function ZestawienieZlecenPage() {
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [columnFilters, setColumnFilters] = useState<Record<ColumnId, string>>({} as Record<ColumnId, string>);
   const debouncedColumnFilters = useDebounce(columnFilters, 300); // 300ms debounce for column filters
-  const [editingCell, setEditingCell] = useState<{ orderId: number; field: 'valuePln' | 'valueEur' | 'deadline' | 'orderStatus' } | null>(null);
+  const [editingCell, setEditingCell] = useState<{ orderId: number; field: 'valuePln' | 'valueEur' | 'deadline' } | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [showStatsModal, setShowStatsModal] = useState(false);
 
@@ -241,7 +241,7 @@ export default function ZestawienieZlecenPage() {
   });
 
   // Funkcje edycji komórek
-  const startEdit = (orderId: number, field: 'valuePln' | 'valueEur' | 'deadline' | 'orderStatus', currentValue: string) => {
+  const startEdit = (orderId: number, field: 'valuePln' | 'valueEur' | 'deadline', currentValue: string) => {
     setEditingCell({ orderId, field });
 
     // Dla daty, konwertuj do formatu YYYY-MM-DD jeśli jest to ISO string
@@ -279,8 +279,6 @@ export default function ZestawienieZlecenPage() {
       data.valueEur = editValue || null;
     } else if (field === 'deadline') {
       data.deadline = editValue || null;
-    } else if (field === 'orderStatus') {
-      data.status = editValue || null;
     }
 
     updateOrderMutation.mutate({ orderId, data });
@@ -415,16 +413,16 @@ export default function ZestawienieZlecenPage() {
         const ordered = order.orderedGlassCount || 0;
         const delivered = order.deliveredGlassCount || 0;
         if (ordered === 0) return '';
-        if (delivered === ordered) return 'Dostarczono';
-        if (delivered > 0) return `${delivered}/${ordered}`;
+        if (delivered >= ordered) return 'Dostarczono';
+        if (delivered > 0) return `Częściowo: ${delivered}/${ordered}`;
         if (order.glassDeliveryDate) return formatDateShort(order.glassDeliveryDate);
-        return '-';
+        return 'Brak daty';
       case 'valuePln':
         return order.valuePln != null ? String(order.valuePln) : '';
       case 'valueEur':
         return order.valueEur != null ? String(order.valueEur) : '';
       case 'orderStatus':
-        // Użyj statusu Schuco jeśli są powiązane zamówienia
+        // Użyj statusu Schuco jeśli są powiązane zamówienia, w przeciwnym razie Order.status
         const schucoStatusVal = aggregateSchucoStatus(order.schucoLinks);
         return schucoStatusVal || order.status || '';
       case 'pvcDelivery':
@@ -770,7 +768,7 @@ export default function ZestawienieZlecenPage() {
       case 'valueEur':
         return order.valueEur != null ? formatCurrency(typeof order.valueEur === 'number' ? order.valueEur : parseFloat(order.valueEur), 'EUR') : '';
       case 'orderStatus':
-        // Użyj statusu Schuco jeśli są powiązane zamówienia (eksport CSV)
+        // Użyj statusu Schuco jeśli są powiązane zamówienia, w przeciwnym razie Order.status (eksport CSV)
         const schucoStatusCsv = aggregateSchucoStatus(order.schucoLinks);
         return schucoStatusCsv || order.status || '';
       case 'pvcDelivery':
@@ -787,6 +785,7 @@ export default function ZestawienieZlecenPage() {
         const deliveredCsv = order.deliveredGlassCount ?? 0;
         if (orderedCsv === 0) return '';
         if (deliveredCsv >= orderedCsv) return 'Dostarczono';
+        if (deliveredCsv > 0) return `Częściowo: ${deliveredCsv}/${orderedCsv}`;
         if (order.glassDeliveryDate) return formatDateShort(order.glassDeliveryDate);
         return 'Brak daty';
       case 'deadline':
@@ -877,6 +876,10 @@ export default function ZestawienieZlecenPage() {
               tooltipDate = formattedDate;
             }
           }
+        } else if (delivered > 0) {
+          // Częściowa dostawa - żółte tło
+          content = `Częściowo: ${delivered}/${ordered}`;
+          colorClass = 'bg-yellow-100 text-yellow-700';
         } else if (order.glassDeliveryDate) {
           // Jest data przewidywanej dostawy - pomarańczowe tło
           const deliveryDate = new Date(order.glassDeliveryDate);
@@ -1120,66 +1123,24 @@ export default function ZestawienieZlecenPage() {
         );
 
       case 'orderStatus':
-        // Wyświetl status Schuco jeśli są powiązane zamówienia
+        // Wyświetl status Schuco jeśli są powiązane zamówienia, w przeciwnym razie Order.status
         const schucoStatus = aggregateSchucoStatus(order.schucoLinks);
-        const hasSchucoStatus = schucoStatus !== '';
+        const displayStatus = schucoStatus || order.status || '-';
+        const hasStatusLinks = schucoStatus !== '';
 
-        if (hasSchucoStatus) {
-          // Wyświetl status Schuco jako badge (bez możliwości edycji)
-          return (
-            <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
-              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getSchucoStatusColor(schucoStatus)}`}>
-                {schucoStatus}
-              </span>
-            </td>
-          );
-        }
-
-        // Edytowalne pole - Status zamówienia (gdy brak powiązań Schuco)
-        if (isEditing && editingCell?.field === 'orderStatus') {
-          return (
-            <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
-              <div className="flex items-center gap-1">
-                <Input
-                  type="text"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  className="h-8 text-sm"
-                  placeholder="Status"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') saveEdit();
-                    if (e.key === 'Escape') cancelEdit();
-                  }}
-                />
-                <button
-                  onClick={saveEdit}
-                  className="p-1 hover:bg-green-100 rounded text-green-600"
-                  title="Zapisz"
-                >
-                  <Check className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={cancelEdit}
-                  className="p-1 hover:bg-red-100 rounded text-red-600"
-                  title="Anuluj"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </td>
-          );
-        }
         return (
-          <td
-            key={column.id}
-            className={`px-4 py-3 text-muted-foreground ${alignClass} group cursor-pointer hover:bg-slate-50`}
-            onClick={() => startEdit(order.id, 'orderStatus', order.status || '')}
-          >
-            <div className="flex items-center gap-2 justify-between">
-              <span>{order.status || '-'}</span>
-              <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50" />
-            </div>
+          <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
+            {displayStatus !== '-' ? (
+              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                hasStatusLinks
+                  ? getSchucoStatusColor(schucoStatus)
+                  : 'bg-slate-100 text-slate-600'
+              }`}>
+                {displayStatus}
+              </span>
+            ) : (
+              <span className="text-slate-400">-</span>
+            )}
           </td>
         );
 
