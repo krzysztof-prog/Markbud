@@ -78,12 +78,56 @@
   background: hsl(var(--muted-foreground) / 0.5);
 }
 
+/* Accessibility: Skip to main content link */
+.skip-to-main {
+  position: absolute;
+  left: -9999px;
+  z-index: 999;
+  padding: 1rem 1.5rem;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  text-decoration: none;
+  border: 2px solid hsl(var(--primary));
+  border-radius: 0.25rem;
+  font-weight: 600;
+}
+
+.skip-to-main:focus {
+  left: 1rem;
+  top: 1rem;
+}
+
+/* Accessibility: Required field indicators */
+.form-field-required::after {
+  content: '*';
+  color: rgb(239 68 68); /* red-500 */
+  margin-left: 0.25rem;
+  font-weight: 600;
+}
+
 /* Accessibility: Focus indicators */
 /* Ensure focus is always visible for keyboard navigation */
 *:focus-visible {
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
   border-radius: 2px;
+}
+
+/* Enhanced focus for buttons */
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid hsl(var(--ring));
+  outline-offset: 3px;
+}
+
+/* Enhanced focus for form inputs */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 0;
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.1);
 }
 
 /* Remove default focus outline to use our custom one */

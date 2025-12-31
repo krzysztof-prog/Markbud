@@ -5,7 +5,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { deliveriesApi, workingDaysApi } from '@/lib/api';
 import { showSuccessToast, showErrorToast, getErrorMessage } from '@/lib/toast-helpers';
-import type { Delivery } from '@/types/delivery';
+import { TOAST_MESSAGES } from '@/lib/toast-messages';
+import type { Delivery, DeliveryCalendarData } from '@/types/delivery';
+import type { Order } from '@/types/order';
 
 const CALENDAR_QUERY_KEY = 'deliveries-calendar-continuous';
 
@@ -27,7 +29,7 @@ export function useCreateDelivery(callbacks?: {
 
       const tempId = `temp-${Date.now()}`;
 
-      queryClient.setQueryData([CALENDAR_QUERY_KEY], (old: any) => {
+      queryClient.setQueryData([CALENDAR_QUERY_KEY], (old: DeliveryCalendarData | undefined) => {
         if (!old) return old;
         return {
           ...old,
@@ -51,7 +53,7 @@ export function useCreateDelivery(callbacks?: {
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CALENDAR_QUERY_KEY] });
-      showSuccessToast('Dostawa utworzona', 'Pomyślnie utworzono nową dostawę');
+      showSuccessToast(TOAST_MESSAGES.delivery.created, TOAST_MESSAGES.delivery.createdDesc);
       callbacks?.onSuccess?.();
     },
 
@@ -59,7 +61,7 @@ export function useCreateDelivery(callbacks?: {
       if (context?.previousData) {
         queryClient.setQueryData([CALENDAR_QUERY_KEY], context.previousData);
       }
-      showErrorToast('Błąd tworzenia dostawy', getErrorMessage(error));
+      showErrorToast(TOAST_MESSAGES.delivery.errorCreate, getErrorMessage(error));
     },
 
     onSettled: () => {
@@ -80,11 +82,11 @@ export function useDeleteDelivery(callbacks?: {
     mutationFn: (id: number) => deliveriesApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CALENDAR_QUERY_KEY] });
-      showSuccessToast('Dostawa usunięta', 'Pomyślnie usunięto dostawę');
+      showSuccessToast(TOAST_MESSAGES.delivery.deleted, TOAST_MESSAGES.delivery.deletedDesc);
       callbacks?.onSuccess?.();
     },
     onError: (error) => {
-      showErrorToast('Błąd usuwania dostawy', getErrorMessage(error));
+      showErrorToast(TOAST_MESSAGES.delivery.errorDelete, getErrorMessage(error));
     },
   });
 }
@@ -100,10 +102,10 @@ export function useRemoveOrderFromDelivery() {
       deliveriesApi.removeOrder(deliveryId, orderId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CALENDAR_QUERY_KEY] });
-      showSuccessToast('Zlecenie usunięte', 'Zlecenie zostało usunięte z dostawy');
+      showSuccessToast(TOAST_MESSAGES.delivery.orderRemoved, TOAST_MESSAGES.delivery.orderRemovedDesc);
     },
     onError: (error) => {
-      showErrorToast('Błąd usuwania zlecenia', getErrorMessage(error));
+      showErrorToast(TOAST_MESSAGES.delivery.errorRemoveOrder, getErrorMessage(error));
     },
   });
 }
@@ -129,22 +131,22 @@ export function useMoveOrderBetweenDeliveries() {
       await queryClient.cancelQueries({ queryKey: [CALENDAR_QUERY_KEY] });
       const previousData = queryClient.getQueryData([CALENDAR_QUERY_KEY]);
 
-      queryClient.setQueryData([CALENDAR_QUERY_KEY], (old: any) => {
+      queryClient.setQueryData([CALENDAR_QUERY_KEY], (old: DeliveryCalendarData | undefined) => {
         if (!old) return old;
 
         return {
           ...old,
-          deliveries: old.deliveries?.map((delivery: any) => {
+          deliveries: old.deliveries?.map((delivery) => {
             if (delivery.id === sourceDeliveryId) {
               return {
                 ...delivery,
-                orders: (delivery.orders || []).filter((o: any) => o.id !== orderId),
+                orders: (delivery.orders || []).filter((o) => o.id !== orderId),
               };
             }
             if (delivery.id === targetDeliveryId) {
               return {
                 ...delivery,
-                orders: [...(delivery.orders || []), { id: orderId, _optimistic: true }],
+                orders: [...(delivery.orders || []), { id: orderId, _optimistic: true } as unknown as Order],
               };
             }
             return delivery;
@@ -157,14 +159,14 @@ export function useMoveOrderBetweenDeliveries() {
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CALENDAR_QUERY_KEY] });
-      showSuccessToast('Zlecenie przeniesione', 'Zlecenie zostało przeniesione między dostawami');
+      showSuccessToast(TOAST_MESSAGES.delivery.orderMoved, TOAST_MESSAGES.delivery.orderMovedDesc);
     },
 
     onError: (error, _variables, context) => {
       if (context?.previousData) {
         queryClient.setQueryData([CALENDAR_QUERY_KEY], context.previousData);
       }
-      showErrorToast('Błąd przenoszenia zlecenia', getErrorMessage(error));
+      showErrorToast(TOAST_MESSAGES.delivery.errorMoveOrder, getErrorMessage(error));
     },
 
     onSettled: () => {
@@ -189,16 +191,16 @@ export function useAddOrderToDelivery(callbacks?: {
       await queryClient.cancelQueries({ queryKey: [CALENDAR_QUERY_KEY] });
       const previousData = queryClient.getQueryData([CALENDAR_QUERY_KEY]);
 
-      queryClient.setQueryData([CALENDAR_QUERY_KEY], (old: any) => {
+      queryClient.setQueryData([CALENDAR_QUERY_KEY], (old: DeliveryCalendarData | undefined) => {
         if (!old) return old;
 
         return {
           ...old,
-          deliveries: old.deliveries?.map((delivery: any) =>
+          deliveries: old.deliveries?.map((delivery) =>
             delivery.id === deliveryId
               ? {
                   ...delivery,
-                  orders: [...(delivery.orders || []), { id: orderId, _optimistic: true }],
+                  orders: [...(delivery.orders || []), { id: orderId, _optimistic: true } as unknown as Order],
                 }
               : delivery
           ),
@@ -210,7 +212,7 @@ export function useAddOrderToDelivery(callbacks?: {
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CALENDAR_QUERY_KEY] });
-      showSuccessToast('Zlecenie dodane', 'Zlecenie zostało dodane do dostawy');
+      showSuccessToast(TOAST_MESSAGES.delivery.orderAdded, TOAST_MESSAGES.delivery.orderAddedDesc);
       callbacks?.onSuccess?.();
     },
 
@@ -218,7 +220,7 @@ export function useAddOrderToDelivery(callbacks?: {
       if (context?.previousData) {
         queryClient.setQueryData([CALENDAR_QUERY_KEY], context.previousData);
       }
-      showErrorToast('Błąd dodawania zlecenia', getErrorMessage(error));
+      showErrorToast(TOAST_MESSAGES.delivery.errorAddOrder, getErrorMessage(error));
     },
 
     onSettled: () => {
@@ -249,11 +251,11 @@ export function useAddItemToDelivery(callbacks?: {
       }),
     onSuccess: async (_result, variables) => {
       await queryClient.invalidateQueries({ queryKey: [CALENDAR_QUERY_KEY] });
-      showSuccessToast('Artykuł dodany', 'Pomyślnie dodano artykuł do dostawy');
+      showSuccessToast(TOAST_MESSAGES.delivery.itemAdded, TOAST_MESSAGES.delivery.itemAddedDesc);
       callbacks?.onSuccess?.(variables.deliveryId);
     },
     onError: (error) => {
-      showErrorToast('Błąd dodawania artykułu', getErrorMessage(error));
+      showErrorToast(TOAST_MESSAGES.delivery.errorAddItem, getErrorMessage(error));
     },
   });
 }
@@ -271,11 +273,11 @@ export function useDeleteItemFromDelivery(callbacks?: {
       deliveriesApi.deleteItem(deliveryId, itemId),
     onSuccess: async (_result, variables) => {
       await queryClient.invalidateQueries({ queryKey: [CALENDAR_QUERY_KEY] });
-      showSuccessToast('Artykuł usunięty', 'Pomyślnie usunięto artykuł z dostawy');
+      showSuccessToast(TOAST_MESSAGES.delivery.itemDeleted, TOAST_MESSAGES.delivery.itemDeletedDesc);
       callbacks?.onSuccess?.(variables.deliveryId);
     },
     onError: (error) => {
-      showErrorToast('Błąd usuwania artykułu', getErrorMessage(error));
+      showErrorToast(TOAST_MESSAGES.delivery.errorDeleteItem, getErrorMessage(error));
     },
   });
 }
@@ -293,11 +295,11 @@ export function useCompleteDeliveryOrders(callbacks?: {
       deliveriesApi.completeOrders(deliveryId, productionDate),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CALENDAR_QUERY_KEY] });
-      showSuccessToast('Zlecenia zakończone', 'Pomyślnie oznaczono zlecenia jako wyprodukowane');
+      showSuccessToast(TOAST_MESSAGES.delivery.ordersCompleted, TOAST_MESSAGES.delivery.ordersCompletedDesc);
       callbacks?.onSuccess?.();
     },
     onError: (error) => {
-      showErrorToast('Błąd kończenia zleceń', getErrorMessage(error));
+      showErrorToast(TOAST_MESSAGES.delivery.errorCompleteOrders, getErrorMessage(error));
     },
   });
 }
@@ -314,12 +316,12 @@ export function useToggleWorkingDay() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['working-days'] });
       showSuccessToast(
-        variables.isWorking ? 'Dzień roboczy' : 'Dzień wolny',
-        `Oznaczono jako ${variables.isWorking ? 'dzień roboczy' : 'dzień wolny'}`
+        variables.isWorking ? TOAST_MESSAGES.workingDays.workingDay : TOAST_MESSAGES.workingDays.dayOff,
+        variables.isWorking ? TOAST_MESSAGES.workingDays.workingDayDesc : TOAST_MESSAGES.workingDays.dayOffDesc
       );
     },
     onError: (error) => {
-      showErrorToast('Błąd zmiany dnia', getErrorMessage(error));
+      showErrorToast(TOAST_MESSAGES.workingDays.errorToggle, getErrorMessage(error));
     },
   });
 }

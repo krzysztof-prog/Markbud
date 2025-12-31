@@ -5,6 +5,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { importsApi } from '@/lib/api';
 import { toast } from '@/hooks/useToast';
+import { getErrorMessage } from '@/lib/error-messages';
+import { TOAST_MESSAGES } from '@/lib/toast-messages';
 
 interface FolderScanResult {
   folderName: string;
@@ -86,16 +88,16 @@ export function useUploadMutation(callbacks?: {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['imports'] });
       toast({
-        title: 'Plik przeslany',
-        description: 'Plik oczekuje na zatwierdzenie',
+        title: TOAST_MESSAGES.import.uploaded,
+        description: TOAST_MESSAGES.import.uploadedDesc,
         variant: 'success',
       });
       callbacks?.onSuccess?.();
     },
     onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Nie udalo sie przeslac pliku';
+      const message = getErrorMessage(error);
       toast({
-        title: 'Blad przesylania',
+        title: TOAST_MESSAGES.import.errorUpload,
         description: message,
         variant: 'destructive',
       });
@@ -127,16 +129,16 @@ export function useImportActionMutations(callbacks?: {
       queryClient.invalidateQueries({ queryKey: ['imports'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       toast({
-        title: 'Import zatwierdzony',
-        description: 'Plik zostal pomyslnie zaimportowany',
+        title: TOAST_MESSAGES.import.approved,
+        description: TOAST_MESSAGES.import.approvedDesc,
         variant: 'success',
       });
       callbacks?.onApproveSuccess?.();
     },
     onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Nie udalo sie zatwierdzic importu';
+      const message = getErrorMessage(error);
       toast({
-        title: 'Blad importu',
+        title: TOAST_MESSAGES.import.errorApprove,
         description: message,
         variant: 'destructive',
       });
@@ -148,16 +150,16 @@ export function useImportActionMutations(callbacks?: {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['imports'] });
       toast({
-        title: 'Import odrzucony',
-        description: 'Plik zostal pomyslnie odrzucony',
+        title: TOAST_MESSAGES.import.rejected,
+        description: TOAST_MESSAGES.import.rejectedDesc,
         variant: 'info',
       });
       callbacks?.onRejectSuccess?.();
     },
     onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Nie udalo sie odrzucic importu';
+      const message = getErrorMessage(error);
       toast({
-        title: 'Blad',
+        title: TOAST_MESSAGES.import.errorReject,
         description: message,
         variant: 'destructive',
       });
@@ -170,15 +172,15 @@ export function useImportActionMutations(callbacks?: {
       queryClient.invalidateQueries({ queryKey: ['imports'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       toast({
-        title: 'Import usuniety',
-        description: 'Import zostal pomyslnie usuniety',
+        title: TOAST_MESSAGES.import.deleted,
+        description: TOAST_MESSAGES.import.deletedDesc,
         variant: 'success',
       });
     },
     onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Nie udalo sie usunac importu';
+      const message = getErrorMessage(error);
       toast({
-        title: 'Blad usuwania',
+        title: TOAST_MESSAGES.import.errorDelete,
         description: message,
         variant: 'destructive',
       });
@@ -197,24 +199,26 @@ export function useImportActionMutations(callbacks?: {
 
       if (summary.failCount === 0) {
         toast({
-          title: `Pomyslnie ${actionLabel} ${summary.successCount} importow`,
+          title: variables.action === 'approve'
+            ? TOAST_MESSAGES.import.bulkApproved(summary.successCount)
+            : TOAST_MESSAGES.import.bulkRejected(summary.successCount),
           description: variables.action === 'approve'
-            ? 'Ceny zostaly zapisane i beda automatycznie przypisane do zlecen'
-            : 'Importy zostaly odrzucone',
+            ? 'Ceny zostały zapisane i będą automatycznie przypisane do zleceń'
+            : 'Importy zostały odrzucone',
           variant: 'success',
         });
       } else {
         toast({
-          title: `Czesciowo ${actionLabel}`,
-          description: `${summary.successCount} pomyslnie, ${summary.failCount} z bledami`,
+          title: `Częściowo ${actionLabel}`,
+          description: TOAST_MESSAGES.import.bulkPartial(summary.successCount, summary.failCount),
           variant: 'destructive',
         });
       }
     },
     onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Nie udalo sie przetworzyc importow';
+      const message = getErrorMessage(error);
       toast({
-        title: 'Blad przetwarzania',
+        title: TOAST_MESSAGES.import.errorBulk,
         description: message,
         variant: 'destructive',
       });
@@ -241,23 +245,23 @@ export function useFolderImportMutations(callbacks?: {
       callbacks?.onScanSuccess?.(data);
       if (!data.detectedDate) {
         toast({
-          title: 'Brak daty w nazwie folderu',
-          description: 'Nazwa folderu powinna zawierac date w formacie DD.MM.YYYY',
+          title: TOAST_MESSAGES.import.noDate,
+          description: TOAST_MESSAGES.import.noDateDesc,
           variant: 'destructive',
         });
       } else if (data.csvFiles.length === 0) {
         toast({
-          title: 'Brak plikow CSV',
-          description: 'Nie znaleziono plikow CSV z "uzyte" lub "bele" w nazwie',
+          title: TOAST_MESSAGES.import.noCsvFiles,
+          description: TOAST_MESSAGES.import.noCsvFilesDesc,
           variant: 'destructive',
         });
       }
     },
     onError: (error: unknown) => {
       callbacks?.onScanError?.();
-      const message = error instanceof Error ? error.message : 'Nie udalo sie przeskanowac folderu';
+      const message = getErrorMessage(error);
       toast({
-        title: 'Blad skanowania',
+        title: TOAST_MESSAGES.import.errorScan,
         description: message,
         variant: 'destructive',
       });
@@ -277,15 +281,15 @@ export function useFolderImportMutations(callbacks?: {
       const { summary, delivery, results } = data;
 
       // Build description with skipped info
-      let description = `Zaimportowano ${summary.successCount}/${summary.totalFiles} plikow do dostawy ${delivery.deliveryNumber}${delivery.created ? ' (nowa)' : ''}`;
+      let description = `Zaimportowano ${summary.successCount}/${summary.totalFiles} plików do dostawy ${delivery.deliveryNumber}${delivery.created ? ' (nowa)' : ''}`;
 
       if (summary.skippedCount > 0) {
-        description += `. Pominieto ${summary.skippedCount} (duplikaty)`;
+        description += `. Pominięto ${summary.skippedCount} (duplikaty)`;
         // Show details of skipped orders
         const skippedOrders = results.filter((r) => r.skipped);
         if (skippedOrders.length > 0) {
           const skippedDetails = skippedOrders
-            .map((r) => r.skipReason || `${r.orderNumber} - juz przypisane`)
+            .map((r) => r.skipReason || `${r.orderNumber} - już przypisane`)
             .join('\n');
           toast({
             title: 'Pominięte zamówienia',
@@ -296,7 +300,7 @@ export function useFolderImportMutations(callbacks?: {
       }
 
       toast({
-        title: 'Import zakonczony',
+        title: TOAST_MESSAGES.import.folderImported,
         description,
         variant: summary.failCount > 0 ? 'destructive' : summary.skippedCount > 0 ? 'info' : 'success',
       });
@@ -322,9 +326,9 @@ export function useFolderImportMutations(callbacks?: {
       }
 
       // For non-conflict errors, show toast
-      const message = error instanceof Error ? error.message : 'Nie udalo sie zaimportowac plikow';
+      const message = getErrorMessage(error);
       toast({
-        title: 'Blad importu',
+        title: TOAST_MESSAGES.import.errorFolderImport,
         description: message,
         variant: 'destructive',
       });
@@ -348,16 +352,16 @@ export function useFolderManagementMutations(callbacks?: {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['available-folders'] });
       toast({
-        title: 'Folder zarchiwizowany',
+        title: TOAST_MESSAGES.import.folderArchived,
         description: `Folder przeniesiony do archiwum: ${data.archivedPath}`,
         variant: 'success',
       });
       callbacks?.onArchiveSuccess?.();
     },
     onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Nie udalo sie zarchiwizowac folderu';
+      const message = getErrorMessage(error);
       toast({
-        title: 'Blad archiwizacji',
+        title: TOAST_MESSAGES.import.errorArchive,
         description: message,
         variant: 'destructive',
       });
@@ -369,16 +373,16 @@ export function useFolderManagementMutations(callbacks?: {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['available-folders'] });
       toast({
-        title: 'Folder usuniety',
-        description: 'Folder zostal trwale usuniety',
+        title: TOAST_MESSAGES.import.folderDeleted,
+        description: TOAST_MESSAGES.import.folderDeletedDesc,
         variant: 'success',
       });
       callbacks?.onDeleteSuccess?.();
     },
     onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Nie udalo sie usunac folderu';
+      const message = getErrorMessage(error);
       toast({
-        title: 'Blad usuwania',
+        title: TOAST_MESSAGES.import.errorFolderDelete,
         description: message,
         variant: 'destructive',
       });
