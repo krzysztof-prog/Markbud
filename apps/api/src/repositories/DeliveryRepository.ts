@@ -2,8 +2,9 @@
  * Delivery Repository - Database access layer
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import type { Delivery } from '@prisma/client';
+import { PaginationParams, PaginatedResponse } from '../validators/common';
 
 export interface DeliveryFilters {
   from?: Date;
@@ -14,8 +15,11 @@ export interface DeliveryFilters {
 export class DeliveryRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async findAll(filters: DeliveryFilters = {}) {
-    const where: any = {};
+  async findAll(filters: DeliveryFilters = {}, pagination?: PaginationParams): Promise<PaginatedResponse<any>> {
+    const where: Prisma.DeliveryWhereInput = {};
+
+    // Exclude soft-deleted deliveries
+    where.deletedAt = null;
 
     if (filters.from || filters.to) {
       where.deliveryDate = {};
@@ -27,7 +31,11 @@ export class DeliveryRepository {
       where.status = filters.status;
     }
 
-    return this.prisma.delivery.findMany({
+    // Get total count for pagination
+    const total = await this.prisma.delivery.count({ where });
+
+    // Get paginated data
+    const data = await this.prisma.delivery.findMany({
       where,
       select: {
         id: true,
@@ -67,7 +75,16 @@ export class DeliveryRepository {
         },
       },
       orderBy: { deliveryDate: 'asc' },
+      skip: pagination?.skip ?? 0,
+      take: pagination?.take ?? 50,
     });
+
+    return {
+      data,
+      total,
+      skip: pagination?.skip ?? 0,
+      take: pagination?.take ?? 50,
+    };
   }
 
   async findById(id: number) {
@@ -150,8 +167,10 @@ export class DeliveryRepository {
   }
 
   async delete(id: number): Promise<void> {
-    await this.prisma.delivery.delete({
+    // Soft delete: set deletedAt instead of hard delete
+    await this.prisma.delivery.update({
       where: { id },
+      data: { deletedAt: new Date() },
     });
   }
 
@@ -344,6 +363,7 @@ export class DeliveryRepository {
 
     const deliveries = await this.prisma.delivery.findMany({
       where: {
+        deletedAt: null, // Exclude soft-deleted deliveries
         deliveryDate: {
           gte: startDate,
           lte: endDate,
@@ -413,7 +433,9 @@ export class DeliveryRepository {
    * Get deliveries with profile requirements
    */
   async getDeliveriesWithRequirements(fromDate?: Date) {
-    const whereCondition: any = {};
+    const whereCondition: Prisma.DeliveryWhereInput = {
+      deletedAt: null, // Exclude soft-deleted deliveries
+    };
     if (fromDate) {
       whereCondition.deliveryDate = { gte: fromDate };
     }
@@ -423,19 +445,25 @@ export class DeliveryRepository {
       select: {
         id: true,
         deliveryDate: true,
+        status: true,
         deliveryOrders: {
           select: {
+            id: true,
+            orderId: true,
             order: {
               select: {
                 id: true,
+                orderNumber: true,
                 requirements: {
                   select: {
+                    id: true,
                     profileId: true,
                     colorId: true,
                     beamsCount: true,
                     meters: true,
+                    restMm: true,
                     color: {
-                      select: { code: true },
+                      select: { id: true, code: true, name: true },
                     },
                   },
                 },
@@ -451,18 +479,21 @@ export class DeliveryRepository {
    * Get deliveries with order windows for stats
    */
   async getDeliveriesWithWindows(startDate: Date, endDate?: Date) {
-    const where: any = {
-      deliveryDate: { gte: startDate },
+    const where: Prisma.DeliveryWhereInput = {
+      deletedAt: null, // Exclude soft-deleted deliveries
+      deliveryDate: endDate ? { gte: startDate, lte: endDate } : { gte: startDate },
     };
-    if (endDate) {
-      where.deliveryDate.lte = endDate;
-    }
 
     return this.prisma.delivery.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        deliveryDate: true,
+        status: true,
         deliveryOrders: {
-          include: {
+          select: {
+            id: true,
+            orderId: true,
             order: {
               select: {
                 id: true,
@@ -484,18 +515,32 @@ export class DeliveryRepository {
   async getDeliveriesWithProfileStats(startDate: Date, endDate: Date) {
     return this.prisma.delivery.findMany({
       where: {
+        deletedAt: null, // Exclude soft-deleted deliveries
         deliveryDate: {
           gte: startDate,
           lte: endDate,
         },
       },
-      include: {
+      select: {
+        id: true,
+        deliveryDate: true,
+        status: true,
         deliveryOrders: {
-          include: {
+          select: {
+            id: true,
+            orderId: true,
             order: {
-              include: {
+              select: {
+                id: true,
+                orderNumber: true,
                 requirements: {
-                  include: {
+                  select: {
+                    id: true,
+                    profileId: true,
+                    colorId: true,
+                    beamsCount: true,
+                    meters: true,
+                    restMm: true,
                     profile: {
                       select: { id: true, number: true, name: true },
                     },
@@ -543,5 +588,117 @@ export class DeliveryRepository {
         },
       },
     });
+  }
+
+  /**
+   * Get working days for a specific month/year
+   */
+  async getWorkingDays(month: number, year: number) {
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0);
+
+    return this.prisma.workingDay.findMany({
+      where: {
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+    });
+  }
+
+  /**
+   * Get holidays for a specific year
+   */
+  async getHolidays(year: number) {
+    // Polish fixed holidays
+    const POLISH_HOLIDAYS = [
+      { month: 1, day: 1, name: 'Nowy Rok' },
+      { month: 1, day: 6, name: 'Trzech Króli' },
+      { month: 5, day: 1, name: 'Święto Pracy' },
+      { month: 5, day: 3, name: 'Święto Konstytucji 3 Maja' },
+      { month: 8, day: 15, name: 'Wniebowzięcie NMP' },
+      { month: 11, day: 1, name: 'Wszystkich Świętych' },
+      { month: 11, day: 11, name: 'Narodowe Święto Niepodległości' },
+      { month: 12, day: 25, name: 'Boże Narodzenie' },
+      { month: 12, day: 26, name: 'Drugi dzień Bożego Narodzenia' },
+    ];
+
+    const holidays = [];
+
+    // Add fixed holidays
+    for (const holiday of POLISH_HOLIDAYS) {
+      holidays.push({
+        date: new Date(year, holiday.month - 1, holiday.day),
+        name: holiday.name,
+        country: 'PL',
+        isWorking: false,
+      });
+    }
+
+    // Calculate Easter and movable holidays
+    const easter = this.calculateEaster(year);
+
+    // Easter Sunday
+    holidays.push({
+      date: new Date(easter),
+      name: 'Niedziela Wielkanocna',
+      country: 'PL',
+      isWorking: false,
+    });
+
+    // Easter Monday
+    const easterMonday = new Date(easter);
+    easterMonday.setDate(easter.getDate() + 1);
+    holidays.push({
+      date: easterMonday,
+      name: 'Poniedziałek Wielkanocny',
+      country: 'PL',
+      isWorking: false,
+    });
+
+    // Pentecost (49 days after Easter)
+    const pentecost = new Date(easter);
+    pentecost.setDate(easter.getDate() + 49);
+    holidays.push({
+      date: pentecost,
+      name: 'Zielone Świątki',
+      country: 'PL',
+      isWorking: false,
+    });
+
+    // Corpus Christi (60 days after Easter)
+    const corpusChristi = new Date(easter);
+    corpusChristi.setDate(easter.getDate() + 60);
+    holidays.push({
+      date: corpusChristi,
+      name: 'Boże Ciało',
+      country: 'PL',
+      isWorking: false,
+    });
+
+    return holidays;
+  }
+
+  /**
+   * Calculate Easter date using Meeus algorithm
+   */
+  private calculateEaster(year: number): Date {
+    const a = year % 19;
+    const b = Math.floor(year / 100);
+    const c = year % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31);
+    const day = ((h + l - 7 * m + 114) % 31) + 1;
+
+    return new Date(year, month - 1, day);
   }
 }

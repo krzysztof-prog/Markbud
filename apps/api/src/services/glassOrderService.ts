@@ -1,19 +1,46 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { parseGlassOrderTxt } from './parsers/glass-order-txt-parser.js';
+import { ConflictError } from '../utils/errors.js';
 
 export class GlassOrderService {
   constructor(private prisma: PrismaClient) {}
 
-  async importFromTxt(fileContent: string | Buffer, filename: string) {
+  async importFromTxt(fileContent: string | Buffer, filename: string, replaceExisting = false) {
     const parsed = parseGlassOrderTxt(fileContent);
 
     // Check if already exists
     const existing = await this.prisma.glassOrder.findUnique({
       where: { glassOrderNumber: parsed.metadata.glassOrderNumber },
+      include: {
+        items: true,
+      },
     });
 
-    if (existing) {
-      throw new Error(`Zamówienie ${parsed.metadata.glassOrderNumber} już istnieje`);
+    if (existing && !replaceExisting) {
+      throw new ConflictError(
+        `Zamówienie ${parsed.metadata.glassOrderNumber} już istnieje`,
+        {
+          existingOrder: {
+            id: existing.id,
+            glassOrderNumber: existing.glassOrderNumber,
+            orderDate: existing.orderDate,
+            supplier: existing.supplier,
+            status: existing.status,
+            itemsCount: existing.items.length,
+          },
+          newOrder: {
+            glassOrderNumber: parsed.metadata.glassOrderNumber,
+            orderDate: parsed.metadata.orderDate,
+            supplier: parsed.metadata.supplier,
+            itemsCount: parsed.items.length,
+          },
+        }
+      );
+    }
+
+    // If replacing, delete the old one first
+    if (existing && replaceExisting) {
+      await this.delete(existing.id);
     }
 
     // Use transaction for atomicity
@@ -147,6 +174,7 @@ export class GlassOrderService {
   async findAll(filters?: { status?: string; orderNumber?: string }) {
     return this.prisma.glassOrder.findMany({
       where: {
+        deletedAt: null, // Exclude soft-deleted glass orders
         status: filters?.status,
         glassOrderNumber: filters?.orderNumber
           ? { contains: filters.orderNumber }
@@ -231,9 +259,10 @@ export class GlassOrderService {
         }
       }
 
-      // Delete glass order (cascade deletes items and validations)
-      await tx.glassOrder.delete({
+      // Soft delete: set deletedAt instead of hard delete
+      await tx.glassOrder.update({
         where: { id },
+        data: { deletedAt: new Date() },
       });
     });
   }

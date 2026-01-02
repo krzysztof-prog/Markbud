@@ -16,16 +16,16 @@ model User {
   createdAt              DateTime            @default(now()) @map("created_at")
   updatedAt              DateTime            @updatedAt @map("updated_at")
   notes                  Note[]
-  okucHistory            OkucHistory[]       @relation("OkucRecordedBy")
-  okucImports            OkucImport[]        @relation("OkucImportedBy")
-  okucOrdersCreated      OkucOrder[]         @relation("OkucCreatedBy")
-  okucRequirements       OkucRequirement[]   @relation("OkucRecordedBy")
-  okucStockUpdates       OkucStock[]         @relation("OkucUpdatedBy")
   warehouseHistory       WarehouseHistory[]  @relation("RecordedBy")
   warehouseOrdersCreated WarehouseOrder[]    @relation("WarehouseOrderCreatedBy")
   warehouseUpdates       WarehouseStock[]    @relation("UpdatedBy")
   folderSettings         UserFolderSettings?
   importLocks            ImportLock[]
+  // DualStock (Okuc) relations
+  okucStockUpdates       OkucStock[]         @relation("OkucStockUpdatedBy")
+  okucOrdersCreated      OkucOrder[]         @relation("OkucOrderCreatedBy")
+  okucHistoryRecorded    OkucHistory[]       @relation("OkucHistoryRecordedBy")
+  okucHistoryEdited      OkucHistory[]       @relation("OkucHistoryEditedBy")
 
   @@map("users")
 }
@@ -86,8 +86,8 @@ model Order {
   system              String?
   deadline            DateTime?
   pvcDeliveryDate     DateTime?           @map("pvc_delivery_date")
-  valuePln            Float?              @map("value_pln")
-  valueEur            Float?              @map("value_eur")
+  valuePln            Int?                @map("value_pln")
+  valueEur            Int?                @map("value_eur")
   invoiceNumber       String?             @map("invoice_number")
   deliveryDate        DateTime?           @map("delivery_date")
   productionDate      DateTime?           @map("production_date")
@@ -110,6 +110,7 @@ model Order {
   requirements        OrderRequirement[]
   windows             OrderWindow[]
   schucoLinks         OrderSchucoLink[]
+  okucDemands         OkucDemand[]
 
   @@index([status])
   @@index([archivedAt])
@@ -118,6 +119,7 @@ model Order {
   @@index([invoiceNumber, deliveryDate])
   @@index([status, archivedAt])
   @@index([glassOrderStatus])
+  @@index([deliveryDate, status])
   @@map("orders")
 }
 
@@ -137,8 +139,6 @@ model OrderRequirement {
   @@unique([orderId, profileId, colorId])
   @@index([colorId])
   @@index([profileId])
-  @@index([orderId])
-  @@index([orderId, colorId])
   @@index([createdAt])
   @@map("order_requirements")
 }
@@ -159,21 +159,21 @@ model OrderWindow {
 }
 
 model WarehouseStock {
-  id                  Int      @id @default(autoincrement())
-  profileId           Int      @map("profile_id")
-  colorId             Int      @map("color_id")
-  currentStockBeams   Int      @default(0) @map("current_stock_beams")
-  updatedAt           DateTime @updatedAt @map("updated_at")
-  updatedById         Int?     @map("updated_by_id")
-  initialStockBeams   Int      @default(0) @map("initial_stock_beams")
-  version             Int      @default(0)
-  updatedBy           User?    @relation("UpdatedBy", fields: [updatedById], references: [id])
-  color               Color    @relation(fields: [colorId], references: [id], onDelete: Restrict)
-  profile             Profile  @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  id                  Int       @id @default(autoincrement())
+  profileId           Int       @map("profile_id")
+  colorId             Int       @map("color_id")
+  currentStockBeams   Int       @default(0) @map("current_stock_beams")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  updatedById         Int?      @map("updated_by_id")
+  initialStockBeams   Int       @default(0) @map("initial_stock_beams")
+  version             Int       @default(0)
+  deletedAt           DateTime? @map("deleted_at")
+  updatedBy           User?     @relation("UpdatedBy", fields: [updatedById], references: [id])
+  color               Color     @relation(fields: [colorId], references: [id], onDelete: Restrict)
+  profile             Profile   @relation(fields: [profileId], references: [id], onDelete: Restrict)
 
   @@unique([profileId, colorId])
-  @@index([colorId])
-  @@index([profileId])
+  @@index([deletedAt])
   @@map("warehouse_stock")
 }
 
@@ -193,8 +193,7 @@ model WarehouseOrder {
 
   @@unique([profileId, colorId, expectedDeliveryDate])
   @@index([status])
-  @@index([colorId])
-  @@index([profileId])
+  @@index([expectedDeliveryDate])
   @@map("warehouse_orders")
 }
 
@@ -230,6 +229,7 @@ model Delivery {
   notes          String?
   createdAt      DateTime            @default(now()) @map("created_at")
   updatedAt      DateTime            @updatedAt @map("updated_at")
+  deletedAt      DateTime?           @map("deleted_at")
   deliveryItems  DeliveryItem[]
   deliveryOrders DeliveryOrder[]
   optimization   PalletOptimization?
@@ -239,6 +239,7 @@ model Delivery {
   @@index([createdAt])
   @@index([deliveryDate, status])
   @@index([status, deliveryDate])
+  @@index([deletedAt])
   @@map("deliveries")
 }
 
@@ -251,7 +252,6 @@ model DeliveryOrder {
   delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
   @@unique([deliveryId, orderId])
-  @@index([deliveryId])
   @@map("delivery_orders")
 }
 
@@ -311,7 +311,6 @@ model PalletOptimization {
   pallets          OptimizedPallet[]
   delivery         Delivery          @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
-  @@index([deliveryId])
   @@map("pallet_optimizations")
 }
 
@@ -385,142 +384,6 @@ model WorkingDay {
   @@map("working_days")
 }
 
-model OkucArticle {
-  id                 Int                @id @default(autoincrement())
-  articleNumber      String             @unique
-  name               String
-  description        String?
-  group              String             @default("UCHWYTY")
-  warehouse          String?
-  price              Float?             @default(0)
-  priceHistory       String?
-  minStock           Int                @default(0) @map("min_stock")
-  maxStock           Int                @default(100) @map("max_stock")
-  avgMonthlyUsage    Float              @default(0) @map("avg_monthly_usage")
-  proportion         Float              @default(1.0)
-  doNotOrder         Boolean            @default(false) @map("do_not_order")
-  hidden             Boolean            @default(false)
-  orderType          String             @default("Po RW") @map("order_type")
-  packageSize        Float              @default(1.0) @map("package_size")
-  notes              String?
-  alternativeNumbers String?
-  createdAt          DateTime           @default(now()) @map("created_at")
-  updatedAt          DateTime           @updatedAt @map("updated_at")
-  history            OkucHistory[]
-  orders             OkucOrder[]
-  images             OkucProductImage[]
-  requirements       OkucRequirement[]
-  stock              OkucStock?
-
-  @@index([group])
-  @@index([warehouse])
-  @@map("okuc_articles")
-}
-
-model OkucStock {
-  id              Int         @id @default(autoincrement())
-  articleId       Int         @unique @map("article_id")
-  currentQuantity Int         @default(0) @map("current_quantity")
-  status          String      @default("OK")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
-  updatedById     Int?        @map("updated_by_id")
-  updatedBy       User?       @relation("OkucUpdatedBy", fields: [updatedById], references: [id])
-  article         OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-
-  @@map("okuc_stock")
-}
-
-model OkucOrder {
-  id                   Int         @id @default(autoincrement())
-  articleId            Int         @map("article_id")
-  orderedQuantity      Int         @map("ordered_quantity")
-  expectedDeliveryDate DateTime    @map("expected_delivery_date")
-  status               String      @default("pending")
-  notes                String?
-  createdAt            DateTime    @default(now()) @map("created_at")
-  createdById          Int?        @map("created_by_id")
-  createdBy            User?       @relation("OkucCreatedBy", fields: [createdById], references: [id])
-  article              OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-
-  @@index([status])
-  @@index([articleId])
-  @@map("okuc_orders")
-}
-
-model OkucRequirement {
-  id             Int         @id @default(autoincrement())
-  articleId      Int         @map("article_id")
-  documentType   String      @map("document_type")
-  documentNumber String      @map("document_number")
-  quantity       Int
-  sourceGroup    String?     @map("source_group")
-  sourceFile     String?     @map("source_file")
-  recordedAt     DateTime    @default(now()) @map("recorded_at")
-  recordedById   Int?        @map("recorded_by_id")
-  recordedBy     User?       @relation("OkucRecordedBy", fields: [recordedById], references: [id])
-  article        OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-
-  @@index([articleId])
-  @@index([documentType])
-  @@index([documentNumber])
-  @@index([recordedAt])
-  @@map("okuc_requirements")
-}
-
-model OkucHistory {
-  id              Int         @id @default(autoincrement())
-  articleId       Int         @map("article_id")
-  calculatedStock Int         @map("calculated_stock")
-  actualStock     Int         @map("actual_stock")
-  difference      Int
-  remanentNumber  String?     @map("remanent_number")
-  recordedAt      DateTime    @default(now()) @map("recorded_at")
-  recordedById    Int?        @map("recorded_by_id")
-  recordedBy      User?       @relation("OkucRecordedBy", fields: [recordedById], references: [id])
-  article         OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-
-  @@index([articleId])
-  @@index([recordedAt])
-  @@map("okuc_history")
-}
-
-model OkucImport {
-  id           Int       @id @default(autoincrement())
-  filename     String
-  fileType     String    @map("file_type")
-  status       String    @default("pending")
-  processedAt  DateTime? @map("processed_at")
-  errorMessage String?   @map("error_message")
-  importedRows Int       @default(0) @map("imported_rows")
-  previewData  String?
-  createdAt    DateTime  @default(now()) @map("created_at")
-  createdById  Int?      @map("created_by_id")
-  createdBy    User?     @relation("OkucImportedBy", fields: [createdById], references: [id])
-
-  @@index([status])
-  @@index([createdAt])
-  @@map("okuc_imports")
-}
-
-model OkucProductImage {
-  id        Int         @id @default(autoincrement())
-  articleId Int         @map("article_id")
-  imageUrl  String      @map("image_url")
-  createdAt DateTime    @default(now()) @map("created_at")
-  article   OkucArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-
-  @@map("okuc_product_images")
-}
-
-model OkucSettings {
-  id                  Int     @id @default(autoincrement())
-  eurPlnRate          Float   @default(4.35) @map("eur_pln_rate")
-  defaultDeliveryTime Int     @default(1) @map("default_delivery_time")
-  averageFromDate     String? @map("average_from_date")
-
-  @@map("okuc_settings")
-}
-
 model SchucoDelivery {
   id                 Int               @id @default(autoincrement())
   orderDate          String            @map("order_date")
@@ -587,8 +450,8 @@ model MonthlyReport {
   totalOrders   Int                 @default(0) @map("total_orders")
   totalWindows  Int                 @default(0) @map("total_windows")
   totalSashes   Int                 @default(0) @map("total_sashes")
-  totalValuePln Float               @default(0) @map("total_value_pln")
-  totalValueEur Float               @default(0) @map("total_value_eur")
+  totalValuePln Int                 @default(0) @map("total_value_pln")
+  totalValueEur Int                 @default(0) @map("total_value_eur")
   createdAt     DateTime            @default(now()) @map("created_at")
   updatedAt     DateTime            @updatedAt @map("updated_at")
   reportItems   MonthlyReportItem[]
@@ -608,8 +471,8 @@ model MonthlyReportItem {
   windowsCount  Int           @default(0) @map("windows_count")
   sashesCount   Int           @default(0) @map("sashes_count")
   unitsCount    Int           @default(0) @map("units_count")
-  valuePln      Float?        @map("value_pln")
-  valueEur      Float?        @map("value_eur")
+  valuePln      Int?          @map("value_pln")
+  valueEur      Int?          @map("value_eur")
   createdAt     DateTime      @default(now()) @map("created_at")
   order         Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
   report        MonthlyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
@@ -621,7 +484,7 @@ model MonthlyReportItem {
 
 model CurrencyConfig {
   id            Int      @id @default(autoincrement())
-  eurToPlnRate  Float    @map("eur_to_pln_rate")
+  eurToPlnRate  Int      @map("eur_to_pln_rate")
   effectiveDate DateTime @default(now()) @map("effective_date")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
@@ -733,6 +596,7 @@ model GlassOrder {
   notes                String?
   createdAt            DateTime               @default(now()) @map("created_at")
   updatedAt            DateTime               @updatedAt @map("updated_at")
+  deletedAt            DateTime?              @map("deleted_at")
   deliveryItems        GlassDeliveryItem[]
   items                GlassOrderItem[]
   validationResults    GlassOrderValidation[]
@@ -741,6 +605,7 @@ model GlassOrder {
   @@index([status])
   @@index([orderDate])
   @@index([glassOrderNumber])
+  @@index([deletedAt])
   @@map("glass_orders")
 }
 
@@ -796,14 +661,15 @@ model PendingOrderPrice {
   orderNumber   String   @map("order_number")
   reference     String?
   currency      String   // EUR lub PLN
-  valueNetto    Float    @map("value_netto")
-  valueBrutto   Float?   @map("value_brutto")
+  valueNetto    Int      @map("value_netto")
+  valueBrutto   Int?     @map("value_brutto")
   filename      String   // oryginalny nazwa pliku PDF
   filepath      String   // ścieżka do pliku
   importId      Int?     @map("import_id")
   status        String   @default("pending") // pending, applied, expired
   appliedAt     DateTime? @map("applied_at")
   appliedToOrderId Int?  @map("applied_to_order_id")
+  expiresAt     DateTime? @map("expires_at") // optional TTL - when this record should be cleaned up
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -812,5 +678,236 @@ model PendingOrderPrice {
   @@index([orderNumber])
   @@index([status])
   @@index([orderNumber, status])
+  @@index([expiresAt])
+  @@index([status, expiresAt])
+  @@index([status, appliedAt])
   @@map("pending_order_prices")
+}
+
+// =============================================================================
+// DUALSTOCK MODULE - Magazyn okuć (PVC + ALU)
+// =============================================================================
+
+// Artykuł okuciowy - podstawowa jednostka w systemie
+model OkucArticle {
+  id              Int      @id @default(autoincrement())
+  articleId       String   @unique @map("article_id")  // Numer artykułu (np. "A123")
+  name            String
+  description     String?
+
+  // Klasyfikacja
+  usedInPvc       Boolean  @default(false) @map("used_in_pvc")
+  usedInAlu       Boolean  @default(false) @map("used_in_alu")
+  orderClass      String   @default("typical") @map("order_class")  // 'typical' | 'atypical'
+  sizeClass       String   @default("standard") @map("size_class")  // 'standard' | 'gabarat'
+
+  // Jednostki i opakowania
+  orderUnit       String   @default("piece") @map("order_unit")  // 'piece' | 'pack'
+  packagingSizes  String?  @map("packaging_sizes")  // JSON: [50, 100]
+  preferredSize   Int?     @map("preferred_size")
+
+  // Dane dostawcy
+  supplierCode    String?  @map("supplier_code")
+  leadTimeDays    Int      @default(14) @map("lead_time_days")
+  safetyDays      Int      @default(3) @map("safety_days")
+
+  // Audit
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relacje
+  aliases            OkucArticleAlias[]
+  proportionsSource  OkucProportion[]   @relation("SourceArticle")
+  proportionsTarget  OkucProportion[]   @relation("TargetArticle")
+  stocks             OkucStock[]
+  demands            OkucDemand[]
+  orderItems         OkucOrderItem[]
+  historyEntries     OkucHistory[]
+
+  @@index([usedInPvc])
+  @@index([usedInAlu])
+  @@index([orderClass, sizeClass])
+  @@index([articleId])
+  @@map("okuc_articles")
+}
+
+// System aliasów - mapowanie starych numerów na nowe
+model OkucArticleAlias {
+  id              Int           @id @default(autoincrement())
+  articleId       Int           @map("article_id")
+  aliasNumber     String        @unique @map("alias_number")  // Stary numer
+  isActive        Boolean       @default(true) @map("is_active")  // false gdy zapas zszedł do 0
+  deactivatedAt   DateTime?     @map("deactivated_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  article         OkucArticle   @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([aliasNumber])
+  @@index([isActive])
+  @@index([articleId])
+  @@map("okuc_article_aliases")
+}
+
+// Proporcje między artykułami (multiplier/split)
+model OkucProportion {
+  id              Int           @id @default(autoincrement())
+  sourceArticleId Int           @map("source_article_id")
+  targetArticleId Int           @map("target_article_id")
+  proportionType  String        @map("proportion_type")  // 'multiplier' | 'split'
+  ratio           Float         @default(1.0)  // np. 2.0 oznacza 2x target na 1x source
+  splitPercent    Float?        @map("split_percent")  // dla typu 'split' (0-100)
+  tolerance       Float         @default(0.9)  // tolerancja proporcji (np. 90%)
+  isActive        Boolean       @default(true) @map("is_active")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  sourceArticle   OkucArticle   @relation("SourceArticle", fields: [sourceArticleId], references: [id], onDelete: Cascade)
+  targetArticle   OkucArticle   @relation("TargetArticle", fields: [targetArticleId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceArticleId, targetArticleId])
+  @@index([sourceArticleId])
+  @@index([targetArticleId])
+  @@index([isActive])
+  @@map("okuc_proportions")
+}
+
+// Stan magazynowy okuć (PVC: 3 podmagazyny, ALU: jeden magazyn)
+model OkucStock {
+  id              Int           @id @default(autoincrement())
+  articleId       Int           @map("article_id")
+  warehouseType   String        @map("warehouse_type")  // 'pvc' | 'alu'
+  subWarehouse    String?       @map("sub_warehouse")   // 'production' | 'buffer' | 'gabaraty' (tylko PVC)
+  currentQuantity Int           @default(0) @map("current_quantity")
+  reservedQty     Int           @default(0) @map("reserved_qty")
+  minStock        Int?          @map("min_stock")
+  maxStock        Int?          @map("max_stock")
+  version         Int           @default(0)  // Optimistic locking
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  updatedById     Int?          @map("updated_by_id")
+
+  article         OkucArticle   @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  updatedBy       User?         @relation("OkucStockUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([articleId, warehouseType, subWarehouse])
+  @@index([warehouseType])
+  @@index([subWarehouse])
+  @@index([articleId])
+  @@map("okuc_stocks")
+}
+
+// Zapotrzebowanie na okucia (z CSV lub zleceń)
+model OkucDemand {
+  id               Int           @id @default(autoincrement())
+  demandId         String?       @unique @map("demand_id")  // ID z CSV importu (np. ZAP-2025-0089)
+  articleId        Int           @map("article_id")
+  orderId          Int?          @map("order_id")  // Powiązanie ze zleceniem (opcjonalne)
+  expectedWeek     String        @map("expected_week")  // Format: "2025-W02"
+  quantity         Int
+  status           String        @default("pending")  // 'pending' | 'confirmed' | 'in_production' | 'completed' | 'cancelled'
+  source           String        @default("order")  // 'order' | 'csv_import'
+
+  // Audit edycji ręcznej
+  isManualEdit     Boolean       @default(false) @map("is_manual_edit")
+  editedAt         DateTime?     @map("edited_at")
+  editedById       Int?          @map("edited_by_id")
+  editReason       String?       @map("edit_reason")
+
+  // Timestamps
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  article          OkucArticle   @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  order            Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([articleId])
+  @@index([expectedWeek])
+  @@index([status])
+  @@index([orderId])
+  @@index([source])
+  @@index([expectedWeek, status])
+  @@map("okuc_demands")
+}
+
+// Zamówienie do dostawcy okuć
+model OkucOrder {
+  id                   Int             @id @default(autoincrement())
+  orderNumber          String          @unique @map("order_number")
+  basketType           String          @map("basket_type")  // 'typical_standard' | 'typical_gabarat' | 'atypical'
+  status               String          @default("draft")  // 'draft' | 'pending' | 'ordered' | 'in_transit' | 'received' | 'cancelled'
+  expectedDeliveryDate DateTime?       @map("expected_delivery_date")
+  actualDeliveryDate   DateTime?       @map("actual_delivery_date")
+  notes                String?
+
+  // Audit edycji ręcznej
+  isManualEdit         Boolean         @default(false) @map("is_manual_edit")
+  editedAt             DateTime?       @map("edited_at")
+  editedById           Int?            @map("edited_by_id")
+  editReason           String?         @map("edit_reason")
+
+  // Timestamps
+  createdAt            DateTime        @default(now()) @map("created_at")
+  createdById          Int?            @map("created_by_id")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+
+  items                OkucOrderItem[]
+  createdBy            User?           @relation("OkucOrderCreatedBy", fields: [createdById], references: [id])
+
+  @@index([basketType])
+  @@index([status])
+  @@index([expectedDeliveryDate])
+  @@index([status, basketType])
+  @@map("okuc_orders")
+}
+
+// Pozycja zamówienia okuć
+model OkucOrderItem {
+  id              Int           @id @default(autoincrement())
+  okucOrderId     Int           @map("okuc_order_id")
+  articleId       Int           @map("article_id")
+  orderedQty      Int           @map("ordered_qty")
+  receivedQty     Int?          @map("received_qty")
+  unitPrice       Int?          @map("unit_price")  // Cena w groszach
+
+  okucOrder       OkucOrder     @relation(fields: [okucOrderId], references: [id], onDelete: Cascade)
+  article         OkucArticle   @relation(fields: [articleId], references: [id], onDelete: Restrict)
+
+  @@unique([okucOrderId, articleId])
+  @@index([okucOrderId])
+  @@index([articleId])
+  @@map("okuc_order_items")
+}
+
+// Historia zmian magazynowych okuć (RW, korekty, zwroty, remanent)
+model OkucHistory {
+  id              Int           @id @default(autoincrement())
+  articleId       Int           @map("article_id")
+  warehouseType   String        @map("warehouse_type")  // 'pvc' | 'alu'
+  subWarehouse    String?       @map("sub_warehouse")
+  eventType       String        @map("event_type")  // 'rw' | 'manual_consumption' | 'adjustment' | 'return' | 'inventory_count' | 'transfer' | 'order_received'
+  previousQty     Int           @map("previous_qty")
+  changeQty       Int           @map("change_qty")  // Może być ujemna
+  newQty          Int           @map("new_qty")
+  reason          String?       // Wymagane dla adjustment i manual_consumption
+  reference       String?       // RW number, Order ID, itp.
+
+  // Audit edycji ręcznej
+  isManualEdit    Boolean       @default(false) @map("is_manual_edit")
+  editedAt        DateTime?     @map("edited_at")
+  editedById      Int?          @map("edited_by_id")
+
+  // Timestamps
+  recordedAt      DateTime      @default(now()) @map("recorded_at")
+  recordedById    Int?          @map("recorded_by_id")
+
+  article         OkucArticle   @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  recordedBy      User?         @relation("OkucHistoryRecordedBy", fields: [recordedById], references: [id])
+  editedBy        User?         @relation("OkucHistoryEditedBy", fields: [editedById], references: [id])
+
+  @@index([articleId])
+  @@index([eventType])
+  @@index([recordedAt])
+  @@index([warehouseType])
+  @@index([warehouseType, subWarehouse])
+  @@index([isManualEdit])
+  @@map("okuc_history")
 }
