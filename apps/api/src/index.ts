@@ -5,9 +5,11 @@ import multipart from '@fastify/multipart';
 import compress from '@fastify/compress';
 import rateLimit from '@fastify/rate-limit';
 import { config as dotenvConfig } from 'dotenv';
-import { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from './utils/prisma.js';
 
 // Routes
+import { authRoutes } from './routes/auth.js';
 import { profileRoutes } from './routes/profiles.js';
 import { colorRoutes } from './routes/colors.js';
 import { orderRoutes } from './routes/orders.js';
@@ -26,10 +28,14 @@ import { profileDepthRoutes } from './routes/profileDepths.js';
 import { glassOrderRoutes } from './routes/glass-orders.js';
 import { glassDeliveryRoutes } from './routes/glass-deliveries.js';
 import { glassValidationRoutes } from './routes/glass-validations.js';
+import { pendingOrderPriceCleanupRoutes } from './routes/pending-order-price-cleanup.js';
+// import { okucRoutes } from './routes/okuc/index.js'; // Temporarily disabled - TypeScript errors
 
 // Services
 import { FileWatcherService } from './services/file-watcher.js';
 import { startSchucoScheduler, stopSchucoScheduler } from './services/schuco/schucoScheduler.js';
+import { startPendingPriceCleanupScheduler, stopPendingPriceCleanupScheduler } from './services/pendingOrderPriceCleanupScheduler.js';
+import { startImportLockCleanupScheduler, stopImportLockCleanupScheduler } from './services/importLockCleanupScheduler.js';
 import { setupWebSocket } from './plugins/websocket.js';
 import { setupSwagger } from './plugins/swagger.js';
 
@@ -42,8 +48,8 @@ import { setupRequestLogging } from './middleware/request-logger.js';
 // Załaduj zmienne środowiskowe
 dotenvConfig();
 
-// Inicjalizacja Prisma
-export const prisma = new PrismaClient();
+// Re-export prisma from utils for backwards compatibility
+export { prisma } from "./utils/prisma.js";
 
 // FileWatcher - eksportowany do restartu z API
 export let fileWatcher: FileWatcherService | null = null;
@@ -55,7 +61,10 @@ const fastify = Fastify({
   requestIdLogLabel: 'requestId',
   disableRequestLogging: false,
   trustProxy: true,
-  requestTimeout: 120000, // 2 minutes for regular requests
+  requestTimeout: 240000, // 4 minutes for requests (including file uploads)
+  bodyLimit: 10 * 1024 * 1024, // 10MB body limit (matches multipart fileSize)
+  keepAliveTimeout: 65000, // Keep connection alive for 65 seconds
+  connectionTimeout: 0, // Disable connection timeout (use requestTimeout instead)
 });
 
 // CORS
@@ -69,7 +78,14 @@ await fastify.register(cors, {
 await fastify.register(multipart, {
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB max
+    files: 1, // Max 1 file per request
+    fields: 10, // Max 10 fields (metadata)
+    fieldNameSize: 100, // Max 100 bytes for field names
+    fieldSize: 1000000, // Max 1MB for field values
+    headerPairs: 2000, // Max 2000 header pairs
   },
+  attachFieldsToBody: false, // Don't attach fields to body automatically
+  throwFileSizeLimit: true, // Throw error if file too large
 });
 
 // Compression (gzip/deflate) - reduces payload size by ~70%
@@ -106,7 +122,7 @@ await fastify.register(rateLimit, {
 fastify.decorate('prisma', prisma);
 
 // Setup Swagger documentation
-await setupSwagger(fastify);
+// TEMP DISABLED: await setupSwagger(fastify);
 
 // Setup request logging (for production monitoring)
 if (!config.isDev) {
@@ -127,6 +143,7 @@ fastify.addHook('onSend', async (request, reply) => {
 await setupWebSocket(fastify);
 
 // Rejestracja routów
+await fastify.register(authRoutes, { prefix: '/api/auth' });
 await fastify.register(profileRoutes, { prefix: '/api/profiles' });
 await fastify.register(colorRoutes, { prefix: '/api/colors' });
 await fastify.register(orderRoutes, { prefix: '/api/orders' });
@@ -147,6 +164,12 @@ await fastify.register(profileDepthRoutes, { prefix: '/api/profile-depths' });
 await fastify.register(glassOrderRoutes, { prefix: '/api/glass-orders' });
 await fastify.register(glassDeliveryRoutes, { prefix: '/api/glass-deliveries' });
 await fastify.register(glassValidationRoutes, { prefix: '/api/glass-validations' });
+
+// Cleanup Routes
+await fastify.register(pendingOrderPriceCleanupRoutes, { prefix: '/api/cleanup/pending-prices' });
+
+// DualStock (Okuc) Routes
+// await fastify.register(okucRoutes, { prefix: '/api/okuc' }); // Temporarily disabled - TypeScript errors
 
 // Health checks
 fastify.get('/api/health', {
@@ -219,8 +242,10 @@ fastify.get('/api/ready', {
 
 // Graceful shutdown
 const closeGracefully = async (signal: string) => {
-  console.log(`\n${signal} received, shutting down gracefully...`);
+  logger.info(`${signal} received, shutting down gracefully...`);
   stopSchucoScheduler();
+  stopPendingPriceCleanupScheduler();
+  stopImportLockCleanupScheduler();
   await fastify.close();
   await prisma.$disconnect();
   process.exit(0);
@@ -232,7 +257,7 @@ process.on('SIGTERM', () => closeGracefully('SIGTERM'));
 // Start serwera
 const start = async () => {
   try {
-    await fastify.listen({ port: config.api.port, host: config.api.host });
+    await fastify.listen({ port: config.api.port, host: '127.0.0.1' });
 
     logger.info(`Server started`, {
       url: `http://${config.api.host}:${config.api.port}`,
@@ -245,6 +270,12 @@ const start = async () => {
 
     // Uruchom Schuco Scheduler (pobieranie 3x dziennie: 8:00, 12:00, 15:00)
     startSchucoScheduler(prisma);
+
+    // Uruchom Pending Price Cleanup Scheduler (czyszczenie codziennie o 2:00)
+    startPendingPriceCleanupScheduler(prisma);
+
+    // Uruchom Import Lock Cleanup Scheduler (czyszczenie co godzinę)
+    startImportLockCleanupScheduler(prisma);
 
   } catch (err) {
     logger.error('Failed to start server', err);

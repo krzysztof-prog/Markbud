@@ -8,6 +8,7 @@ import PDFDocument from 'pdfkit';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { MonthlyReportData } from './monthlyReportService.js';
+import { groszeToPln, centyToEur, type Grosze, type Centy } from '../utils/money.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,8 +56,8 @@ export class MonthlyReportExportService {
         windows: item.windowsCount,
         sashes: item.sashesCount,
         units: item.unitsCount,
-        valuePln: item.valuePln ? item.valuePln.toFixed(2) : '-',
-        valueEur: item.valueEur ? item.valueEur.toFixed(2) : '-',
+        valuePln: item.valuePln ? groszeToPln(item.valuePln as Grosze).toFixed(2) : '-',
+        valueEur: item.valueEur ? centyToEur(item.valueEur as Centy).toFixed(2) : '-',
       });
     });
 
@@ -67,8 +68,8 @@ export class MonthlyReportExportService {
       windows: reportData.totalWindows,
       sashes: reportData.totalSashes,
       units: reportData.items.reduce((sum, item) => sum + item.unitsCount, 0),
-      valuePln: reportData.totalValuePln.toFixed(2),
-      valueEur: reportData.totalValueEur.toFixed(2),
+      valuePln: groszeToPln(reportData.totalValuePln as Grosze).toFixed(2),
+      valueEur: centyToEur(reportData.totalValueEur as Centy).toFixed(2),
     });
 
     // Style totals row
@@ -116,10 +117,10 @@ export class MonthlyReportExportService {
     worksheet.getCell(`B${summaryStartRow + 3}`).value = reportData.totalSashes;
 
     worksheet.getCell(`A${summaryStartRow + 4}`).value = 'Łączna wartość PLN:';
-    worksheet.getCell(`B${summaryStartRow + 4}`).value = reportData.totalValuePln.toFixed(2);
+    worksheet.getCell(`B${summaryStartRow + 4}`).value = groszeToPln(reportData.totalValuePln as Grosze).toFixed(2);
 
     worksheet.getCell(`A${summaryStartRow + 5}`).value = 'Łączna wartość EUR:';
-    worksheet.getCell(`B${summaryStartRow + 5}`).value = reportData.totalValueEur.toFixed(2);
+    worksheet.getCell(`B${summaryStartRow + 5}`).value = centyToEur(reportData.totalValueEur as Centy).toFixed(2);
 
     // Generate buffer
     const buffer = await workbook.xlsx.writeBuffer();
@@ -197,8 +198,8 @@ export class MonthlyReportExportService {
           { text: item.windowsCount.toString(), align: 'right' },
           { text: item.sashesCount.toString(), align: 'right' },
           { text: item.unitsCount.toString(), align: 'right' },
-          { text: item.valuePln ? item.valuePln.toFixed(2) : '-', align: 'right' },
-          { text: item.valueEur ? item.valueEur.toFixed(2) : '-', align: 'right' },
+          { text: item.valuePln ? groszeToPln(item.valuePln as Grosze).toFixed(2) : '-', align: 'right' },
+          { text: item.valueEur ? centyToEur(item.valueEur as Centy).toFixed(2) : '-', align: 'right' },
         ];
 
         columns.forEach((col, idx) => {
@@ -226,8 +227,8 @@ export class MonthlyReportExportService {
         { text: reportData.totalWindows.toString(), align: 'right' },
         { text: reportData.totalSashes.toString(), align: 'right' },
         { text: totalUnits.toString(), align: 'right' },
-        { text: reportData.totalValuePln.toFixed(2), align: 'right' },
-        { text: reportData.totalValueEur.toFixed(2), align: 'right' },
+        { text: groszeToPln(reportData.totalValuePln as Grosze).toFixed(2), align: 'right' },
+        { text: centyToEur(reportData.totalValueEur as Centy).toFixed(2), align: 'right' },
       ];
 
       columns.forEach((col, idx) => {
@@ -249,8 +250,8 @@ export class MonthlyReportExportService {
         `Liczba zleceń: ${reportData.totalOrders}`,
         `Łączna liczba okien: ${reportData.totalWindows}`,
         `Łączna liczba skrzydeł: ${reportData.totalSashes}`,
-        `Łączna wartość PLN: ${reportData.totalValuePln.toFixed(2)}`,
-        `Łączna wartość EUR: ${reportData.totalValueEur.toFixed(2)}`,
+        `Łączna wartość PLN: ${groszeToPln(reportData.totalValuePln as Grosze).toFixed(2)}`,
+        `Łączna wartość EUR: ${centyToEur(reportData.totalValueEur as Centy).toFixed(2)}`,
       ];
 
       summaryLines.forEach((line) => {
