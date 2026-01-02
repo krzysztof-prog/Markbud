@@ -9,6 +9,12 @@ import {
   updateOrderSchema,
   orderParamsSchema,
   orderQuerySchema,
+  bulkUpdateStatusSchema,
+  forProductionQuerySchema,
+  type CreateOrderInput,
+  type UpdateOrderInput,
+  type BulkUpdateStatusInput,
+  type ForProductionQuery,
 } from '../validators/order.js';
 
 export class OrderHandler {
@@ -42,7 +48,7 @@ export class OrderHandler {
   }
 
   async create(
-    request: FastifyRequest<{ Body: any }>,
+    request: FastifyRequest<{ Body: CreateOrderInput }>,
     reply: FastifyReply
   ) {
     const validated = createOrderSchema.parse(request.body);
@@ -51,7 +57,7 @@ export class OrderHandler {
   }
 
   async update(
-    request: FastifyRequest<{ Params: { id: string }; Body: any }>,
+    request: FastifyRequest<{ Params: { id: string }; Body: UpdateOrderInput }>,
     reply: FastifyReply
   ) {
     const { id } = orderParamsSchema.parse(request.params);
@@ -85,5 +91,39 @@ export class OrderHandler {
     const { id } = orderParamsSchema.parse(request.params);
     const order = await this.service.unarchiveOrder(parseInt(id));
     return reply.send(order);
+  }
+
+  async bulkUpdateStatus(
+    request: FastifyRequest<{ Body: BulkUpdateStatusInput }>,
+    reply: FastifyReply
+  ) {
+    const validated = bulkUpdateStatusSchema.parse(request.body);
+    const orders = await this.service.bulkUpdateStatus(
+      validated.orderIds,
+      validated.status,
+      validated.productionDate
+    );
+    return reply.status(200).send(orders);
+  }
+
+  async getForProduction(
+    request: FastifyRequest<{ Querystring: ForProductionQuery }>,
+    reply: FastifyReply
+  ) {
+    const validated = forProductionQuerySchema.parse(request.query);
+    const data = await this.service.getForProduction(validated);
+    return reply.status(200).send(data);
+  }
+
+  async getMonthlyProduction(
+    request: FastifyRequest<{ Querystring: MonthlyProductionQuery }>,
+    reply: FastifyReply
+  ) {
+    const validated = MonthlyProductionQuerySchema.parse(request.query);
+    const year = parseInt(validated.year, 10);
+    const month = parseInt(validated.month, 10);
+
+    const orders = await this.service.getMonthlyProduction(year, month);
+    return reply.status(200).send(orders);
   }
 }
