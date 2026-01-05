@@ -3,6 +3,7 @@
  */
 
 import { fetchApi, API_URL } from '@/lib/api-client';
+import { getAuthToken } from '@/lib/auth-token';
 import type {
   Order,
   OrderWithRequirements,
@@ -44,7 +45,13 @@ export const ordersApi = {
    */
   getPdf: async (id: number): Promise<boolean> => {
     try {
-      const response = await fetch(`${API_URL}/api/orders/${id}/pdf`, { method: 'HEAD' });
+      const token = await getAuthToken();
+      const response = await fetch(`${API_URL}/api/orders/${id}/pdf`, {
+        method: 'HEAD',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       return response.ok;
     } catch {
       return false;

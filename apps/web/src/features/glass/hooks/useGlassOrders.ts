@@ -40,13 +40,19 @@ export function useImportGlassOrder() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (file: File) => glassOrdersApi.importFromTxt(file),
+    mutationFn: ({ file, replace = false }: { file: File; replace?: boolean }) =>
+      glassOrdersApi.importFromTxt(file, replace),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: glassOrderKeys.lists() });
       showSuccessToast('Import udany', `Zamowienie ${data.glassOrderNumber} zaimportowane`);
     },
-    onError: (error: unknown) => {
-      showErrorToast('Blad importu', getErrorMessage(error));
+    onError: (error: any) => {
+      // Don't show toast for conflict errors - they're handled by the modal
+      if (error?.status !== 409) {
+        showErrorToast('Blad importu', getErrorMessage(error));
+      }
+      // Re-throw to allow component to handle it
+      throw error;
     },
   });
 }

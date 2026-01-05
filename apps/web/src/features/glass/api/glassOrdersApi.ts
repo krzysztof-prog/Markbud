@@ -20,8 +20,9 @@ export const glassOrdersApi = {
     return fetchApi(`/api/glass-orders/${id}`);
   },
 
-  importFromTxt: (file: File): Promise<GlassOrder> => {
-    return uploadFile('/api/glass-orders/import', file);
+  importFromTxt: (file: File, replace = false): Promise<GlassOrder> => {
+    const url = `/api/glass-orders/import${replace ? '?replace=true' : ''}`;
+    return uploadFile(url, file);
   },
 
   delete: (id: number): Promise<void> => {

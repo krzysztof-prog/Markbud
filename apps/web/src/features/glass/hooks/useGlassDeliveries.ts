@@ -36,10 +36,25 @@ export function useImportGlassDelivery() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (file: File) => glassDeliveriesApi.importFromCsv(file),
+    mutationFn: async (file: File) => {
+      console.log('[useImportGlassDelivery] Starting import for file:', file.name, 'size:', file.size);
+      try {
+        const result = await glassDeliveriesApi.importFromCsv(file);
+        console.log('[useImportGlassDelivery] Import success:', result);
+        return result;
+      } catch (error) {
+        console.error('[useImportGlassDelivery] Import failed:', error);
+        throw error;
+      }
+    },
+    onMutate: () => {
+      // Disable refetching during import to prevent interference
+      queryClient.cancelQueries({ queryKey: ['glass-deliveries', 'latest-import'] });
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: glassDeliveryKeys.lists() });
       queryClient.invalidateQueries({ queryKey: validationKeys.dashboard() });
+      queryClient.invalidateQueries({ queryKey: ['glass-deliveries', 'latest-import'] });
       showSuccessToast('Import udany', `Dostawa ${data.rackNumber} zaimportowana`);
     },
     onError: (error: unknown) => {

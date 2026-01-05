@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDate } from '@/lib/utils';
 import { DashboardSkeleton } from '@/components/loaders/DashboardSkeleton';
+import { ErrorUI } from '@/components/ui/error-ui';
 import {
   Package,
   Truck,
@@ -25,7 +26,12 @@ import { useDashboard, useAlerts, useWeeklyStats } from '../hooks/useDashboard';
 import type { Import, Delivery, Alert } from '@/types';
 
 export function DashboardContent() {
-  const { data: dashboard, isLoading: dashboardLoading } = useDashboard();
+  const {
+    data: dashboard,
+    isLoading: dashboardLoading,
+    error: dashboardError,
+    refetch: refetchDashboard,
+  } = useDashboard();
   const { data: alerts, isLoading: alertsLoading } = useAlerts();
   const { data: weeklyStats, isLoading: weeklyStatsLoading } = useWeeklyStats();
 
@@ -38,12 +44,18 @@ export function DashboardContent() {
     );
   }
 
-  if (!dashboard) {
+  if (dashboardError || !dashboard) {
     return (
       <div className="flex flex-col h-full">
         <Header title="Dashboard" alertsCount={0} />
-        <div className="flex-1 flex items-center justify-center">
-          <p>Nie udało się załadować danych dashboard</p>
+        <div className="flex-1 flex items-center justify-center p-6">
+          <ErrorUI
+            variant="centered"
+            title="Błąd ładowania dashboard"
+            message="Nie udało się załadować danych dashboard. Spróbuj ponownie."
+            onRetry={refetchDashboard}
+            error={dashboardError as Error}
+          />
         </div>
       </div>
     );
@@ -125,7 +137,7 @@ export function DashboardContent() {
                         <div>
                           <p className="font-medium text-sm">{imp.fileName}</p>
                           <p className="text-xs text-muted-foreground">
-                            {formatDate(imp.uploadedAt || imp.createdAt)}
+                            {formatDate(imp.createdAt)}
                           </p>
                         </div>
                       </div>
@@ -220,11 +232,26 @@ export function DashboardContent() {
                 ))}
               </div>
             ) : weeklyStats && weeklyStats.weeks.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                {weeklyStats.weeks.map((week) => {
-                  const weekStart = week.startDate ? new Date(week.startDate) : null;
-                  const weekEnd = week.endDate ? new Date(week.endDate) : null;
-                  const hasData = week.windows > 0 || week.sashes > 0 || week.glasses > 0;
+              (() => {
+                // Check if there's any data across all weeks
+                const hasAnyData = weeklyStats.weeks.some(
+                  (w) => w.windows > 0 || w.sashes > 0 || w.glasses > 0
+                );
+
+                if (!hasAnyData) {
+                  return (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      Brak zaplanowanych dostaw w najbliższych 8 tygodniach
+                    </p>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {weeklyStats.weeks.map((week) => {
+                      const weekStart = week.startDate ? new Date(week.startDate) : null;
+                      const weekEnd = week.endDate ? new Date(week.endDate) : null;
+                      const hasData = week.windows > 0 || week.sashes > 0 || week.glasses > 0;
 
                   return (
                     <div
@@ -254,25 +281,37 @@ export function DashboardContent() {
                         )}
                       </div>
                       {hasData ? (
-                        <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                          <div key="windows">
-                            <div className="text-slate-600">Okna</div>
-                            <div className="text-lg font-bold text-blue-700">
-                              {week.windows}
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                            <div key="windows">
+                              <div className="text-slate-600">Okna</div>
+                              <div className="text-lg font-bold text-blue-700">
+                                {week.windows}
+                              </div>
+                            </div>
+                            <div key="sashes">
+                              <div className="text-slate-600">Skrzydła</div>
+                              <div className="text-lg font-bold text-blue-700">
+                                {week.sashes}
+                              </div>
+                            </div>
+                            <div key="glasses">
+                              <div className="text-slate-600">Szyby</div>
+                              <div className="text-lg font-bold text-blue-700">
+                                {week.glasses}
+                              </div>
                             </div>
                           </div>
-                          <div key="sashes">
-                            <div className="text-slate-600">Skrzydła</div>
-                            <div className="text-lg font-bold text-blue-700">
-                              {week.sashes}
+                          {week.ordersCount > 0 && (
+                            <div className="text-xs text-slate-600 text-center pt-1 border-t border-slate-200">
+                              {week.ordersCount}{' '}
+                              {week.ordersCount === 1
+                                ? 'zlecenie'
+                                : week.ordersCount < 5
+                                ? 'zlecenia'
+                                : 'zleceń'}
                             </div>
-                          </div>
-                          <div key="glasses">
-                            <div className="text-slate-600">Szyby</div>
-                            <div className="text-lg font-bold text-blue-700">
-                              {week.glasses}
-                            </div>
-                          </div>
+                          )}
                         </div>
                       ) : (
                         <div className="text-xs text-slate-400 text-center py-4">
@@ -292,7 +331,9 @@ export function DashboardContent() {
                     </div>
                   );
                 })}
-              </div>
+                  </div>
+                );
+              })()
             ) : (
               <p className="text-sm text-muted-foreground text-center py-4">
                 Brak danych o dostawach
@@ -346,3 +387,5 @@ export function DashboardContent() {
     </div>
   );
 }
+
+export default DashboardContent;

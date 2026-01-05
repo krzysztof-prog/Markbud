@@ -10,6 +10,7 @@ export interface WeekStats {
   startDate: string;
   endDate: string;
   deliveriesCount: number;
+  ordersCount: number;
   windows: number;
   sashes: number;
   glasses: number;

@@ -71,6 +71,12 @@ export class DashboardService {
     // Process shortages (add priority)
     const shortages = this.processShortages(shortagesData).slice(0, 5); // Top 5
 
+    // Map pendingImports to include fileName alias for frontend compatibility
+    const pendingImports = pendingImportsData.map((imp) => ({
+      ...imp,
+      fileName: imp.filename, // Frontend uses fileName (camelCase)
+    }));
+
     return {
       stats: {
         activeOrders: activeOrdersCount,
@@ -79,7 +85,7 @@ export class DashboardService {
         shortagesCount: shortagesData.length,
       },
       upcomingDeliveries,
-      pendingImports: pendingImportsData,
+      pendingImports,
       shortages,
       recentOrders: recentOrdersData,
     };
@@ -171,7 +177,11 @@ export class DashboardService {
       // Find deliveries in this week
       const weekData = weekStatsRaw.filter((stat) => {
         if (!stat.deliveryDate) return false;
-        const date = new Date(stat.deliveryDate + 'T00:00:00.000Z');
+        // deliveryDate format: "YYYY-MM-DD" (from SQL DATE() function in repository)
+        // SQL DATE() always returns "YYYY-MM-DD" without time component
+        // Append UTC midnight time to create valid ISO 8601 date string
+        const dateStr = stat.deliveryDate + 'T00:00:00.000Z';
+        const date = new Date(dateStr);
         return isDateInRange(date, weekStart, weekEnd);
       });
 

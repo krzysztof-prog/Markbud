@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,11 +8,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/components/ui/use-toast';
 import { DeliveryCheckbox } from './DeliveryCheckbox';
 import { OrderCheckbox } from './OrderCheckbox';
-import { ordersApi, deliveriesApi } from '@/lib/api';
+import { managerApi } from '../api/managerApi';
+import { getTodayISOString } from '../helpers/dateHelpers';
 import type { Order, Delivery } from '@/types';
-import type { BulkUpdateStatusData } from '@/types/manager';
 import { Loader2, AlertCircle, CheckCircle2, Package, FileCheck } from 'lucide-react';
 
 /**
@@ -29,52 +31,83 @@ import { Loader2, AlertCircle, CheckCircle2, Package, FileCheck } from 'lucide-r
  */
 export const CompleteOrdersTab: React.FC = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   // State dla zaznaczonych zleceń i dostaw
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
   const [selectedDeliveryIds, setSelectedDeliveryIds] = useState<Set<number>>(new Set());
 
   // Data produkcji (domyślnie dzisiaj)
-  const [productionDate, setProductionDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
-  );
+  const [productionDate, setProductionDate] = useState<string>(getTodayISOString());
 
   // Fetch zleceń w produkcji
-  const { data: ordersData = [], isLoading: ordersLoading } = useQuery<Order[]>({
+  const { data: ordersResponse, isLoading: ordersLoading } = useQuery({
     queryKey: ['orders', 'in-production'],
-    queryFn: () => ordersApi.getAll({ status: 'in_progress' }),
+    queryFn: () => managerApi.getOrdersInProduction(),
   });
 
+  // Wyciągnij tablicę zleceń z paginated response
+  const ordersData: Order[] = (ordersResponse as any)?.data ?? [];
+
   // Fetch dostaw w produkcji
-  const { data: deliveriesData = [], isLoading: deliveriesLoading } = useQuery<Delivery[]>({
+  const { data: deliveriesResponse, isLoading: deliveriesLoading } = useQuery({
     queryKey: ['deliveries', 'in-production'],
-    queryFn: () => deliveriesApi.getAll({ status: 'in_progress' }),
+    queryFn: () => managerApi.getDeliveriesInProduction(),
   });
+
+  // Wyciągnij tablicę dostaw z paginated response
+  const deliveriesData: Delivery[] = (deliveriesResponse as any)?.data ?? [];
 
   // Mutation do bulk update statusu zleceń
   const bulkUpdateMutation = useMutation({
-    mutationFn: (updateData: BulkUpdateStatusData) => ordersApi.bulkUpdateStatus(updateData),
-    onSuccess: () => {
+    mutationFn: (orderIds: number[]) =>
+      managerApi.bulkUpdateStatus({
+        orderIds,
+        status: 'completed',
+        productionDate,
+      }),
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['deliveries'] });
       setSelectedOrderIds(new Set());
-      setSelectedDeliveryIds(new Set());
+      toast({
+        title: 'Sukces',
+        description: `Oznaczono ${data.length} zleceń jako wyprodukowane`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Błąd',
+        description: error instanceof Error ? error.message : 'Nie udało się zakończyć zleceń',
+        variant: 'destructive',
+      });
     },
   });
 
   // Mutation do zakończenia wszystkich zleceń w dostawie
   const completeDeliveryMutation = useMutation({
     mutationFn: ({ deliveryId, date }: { deliveryId: number; date: string }) =>
-      deliveriesApi.completeAllOrders(deliveryId, { productionDate: date }),
+      managerApi.completeDeliveryOrders(deliveryId, { productionDate: date }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['deliveries'] });
       setSelectedDeliveryIds(new Set());
+      toast({
+        title: 'Sukces',
+        description: 'Oznaczono zlecenia jako wyprodukowane',
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Błąd',
+        description: error instanceof Error ? error.message : 'Nie udało się zakończyć dostawy',
+        variant: 'destructive',
+      });
     },
   });
 
-  // Obsługa zaznaczania pojedynczego zlecenia
-  const handleOrderToggle = (orderId: number, checked: boolean) => {
+  // Obsługa zaznaczania pojedynczego zlecenia z useCallback
+  const handleOrderToggle = useCallback((orderId: number, checked: boolean) => {
     setSelectedOrderIds((prev) => {
       const newSet = new Set(prev);
       if (checked) {
@@ -84,10 +117,10 @@ export const CompleteOrdersTab: React.FC = () => {
       }
       return newSet;
     });
-  };
+  }, []);
 
-  // Obsługa zaznaczania całej dostawy
-  const handleDeliveryToggle = (deliveryId: number, checked: boolean) => {
+  // Obsługa zaznaczania całej dostawy z useCallback
+  const handleDeliveryToggle = useCallback((deliveryId: number, checked: boolean) => {
     setSelectedDeliveryIds((prev) => {
       const newSet = new Set(prev);
       if (checked) {
@@ -97,41 +130,105 @@ export const CompleteOrdersTab: React.FC = () => {
       }
       return newSet;
     });
-  };
+  }, []);
 
-  // Obsługa zakończenia zleceń
-  const handleCompleteOrders = async () => {
+  // Obsługa zakończenia zleceń z useCallback + walidacja daty + partial failure handling
+  const handleCompleteOrders = useCallback(async () => {
+    // Walidacja daty produkcji
+    const productionDateObj = new Date(productionDate);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    if (productionDateObj > today) {
+      toast({
+        title: 'Błąd walidacji',
+        description: 'Data produkcji nie może być w przyszłości',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+    if (productionDateObj < sixtyDaysAgo) {
+      toast({
+        title: 'Błąd walidacji',
+        description: 'Data produkcji nie może być starsza niż 60 dni',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const results = {
+      succeeded: 0,
+      failed: 0,
+      errors: [] as string[],
+    };
+
     // Zakończ pojedyncze zlecenia
     if (selectedOrderIds.size > 0) {
-      await bulkUpdateMutation.mutateAsync({
-        orderIds: Array.from(selectedOrderIds),
-        status: 'completed',
-        productionDate,
+      try {
+        const updated = await bulkUpdateMutation.mutateAsync(Array.from(selectedOrderIds));
+        results.succeeded += updated.length;
+      } catch (error) {
+        results.failed += selectedOrderIds.size;
+        results.errors.push(
+          error instanceof Error ? error.message : 'Błąd podczas kończenia zleceń'
+        );
+      }
+    }
+
+    // Zakończ dostawy (każdą osobno z error handling)
+    if (selectedDeliveryIds.size > 0) {
+      for (const deliveryId of Array.from(selectedDeliveryIds)) {
+        try {
+          await completeDeliveryMutation.mutateAsync({ deliveryId, date: productionDate });
+          results.succeeded += 1;
+        } catch (error) {
+          results.failed += 1;
+          results.errors.push(
+            `Dostawa ${deliveryId}: ${error instanceof Error ? error.message : 'nieznany błąd'}`
+          );
+        }
+      }
+    }
+
+    // Wyświetl wyniki
+    if (results.failed > 0 && results.succeeded > 0) {
+      toast({
+        title: 'Częściowy sukces',
+        description: `Zakończono: ${results.succeeded}, Błędy: ${results.failed}. Sprawdź szczegóły.`,
+        variant: 'default',
+      });
+      // Pokazanie szczegółowych błędów w console dla debugging
+      console.error('Partial failure details:', results.errors);
+    } else if (results.failed > 0) {
+      toast({
+        title: 'Błąd',
+        description: results.errors[0] || 'Nie udało się zakończyć żadnej pozycji',
+        variant: 'destructive',
+      });
+    } else if (results.succeeded > 0) {
+      toast({
+        title: 'Sukces',
+        description: `Oznaczono ${results.succeeded} pozycji jako wyprodukowane`,
       });
     }
-
-    // Zakończ dostawy (wszystkie zlecenia w dostawie)
-    if (selectedDeliveryIds.size > 0) {
-      await Promise.all(
-        Array.from(selectedDeliveryIds).map((deliveryId) =>
-          completeDeliveryMutation.mutateAsync({ deliveryId, date: productionDate })
-        )
-      );
-    }
-  };
+  }, [selectedOrderIds, selectedDeliveryIds, productionDate, bulkUpdateMutation, completeDeliveryMutation, toast]);
 
   // Filtrowanie zleceń - tylko te, które NIE są przypisane do żadnej dostawy w produkcji
-  const standaloneOrders = React.useMemo(() => {
+  const standaloneOrders = useMemo(() => {
     // Zbierz wszystkie orderId z dostaw w produkcji
     const deliveryOrderIds = new Set<number>();
-    deliveriesData.forEach((delivery) => {
-      delivery.deliveryOrders?.forEach((dOrder) => {
+    deliveriesData.forEach((delivery: Delivery) => {
+      delivery.deliveryOrders?.forEach((dOrder: any) => {
         deliveryOrderIds.add(dOrder.order.id);
       });
     });
 
     // Zwróć tylko zlecenia, które NIE są w dostawach
-    return ordersData.filter((order) => !deliveryOrderIds.has(order.id));
+    return ordersData.filter((order: Order) => !deliveryOrderIds.has(order.id));
   }, [ordersData, deliveriesData]);
 
   const isLoading = ordersLoading || deliveriesLoading;
@@ -139,19 +236,9 @@ export const CompleteOrdersTab: React.FC = () => {
   const hasSelection = totalSelected > 0;
   const isPending = bulkUpdateMutation.isPending || completeDeliveryMutation.isPending;
 
-  // Loading state
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        <span className="ml-3 text-gray-600">Ładowanie zleceń w produkcji...</span>
-      </div>
-    );
-  }
-
   return (
     <div className="p-6 space-y-6">
-      {/* Nagłówek z licznikiem, datą i przyciskiem akcji */}
+      {/* Nagłówek z licznikiem, datą i przyciskiem akcji - ZAWSZE WIDOCZNY */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Zakończ zlecenia</h2>
@@ -195,79 +282,69 @@ export const CompleteOrdersTab: React.FC = () => {
         </div>
       </div>
 
-      {/* Success notification */}
-      {(bulkUpdateMutation.isSuccess || completeDeliveryMutation.isSuccess) && (
-        <Alert className="bg-green-50 border-green-200">
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-800">
-            Pomyślnie oznaczono zlecenia jako wyprodukowane
-          </AlertDescription>
-        </Alert>
+      {/* CONDITIONAL RENDERING zamiast early returns - zawsze ten sam layout */}
+      {isLoading ? (
+        <>
+          <Skeleton className="h-48 rounded-lg" />
+          <Skeleton className="h-48 rounded-lg" />
+        </>
+      ) : (
+        <>
+          {/* Sekcja 1: Dostawy AKROBUD w produkcji */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-blue-600" />
+                <CardTitle>Dostawy AKROBUD w produkcji</CardTitle>
+                <Badge variant="outline">{deliveriesData?.length || 0} dostaw</Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {!deliveriesData?.length ? (
+                <p className="text-gray-500 text-center py-4">Brak dostaw w produkcji</p>
+              ) : (
+                <div className="space-y-3">
+                  {deliveriesData.map((delivery: Delivery) => (
+                    <DeliveryCheckbox
+                      key={delivery.id}
+                      delivery={delivery}
+                      checked={selectedDeliveryIds.has(delivery.id)}
+                      onChange={handleDeliveryToggle}
+                    />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Sekcja 2: Pojedyncze zlecenia w produkcji */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <FileCheck className="h-5 w-5 text-green-600" />
+                <CardTitle>Pojedyncze zlecenia w produkcji</CardTitle>
+                <Badge variant="outline">{standaloneOrders.length} zleceń</Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {!standaloneOrders.length ? (
+                <p className="text-gray-500 text-center py-4">Brak pojedynczych zleceń w produkcji</p>
+              ) : (
+                <div className="space-y-2">
+                  {standaloneOrders.map((order: Order) => (
+                    <OrderCheckbox
+                      key={order.id}
+                      order={order}
+                      checked={selectedOrderIds.has(order.id)}
+                      onChange={handleOrderToggle}
+                    />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
       )}
-
-      {/* Error notification */}
-      {(bulkUpdateMutation.isError || completeDeliveryMutation.isError) && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Błąd podczas zapisywania. Spróbuj ponownie.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Sekcja 1: Dostawy AKROBUD w produkcji */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-blue-600" />
-            <CardTitle>Dostawy AKROBUD w produkcji</CardTitle>
-            <Badge variant="outline">{deliveriesData?.length || 0} dostaw</Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {!deliveriesData?.length ? (
-            <p className="text-gray-500 text-center py-4">Brak dostaw w produkcji</p>
-          ) : (
-            <div className="space-y-3">
-              {deliveriesData.map((delivery) => (
-                <DeliveryCheckbox
-                  key={delivery.id}
-                  delivery={delivery}
-                  checked={selectedDeliveryIds.has(delivery.id)}
-                  onChange={handleDeliveryToggle}
-                />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Sekcja 2: Pojedyncze zlecenia w produkcji */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <FileCheck className="h-5 w-5 text-green-600" />
-            <CardTitle>Pojedyncze zlecenia w produkcji</CardTitle>
-            <Badge variant="outline">{standaloneOrders.length} zleceń</Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {!standaloneOrders.length ? (
-            <p className="text-gray-500 text-center py-4">Brak pojedynczych zleceń w produkcji</p>
-          ) : (
-            <div className="space-y-2">
-              {standaloneOrders.map((order) => (
-                <OrderCheckbox
-                  key={order.id}
-                  order={order}
-                  checked={selectedOrderIds.has(order.id)}
-                  onChange={handleOrderToggle}
-                />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 };

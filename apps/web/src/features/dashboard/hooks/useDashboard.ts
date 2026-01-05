@@ -2,7 +2,9 @@
  * Dashboard hooks - data fetching z useQuery
  */
 
+import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/components/ui/use-toast';
 import { dashboardApi } from '../api/dashboardApi';
 import type { DashboardResponse, Alert } from '@/types';
 
@@ -23,33 +25,78 @@ export const WEEKLY_STATS_QUERY_KEY = ['dashboard', 'weekly-stats'] as const;
  * ```
  */
 export function useDashboard() {
-  return useQuery({
+  const { toast } = useToast();
+
+  const query = useQuery({
     queryKey: DASHBOARD_QUERY_KEY,
     queryFn: dashboardApi.getDashboard,
     staleTime: 2 * 60 * 1000, // 2 minuty
   });
+
+  // TanStack Query v5: Show toast on error
+  useEffect(() => {
+    if (query.error) {
+      toast({
+        variant: 'destructive',
+        title: 'Błąd ładowania dashboard',
+        description: query.error.message || 'Nie udało się pobrać danych dashboard',
+      });
+    }
+  }, [query.error, toast]);
+
+  return query;
 }
 
 /**
  * Hook do pobierania alertów
  */
 export function useAlerts() {
-  return useQuery({
+  const { toast } = useToast();
+
+  const query = useQuery({
     queryKey: ALERTS_QUERY_KEY,
     queryFn: dashboardApi.getAlerts,
     staleTime: 1 * 60 * 1000, // 1 minuta
   });
+
+  // TanStack Query v5: Show toast on error
+  useEffect(() => {
+    if (query.error) {
+      toast({
+        variant: 'destructive',
+        title: 'Błąd ładowania alertów',
+        description: query.error.message || 'Nie udało się pobrać alertów',
+      });
+    }
+  }, [query.error, toast]);
+
+  return query;
 }
 
 /**
  * Hook do pobierania statystyk tygodniowych
  */
 export function useWeeklyStats() {
-  return useQuery({
+  const { toast } = useToast();
+
+  const query = useQuery({
     queryKey: WEEKLY_STATS_QUERY_KEY,
     queryFn: dashboardApi.getWeeklyStats,
     staleTime: 5 * 60 * 1000, // 5 minut
   });
+
+  // TanStack Query v5: Show toast on error
+  useEffect(() => {
+    if (query.error) {
+      toast({
+        variant: 'destructive',
+        title: 'Błąd ładowania statystyk tygodniowych',
+        description: query.error.message || 'Nie udało się pobrać statystyk',
+      });
+    }
+  }, [query.error, toast]);
+
+  return query;
 }
 
 /**
