@@ -1,0 +1,4 @@
+uid=1_0 RootWebArea "AKROBUD - System zarządzania produkcją" url="http://localhost:3000/"
+  uid=1_1 StaticText "Inicjalizacja..."
+  uid=1_2 region "Notifications (F8)"
+    uid=1_3 list

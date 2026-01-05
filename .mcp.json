@@ -83,6 +83,36 @@
         "-y",
         "@modelcontextprotocol/server-puppeteer"
       ]
+    },
+    "google-devtools": {
+      "type": "stdio",
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-google-devtools@latest"
+      ]
+    },
+    "web-fetch": {
+      "type": "stdio",
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-web-fetch@latest"
+      ]
+    },
+    "fetch": {
+      "type": "stdio",
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-fetch@latest"
+      ]
     }
   }
 }

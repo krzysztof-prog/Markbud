@@ -24,14 +24,6 @@ import type {
   CreateWarehouseOrderData,
   UpdateWarehouseOrderData,
   MonthlyStockUpdate,
-  OkucArticle,
-  CreateOkucArticleData,
-  UpdateOkucArticleData,
-  OkucStock,
-  UpdateOkucStockData,
-  OkucOrder,
-  CreateOkucOrderData,
-  UpdateOkucOrderData,
   PalletType,
   CreatePalletTypeData,
   UpdatePalletTypeData,
@@ -126,22 +118,6 @@ export interface SettingsApi {
 }
 
 /**
- * Okuć API
- */
-export interface OkucApi {
-  getArticles: () => Promise<OkucArticle[]>;
-  createArticle: (data: CreateOkucArticleData) => Promise<OkucArticle>;
-  updateArticle: (id: number, data: UpdateOkucArticleData) => Promise<OkucArticle>;
-  deleteArticle: (id: number) => Promise<void>;
-  getStock: () => Promise<OkucStock[]>;
-  updateStock: (articleId: number, data: UpdateOkucStockData) => Promise<OkucStock>;
-  getOrders: () => Promise<OkucOrder[]>;
-  createOrder: (data: CreateOkucOrderData) => Promise<OkucOrder>;
-  updateOrder: (id: number, data: UpdateOkucOrderData) => Promise<OkucOrder>;
-  deleteOrder: (id: number) => Promise<void>;
-}
-
-/**
  * Import API
  */
 export interface ImportsApi {
@@ -169,7 +145,6 @@ export interface ApiClient {
   deliveries: DeliveriesApi;
   warehouse: WarehouseApi;
   settings: SettingsApi;
-  okuc: OkucApi;
   imports: ImportsApi;
   dashboard: DashboardApi;
 }

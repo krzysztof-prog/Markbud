@@ -103,26 +103,21 @@ export const emitWarehouseStockChanged = (data: EventData) => eventEmitter.emitD
   timestamp: new Date(),
 });
 
+// Okuc events
+export const emitOkucRwImported = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'okuc:rw_imported',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitOkucDemandImported = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'okuc:demand_imported',
+  data,
+  timestamp: new Date(),
+});
+
 export const emitOkucStockUpdated = (data: EventData) => eventEmitter.emitDataChange({
   type: 'okuc:stock_updated',
   data,
-  timestamp: new Date(),
-});
-
-export const emitOkucArticleCreated = (data: EventData) => eventEmitter.emitDataChange({
-  type: 'okuc:article_created',
-  data,
-  timestamp: new Date(),
-});
-
-export const emitOkucArticleUpdated = (data: EventData) => eventEmitter.emitDataChange({
-  type: 'okuc:article_updated',
-  data,
-  timestamp: new Date(),
-});
-
-export const emitOkucArticleDeleted = (id: number) => eventEmitter.emitDataChange({
-  type: 'okuc:article_deleted',
-  data: { id },
   timestamp: new Date(),
 });

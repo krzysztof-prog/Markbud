@@ -22,7 +22,7 @@ export class ValidationError extends AppError {
 
 export class NotFoundError extends AppError {
   constructor(resource: string) {
-    super(`${resource} not found`, 404, 'NOT_FOUND');
+    super(`${resource} nie znaleziono`, 404, 'NOT_FOUND');
     this.name = 'NotFoundError';
   }
 }
@@ -42,7 +42,7 @@ export class ForbiddenError extends AppError {
 }
 
 export class ConflictError extends AppError {
-  constructor(message: string) {
+  constructor(message: string, public details?: Record<string, any>) {
     super(message, 409, 'CONFLICT');
     this.name = 'ConflictError';
   }
@@ -52,6 +52,13 @@ export class InternalServerError extends AppError {
   constructor(message: string = 'Internal server error') {
     super(message, 500, 'INTERNAL_SERVER_ERROR');
     this.name = 'InternalServerError';
+  }
+}
+
+export class DatabaseError extends AppError {
+  constructor(message: string, public originalError?: Error) {
+    super(message, 500, 'DATABASE_ERROR');
+    this.name = 'DatabaseError';
   }
 }
 

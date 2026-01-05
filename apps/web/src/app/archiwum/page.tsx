@@ -93,10 +93,10 @@ export default function ArchiwumPage() {
                           {order.archivedAt ? formatDate(order.archivedAt) : '-'}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          {order.valuePln ? formatCurrency(parseFloat(order.valuePln), 'PLN') : '-'}
+                          {order.valuePln ? formatCurrency(parseFloat(String(order.valuePln)), 'PLN') : '-'}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          {order.valueEur ? formatCurrency(parseFloat(order.valueEur), 'EUR') : '-'}
+                          {order.valueEur ? formatCurrency(parseFloat(String(order.valueEur)), 'EUR') : '-'}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-center gap-2">

@@ -13,7 +13,7 @@ import {
   previewByFilepathQuerySchema,
   processImportSchema,
 } from '../validators/import.js';
-import { parseIntParam } from '../utils/errors.js';
+import { ValidationError } from '../utils/errors.js';
 
 export class ImportHandler {
   constructor(private service: ImportService) {}
@@ -28,42 +28,32 @@ export class ImportHandler {
     const data = await request.file();
 
     if (!data) {
-      return reply.status(400).send({ error: 'Brak pliku' });
+      throw new ValidationError('Brak pliku');
     }
 
     const filename = data.filename;
     const mimeType = data.mimetype;
     const buffer = await data.toBuffer();
 
-    try {
-      const result = await this.service.uploadFile(filename, buffer, mimeType);
+    const result = await this.service.uploadFile(filename, buffer, mimeType);
 
-      reply.status(201);
+    reply.status(201);
 
-      if (result.autoImportStatus === 'success') {
-        return {
-          ...result.fileImport,
-          autoImportStatus: result.autoImportStatus,
-          result: result.result,
-        };
-      } else if (result.autoImportStatus) {
-        return {
-          ...result.fileImport,
-          autoImportStatus: result.autoImportStatus,
-          autoImportError: result.autoImportError,
-        };
-      }
-
-      return result.fileImport;
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('zbyt duzy')) {
-        return reply.status(413).send({
-          error: 'Plik jest zbyt duzy',
-          details: error.message,
-        });
-      }
-      throw error;
+    if (result.autoImportStatus === 'success') {
+      return {
+        ...result.fileImport,
+        autoImportStatus: result.autoImportStatus,
+        result: result.result,
+      };
+    } else if (result.autoImportStatus) {
+      return {
+        ...result.fileImport,
+        autoImportStatus: result.autoImportStatus,
+        autoImportError: result.autoImportError,
+      };
     }
+
+    return result.fileImport;
   }
 
   /**
@@ -179,16 +169,8 @@ export class ImportHandler {
     reply: FastifyReply
   ) {
     const userId = request.query.userId;
+    // Service rzuci NotFoundError lub InternalServerError - middleware obsluzy
     const result = await this.service.listFolders(userId);
-
-    if ('error' in result && result.error === 'Folder bazowy nie istnieje') {
-      return reply.status(404).send(result);
-    }
-
-    if ('error' in result) {
-      return reply.status(500).send(result);
-    }
-
     return reply.send(result);
   }
 
@@ -270,6 +252,9 @@ export class ImportHandler {
   /**
    * POST /api/imports/bulk - perform bulk action on multiple imports
    * Domyślna akcja dla PDF z błędem order_not_found: zapisz cenę do pending_order_prices
+   *
+   * UWAGA: try-catch w petli jest uzasadniony - zbieramy wyniki dla kazdego elementu
+   * osobno i nie przerywamy przetwarzania w przypadku bledu jednego elementu.
    */
   async bulkAction(
     request: FastifyRequest<{
@@ -280,7 +265,7 @@ export class ImportHandler {
     const { ids, action } = request.body;
 
     if (!Array.isArray(ids) || ids.length === 0) {
-      return reply.status(400).send({ error: 'Brak ID do przetworzenia' });
+      throw new ValidationError('Brak ID do przetworzenia');
     }
 
     const results: Array<{ id: number; success: boolean; error?: string }> = [];
@@ -295,6 +280,7 @@ export class ImportHandler {
           results.push({ id, success: true });
         }
       } catch (error) {
+        // Uzasadniony try-catch - zbieramy wyniki dla wszystkich elementow
         results.push({
           id,
           success: false,

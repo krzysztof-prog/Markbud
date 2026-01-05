@@ -18,6 +18,10 @@ import {
   X,
   ChevronLeft,
   GlassWater,
+  ClipboardList,
+  Wrench,
+  BarChart3,
+  Calendar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -32,17 +36,19 @@ type NavigationItem = {
 
 const navigation: NavigationItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'Panel Kierownika', href: '/kierownik', icon: ClipboardList },
   {
-    name: 'AKROBUD',
-    href: '/magazyn',
-    icon: Warehouse,
+    name: 'Zestawienia',
+    href: '/zestawienia',
+    icon: BarChart3,
     subItems: [
-      { name: 'Magazyn Akrobud', href: '/magazyn/akrobud', icon: Warehouse },
-      { name: 'Profile na dostawy', href: '/magazyn/profile-na-dostawy', icon: Package },
-      { name: 'Dostawy', href: '/dostawy', icon: Truck },
+      { name: 'Zestawienie zleceń', href: '/zestawienia/zlecenia', icon: FileText },
+      { name: 'Raport miesięczny', href: '/zestawienia/miesieczne', icon: Calendar },
     ]
   },
+  { name: 'AKROBUD', href: '/magazyn/akrobud', icon: Warehouse },
   { name: 'Magazyn PVC', href: '/magazyn/pvc', icon: Box },
+  { name: 'Okucia', href: '/magazyn/okuc', icon: Wrench },
   { name: 'Dostawy Schuco', href: '/magazyn/dostawy-schuco', icon: Truck },
   {
     name: 'Szyby',
@@ -53,8 +59,6 @@ const navigation: NavigationItem[] = [
       { name: 'Dostawy szyb', href: '/dostawy-szyb', icon: Truck },
     ]
   },
-  { name: 'Zestawienie miesięczne', href: '/zestawienia', icon: FileText },
-  { name: 'Zestawienie zleceń', href: '/zestawienia/zlecenia', icon: FileText },
   { name: 'Importy', href: '/importy', icon: FolderInput },
   { name: 'Archiwum', href: '/archiwum', icon: Archive },
   { name: 'Ustawienia', href: '/ustawienia', icon: Settings },
@@ -62,14 +66,9 @@ const navigation: NavigationItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [expandedItems, setExpandedItems] = useState<string[]>(['/magazyn']);
+  const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const toggleExpanded = (href: string) => {
     setExpandedItems((prev) =>
@@ -95,21 +94,6 @@ export function Sidebar() {
       document.body.style.overflow = 'unset';
     };
   }, [mobileOpen]);
-
-  // Prevent hydration mismatch by not rendering interactive elements until mounted
-  if (!mounted) {
-    return (
-      <div className="hidden md:flex h-full w-64 flex-col bg-slate-900 text-white">
-        <div className="flex h-16 items-center px-6 border-b border-slate-800">
-          <span className="text-xl font-bold text-blue-400">AKROBUD</span>
-        </div>
-        <nav className="flex-1 px-3 py-4" />
-        <div className="border-t border-slate-800 p-4">
-          <p className="text-xs text-slate-500">AKROBUD v1.0.0</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <>
@@ -196,6 +180,8 @@ export function Sidebar() {
                       : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   )}
                   title={desktopCollapsed ? item.name : undefined}
+                  aria-label={isExpanded ? `Zwiń ${item.name}` : `Rozwiń ${item.name}`}
+                  aria-expanded={isExpanded}
                 >
                   <item.icon className="h-5 w-5 flex-shrink-0" />
                   <span className={cn(

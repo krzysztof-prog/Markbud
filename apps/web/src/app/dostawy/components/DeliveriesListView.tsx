@@ -167,7 +167,7 @@ export function DeliveriesListView({ initialDateRange = '14' }: DeliveriesListVi
 
   // Calculate summary stats
   const summaryStats = useMemo(() => {
-    if (!deliveries || deliveries.length === 0) {
+    if (!deliveries || !Array.isArray(deliveries) || deliveries.length === 0) {
       return { count: 0, windows: 0, sashes: 0, glasses: 0, valuePln: 0 };
     }
 
@@ -209,7 +209,7 @@ export function DeliveriesListView({ initialDateRange = '14' }: DeliveriesListVi
           </div>
 
           {/* Summary stats */}
-          {!isLoading && deliveries && deliveries.length > 0 && (
+          {!isLoading && Array.isArray(deliveries) && deliveries.length > 0 && (
             <div className="flex flex-wrap gap-4 pt-4 border-t mt-4">
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-slate-500">Dostaw:</span>
@@ -247,7 +247,7 @@ export function DeliveriesListView({ initialDateRange = '14' }: DeliveriesListVi
               <p className="text-red-600 mb-2">Błąd wczytywania dostaw</p>
               <p className="text-sm text-slate-500">{getErrorMessage(error)}</p>
             </div>
-          ) : deliveries && deliveries.length > 0 ? (
+          ) : Array.isArray(deliveries) && deliveries.length > 0 ? (
             <DeliveriesTable
               deliveries={deliveries}
               expandedRows={expandedRows}

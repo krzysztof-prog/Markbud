@@ -6,9 +6,17 @@
  */
 
 import { Suspense } from 'react';
-import { DashboardContent } from '@/features/dashboard/components/DashboardContent';
+import dynamic from 'next/dynamic';
 import { DashboardSkeleton } from '@/components/loaders/DashboardSkeleton';
 import { Header } from '@/components/layout/header';
+
+const DashboardContent = dynamic(
+  () => import('@/features/dashboard/components/DashboardContent').then((mod) => mod.DashboardContent),
+  {
+    loading: () => <DashboardSkeleton />,
+    ssr: false,
+  }
+);
 
 export function DashboardWrapper() {
   return (

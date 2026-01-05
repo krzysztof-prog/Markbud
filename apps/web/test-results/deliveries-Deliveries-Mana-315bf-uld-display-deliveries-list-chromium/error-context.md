@@ -1,0 +1,221 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e6] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e7]:
+      - img [ref=e8]
+    - generic [ref=e11]:
+      - button "Open issues overlay" [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: "3"
+          - generic [ref=e15]: "4"
+        - generic [ref=e16]:
+          - text: Issue
+          - generic [ref=e17]: s
+      - button "Collapse issues badge" [ref=e18]:
+        - img [ref=e19]
+  - alert [ref=e21]
+  - generic [ref=e22]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - generic [ref=e25]: AKROBUD
+        - button "Toggle sidebar" [ref=e26] [cursor=pointer]:
+          - img [ref=e27]
+      - navigation [ref=e29]:
+        - link "Dashboard" [ref=e31] [cursor=pointer]:
+          - /url: /
+          - img [ref=e32]
+          - generic [ref=e37]: Dashboard
+        - link "AKROBUD" [ref=e39] [cursor=pointer]:
+          - /url: /magazyn/akrobud
+          - img [ref=e40]
+          - generic [ref=e43]: AKROBUD
+        - link "Magazyn PVC" [ref=e45] [cursor=pointer]:
+          - /url: /magazyn/pvc
+          - img [ref=e46]
+          - generic [ref=e49]: Magazyn PVC
+        - link "Dostawy Schuco" [ref=e51] [cursor=pointer]:
+          - /url: /magazyn/dostawy-schuco
+          - img [ref=e52]
+          - generic [ref=e57]: Dostawy Schuco
+        - button "Szyby" [ref=e59] [cursor=pointer]:
+          - img [ref=e60]
+          - generic [ref=e63]: Szyby
+          - img [ref=e64]
+        - link "Zestawienie miesięczne" [ref=e67] [cursor=pointer]:
+          - /url: /zestawienia
+          - img [ref=e68]
+          - generic [ref=e71]: Zestawienie miesięczne
+        - link "Zestawienie zleceń" [ref=e73] [cursor=pointer]:
+          - /url: /zestawienia/zlecenia
+          - img [ref=e74]
+          - generic [ref=e77]: Zestawienie zleceń
+        - link "Importy" [ref=e79] [cursor=pointer]:
+          - /url: /importy
+          - img [ref=e80]
+          - generic [ref=e83]: Importy
+        - link "Archiwum" [ref=e85] [cursor=pointer]:
+          - /url: /archiwum
+          - img [ref=e86]
+          - generic [ref=e89]: Archiwum
+        - link "Ustawienia" [ref=e91] [cursor=pointer]:
+          - /url: /ustawienia
+          - img [ref=e92]
+          - generic [ref=e95]: Ustawienia
+      - paragraph [ref=e97]: AKROBUD v1.0.0
+    - main [ref=e98]:
+      - generic [ref=e99]:
+        - generic [ref=e100]:
+          - heading "Dostawy" [level=1] [ref=e102]
+          - generic [ref=e103]:
+            - button "Szukaj ⌘ K" [ref=e104] [cursor=pointer]:
+              - img [ref=e105]
+              - generic [ref=e108]: Szukaj
+              - generic [ref=e109]:
+                - generic [ref=e110]: ⌘
+                - text: K
+            - button "Otwórz powiadomienia" [ref=e112] [cursor=pointer]:
+              - img [ref=e113]
+        - generic [ref=e117]:
+          - navigation "Breadcrumb" [ref=e118]:
+            - link "Strona główna" [ref=e119] [cursor=pointer]:
+              - /url: /
+              - img [ref=e120]
+            - img [ref=e123]
+            - generic [ref=e125]:
+              - img [ref=e127]
+              - text: Dostawy
+          - generic [ref=e129]:
+            - button "Kalendarz" [ref=e130] [cursor=pointer]:
+              - img [ref=e131]
+              - text: Kalendarz
+            - button "Lista" [ref=e133] [cursor=pointer]:
+              - img [ref=e134]
+              - text: Lista
+        - generic [ref=e135]:
+          - generic [ref=e137]:
+            - generic [ref=e138]:
+              - generic [ref=e139]:
+                - generic [ref=e140]:
+                  - button [ref=e141] [cursor=pointer]:
+                    - img [ref=e142]
+                  - heading "29.12.2025 - 25.01.2026" [level=3] [ref=e144]
+                  - button [ref=e145] [cursor=pointer]:
+                    - img [ref=e146]
+                - generic [ref=e148]:
+                  - button "Statystyki okien" [ref=e149] [cursor=pointer]:
+                    - img [ref=e150]
+                    - text: Statystyki okien
+                  - button "Nowa dostawa" [ref=e152] [cursor=pointer]:
+                    - img [ref=e153]
+                    - text: Nowa dostawa
+              - generic [ref=e154]:
+                - generic [ref=e155]: "Widok:"
+                - button "Tydzień" [ref=e156] [cursor=pointer]
+                - button "Miesiąc" [ref=e157] [cursor=pointer]
+                - button "8 tygodni" [ref=e158] [cursor=pointer]
+            - table [ref=e161]:
+              - rowgroup [ref=e162]:
+                - row [ref=e163]:
+                  - columnheader [ref=e164]
+                  - columnheader [ref=e166]
+                  - columnheader [ref=e168]
+                  - columnheader [ref=e170]
+                  - columnheader [ref=e172]
+                  - columnheader [ref=e174]
+                  - columnheader [ref=e176]
+              - rowgroup [ref=e178]:
+                - row [ref=e179]:
+                  - cell [ref=e180]
+                  - cell [ref=e182]
+                  - cell [ref=e184]
+                  - cell [ref=e186]
+                  - cell [ref=e188]
+                  - cell [ref=e190]
+                  - cell [ref=e192]
+                - row [ref=e194]:
+                  - cell [ref=e195]
+                  - cell [ref=e197]
+                  - cell [ref=e199]
+                  - cell [ref=e201]
+                  - cell [ref=e203]
+                  - cell [ref=e205]
+                  - cell [ref=e207]
+                - row [ref=e209]:
+                  - cell [ref=e210]
+                  - cell [ref=e212]
+                  - cell [ref=e214]
+                  - cell [ref=e216]
+                  - cell [ref=e218]
+                  - cell [ref=e220]
+                  - cell [ref=e222]
+                - row [ref=e224]:
+                  - cell [ref=e225]
+                  - cell [ref=e227]
+                  - cell [ref=e229]
+                  - cell [ref=e231]
+                  - cell [ref=e233]
+                  - cell [ref=e235]
+                  - cell [ref=e237]
+                - row [ref=e239]:
+                  - cell [ref=e240]
+                  - cell [ref=e242]
+                  - cell [ref=e244]
+                  - cell [ref=e246]
+                  - cell [ref=e248]
+                  - cell [ref=e250]
+                  - cell [ref=e252]
+                - row [ref=e254]:
+                  - cell [ref=e255]
+                  - cell [ref=e257]
+                  - cell [ref=e259]
+                  - cell [ref=e261]
+                  - cell [ref=e263]
+                  - cell [ref=e265]
+                  - cell [ref=e267]
+                - row [ref=e269]:
+                  - cell [ref=e270]
+                  - cell [ref=e272]
+                  - cell [ref=e274]
+                  - cell [ref=e276]
+                  - cell [ref=e278]
+                  - cell [ref=e280]
+                  - cell [ref=e282]
+                - row [ref=e284]:
+                  - cell [ref=e285]
+                  - cell [ref=e287]
+                  - cell [ref=e289]
+                  - cell [ref=e291]
+                  - cell [ref=e293]
+                  - cell [ref=e295]
+                  - cell [ref=e297]
+                - row [ref=e299]:
+                  - cell [ref=e300]
+                  - cell [ref=e302]
+                  - cell [ref=e304]
+                  - cell [ref=e306]
+                  - cell [ref=e308]
+                  - cell [ref=e310]
+                  - cell [ref=e312]
+                - row [ref=e314]:
+                  - cell [ref=e315]
+                  - cell [ref=e317]
+                  - cell [ref=e319]
+                  - cell [ref=e321]
+                  - cell [ref=e323]
+                  - cell [ref=e325]
+                  - cell [ref=e327]
+          - generic [ref=e330]:
+            - generic [ref=e331]:
+              - heading "Zlecenia bez daty" [level=3] [ref=e332]:
+                - img [ref=e333]
+                - text: Zlecenia bez daty
+              - button "Collapse right panel" [ref=e337] [cursor=pointer]:
+                - img [ref=e338]
+            - paragraph [ref=e340]: Przeciągnij zlecenia na dni w kalendarzu, aby przypisać do dostawy
+            - paragraph [ref=e341]: Wszystkie zlecenia mają przypisaną datę dostawy
+      - status [ref=e342]
+  - region "Notifications (F8)":
+    - list
+```

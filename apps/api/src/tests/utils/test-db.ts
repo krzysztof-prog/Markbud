@@ -73,18 +73,18 @@ export async function resetTestDatabase(): Promise<void> {
  */
 export async function seedMinimalData(): Promise<void> {
   // Ensure system user exists (id = 1) for audit fields
-  const systemUser = await prisma.user.findUnique({ where: { id: 1 } });
-  if (!systemUser) {
-    await prisma.user.create({
-      data: {
-        id: 1,
-        email: 'system@akrobud.local',
-        passwordHash: '$2a$10$dummy.hash.for.system.user.placeholder',
-        name: 'System User',
-        role: 'system',
-      },
-    });
-  }
+  // Use upsert to handle case where user exists with different email (production DB)
+  await prisma.user.upsert({
+    where: { id: 1 },
+    update: {}, // Don't change existing user
+    create: {
+      id: 1,
+      email: 'system@akrobud.local',
+      passwordHash: '$2a$10$dummy.hash.for.system.user.placeholder',
+      name: 'System User',
+      role: 'system',
+    },
+  });
 
   // Seed profiles (SQLite doesn't support skipDuplicates in createMany)
   // So we check first and only create if they don't exist

@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { SchucoHandler } from '../handlers/schucoHandler.js';
 import { SchucoService } from '../services/schuco/schucoService.js';
+import { verifyAuth } from '../middleware/auth.js';
+
 
 export default async function schucoRoutes(fastify: FastifyInstance) {
   const schucoService = new SchucoService(fastify.prisma);
@@ -8,6 +10,7 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
 
   // GET /api/schuco/deliveries - Get deliveries with pagination
   fastify.get('/deliveries', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Get Schuco deliveries with pagination',
       tags: ['schuco'],
@@ -64,6 +67,7 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
   // POST /api/schuco/refresh - Trigger manual refresh
   // Note: Scraping może trwać do 3 minut - timeout jest obsługiwany w schucoHandler
   fastify.post('/refresh', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Trigger manual refresh of Schuco deliveries',
       tags: ['schuco'],
@@ -96,6 +100,7 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
 
   // GET /api/schuco/status - Get last fetch status
   fastify.get('/status', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Get status of last Schuco fetch',
       tags: ['schuco'],
@@ -129,6 +134,7 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
 
   // GET /api/schuco/logs - Get fetch history
   fastify.get('/logs', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Get history of Schuco fetches',
       tags: ['schuco'],
@@ -140,7 +146,11 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
             properties: {
               id: { type: 'integer' },
               status: { type: 'string' },
+              triggerType: { type: 'string', nullable: true },
               recordsCount: { type: 'integer', nullable: true },
+              newRecords: { type: 'integer', nullable: true },
+              updatedRecords: { type: 'integer', nullable: true },
+              unchangedRecords: { type: 'integer', nullable: true },
               errorMessage: { type: 'string', nullable: true },
               startedAt: { type: 'string', format: 'date-time' },
               completedAt: { type: 'string', format: 'date-time', nullable: true },
@@ -155,6 +165,7 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
 
   // GET /api/schuco/statistics - Get delivery statistics
   fastify.get('/statistics', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Get statistics about deliveries by changeType',
       tags: ['schuco'],
@@ -205,5 +216,128 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
       totalCount,
       changedRecords,
     });
+  });
+
+  // POST /api/schuco/sync-links - Synchronize all order links
+  fastify.post('/sync-links', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Synchronize all Schuco deliveries with orders (creates missing links)',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            total: { type: 'integer' },
+            processed: { type: 'integer' },
+            linksCreated: { type: 'integer' },
+            warehouseItems: { type: 'integer' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const result = await schucoService.syncAllOrderLinks();
+      return reply.send(result);
+    },
+  });
+
+  // GET /api/schuco/unlinked - Get unlinked deliveries (for manual linking)
+  fastify.get('/unlinked', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get Schuco deliveries without order links',
+      tags: ['schuco'],
+      querystring: {
+        type: 'object',
+        properties: {
+          limit: { type: 'integer', default: 100, minimum: 1, maximum: 500 },
+        },
+      },
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'integer' },
+              orderNumber: { type: 'string' },
+              orderName: { type: 'string' },
+              shippingStatus: { type: 'string' },
+              deliveryWeek: { type: 'string', nullable: true },
+              extractedOrderNums: { type: 'string', nullable: true },
+            },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { limit } = request.query as { limit?: number };
+      const deliveries = await schucoService.getUnlinkedDeliveries(limit);
+      return reply.send(deliveries);
+    },
+  });
+
+  // POST /api/schuco/links - Create manual link between order and Schuco delivery
+  fastify.post('/links', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Create manual link between order and Schuco delivery',
+      tags: ['schuco'],
+      body: {
+        type: 'object',
+        required: ['orderId', 'schucoDeliveryId'],
+        properties: {
+          orderId: { type: 'integer' },
+          schucoDeliveryId: { type: 'integer' },
+        },
+      },
+      response: {
+        201: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            orderId: { type: 'integer' },
+            schucoDeliveryId: { type: 'integer' },
+            linkedAt: { type: 'string', format: 'date-time' },
+            linkedBy: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { orderId, schucoDeliveryId } = request.body as { orderId: number; schucoDeliveryId: number };
+      const link = await schucoService.getOrderMatcher().createManualLink(orderId, schucoDeliveryId);
+      return reply.status(201).send(link);
+    },
+  });
+
+  // DELETE /api/schuco/links/:id - Delete link
+  fastify.delete('/links/:id', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Delete link between order and Schuco delivery',
+      tags: ['schuco'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'integer' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { id } = request.params as { id: number };
+      await schucoService.getOrderMatcher().deleteLink(id);
+      return reply.send({ message: 'Link deleted' });
+    },
   });
 }

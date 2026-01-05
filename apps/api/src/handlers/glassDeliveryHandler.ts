@@ -1,85 +1,54 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import type { GlassDeliveryService } from '../services/glassDeliveryService.js';
+import type { GlassDeliveryService } from '../services/glass-delivery/index.js';
 import {
   glassDeliveryFiltersSchema,
   glassDeliveryIdParamsSchema,
 } from '../validators/glass.js';
-import { ZodError } from 'zod';
+import { NotFoundError, ValidationError } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
 
 export class GlassDeliveryHandler {
   constructor(private service: GlassDeliveryService) {}
 
   async getAll(request: FastifyRequest, reply: FastifyReply) {
-    try {
-      const filters = glassDeliveryFiltersSchema.parse(request.query);
-      const deliveries = await this.service.findAll(filters);
-      return reply.send(deliveries);
-    } catch (error) {
-      if (error instanceof ZodError) {
-        return reply.status(400).send({ error: error.errors[0].message });
-      }
-      throw error;
-    }
+    const filters = glassDeliveryFiltersSchema.parse(request.query);
+    const deliveries = await this.service.findAll(filters);
+    return reply.send(deliveries);
   }
 
   async getById(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-    try {
-      const { id } = glassDeliveryIdParamsSchema.parse(request.params);
-      const delivery = await this.service.findById(id);
-      if (!delivery) {
-        return reply.status(404).send({ error: 'Dostawa nie istnieje' });
-      }
-      return reply.send(delivery);
-    } catch (error) {
-      if (error instanceof ZodError) {
-        return reply.status(400).send({ error: error.errors[0].message });
-      }
-      throw error;
+    const { id } = glassDeliveryIdParamsSchema.parse(request.params);
+    const delivery = await this.service.findById(id);
+    if (!delivery) {
+      throw new NotFoundError('Dostawa szklana');
     }
+    return reply.send(delivery);
   }
 
   async importFromCsv(request: FastifyRequest, reply: FastifyReply) {
-    try {
-      const data = await request.file();
+    logger.debug('[GlassDeliveryHandler] importFromCsv called');
 
-      if (!data) {
-        return reply.status(400).send({ error: 'Brak pliku' });
-      }
+    const data = await request.file();
 
-      const content = (await data.toBuffer()).toString('utf-8');
-      const delivery = await this.service.importFromCsv(content, data.filename);
-
-      return reply.status(201).send(delivery);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Błąd importu';
-      return reply.status(400).send({ error: message });
+    if (!data) {
+      throw new ValidationError('Brak pliku');
     }
+
+    const content = (await data.toBuffer()).toString('utf-8');
+    const delivery = await this.service.importFromCsv(content, data.filename);
+
+    return reply.status(201).send(delivery);
   }
 
   async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-    try {
-      const { id } = glassDeliveryIdParamsSchema.parse(request.params);
-      await this.service.delete(id);
-      return reply.status(204).send();
-    } catch (error) {
-      if (error instanceof ZodError) {
-        return reply.status(400).send({ error: error.errors[0].message });
-      }
-      const message = error instanceof Error ? error.message : 'Błąd usuwania';
-      return reply.status(400).send({ error: message });
-    }
+    const { id } = glassDeliveryIdParamsSchema.parse(request.params);
+    await this.service.delete(id);
+    return reply.status(204).send();
   }
 
   async getLatestImportSummary(request: FastifyRequest, reply: FastifyReply) {
-    try {
-      const summary = await this.service.getLatestImportSummary();
-      if (!summary) {
-        return reply.status(404).send({ error: 'Brak ostatniego importu' });
-      }
-      return reply.send(summary);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Błąd pobierania';
-      return reply.status(500).send({ error: message });
-    }
+    const summary = await this.service.getLatestImportSummary();
+    // Return null instead of 404 when no data - let frontend handle empty state
+    return reply.send(summary);
   }
 }

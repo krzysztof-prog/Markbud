@@ -15,6 +15,7 @@ import {
   updatePackingRuleSchema,
   packingRuleParamsSchema,
 } from '../validators/pallet.js';
+import { NotFoundError } from '../utils/errors.js';
 
 export class PalletHandler {
   private pdfService: PdfExportService;
@@ -52,7 +53,7 @@ export class PalletHandler {
     const result = await this.service.getOptimization(parseInt(deliveryId));
 
     if (!result) {
-      return reply.status(404).send({ error: 'Optimization not found' });
+      throw new NotFoundError('Optymalizacja');
     }
 
     return reply.send(result);
@@ -85,7 +86,7 @@ export class PalletHandler {
     const result = await this.service.getOptimization(parseInt(deliveryId));
 
     if (!result) {
-      return reply.status(404).send({ error: 'Optimization not found' });
+      throw new NotFoundError('Optymalizacja');
     }
 
     // Generuj PDF

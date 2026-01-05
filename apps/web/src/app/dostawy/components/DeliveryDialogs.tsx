@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -10,8 +11,22 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { DestructiveActionDialog } from '@/components/ui/destructive-action-dialog';
 import { formatDate, cn } from '@/lib/utils';
-import { Truck } from 'lucide-react';
+import {
+  Truck,
+  Calendar,
+  Package,
+  CheckCircle2,
+  FileText,
+  Trash2,
+  Plus,
+  X,
+} from 'lucide-react';
+import {
+  DraggableOrderWithContextMenu,
+  UnassignedOrdersDropzone,
+} from '../DragDropComponents';
 import type { Delivery } from '@/types/delivery';
 
 interface NewDeliveryDialogProps {
@@ -110,6 +125,104 @@ export function NewDeliveryDialog({
   );
 }
 
+interface DestructiveDeleteDeliveryDialogProps {
+  delivery: Delivery | null;
+  onClose: () => void;
+  onConfirm: (id: number) => void;
+  isPending: boolean;
+}
+
+export function DestructiveDeleteDeliveryDialog({
+  delivery,
+  onClose,
+  onConfirm,
+  isPending,
+}: DestructiveDeleteDeliveryDialogProps) {
+  const confirmText = 'USUŃ';
+
+  if (!delivery) return null;
+
+  const orderCount = delivery.deliveryOrders?.length || 0;
+  const hasOrders = orderCount > 0;
+
+  return (
+    <DestructiveActionDialog
+      open={!!delivery}
+      onOpenChange={(open) => !open && onClose()}
+      title={`Usuwanie dostawy - ${formatDate(delivery.deliveryDate)}`}
+      description="Ta akcja trwale usunie dostawę z systemu"
+      actionType="delete"
+      confirmText={confirmText}
+      isLoading={isPending}
+      consequences={[
+        'Dostawa zostanie trwale usunięta z systemu',
+        hasOrders ? `${orderCount} zlecenie(ń) zostanie odpiętych od dostawy` : 'Brak przypisanych zleceń',
+        'Odpięte zlecenia wrócą do listy nieprzypisanych',
+        'Historia powiązanych zleceń pozostanie zachowana',
+        'Tej operacji nie można cofnąć',
+      ]}
+      affectedItems={
+        hasOrders
+          ? delivery.deliveryOrders?.map((dOrder) => ({
+              id: dOrder.order?.id?.toString() || '',
+              label: `Zlecenie #${dOrder.order?.orderNumber || 'N/A'}`,
+            }))
+          : undefined
+      }
+      previewData={
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-blue-600" aria-hidden="true" />
+              <div>
+                <p className="text-xs text-slate-600">Data dostawy</p>
+                <p className="text-lg font-semibold">{formatDate(delivery.deliveryDate)}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Package className="h-4 w-4 text-orange-600" aria-hidden="true" />
+              <div>
+                <p className="text-xs text-slate-600">Przypisane zlecenia</p>
+                <p className="text-lg font-semibold">{orderCount}</p>
+              </div>
+            </div>
+          </div>
+
+          {delivery.notes && (
+            <div className="pt-2 border-t">
+              <p className="text-xs text-slate-600 mb-1">Notatki:</p>
+              <p className="text-sm text-slate-700">{delivery.notes}</p>
+            </div>
+          )}
+
+          {hasOrders && delivery.deliveryOrders && (
+            <div className="pt-2 border-t">
+              <p className="text-xs text-slate-600 mb-1">Zlecenia do odpięcia:</p>
+              <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                {delivery.deliveryOrders.slice(0, 10).map((dOrder) => (
+                  <span
+                    key={dOrder.order.id}
+                    className="text-xs px-2 py-1 bg-slate-100 rounded font-mono"
+                  >
+                    {dOrder.order?.orderNumber || 'N/A'}
+                  </span>
+                ))}
+                {delivery.deliveryOrders.length > 10 && (
+                  <span className="text-xs px-2 py-1 bg-slate-200 rounded">
+                    +{delivery.deliveryOrders.length - 10} więcej
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      }
+      onConfirm={() => onConfirm(delivery.id)}
+    />
+  );
+}
+
+// Legacy component for backward compatibility
 interface DeleteConfirmDialogProps {
   deliveryId: number | null;
   onClose: () => void;
@@ -323,6 +436,217 @@ export function CompleteOrdersDialog({
           </Button>
           <Button onClick={onSubmit} disabled={!productionDate || isPending}>
             Zakończ zlecenia
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Delivery Details Dialog - shows full details of a selected delivery
+interface DeliveryDetailsDialogProps {
+  delivery: Delivery | null;
+  onClose: () => void;
+  onDelete: (delivery: Delivery) => void;
+  onShowCompleteDialog: () => void;
+  onShowAddItemDialog: () => void;
+  onViewOrder: (orderId: number, orderNumber: string) => void;
+  onRemoveOrder: (deliveryId: number, orderId: number) => void;
+  onMoveOrder: (sourceDeliveryId: number, targetDeliveryId: number, orderId: number) => void;
+  onDeleteItem: (deliveryId: number, itemId: number) => void;
+  downloadProtocol: (deliveryId: number) => void;
+  isDownloading: boolean;
+  availableDeliveries: Delivery[];
+}
+
+export function DeliveryDetailsDialog({
+  delivery,
+  onClose,
+  onDelete,
+  onShowCompleteDialog,
+  onShowAddItemDialog,
+  onViewOrder,
+  onRemoveOrder,
+  onMoveOrder,
+  onDeleteItem,
+  downloadProtocol,
+  isDownloading,
+  availableDeliveries,
+}: DeliveryDetailsDialogProps) {
+  const router = useRouter();
+
+  if (!delivery) return null;
+
+  const hasOrders = delivery.deliveryOrders && delivery.deliveryOrders.length > 0;
+
+  return (
+    <Dialog open={!!delivery} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Szczegoly dostawy</DialogTitle>
+        </DialogHeader>
+
+        {/* Action buttons at top */}
+        <div className="flex flex-wrap gap-2 pb-4 border-b">
+          {hasOrders && (
+            <>
+              <Button variant="default" size="sm" onClick={onShowCompleteDialog}>
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                Zlecenia zakonczone
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => router.push(`/dostawy/${delivery.id}/optymalizacja`)}
+              >
+                <Package className="h-4 w-4 mr-2" />
+                Optymalizuj palety
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadProtocol(delivery.id)}
+                disabled={isDownloading}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                {isDownloading ? 'Generuje...' : 'Protokol odbioru'}
+              </Button>
+            </>
+          )}
+          <Button variant="destructive" size="sm" onClick={() => onDelete(delivery)}>
+            <Trash2 className="h-4 w-4 mr-2" />
+            Usun dostawe
+          </Button>
+        </div>
+
+        {/* Dialog content with scrolling */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="space-y-4 py-4">
+            {/* Delivery info grid */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-slate-500">Data</p>
+                <p className="font-medium">{formatDate(delivery.deliveryDate)}</p>
+              </div>
+
+              <div>
+                <p className="text-sm text-slate-500">Status</p>
+                <Badge variant={delivery.status === 'completed' ? 'success' : 'secondary'}>
+                  {delivery.status === 'planned'
+                    ? 'Zaplanowana'
+                    : delivery.status === 'in_progress'
+                    ? 'W trakcie'
+                    : delivery.status === 'completed'
+                    ? 'Zrealizowana'
+                    : delivery.status}
+                </Badge>
+              </div>
+
+              {delivery.deliveryNumber && (
+                <div>
+                  <p className="text-sm text-slate-500">Numer dostawy</p>
+                  <p className="font-medium text-lg">{delivery.deliveryNumber}</p>
+                </div>
+              )}
+
+              {delivery.notes && (
+                <div className="col-span-2">
+                  <p className="text-sm text-slate-500">Notatki</p>
+                  <p className="text-sm">{delivery.notes}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Orders section */}
+            <div>
+              <p className="text-sm text-slate-500 mb-2">
+                Zlecenia ({delivery.deliveryOrders?.length || 0})
+              </p>
+              {hasOrders ? (
+                <UnassignedOrdersDropzone>
+                  <div className="space-y-2">
+                    {delivery.deliveryOrders?.map((item) => (
+                      <DraggableOrderWithContextMenu
+                        key={item.order.id}
+                        order={item.order}
+                        deliveryId={delivery.id}
+                        onView={() => onViewOrder(item.order.id, item.order.orderNumber)}
+                        onRemove={() => onRemoveOrder(delivery.id, item.order.id)}
+                        availableDeliveries={availableDeliveries.map((d: Delivery) => ({
+                          id: d.id,
+                          deliveryDate: d.deliveryDate,
+                          deliveryNumber: d.deliveryNumber,
+                        }))}
+                        onMoveToDelivery={(orderId, targetDeliveryId) => {
+                          if (targetDeliveryId) {
+                            onMoveOrder(delivery.id, targetDeliveryId, orderId);
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                </UnassignedOrdersDropzone>
+              ) : (
+                <p className="text-sm text-slate-400">Brak zlecen</p>
+              )}
+            </div>
+
+            {/* Additional items section */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm text-slate-500">
+                  Dodatkowe artykuly ({delivery.deliveryItems?.length || 0})
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onShowAddItemDialog}
+                  className="h-6 px-2"
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+              {delivery.deliveryItems && delivery.deliveryItems.length > 0 ? (
+                <div className="space-y-2">
+                  {delivery.deliveryItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-2 rounded bg-green-50 text-sm"
+                    >
+                      <div>
+                        <span className="font-medium">{item.quantity}x</span>{' '}
+                        <span className="text-slate-600">{item.description}</span>
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          {item.itemType === 'glass'
+                            ? 'Szyby'
+                            : item.itemType === 'sash'
+                            ? 'Skrzydla'
+                            : item.itemType === 'frame'
+                            ? 'Ramy'
+                            : 'Inne'}
+                        </Badge>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onDeleteItem(delivery.id, item.id)}
+                      >
+                        <X className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400">Brak dodatkowych artykulow</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer with close button */}
+        <DialogFooter className="border-t pt-4">
+          <Button variant="outline" onClick={onClose}>
+            Zamknij
           </Button>
         </DialogFooter>
       </DialogContent>

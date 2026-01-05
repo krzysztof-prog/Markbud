@@ -51,6 +51,16 @@ export const completeDeliverySchema = z.object({
   productionDate: dateSchema,
 });
 
+export const bulkUpdateDatesSchema = z.object({
+  fromDate: dateSchema,
+  toDate: dateSchema,
+  yearOffset: z.number().int().min(-10).max(10),
+});
+
+export const completeAllOrdersSchema = z.object({
+  productionDate: optionalDateSchema,
+});
+
 export type CreateDeliveryInput = z.infer<typeof createDeliverySchema>;
 export type UpdateDeliveryInput = z.infer<typeof updateDeliverySchema>;
 export type DeliveryQuery = z.infer<typeof deliveryQuerySchema>;
@@ -60,3 +70,5 @@ export type MoveOrderInput = z.infer<typeof moveOrderSchema>;
 export type ReorderInput = z.infer<typeof reorderSchema>;
 export type AddItemInput = z.infer<typeof addItemSchema>;
 export type CompleteDeliveryInput = z.infer<typeof completeDeliverySchema>;
+export type BulkUpdateDatesInput = z.infer<typeof bulkUpdateDatesSchema>;
+export type CompleteAllOrdersInput = z.infer<typeof completeAllOrdersSchema>;

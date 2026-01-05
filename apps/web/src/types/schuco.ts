@@ -15,6 +15,9 @@ export interface SchucoDelivery {
   complaint: string | null;
   orderType: string | null;
   totalAmount: string | null;
+  // Warehouse item flag - automatically detected based on order number format
+  isWarehouseItem: boolean;
+  extractedOrderNums: string | null; // JSON array of extracted 5-digit order numbers
   // Change tracking fields
   changeType: 'new' | 'updated' | null;
   changedAt: string | null;
@@ -54,4 +57,33 @@ export interface SchucoDeliveriesResponse {
   page: number;
   pageSize: number;
   totalPages: number;
+}
+
+/**
+ * Schuco delivery linked to an order
+ */
+export interface SchucoDeliveryLink {
+  id: number;
+  linkedAt: string;
+  linkedBy: string | null;
+  schucoDelivery: {
+    id: number;
+    orderNumber: string;
+    orderName?: string;
+    shippingStatus: string;
+    deliveryWeek: string | null;
+    totalAmount: string | null;
+    isWarehouseItem: boolean;
+    orderDateParsed?: string | null;
+  };
+}
+
+/**
+ * Sync links response
+ */
+export interface SchucoSyncLinksResponse {
+  total: number;
+  processed: number;
+  linksCreated: number;
+  warehouseItems: number;
 }

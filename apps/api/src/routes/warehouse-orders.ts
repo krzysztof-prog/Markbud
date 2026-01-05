@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../index.js';
 
+
 export const warehouseOrderRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/warehouse-orders - pobierz wszystkie zamówienia (z filtrowaniem)
   fastify.get<{

@@ -1,0 +1,22 @@
+Type,Severity,Issue,Current,Should Be,File,Action,Priority
+Requirement,CRITICAL,Field name mismatch,quantity: number,beamsCount: number,apps/web/src/types/requirement.ts,Replace quantity with beamsCount,1
+Requirement,CRITICAL,Missing fields,N/A,"meters: number, restMm?: number",apps/web/src/types/requirement.ts,Add missing fields,1
+WarehouseStock,CRITICAL,Field name mismatch,quantity: number,currentStockBeams: number,apps/web/src/types/warehouse.ts,Replace quantity with currentStockBeams,1
+Order,HIGH,Missing fields,N/A,"notes, deliveryDate, productionDate",apps/web/src/types/order.ts,Add missing fields,2
+Order,HIGH,Missing nested object,N/A,"deliveryOrders: Array<{id, deliveryId, delivery}>",apps/web/src/types/order.ts,Add deliveryOrders field,2
+Order,HIGH,Missing nested array,N/A,"orderNotes: Array<{id, content, createdAt}>",apps/web/src/types/order.ts,Add orderNotes field,2
+Order,HIGH,Incomplete Window fields in findAll(),windows: {id|profileType|reference},windows: {id|widthMm|heightMm|profileType|quantity|reference},apps/api/src/repositories/OrderRepository.ts,Update findAll() select,2
+Delivery,HIGH,Structure mismatch,"orders?: Order[]","deliveryOrders: Array<{orderId, position, order}>",apps/web/src/types/delivery.ts,Change orders to deliveryOrders,2
+Delivery,HIGH,Missing nested array,N/A,"deliveryItems: DeliveryItem[]",apps/web/src/types/delivery.ts,Add deliveryItems field,2
+GlassDelivery,HIGH,Missing entire interface,Does not exist,GlassDelivery with properties,apps/web/src/types/glass-delivery.ts,Create new file with interfaces,2
+GlassOrder,HIGH,Missing entire interface,Does not exist,GlassOrder with properties,apps/web/src/types/glass-delivery.ts,Create new file with interfaces,2
+GlassDeliveryItem,HIGH,Missing entire interface,Does not exist,GlassDeliveryItem with properties,apps/web/src/types/glass-delivery.ts,Create new file with interfaces,2
+GlassOrderItem,HIGH,Missing entire interface,Does not exist,GlassOrderItem with properties,apps/web/src/types/glass-delivery.ts,Create new file with interfaces,2
+Profile,LOW,Missing field,N/A,articleNumber?: string,apps/web/src/types/profile.ts,Add articleNumber field,3
+Profile,LOW,Missing nested array,N/A,"profileColors?: ProfileColor[]",apps/web/src/types/profile.ts,Add profileColors field,3
+Color,LOW,Missing nested array,N/A,"profileColors?: ProfileColor[]",apps/web/src/types/color.ts,Add profileColors field,3
+Order,MEDIUM,Unused field maybe,deliveryId (in type),Not returned from API,apps/web/src/types/order.ts,Verify if used or remove,3
+Order,MEDIUM,Unused field maybe,clientName (in type),Not returned from API,apps/web/src/types/order.ts,Verify if used or remove,3
+Order,MEDIUM,Unused field maybe,priority (in type),Not returned from API,apps/web/src/types/order.ts,Verify if used or remove,3
+Delivery,MEDIUM,Unused fields maybe,"weekNumber, year, colorId, isUnassigned",Not returned from API,apps/web/src/types/delivery.ts,Verify if used or remove,3
+Delivery,MEDIUM,Unused fields maybe,"ordersCount, totalWindows, totalGlass, totalPallets, totalValue",Not returned from API,apps/web/src/types/delivery.ts,Verify if used or remove,3

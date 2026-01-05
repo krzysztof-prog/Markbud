@@ -11,10 +11,12 @@ import {
   orderQuerySchema,
   bulkUpdateStatusSchema,
   forProductionQuerySchema,
+  monthlyProductionQuerySchema,
   type CreateOrderInput,
   type UpdateOrderInput,
   type BulkUpdateStatusInput,
   type ForProductionQuery,
+  type MonthlyProductionQuery,
 } from '../validators/order.js';
 
 export class OrderHandler {
@@ -119,7 +121,7 @@ export class OrderHandler {
     request: FastifyRequest<{ Querystring: MonthlyProductionQuery }>,
     reply: FastifyReply
   ) {
-    const validated = MonthlyProductionQuerySchema.parse(request.query);
+    const validated = monthlyProductionQuerySchema.parse(request.query);
     const year = parseInt(validated.year, 10);
     const month = parseInt(validated.month, 10);
 

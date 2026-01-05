@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Check, AlertTriangle, X } from 'lucide-react';
+import { Check, AlertTriangle, X, AlertCircle, Download } from 'lucide-react';
 import { OrderVariantConflictModal } from '@/components/orders/order-variant-conflict-modal';
 import type { ImportPreview } from '@/types';
 
@@ -63,6 +63,7 @@ export function ImportPreviewCard({
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
 
   const hasConflict = preview?.variantConflict?.type && preview.variantConflict.existingOrders.length > 0;
+  const hasErrors = preview?.errors && preview.errors.length > 0;
 
   const handleApprove = () => {
     if (hasConflict) {
@@ -79,6 +80,33 @@ export function ImportPreviewCard({
     const resolution = { type: resolutionType, deleteOlder };
     onApprove(resolution);
     setConflictModalOpen(false);
+  };
+
+  const handleDownloadErrors = () => {
+    if (!preview?.errors || preview.errors.length === 0) return;
+
+    // Generuj CSV z błędami
+    const headers = ['Wiersz', 'Pole', 'Powód błędu', 'Surowe dane'];
+    const rows = preview.errors.map((error) => [
+      error.row.toString(),
+      error.field || '-',
+      error.reason,
+      JSON.stringify(error.rawData),
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+
+    // Pobierz jako plik
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `bledy_importu_${metadata?.orderNumber || 'unknown'}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   // Metadata can be in preview.metadata (new format) or preview.import.metadata (legacy)
@@ -137,6 +165,15 @@ export function ImportPreviewCard({
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* TASK 7: Bledy walidacji CSV */}
+            {hasErrors && (
+              <ErrorsSection
+                errors={preview.errors!}
+                summary={preview.summary}
+                onDownload={handleDownloadErrors}
+              />
             )}
 
             {/* Podsumowanie z PDF - wartosc i waluta */}
@@ -364,6 +401,103 @@ function WindowsTable({ items }: { items: ImportDataItem[] }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * TASK 7: Sekcja wyswietlania bledow walidacji CSV
+ */
+function ErrorsSection({
+  errors,
+  summary,
+  onDownload,
+}: {
+  errors: Array<{ row: number; field?: string; reason: string; rawData: any }>;
+  summary: { totalRecords: number; validRecords: number; invalidRecords: number };
+  onDownload: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const displayErrors = expanded ? errors : errors.slice(0, 5);
+
+  return (
+    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+      <div className="flex items-start gap-3">
+        <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+        <div className="flex-1">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="font-medium text-red-900">Wykryto błędy walidacji</h4>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onDownload}
+              className="border-red-300 text-red-700 hover:bg-red-100"
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Pobierz CSV
+            </Button>
+          </div>
+          <p className="text-sm text-red-800 mb-3">
+            Import zawiera {summary.invalidRecords} błędnych {summary.invalidRecords === 1 ? 'wiersz' : 'wierszy'}
+            {' '}z {summary.totalRecords} całkowitych. Sprawdź szczegóły poniżej.
+          </p>
+
+          {/* Statystyki */}
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="bg-white rounded p-2 text-center border border-red-200">
+              <p className="text-xl font-bold text-red-700">{summary.totalRecords}</p>
+              <p className="text-xs text-red-600">Wszystkie wiersze</p>
+            </div>
+            <div className="bg-white rounded p-2 text-center border border-green-200">
+              <p className="text-xl font-bold text-green-700">{summary.validRecords}</p>
+              <p className="text-xs text-green-600">Poprawne</p>
+            </div>
+            <div className="bg-white rounded p-2 text-center border border-red-300">
+              <p className="text-xl font-bold text-red-700">{summary.invalidRecords}</p>
+              <p className="text-xs text-red-600">Błędne</p>
+            </div>
+          </div>
+
+          {/* Lista błędów */}
+          <div className="space-y-2 max-h-[300px] overflow-y-auto">
+            {displayErrors.map((error, idx) => (
+              <div key={idx} className="bg-white rounded p-3 border border-red-200 text-sm">
+                <div className="flex items-start gap-2">
+                  <Badge variant="outline" className="text-red-700 border-red-300 flex-shrink-0">
+                    Wiersz {error.row}
+                  </Badge>
+                  {error.field && (
+                    <Badge variant="outline" className="text-orange-700 border-orange-300 flex-shrink-0">
+                      {error.field}
+                    </Badge>
+                  )}
+                </div>
+                <p className="mt-2 text-red-900">{error.reason}</p>
+                {error.rawData && (
+                  <details className="mt-2">
+                    <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
+                      Pokaż surowe dane
+                    </summary>
+                    <pre className="mt-1 p-2 bg-slate-50 rounded text-xs overflow-x-auto">
+                      {JSON.stringify(error.rawData, null, 2)}
+                    </pre>
+                  </details>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Przycisk rozwiń/zwiń */}
+          {errors.length > 5 && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="mt-3 text-sm text-red-700 hover:text-red-900 underline"
+            >
+              {expanded ? 'Zwiń' : `Pokaż wszystkie (${errors.length})`}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

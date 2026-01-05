@@ -1,6 +1,7 @@
 import { PrismaClient, SchucoDelivery } from '@prisma/client';
 import { SchucoScraper } from './schucoScraper.js';
 import { SchucoParser, SchucoDeliveryRow } from './schucoParser.js';
+import { SchucoOrderMatcher, extractOrderNumbers, isWarehouseItem } from './schucoOrderMatcher.js';
 import { logger } from '../../utils/logger.js';
 
 // Fields to compare for change detection (excluding metadata fields)
@@ -33,10 +34,12 @@ interface FetchResult {
 export class SchucoService {
   private prisma: PrismaClient;
   private parser: SchucoParser;
+  private orderMatcher: SchucoOrderMatcher;
 
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
     this.parser = new SchucoParser();
+    this.orderMatcher = new SchucoOrderMatcher(prisma);
   }
 
   /**
@@ -187,9 +190,13 @@ export class SchucoService {
       const existing = existingMap.get(delivery.orderNumber);
       const orderDateParsed = this.parser.parseDate(delivery.orderDate);
 
+      // Extract order numbers for linking
+      const extractedNums = extractOrderNumbers(delivery.orderNumber);
+      const isWarehouse = isWarehouseItem(delivery.orderNumber);
+
       if (!existing) {
         // New record - use upsert to handle race conditions with duplicate orderNumbers in CSV
-        await this.prisma.schucoDelivery.upsert({
+        const created = await this.prisma.schucoDelivery.upsert({
           where: { orderNumber: delivery.orderNumber },
           create: {
             orderDate: delivery.orderDate,
@@ -209,9 +216,11 @@ export class SchucoService {
             changedAt: now,
             changedFields: null,
             previousValues: null,
+            isWarehouseItem: isWarehouse,
+            extractedOrderNums: extractedNums.length > 0 ? JSON.stringify(extractedNums) : null,
           },
           update: {
-            // If record already exists (duplicate in CSV), update it
+            // If record already exists (duplicate in CSV), keep it as 'new' (don't change to 'updated')
             orderDate: delivery.orderDate,
             orderDateParsed: orderDateParsed,
             projectNumber: delivery.projectNumber,
@@ -224,18 +233,28 @@ export class SchucoService {
             orderType: delivery.orderType || null,
             totalAmount: delivery.totalAmount || null,
             rawData: JSON.stringify(delivery.rawData),
-            changeType: 'updated',
-            changedAt: now,
+            // Keep 'new' status - don't override to 'updated' for duplicates in same CSV
             updatedAt: now,
+            isWarehouseItem: isWarehouse,
+            extractedOrderNums: extractedNums.length > 0 ? JSON.stringify(extractedNums) : null,
           },
         });
+
+        // Create order links for new deliveries
+        if (!isWarehouse && extractedNums.length > 0) {
+          await this.createOrderLinks(created.id, extractedNums);
+        }
+
         stats.newRecords++;
       } else {
         // Check for changes
         const changes = this.compareDeliveries(existing, delivery);
 
         if (changes) {
-          // Updated record
+          // Updated record - but preserve 'new' status if record is still marked as new
+          // (new records should stay 'new' until 72h passes, even if they have changes)
+          const shouldKeepNewStatus = existing.changeType === 'new';
+
           await this.prisma.schucoDelivery.update({
             where: { id: existing.id },
             data: {
@@ -251,22 +270,44 @@ export class SchucoService {
               orderType: delivery.orderType || null,
               totalAmount: delivery.totalAmount || null,
               rawData: JSON.stringify(delivery.rawData),
-              changeType: 'updated',
-              changedAt: now,
-              changedFields: JSON.stringify(changes.changedFields),
-              previousValues: JSON.stringify(changes.previousValues),
+              // Preserve 'new' status - only mark as 'updated' if it wasn't 'new' before
+              changeType: shouldKeepNewStatus ? 'new' : 'updated',
+              changedAt: shouldKeepNewStatus ? existing.changedAt : now,
+              changedFields: shouldKeepNewStatus ? existing.changedFields : JSON.stringify(changes.changedFields),
+              previousValues: shouldKeepNewStatus ? existing.previousValues : JSON.stringify(changes.previousValues),
               updatedAt: now,
+              isWarehouseItem: isWarehouse,
+              extractedOrderNums: extractedNums.length > 0 ? JSON.stringify(extractedNums) : null,
             },
           });
-          stats.updatedRecords++;
+
+          // Update order links if needed
+          if (!isWarehouse && extractedNums.length > 0) {
+            await this.createOrderLinks(existing.id, extractedNums);
+          }
+
+          // Count based on actual status change
+          if (shouldKeepNewStatus) {
+            stats.newRecords++; // Still counts as new
+          } else {
+            stats.updatedRecords++;
+          }
         } else {
-          // No changes - just update fetchedAt
+          // No changes - just update fetchedAt and ensure links exist
           await this.prisma.schucoDelivery.update({
             where: { id: existing.id },
             data: {
               fetchedAt: now,
+              isWarehouseItem: isWarehouse,
+              extractedOrderNums: extractedNums.length > 0 ? JSON.stringify(extractedNums) : null,
             },
           });
+
+          // Ensure order links exist
+          if (!isWarehouse && extractedNums.length > 0) {
+            await this.createOrderLinks(existing.id, extractedNums);
+          }
+
           stats.unchangedRecords++;
         }
       }
@@ -277,10 +318,84 @@ export class SchucoService {
   }
 
   /**
+   * Create order links for a Schuco delivery
+   * Also updates order value from Schuco delivery if available
+   */
+  private async createOrderLinks(schucoDeliveryId: number, orderNumbers: string[]): Promise<number> {
+    if (orderNumbers.length === 0) {
+      return 0;
+    }
+
+    // Get Schuco delivery with totalAmount
+    const schucoDelivery = await this.prisma.schucoDelivery.findUnique({
+      where: { id: schucoDeliveryId },
+      select: { totalAmount: true },
+    });
+
+    // Parse EUR amount from Schuco if available
+    let eurValue: number | null = null;
+    if (schucoDelivery?.totalAmount) {
+      eurValue = this.parser.parseEurAmount(schucoDelivery.totalAmount);
+    }
+
+    // Find matching orders
+    const orders = await this.prisma.order.findMany({
+      where: {
+        orderNumber: {
+          in: orderNumbers,
+        },
+      },
+      select: { id: true, orderNumber: true, valueEur: true },
+    });
+
+    if (orders.length === 0) {
+      return 0;
+    }
+
+    let linksCreated = 0;
+    for (const order of orders) {
+      try {
+        // Create/update order link
+        await this.prisma.orderSchucoLink.upsert({
+          where: {
+            orderId_schucoDeliveryId: {
+              orderId: order.id,
+              schucoDeliveryId: schucoDeliveryId,
+            },
+          },
+          create: {
+            orderId: order.id,
+            schucoDeliveryId: schucoDeliveryId,
+            linkedBy: 'auto',
+          },
+          update: {
+            // Link already exists, no update needed
+          },
+        });
+
+        // Update order value if EUR value is available and order doesn't have a value yet
+        if (eurValue !== null && order.valueEur === null) {
+          await this.prisma.order.update({
+            where: { id: order.id },
+            data: { valueEur: eurValue },
+          });
+          logger.info(`[SchucoService] Updated order ${order.orderNumber} with EUR value: ${eurValue}`);
+        }
+
+        linksCreated++;
+      } catch (error) {
+        logger.error(`[SchucoService] Error creating link for order ${order.orderNumber}:`, error);
+      }
+    }
+
+    return linksCreated;
+  }
+
+  /**
    * Get deliveries from database with pagination
    */
   async getDeliveries(page = 1, pageSize = 100): Promise<{
-    data: any[];
+    data: Array<Record<string, unknown>>;
     total: number;
     page: number;
     pageSize: number;
@@ -441,5 +556,88 @@ export class SchucoService {
         unchangedRecords: changeStats?.unchangedRecords ?? null,
       },
     });
+  }
+
+  /**
+   * Get the order matcher instance
+   */
+  getOrderMatcher(): SchucoOrderMatcher {
+    return this.orderMatcher;
+  }
+
+  /**
+   * Synchronize all existing Schuco deliveries with orders
+   * Creates links for deliveries that don't have them yet
+   */
+  async syncAllOrderLinks(): Promise<{
+    total: number;
+    processed: number;
+    linksCreated: number;
+    warehouseItems: number;
+  }> {
+    logger.info('[SchucoService] Synchronizing all order links...');
+
+    const deliveries = await this.prisma.schucoDelivery.findMany({
+      select: { id: true, orderNumber: true },
+    });
+
+    let processed = 0;
+    let linksCreated = 0;
+    let warehouseItems = 0;
+
+    for (const delivery of deliveries) {
+      const extractedNums = extractOrderNumbers(delivery.orderNumber);
+      const isWarehouse = extractedNums.length === 0;
+
+      // Update delivery flags
+      await this.prisma.schucoDelivery.update({
+        where: { id: delivery.id },
+        data: {
+          isWarehouseItem: isWarehouse,
+          extractedOrderNums: extractedNums.length > 0 ? JSON.stringify(extractedNums) : null,
+        },
+      });
+
+      if (isWarehouse) {
+        warehouseItems++;
+      } else {
+        const links = await this.createOrderLinks(delivery.id, extractedNums);
+        linksCreated += links;
+      }
+
+      processed++;
+    }
+
+    logger.info(
+      `[SchucoService] Sync completed. Processed: ${processed}, Links: ${linksCreated}, Warehouse: ${warehouseItems}`
+    );
+
+    return {
+      total: deliveries.length,
+      processed,
+      linksCreated,
+      warehouseItems,
+    };
+  }
+
+  /**
+   * Get deliveries for a specific order
+   */
+  async getDeliveriesForOrder(orderId: number) {
+    return this.orderMatcher.getSchucoDeliveriesForOrder(orderId);
+  }
+
+  /**
+   * Get aggregated Schuco status for an order
+   */
+  async getSchucoStatusForOrder(orderId: number) {
+    return this.orderMatcher.getSchucoStatusForOrder(orderId);
+  }
+
+  /**
+   * Get unlinked deliveries (for manual linking)
+   */
+  async getUnlinkedDeliveries(limit = 100) {
+    return this.orderMatcher.getUnlinkedDeliveries(limit);
   }
 }

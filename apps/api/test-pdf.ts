@@ -2,8 +2,8 @@
  * Test PDF generation with Polish characters
  */
 
-import { DeliveryProtocolService } from './src/services/DeliveryProtocolService.js';
-import type { DeliveryProtocolData } from './src/services/DeliveryProtocolService.js';
+import { DeliveryProtocolService } from './src/services/delivery-protocol-service.js';
+import type { DeliveryProtocolData } from './src/services/delivery-protocol-service.js';
 import fs from 'fs';
 import path from 'path';
 

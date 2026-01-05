@@ -6,9 +6,13 @@ import { OrderRepository } from '../repositories/OrderRepository.js';
 import { OrderService } from '../services/orderService.js';
 import { OrderHandler } from '../handlers/orderHandler.js';
 import { parseIntParam } from '../utils/errors.js';
+import { verifyAuth } from '../middleware/auth.js';
+import type { BulkUpdateStatusInput, ForProductionQuery, MonthlyProductionQuery } from '../validators/order.js';
 import {
   emitOrderUpdated,
 } from '../services/event-emitter.js';
+import { plnToGrosze, eurToCenty } from '../utils/money.js';
+
 
 export const orderRoutes: FastifyPluginAsync = async (fastify) => {
   // Initialize layered architecture
@@ -16,15 +20,63 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
   const service = new OrderService(repository);
   const handler = new OrderHandler(service);
 
-  // Routes delegated to handler
-  fastify.get('/', handler.getAll.bind(handler));
-  fastify.get('/:id', handler.getById.bind(handler));
-  fastify.get('/by-number/:orderNumber', handler.getByNumber.bind(handler));
-  fastify.post('/', handler.create.bind(handler));
-  fastify.put('/:id', handler.update.bind(handler));
-  fastify.delete('/:id', handler.delete.bind(handler));
-  fastify.post('/:id/archive', handler.archive.bind(handler));
-  fastify.post('/:id/unarchive', handler.unarchive.bind(handler));
+  // Routes delegated to handler - all require authentication
+  fastify.get<{ Querystring: { status?: string; archived?: string; colorId?: string; skip?: number; take?: number } }>('/', {
+    preHandler: verifyAuth,
+  }, handler.getAll.bind(handler));
+
+  fastify.get<{ Params: { id: string } }>('/:id', {
+    preHandler: verifyAuth,
+  }, handler.getById.bind(handler));
+
+  fastify.get<{ Params: { orderNumber: string } }>('/by-number/:orderNumber', {
+    preHandler: verifyAuth,
+  }, handler.getByNumber.bind(handler));
+
+  fastify.post<{ Body: { orderNumber: string; status?: string; valuePln?: number; valueEur?: number; deliveryDate?: string; customerId?: number } }>('/', {
+    preHandler: verifyAuth,
+  }, handler.create.bind(handler));
+
+  fastify.put<{ Params: { id: string }; Body: { status?: string; valuePln?: number; valueEur?: number; deliveryDate?: string; notes?: string } }>('/:id', {
+    preHandler: verifyAuth,
+  }, handler.update.bind(handler));
+
+  fastify.delete<{ Params: { id: string } }>('/:id', {
+    preHandler: verifyAuth,
+  }, handler.delete.bind(handler));
+
+  fastify.post<{ Params: { id: string } }>('/:id/archive', {
+    preHandler: verifyAuth,
+  }, handler.archive.bind(handler));
+
+  fastify.post<{ Params: { id: string } }>('/:id/unarchive', {
+    preHandler: verifyAuth,
+  }, handler.unarchive.bind(handler));
+
+  fastify.post<{ Body: BulkUpdateStatusInput }>('/bulk-update-status', {
+    preHandler: verifyAuth,
+  }, handler.bulkUpdateStatus.bind(handler));
+
+  fastify.get<{ Querystring: ForProductionQuery }>('/for-production', {
+    preHandler: verifyAuth,
+  }, handler.getForProduction.bind(handler));
+
+  // GET /api/orders/monthly-production - Get orders completed in a specific month
+  fastify.get<{ Querystring: MonthlyProductionQuery }>('/monthly-production', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get orders completed in a specific month/year for production reports',
+      tags: ['orders'],
+      querystring: {
+        type: 'object',
+        required: ['year', 'month'],
+        properties: {
+          year: { type: 'string', pattern: '^\\d{4}$', description: 'Year (YYYY format)' },
+          month: { type: 'string', pattern: '^(0?[1-9]|1[0-2])$', description: 'Month (1-12)' },
+        },
+      },
+    },
+  }, handler.getMonthlyProduction.bind(handler));
 
   // PATCH /api/orders/:id - partial update (inline - not covered by handler)
   fastify.patch<{
@@ -35,17 +87,21 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
       deadline?: string | null;
       status?: string | null;
     };
-  }>('/:id', async (request, reply) => {
+  }>('/:id', {
+    preHandler: verifyAuth,
+  }, async (request) => {
     const { id } = request.params;
     const { valuePln, valueEur, deadline, status } = request.body;
 
     const updateData: Prisma.OrderUpdateInput = {};
 
     if (valuePln !== undefined) {
-      updateData.valuePln = valuePln !== null ? parseFloat(valuePln) : null;
+      // Convert PLN string (e.g., "123.45") to grosze (12345)
+      updateData.valuePln = valuePln !== null ? plnToGrosze(Number(valuePln)) : null;
     }
     if (valueEur !== undefined) {
-      updateData.valueEur = valueEur !== null ? parseFloat(valueEur) : null;
+      // Convert EUR string (e.g., "123.45") to cents (12345)
+      updateData.valueEur = valueEur !== null ? eurToCenty(Number(valueEur)) : null;
     }
     if (deadline !== undefined) {
       updateData.deadline = deadline ? new Date(deadline) : null;
@@ -65,7 +121,9 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // GET /api/orders/:id/has-pdf - check if PDF exists for order
-  fastify.get<{ Params: { id: string } }>('/:id/has-pdf', async (request, reply) => {
+  fastify.get<{ Params: { id: string } }>('/:id/has-pdf', {
+    preHandler: verifyAuth,
+  }, async (request, reply) => {
     const { id } = request.params;
 
     const order = await prisma.order.findUnique({
@@ -81,7 +139,7 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
         fileType: 'ceny_pdf',
         status: 'completed',
         metadata: {
-          contains: JSON.stringify({ orderId: order.id }),
+          contains: `"orderId":${order.id}`,
         },
       },
       orderBy: { processedAt: 'desc' },
@@ -94,7 +152,9 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // GET /api/orders/:id/pdf - download PDF file for order (inline - specific logic)
-  fastify.get<{ Params: { id: string } }>('/:id/pdf', async (request, reply) => {
+  fastify.get<{ Params: { id: string } }>('/:id/pdf', {
+    preHandler: verifyAuth,
+  }, async (request, reply) => {
     const { id } = request.params;
 
     const order = await prisma.order.findUnique({
@@ -110,7 +170,7 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
         fileType: 'ceny_pdf',
         status: 'completed',
         metadata: {
-          contains: JSON.stringify({ orderId: order.id }),
+          contains: `"orderId":${order.id}`,
         },
       },
       orderBy: { processedAt: 'desc' },
@@ -134,6 +194,9 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/orders/table/:colorId - orders table for given color (inline - specific logic)
   fastify.get<{ Params: { colorId: string } }>(
     '/table/:colorId',
+    {
+      preHandler: verifyAuth,
+    },
     async (request) => {
       const { colorId } = request.params;
 
@@ -235,7 +298,9 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
   );
 
   // GET /api/orders/requirements/totals - get totals for each profile (inline - specific logic)
-  fastify.get('/requirements/totals', async () => {
+  fastify.get('/requirements/totals', {
+    preHandler: verifyAuth,
+  }, async () => {
     const requirements = await prisma.orderRequirement.findMany({
       select: {
         profileId: true,

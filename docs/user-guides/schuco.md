@@ -105,11 +105,13 @@ System automatycznie pobiera zamówienia z ostatnich **6 miesięcy** licząc wst
 
 ### Dane logowania (tylko dla administratorów)
 
-Dane są przechowywane w pliku `.env`:
+Dane logowania są przechowywane w pliku `.env` (nie commituj tego pliku do repozytorium!):
 ```
-SCHUCO_EMAIL=krzysztof@markbud.pl
-SCHUCO_PASSWORD=Markbud2020
+SCHUCO_EMAIL=your-email@example.com
+SCHUCO_PASSWORD=your-password-here
 ```
+
+**UWAGA:** Te zmienne środowiskowe są wymagane. Jeśli nie są ustawione, system zwróci błąd.
 
 ### Miejsce przechowywania
 

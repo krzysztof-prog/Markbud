@@ -334,4 +334,180 @@ export class OrderRepository {
       data: { archivedAt: null },
     });
   }
+
+  async bulkUpdateStatus(
+    orderIds: number[],
+    status: string,
+    productionDate?: string
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const updateData: Prisma.OrderUpdateInput = {
+        status,
+      };
+
+      // If status is 'completed' and productionDate is provided, set it
+      if (status === 'completed' && productionDate) {
+        updateData.productionDate = new Date(productionDate);
+      }
+
+      // Update all orders
+      await tx.order.updateMany({
+        where: {
+          id: { in: orderIds },
+        },
+        data: updateData,
+      });
+
+      // Fetch and return updated orders
+      return tx.order.findMany({
+        where: {
+          id: { in: orderIds },
+        },
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
+          productionDate: true,
+          updatedAt: true,
+        },
+      });
+    });
+  }
+
+  async findForProduction(where: Prisma.OrderWhereInput) {
+    return this.prisma.order.findMany({
+      where,
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        client: true,
+        project: true,
+        deadline: true,
+        valuePln: true,
+        valueEur: true,
+        totalWindows: true,
+        createdAt: true,
+      },
+      orderBy: { deadline: 'asc' },
+    });
+  }
+
+  async findPrivateOrders(where: Prisma.OrderWhereInput) {
+    return this.prisma.order.findMany({
+      where: {
+        ...where,
+        // Zlecenia prywatne = klient różny od AKROBUD (obie wersje encoding)
+        client: {
+          notIn: [
+            'AKROBUD SOKOŁOWSKI SPÓŁKA KOMANDYTOWA',
+            'AKROBUD SOKOŁOWSKI SPÓŁKA KOMANDYTOWA', // UTF-8 version
+          ],
+        },
+        // Dodatkowo wykluczamy null/undefined
+        NOT: {
+          client: {
+            contains: 'AKROBUD',
+          },
+        },
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        client: true,
+        project: true,
+        deadline: true,
+        valuePln: true,
+        valueEur: true,
+        totalWindows: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findUpcomingDeliveries(params: {
+    deliveryDate: Prisma.DateTimeFilter;
+    status: Prisma.StringFilter;
+    limit: number;
+  }) {
+    return this.prisma.delivery.findMany({
+      where: {
+        deliveryDate: params.deliveryDate,
+        status: params.status,
+      },
+      select: {
+        id: true,
+        deliveryDate: true,
+        deliveryNumber: true,
+        status: true,
+        notes: true,
+        deliveryOrders: {
+          select: {
+            id: true,
+            position: true,
+            order: {
+              select: {
+                id: true,
+                orderNumber: true,
+                status: true,
+                client: true,
+                project: true,
+                totalWindows: true,
+              },
+            },
+          },
+          orderBy: { position: 'asc' },
+        },
+      },
+      orderBy: { deliveryDate: 'asc' },
+      take: params.limit,
+    });
+  }
+
+  /**
+   * Find orders completed in a specific month/year
+   * Optimized for monthly production reports
+   */
+  async findMonthlyProduction(year: number, month: number) {
+    // Calculate month date range (month is 1-indexed: 1 = January)
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+    return this.prisma.order.findMany({
+      where: {
+        completedAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+        archivedAt: null, // Exclude archived orders
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        client: true,
+        project: true,
+        system: true,
+        totalWindows: true,
+        totalSashes: true,
+        totalGlasses: true,
+        valuePln: true,
+        valueEur: true,
+        invoiceNumber: true,
+        completedAt: true,
+        windows: {
+          select: {
+            id: true,
+            reference: true,
+            profileType: true,
+          },
+        },
+        _count: {
+          select: { windows: true },
+        },
+      },
+      orderBy: { completedAt: 'desc' },
+    });
+  }
 }

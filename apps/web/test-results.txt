@@ -1,0 +1,752 @@
+
+> @akrobud/web@1.0.0 test:e2e C:\Users\Krzysztof\Desktop\AKROBUD\apps\web
+> playwright test
+
+
+Running 73 tests using 4 workers
+
+[1A[2K[1/73] [chromium] › e2e\deliveries.spec.ts:74:7 › Deliveries Management › should filter deliveries by date
+[1A[2K[2/73] [chromium] › e2e\deliveries.spec.ts:33:7 › Deliveries Management › should navigate to delivery details
+[1A[2K[3/73] [chromium] › e2e\deliveries.spec.ts:23:7 › Deliveries Management › should display deliveries list
+[1A[2K[4/73] [chromium] › e2e\deliveries.spec.ts:51:7 › Deliveries Management › should open create delivery dialog
+[1A[2K[5/73] [chromium] › e2e\deliveries.spec.ts:93:7 › Deliveries Management › should search deliveries
+[1A[2K[6/73] [chromium] › e2e\deliveries.spec.ts:111:7 › Delivery Protocol Generation › should generate delivery protocol PDF
+[1A[2K[7/73] [chromium] › e2e\imports.spec.ts:20:7 › CSV Import Management › should display imports page
+[1A[2K[8/73] [chromium] › e2e\imports.spec.ts:30:7 › CSV Import Management › should show file upload area
+[1A[2K[9/73] [chromium] › e2e\imports.spec.ts:41:7 › CSV Import Management › should display import history
+[1A[2K  1) [chromium] › e2e\deliveries.spec.ts:23:7 › Deliveries Management › should display deliveries list 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('h1, h2').first()
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('h1, h2').first()[22m
+
+
+      24 |     // Check for page title or header
+      25 |     const header = page.locator('h1, h2').first();
+    > 26 |     await expect(header).toBeVisible();
+         |                          ^
+      27 |
+      28 |     // Verify table or list is visible
+      29 |     const deliveriesList = page.locator('table, [role="grid"], [data-testid="deliveries-list"]');
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\deliveries.spec.ts:26:26
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\deliveries-Deliveries-Mana-315bf-uld-display-deliveries-list-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\deliveries-Deliveries-Mana-315bf-uld-display-deliveries-list-chromium\error-context.md
+
+
+[1A[2K[10/73] [chromium] › e2e\imports.spec.ts:59:7 › CSV Import Management › should show import details
+[1A[2K[11/73] [chromium] › e2e\imports.spec.ts:89:7 › CSV Import Management › should validate file type restrictions
+[1A[2K  2) [chromium] › e2e\imports.spec.ts:30:7 › CSV Import Management › should show file upload area ──
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeTruthy[2m()[22m
+
+    Received: [31mfalse[39m
+
+      36 |     const hasDropzone = await dropzone.first().isVisible({ timeout: 3000 }).catch(() => false);
+      37 |
+    > 38 |     expect(hasFileInput || hasDropzone).toBeTruthy();
+         |                                         ^
+      39 |   });
+      40 |
+      41 |   test('should display import history', async ({ page }) => {
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\imports.spec.ts:38:41
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\imports-CSV-Import-Management-should-show-file-upload-area-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\imports-CSV-Import-Management-should-show-file-upload-area-chromium\error-context.md
+
+
+[1A[2K[12/73] [chromium] › e2e\imports.spec.ts:122:7 › Import Status and Validation › should display validation errors if any
+[1A[2K[13/73] [chromium] › e2e\navigation.spec.ts:21:7 › Sidebar Navigation › should display sidebar with navigation links
+[1A[2K[14/73] [chromium] › e2e\navigation.spec.ts:32:7 › Sidebar Navigation › should navigate to deliveries page from sidebar
+[1A[2K[15/73] [chromium] › e2e\navigation.spec.ts:48:7 › Sidebar Navigation › should navigate to warehouse page from sidebar
+[1A[2K[16/73] [chromium] › e2e\imports.spec.ts:107:7 › Import Status and Validation › should show import status indicators
+[1A[2K[17/73] [chromium] › e2e\navigation.spec.ts:64:7 › Sidebar Navigation › should navigate to settings page from sidebar
+[1A[2K[18/73] [chromium] › e2e\navigation.spec.ts:80:7 › Sidebar Navigation › should highlight active navigation item
+[1A[2K[19/73] [chromium] › e2e\navigation.spec.ts:103:7 › Mobile Navigation › should show mobile menu button
+[1A[2K[20/73] [chromium] › e2e\navigation.spec.ts:120:7 › Mobile Navigation › should toggle mobile menu on button click
+[1A[2K[21/73] [chromium] › e2e\navigation.spec.ts:143:7 › Mobile Navigation › should navigate in mobile menu
+[1A[2K[22/73] [chromium] › e2e\navigation.spec.ts:170:7 › Page Transitions and Deep Linking › should support direct URL navigation
+[1A[2K[23/73] [chromium] › e2e\navigation.spec.ts:180:7 › Page Transitions and Deep Linking › should support nested routes
+[1A[2K[24/73] [chromium] › e2e\navigation.spec.ts:190:7 › Page Transitions and Deep Linking › should handle browser back button
+[1A[2K[25/73] [chromium] › e2e\navigation.spec.ts:213:7 › Page Transitions and Deep Linking › should handle browser forward button
+[1A[2K[26/73] [chromium] › e2e\navigation.spec.ts:239:7 › Breadcrumbs Navigation › should display breadcrumbs on detail pages
+[1A[2K[27/73] [chromium] › e2e\navigation.spec.ts:260:7 › Breadcrumbs Navigation › should navigate using breadcrumbs
+[1A[2K[28/73] [chromium] › e2e\navigation.spec.ts:280:7 › Navigation State Persistence › should preserve scroll position on back navigation
+[1A[2K  3) [chromium] › e2e\navigation.spec.ts:180:7 › Page Transitions and Deep Linking › should support nested routes 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('main, h1')
+    Expected: visible
+    Error: strict mode violation: locator('main, h1') resolved to 2 elements:
+        1) <main class="flex-1 overflow-auto bg-slate-50 transition-all duration-300">…</main> aka getByRole('main')
+        2) <h1 class="text-xl font-semibold text-slate-900 truncate">AKROBUD</h1> aka getByRole('heading', { name: 'AKROBUD', exact: true })
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 10000ms[22m
+    [2m  - waiting for locator('main, h1')[22m
+
+
+      185 |     // Should load without 404
+      186 |     const mainContent = page.locator('main, h1');
+    > 187 |     await expect(mainContent).toBeVisible({ timeout: 10000 });
+          |                               ^
+      188 |   });
+      189 |
+      190 |   test('should handle browser back button', async ({ page }) => {
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\navigation.spec.ts:187:31
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\navigation-Page-Transition-64c0a-hould-support-nested-routes-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\navigation-Page-Transition-64c0a-hould-support-nested-routes-chromium\error-context.md
+
+
+[1A[2K[29/73] [chromium] › e2e\no-console-errors.spec.ts:12:7 › Application Console Errors › should load home page without console errors
+[1A[2K[30/73] [chromium] › e2e\no-console-errors.spec.ts:61:7 › Application Console Errors › should load settings page without console errors
+[1A[2K[31/73] [chromium] › e2e\no-console-errors.spec.ts:93:7 › Application Console Errors › should load deliveries page without console errors
+[1A[2K[32/73] [chromium] › e2e\navigation.spec.ts:309:7 › External Links › should open external links in new tab
+[1A[2K  4) [chromium] › e2e\no-console-errors.spec.ts:12:7 › Application Console Errors › should load home page without console errors 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/
+    Call log:
+    [2m  - navigating to "http://localhost:3000/", waiting until "load"[22m
+
+
+      37 |
+      38 |     // Navigate to home page
+    > 39 |     await page.goto('/');
+         |                ^
+      40 |
+      41 |     // Wait for the sidebar to load (indicates app is ready)
+      42 |     await page.waitForSelector('[data-testid="sidebar"], nav, aside', {
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\no-console-errors.spec.ts:39:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\no-console-errors-Applicat-ad0aa-page-without-console-errors-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  5) [chromium] › e2e\no-console-errors.spec.ts:61:7 › Application Console Errors › should load settings page without console errors 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/ustawienia
+    Call log:
+    [2m  - navigating to "http://localhost:3000/ustawienia", waiting until "load"[22m
+
+
+      76 |
+      77 |     // Navigate to settings page
+    > 78 |     await page.goto('/ustawienia');
+         |                ^
+      79 |
+      80 |     // Wait for page content to load
+      81 |     await page.waitForSelector('main, [role="main"], h1', {
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\no-console-errors.spec.ts:78:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\no-console-errors-Applicat-6958a-page-without-console-errors-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  6) [chromium] › e2e\no-console-errors.spec.ts:93:7 › Application Console Errors › should load deliveries page without console errors 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/dostawy
+    Call log:
+    [2m  - navigating to "http://localhost:3000/dostawy", waiting until "load"[22m
+
+
+      108 |
+      109 |     // Navigate to deliveries page
+    > 110 |     await page.goto('/dostawy');
+          |                ^
+      111 |
+      112 |     // Wait for page content to load
+      113 |     await page.waitForSelector('main, [role="main"], h1', {
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\no-console-errors.spec.ts:110:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\no-console-errors-Applicat-9b259-page-without-console-errors-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  7) [chromium] › e2e\navigation.spec.ts:309:7 › External Links › should open external links in new tab 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/
+    Call log:
+    [2m  - navigating to "http://localhost:3000/", waiting until "load"[22m
+
+
+      308 | test.describe('External Links', () => {
+      309 |   test('should open external links in new tab', async ({ page, context }) => {
+    > 310 |     await page.goto('/');
+          |                ^
+      311 |     await page.waitForLoadState('networkidle');
+      312 |
+      313 |     // Look for external links (if any)
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\navigation.spec.ts:310:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\navigation-External-Links--f9f6d-n-external-links-in-new-tab-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K[33/73] [chromium] › e2e\responsive.spec.ts:18:7 › Mobile Viewport (375px) › should display mobile-optimized layout
+[1A[2K[34/73] [chromium] › e2e\responsive.spec.ts:31:7 › Mobile Viewport (375px) › should stack elements vertically on mobile
+[1A[2K[35/73] [chromium] › e2e\responsive.spec.ts:48:7 › Mobile Viewport (375px) › should hide sidebar on mobile
+[1A[2K[36/73] [chromium] › e2e\responsive.spec.ts:63:7 › Mobile Viewport (375px) › should make tables scrollable horizontally on mobile
+[1A[2K  8) [chromium] › e2e\responsive.spec.ts:18:7 › Mobile Viewport (375px) › should display mobile-optimized layout 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/
+    Call log:
+    [2m  - navigating to "http://localhost:3000/", waiting until "load"[22m
+
+
+      17 |
+      18 |   test('should display mobile-optimized layout', async ({ page }) => {
+    > 19 |     await page.goto('/');
+         |                ^
+      20 |     await page.waitForLoadState('networkidle');
+      21 |
+      22 |     // Main content should be visible
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:19:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Mobile-Viewport-0f6ba-lay-mobile-optimized-layout-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  9) [chromium] › e2e\responsive.spec.ts:48:7 › Mobile Viewport (375px) › should hide sidebar on mobile 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/
+    Call log:
+    [2m  - navigating to "http://localhost:3000/", waiting until "load"[22m
+
+
+      47 |
+      48 |   test('should hide sidebar on mobile', async ({ page }) => {
+    > 49 |     await page.goto('/');
+         |                ^
+      50 |     await page.waitForLoadState('networkidle');
+      51 |
+      52 |     // Sidebar should be hidden or collapsed on mobile
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:49:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Mobile-Viewport-e1517-ould-hide-sidebar-on-mobile-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  10) [chromium] › e2e\responsive.spec.ts:31:7 › Mobile Viewport (375px) › should stack elements vertically on mobile 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/dostawy
+    Call log:
+    [2m  - navigating to "http://localhost:3000/dostawy", waiting until "load"[22m
+
+
+      30 |
+      31 |   test('should stack elements vertically on mobile', async ({ page }) => {
+    > 32 |     await page.goto('/dostawy');
+         |                ^
+      33 |     await page.waitForLoadState('networkidle');
+      34 |
+      35 |     // Cards/items should stack (grid-cols-1)
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:32:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Mobile-Viewport-8410f-ements-vertically-on-mobile-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  11) [chromium] › e2e\responsive.spec.ts:63:7 › Mobile Viewport (375px) › should make tables scrollable horizontally on mobile 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/dostawy
+    Call log:
+    [2m  - navigating to "http://localhost:3000/dostawy", waiting until "load"[22m
+
+
+      62 |
+      63 |   test('should make tables scrollable horizontally on mobile', async ({ page }) => {
+    > 64 |     await page.goto('/dostawy');
+         |                ^
+      65 |     await page.waitForLoadState('networkidle');
+      66 |
+      67 |     // Tables should be in scrollable container
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:64:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Mobile-Viewport-80e10-able-horizontally-on-mobile-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K[37/73] [chromium] › e2e\responsive.spec.ts:86:7 › Mobile Viewport (375px) › should adjust font sizes for mobile
+[1A[2K[38/73] [chromium] › e2e\responsive.spec.ts:104:7 › Mobile Viewport (375px) › should show mobile-friendly buttons
+[1A[2K[39/73] [chromium] › e2e\responsive.spec.ts:127:7 › Tablet Viewport (768px) › should display tablet-optimized layout
+[1A[2K[40/73] [chromium] › e2e\responsive.spec.ts:138:7 › Tablet Viewport (768px) › should show two-column layout on tablet
+[1A[2K  12) [chromium] › e2e\responsive.spec.ts:86:7 › Mobile Viewport (375px) › should adjust font sizes for mobile 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/
+    Call log:
+    [2m  - navigating to "http://localhost:3000/", waiting until "load"[22m
+
+
+      85 |
+      86 |   test('should adjust font sizes for mobile', async ({ page }) => {
+    > 87 |     await page.goto('/');
+         |                ^
+      88 |     await page.waitForLoadState('networkidle');
+      89 |
+      90 |     const heading = page.locator('h1, h2').first();
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:87:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Mobile-Viewport-237e9-djust-font-sizes-for-mobile-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  13) [chromium] › e2e\responsive.spec.ts:104:7 › Mobile Viewport (375px) › should show mobile-friendly buttons 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/dostawy
+    Call log:
+    [2m  - navigating to "http://localhost:3000/dostawy", waiting until "load"[22m
+
+
+      103 |
+      104 |   test('should show mobile-friendly buttons', async ({ page }) => {
+    > 105 |     await page.goto('/dostawy');
+          |                ^
+      106 |     await page.waitForLoadState('networkidle');
+      107 |
+      108 |     const button = page.locator('button').first();
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:105:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Mobile-Viewport-9528c-how-mobile-friendly-buttons-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  14) [chromium] › e2e\responsive.spec.ts:127:7 › Tablet Viewport (768px) › should display tablet-optimized layout 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/
+    Call log:
+    [2m  - navigating to "http://localhost:3000/", waiting until "load"[22m
+
+
+      126 |
+      127 |   test('should display tablet-optimized layout', async ({ page }) => {
+    > 128 |     await page.goto('/');
+          |                ^
+      129 |     await page.waitForLoadState('networkidle');
+      130 |
+      131 |     const main = page.locator('main, [role="main"]');
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:128:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Tablet-Viewport-a2864-lay-tablet-optimized-layout-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  15) [chromium] › e2e\responsive.spec.ts:138:7 › Tablet Viewport (768px) › should show two-column layout on tablet 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/dostawy
+    Call log:
+    [2m  - navigating to "http://localhost:3000/dostawy", waiting until "load"[22m
+
+
+      137 |
+      138 |   test('should show two-column layout on tablet', async ({ page }) => {
+    > 139 |     await page.goto('/dostawy');
+          |                ^
+      140 |     await page.waitForLoadState('networkidle');
+      141 |
+      142 |     // Grid should use md:grid-cols-2 on tablet
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:139:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Tablet-Viewport-54251-two-column-layout-on-tablet-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K[41/73] [chromium] › e2e\responsive.spec.ts:152:7 › Tablet Viewport (768px) › should show sidebar on tablet
+[1A[2K[42/73] [chromium] › e2e\responsive.spec.ts:169:7 › Tablet Viewport (768px) › should display full table on tablet
+[1A[2K[43/73] [chromium] › e2e\responsive.spec.ts:190:7 › Desktop Viewport (1920px) › should display full desktop layout
+[1A[2K[44/73] [chromium] › e2e\responsive.spec.ts:201:7 › Desktop Viewport (1920px) › should show multi-column layout on desktop
+[1A[2K  16) [chromium] › e2e\responsive.spec.ts:152:7 › Tablet Viewport (768px) › should show sidebar on tablet 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/
+    Call log:
+    [2m  - navigating to "http://localhost:3000/", waiting until "load"[22m
+
+
+      151 |
+      152 |   test('should show sidebar on tablet', async ({ page }) => {
+    > 153 |     await page.goto('/');
+          |                ^
+      154 |     await page.waitForLoadState('networkidle');
+      155 |
+      156 |     // Sidebar might be visible or collapsible on tablet
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:153:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Tablet-Viewport-62a4d-ould-show-sidebar-on-tablet-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  17) [chromium] › e2e\responsive.spec.ts:169:7 › Tablet Viewport (768px) › should display full table on tablet 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/dostawy
+    Call log:
+    [2m  - navigating to "http://localhost:3000/dostawy", waiting until "load"[22m
+
+
+      168 |
+      169 |   test('should display full table on tablet', async ({ page }) => {
+    > 170 |     await page.goto('/dostawy');
+          |                ^
+      171 |     await page.waitForLoadState('networkidle');
+      172 |
+      173 |     const table = page.locator('table').first();
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:170:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Tablet-Viewport-f2fa8-isplay-full-table-on-tablet-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  18) [chromium] › e2e\responsive.spec.ts:190:7 › Desktop Viewport (1920px) › should display full desktop layout 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/
+    Call log:
+    [2m  - navigating to "http://localhost:3000/", waiting until "load"[22m
+
+
+      189 |
+      190 |   test('should display full desktop layout', async ({ page }) => {
+    > 191 |     await page.goto('/');
+          |                ^
+      192 |     await page.waitForLoadState('networkidle');
+      193 |
+      194 |     const main = page.locator('main, [role="main"]');
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:191:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Desktop-Viewpor-c9624-display-full-desktop-layout-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  19) [chromium] › e2e\responsive.spec.ts:201:7 › Desktop Viewport (1920px) › should show multi-column layout on desktop 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/dostawy
+    Call log:
+    [2m  - navigating to "http://localhost:3000/dostawy", waiting until "load"[22m
+
+
+      200 |
+      201 |   test('should show multi-column layout on desktop', async ({ page }) => {
+    > 202 |     await page.goto('/dostawy');
+          |                ^
+      203 |     await page.waitForLoadState('networkidle');
+      204 |
+      205 |     // Desktop should use lg:grid-cols-3 or more
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:202:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Desktop-Viewpor-68af7-ti-column-layout-on-desktop-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K[45/73] [chromium] › e2e\responsive.spec.ts:214:7 › Desktop Viewport (1920px) › should show persistent sidebar on desktop
+[1A[2K[46/73] [chromium] › e2e\responsive.spec.ts:240:7 › Desktop Viewport (1920px) › should show hover effects on desktop
+[1A[2K[47/73] [chromium] › e2e\responsive.spec.ts:223:7 › Desktop Viewport (1920px) › should display all table columns on desktop
+[1A[2K[48/73] [chromium] › e2e\responsive.spec.ts:260:7 › Responsive Images and Media › should load appropriate image sizes
+[1A[2K  20) [chromium] › e2e\responsive.spec.ts:214:7 › Desktop Viewport (1920px) › should show persistent sidebar on desktop 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/
+    Call log:
+    [2m  - navigating to "http://localhost:3000/", waiting until "load"[22m
+
+
+      213 |
+      214 |   test('should show persistent sidebar on desktop', async ({ page }) => {
+    > 215 |     await page.goto('/');
+          |                ^
+      216 |     await page.waitForLoadState('networkidle');
+      217 |
+      218 |     // Sidebar should always be visible on desktop
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:215:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Desktop-Viewpor-784a6-rsistent-sidebar-on-desktop-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  21) [chromium] › e2e\responsive.spec.ts:240:7 › Desktop Viewport (1920px) › should show hover effects on desktop 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/dostawy
+    Call log:
+    [2m  - navigating to "http://localhost:3000/dostawy", waiting until "load"[22m
+
+
+      239 |
+      240 |   test('should show hover effects on desktop', async ({ page }) => {
+    > 241 |     await page.goto('/dostawy');
+          |                ^
+      242 |     await page.waitForLoadState('networkidle');
+      243 |
+      244 |     const button = page.locator('button').first();
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:241:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Desktop-Viewpor-dbc93-ow-hover-effects-on-desktop-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K  22) [chromium] › e2e\responsive.spec.ts:223:7 › Desktop Viewport (1920px) › should display all table columns on desktop 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/dostawy
+    Call log:
+    [2m  - navigating to "http://localhost:3000/dostawy", waiting until "load"[22m
+
+
+      222 |
+      223 |   test('should display all table columns on desktop', async ({ page }) => {
+    > 224 |     await page.goto('/dostawy');
+          |                ^
+      225 |     await page.waitForLoadState('networkidle');
+      226 |
+      227 |     const table = page.locator('table').first();
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:224:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Desktop-Viewpor-e35c1-ll-table-columns-on-desktop-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K[49/73] [chromium] › e2e\responsive.spec.ts:281:7 › Responsive Images and Media › should handle orientation changes
+[1A[2K[50/73] [chromium] › e2e\responsive.spec.ts:306:7 › Touch Interactions (Mobile) › should handle tap events
+[1A[2K[51/73] [chromium] › e2e\responsive.spec.ts:325:7 › Touch Interactions (Mobile) › should handle swipe gestures on tables
+[1A[2K[52/73] [chromium] › e2e\responsive.spec.ts:355:7 › Breakpoint Transitions › should handle viewport resize smoothly
+[1A[2K[53/73] [chromium] › e2e\responsive.spec.ts:377:7 › Breakpoint Transitions › should preserve functionality across viewports
+[1A[2K[54/73] [chromium] › e2e\responsive.spec.ts:399:7 › Accessibility on Different Viewports › should maintain focus visibility on all viewports
+[1A[2K  23) [chromium] › e2e\responsive.spec.ts:377:7 › Breakpoint Transitions › should preserve functionality across viewports 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeTruthy[2m()[22m
+
+    Received: [31mfalse[39m
+
+      392 |
+      393 |     // Table should be visible at both sizes (or use different components)
+    > 394 |     expect(hasMobileTable || hasDesktopTable).toBeTruthy();
+          |                                               ^
+      395 |   });
+      396 | });
+      397 |
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:394:47
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Breakpoint-Tran-357f2-ctionality-across-viewports-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\responsive-Breakpoint-Tran-357f2-ctionality-across-viewports-chromium\error-context.md
+
+
+[1A[2K[55/73] [chromium] › e2e\settings.spec.ts:20:7 › Settings Page › should display settings page
+[1A[2K[56/73] [chromium] › e2e\settings.spec.ts:30:7 › Settings Page › should show settings tabs or sections
+[1A[2K[57/73] [chromium] › e2e\responsive.spec.ts:421:7 › Accessibility on Different Viewports › should provide adequate touch target sizes on mobile
+[1A[2K[58/73] [chromium] › e2e\settings.spec.ts:45:7 › Settings Page › should display currency configuration
+[1A[2K[59/73] [chromium] › e2e\settings.spec.ts:56:7 › Settings Page › should show working days configuration
+[1A[2K[60/73] [chromium] › e2e\settings.spec.ts:69:7 › Profile Management in Settings › should navigate to profiles settings
+[1A[2K[61/73] [chromium] › e2e\settings.spec.ts:88:7 › Profile Management in Settings › should display profile depths settings
+[1A[2K[62/73] [chromium] › e2e\settings.spec.ts:104:7 › Color Management in Settings › should navigate to colors settings
+[1A[2K[63/73] [chromium] › e2e\settings.spec.ts:123:7 › Color Management in Settings › should show color visibility toggles
+[1A[2K[64/73] [chromium] › e2e\settings.spec.ts:147:7 › Settings Form Interactions › should allow editing settings
+[1A[2K[65/73] [chromium] › e2e\settings.spec.ts:167:7 › Settings Form Interactions › should show save/cancel buttons
+[1A[2K[66/73] [chromium] › e2e\warehouse.spec.ts:19:7 › Warehouse Stock Management › should display warehouse stock table
+[1A[2K[67/73] [chromium] › e2e\warehouse.spec.ts:28:7 › Warehouse Stock Management › should filter by color
+[1A[2K  24) [chromium] › e2e\settings.spec.ts:167:7 › Settings Form Interactions › should show save/cancel buttons 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeTruthy[2m()[22m
+
+    Received: [31mfalse[39m
+
+      177 |
+      178 |     // At least one action button should be present
+    > 179 |     expect(hasSave || hasCancel).toBeTruthy();
+          |                                  ^
+      180 |   });
+      181 | });
+      182 |
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\settings.spec.ts:179:34
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\settings-Settings-Form-Int-4a759-ld-show-save-cancel-buttons-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\settings-Settings-Form-Int-4a759-ld-show-save-cancel-buttons-chromium\error-context.md
+
+
+[1A[2K[68/73] [chromium] › e2e\warehouse.spec.ts:47:7 › Warehouse Stock Management › should show stock details
+[1A[2K[69/73] [chromium] › e2e\warehouse.spec.ts:63:7 › Warehouse Stock Management › should allow editing stock quantity
+[1A[2K[70/73] [chromium] › e2e\warehouse.spec.ts:88:7 › Warehouse Orders › should display warehouse orders page
+[1A[2K  25) [chromium] › e2e\responsive.spec.ts:399:7 › Accessibility on Different Viewports › should maintain focus visibility on all viewports 
+
+    [31mTest timeout of 30000ms exceeded.[39m
+
+    Error: page.waitForLoadState: Test timeout of 30000ms exceeded.
+
+      407 |       await page.setViewportSize(viewport);
+      408 |       await page.goto('/');
+    > 409 |       await page.waitForLoadState('networkidle');
+          |                  ^
+      410 |
+      411 |       // Tab to first focusable element
+      412 |       await page.keyboard.press('Tab');
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\responsive.spec.ts:409:18
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\responsive-Accessibility-o-9ea84-visibility-on-all-viewports-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\responsive-Accessibility-o-9ea84-visibility-on-all-viewports-chromium\error-context.md
+
+
+[1A[2K[71/73] [chromium] › e2e\warehouse.spec.ts:97:7 › Warehouse Orders › should navigate to warehouse details
+[1A[2K[72/73] [chromium] › e2e\warehouse.spec.ts:118:7 › Schuco Deliveries › should display Schuco deliveries page
+[1A[2K  26) [chromium] › e2e\warehouse.spec.ts:88:7 › Warehouse Orders › should display warehouse orders page 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('main, h1')
+    Expected: visible
+    Error: strict mode violation: locator('main, h1') resolved to 2 elements:
+        1) <main class="flex-1 overflow-auto bg-slate-50 transition-all duration-300">…</main> aka getByRole('main')
+        2) <h1 class="next-error-h1">404</h1> aka getByRole('heading', { name: '404' })
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 10000ms[22m
+    [2m  - waiting for locator('main, h1')[22m
+
+
+      92 |     // Check if page loaded
+      93 |     const mainContent = page.locator('main, h1');
+    > 94 |     await expect(mainContent).toBeVisible({ timeout: 10000 });
+         |                               ^
+      95 |   });
+      96 |
+      97 |   test('should navigate to warehouse details', async ({ page }) => {
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\warehouse.spec.ts:94:31
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\warehouse-Warehouse-Orders-12f87-splay-warehouse-orders-page-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\warehouse-Warehouse-Orders-12f87-splay-warehouse-orders-page-chromium\error-context.md
+
+
+[1A[2K[73/73] [chromium] › e2e\warehouse.spec.ts:131:7 › Schuco Deliveries › should show Schuco order status
+[1A[2K  27) [chromium] › e2e\warehouse.spec.ts:19:7 › Warehouse Stock Management › should display warehouse stock table 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('table, [role="grid"], [data-testid="warehouse-stock"]')
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 10000ms[22m
+    [2m  - waiting for locator('table, [role="grid"], [data-testid="warehouse-stock"]')[22m
+
+
+      23 |     // Should have a table or grid
+      24 |     const stockTable = page.locator('table, [role="grid"], [data-testid="warehouse-stock"]');
+    > 25 |     await expect(stockTable).toBeVisible({ timeout: 10000 });
+         |                              ^
+      26 |   });
+      27 |
+      28 |   test('should filter by color', async ({ page }) => {
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\warehouse.spec.ts:25:30
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\warehouse-Warehouse-Stock--0f756-splay-warehouse-stock-table-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\warehouse-Warehouse-Stock--0f756-splay-warehouse-stock-table-chromium\error-context.md
+
+
+[1A[2K  28) [chromium] › e2e\warehouse.spec.ts:118:7 › Schuco Deliveries › should display Schuco deliveries page 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('main, h1')
+    Expected: visible
+    Error: strict mode violation: locator('main, h1') resolved to 2 elements:
+        1) <main class="flex-1 overflow-auto bg-slate-50 transition-all duration-300">…</main> aka getByRole('main')
+        2) <h1 class="text-xl font-semibold text-slate-900 truncate">Dostawy Schuco</h1> aka getByRole('heading', { name: 'Dostawy Schuco' })
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 10000ms[22m
+    [2m  - waiting for locator('main, h1')[22m
+
+
+      122 |     // Wait for page content
+      123 |     const mainContent = page.locator('main, h1');
+    > 124 |     await expect(mainContent).toBeVisible({ timeout: 10000 });
+          |                               ^
+      125 |
+      126 |     // Should have table or list
+      127 |     const deliveriesList = page.locator('table, [role="grid"], [data-testid="schuco-deliveries"]');
+        at C:\Users\Krzysztof\Desktop\AKROBUD\apps\web\e2e\warehouse.spec.ts:124:31
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\warehouse-Schuco-Deliverie-fb799-play-Schuco-deliveries-page-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\warehouse-Schuco-Deliverie-fb799-play-Schuco-deliveries-page-chromium\error-context.md
+
+
+[1A[2K  28 failed
+    [chromium] › e2e\deliveries.spec.ts:23:7 › Deliveries Management › should display deliveries list 
+    [chromium] › e2e\imports.spec.ts:30:7 › CSV Import Management › should show file upload area ───
+    [chromium] › e2e\navigation.spec.ts:180:7 › Page Transitions and Deep Linking › should support nested routes 
+    [chromium] › e2e\navigation.spec.ts:309:7 › External Links › should open external links in new tab 
+    [chromium] › e2e\no-console-errors.spec.ts:12:7 › Application Console Errors › should load home page without console errors 
+    [chromium] › e2e\no-console-errors.spec.ts:61:7 › Application Console Errors › should load settings page without console errors 
+    [chromium] › e2e\no-console-errors.spec.ts:93:7 › Application Console Errors › should load deliveries page without console errors 
+    [chromium] › e2e\responsive.spec.ts:18:7 › Mobile Viewport (375px) › should display mobile-optimized layout 
+    [chromium] › e2e\responsive.spec.ts:31:7 › Mobile Viewport (375px) › should stack elements vertically on mobile 
+    [chromium] › e2e\responsive.spec.ts:48:7 › Mobile Viewport (375px) › should hide sidebar on mobile 
+    [chromium] › e2e\responsive.spec.ts:63:7 › Mobile Viewport (375px) › should make tables scrollable horizontally on mobile 
+    [chromium] › e2e\responsive.spec.ts:86:7 › Mobile Viewport (375px) › should adjust font sizes for mobile 
+    [chromium] › e2e\responsive.spec.ts:104:7 › Mobile Viewport (375px) › should show mobile-friendly buttons 
+    [chromium] › e2e\responsive.spec.ts:127:7 › Tablet Viewport (768px) › should display tablet-optimized layout 
+    [chromium] › e2e\responsive.spec.ts:138:7 › Tablet Viewport (768px) › should show two-column layout on tablet 
+    [chromium] › e2e\responsive.spec.ts:152:7 › Tablet Viewport (768px) › should show sidebar on tablet 
+    [chromium] › e2e\responsive.spec.ts:169:7 › Tablet Viewport (768px) › should display full table on tablet 
+    [chromium] › e2e\responsive.spec.ts:190:7 › Desktop Viewport (1920px) › should display full desktop layout 
+    [chromium] › e2e\responsive.spec.ts:201:7 › Desktop Viewport (1920px) › should show multi-column layout on desktop 
+    [chromium] › e2e\responsive.spec.ts:214:7 › Desktop Viewport (1920px) › should show persistent sidebar on desktop 
+    [chromium] › e2e\responsive.spec.ts:223:7 › Desktop Viewport (1920px) › should display all table columns on desktop 
+    [chromium] › e2e\responsive.spec.ts:240:7 › Desktop Viewport (1920px) › should show hover effects on desktop 
+    [chromium] › e2e\responsive.spec.ts:377:7 › Breakpoint Transitions › should preserve functionality across viewports 
+    [chromium] › e2e\responsive.spec.ts:399:7 › Accessibility on Different Viewports › should maintain focus visibility on all viewports 
+    [chromium] › e2e\settings.spec.ts:167:7 › Settings Form Interactions › should show save/cancel buttons 
+    [chromium] › e2e\warehouse.spec.ts:19:7 › Warehouse Stock Management › should display warehouse stock table 
+    [chromium] › e2e\warehouse.spec.ts:88:7 › Warehouse Orders › should display warehouse orders page 
+    [chromium] › e2e\warehouse.spec.ts:118:7 › Schuco Deliveries › should display Schuco deliveries page 
+  34 skipped
+  11 passed (3.0m)
+ ELIFECYCLE  Command failed with exit code 1.

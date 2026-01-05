@@ -33,16 +33,6 @@ import type {
   Shortage,
   RemanentHistoryEntry,
   WarehouseDataResponse,
-  OkucArticle,
-  CreateOkucArticleData,
-  UpdateOkucArticleData,
-  OkucStock,
-  UpdateOkucStockData,
-  OkucOrder,
-  CreateOkucOrderData,
-  UpdateOkucOrderData,
-  OkucDashboard,
-  OkucImportHistory,
   PalletType,
   CreatePalletTypeData,
   UpdatePalletTypeData,
@@ -53,6 +43,9 @@ import type {
   Holiday,
   WorkingDay,
   SetWorkingDayData,
+  ForProductionData,
+  BulkUpdateStatusData,
+  CompleteDeliveryData,
 } from '@/types';
 import type {
   OptimizationResult,
@@ -108,6 +101,12 @@ export const ordersApi = {
   getByNumber: (orderNumber: string) => fetchApi<Order>(`/api/orders/by-number/${orderNumber}`),
   getTable: (colorId: number) => fetchApi<OrderTableData>(`/api/orders/table/${colorId}`),
   getRequirementsTotals: () => fetchApi<Array<{ profileId: number; total: number }>>('/api/orders/requirements/totals'),
+  getForProduction: (params?: { from?: string; to?: string }) => {
+    const query = new URLSearchParams(params as Record<string, string>).toString();
+    return fetchApi<ForProductionData>(`/api/orders/for-production${query ? `?${query}` : ''}`);
+  },
+  getMonthlyProduction: (year: number, month: number) =>
+    fetchApi<Order[]>(`/api/orders/monthly-production?year=${year}&month=${month}`),
   checkPdf: async (id: number): Promise<{ hasPdf: boolean; filename: string | null }> => {
     try {
       const token = await getAuthToken();
@@ -128,8 +127,10 @@ export const ordersApi = {
     fetchApi<Order>('/api/orders', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: UpdateOrderData) =>
     fetchApi<Order>(`/api/orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  patch: (id: number, data: { valuePln?: string | null; valueEur?: string | null; deadline?: string | null; status?: string | null }) =>
+  patch: (id: number, data: { valuePln?: string | null; valueEur?: string | null; deadline?: string | null; status?: string | null; invoiceNumber?: string | null }) =>
     fetchApi<Order>(`/api/orders/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  bulkUpdateStatus: (data: BulkUpdateStatusData) =>
+    fetchApi<Order[]>('/api/orders/bulk-update-status', { method: 'POST', body: JSON.stringify(data) }),
   archive: (id: number) =>
     fetchApi<Order>(`/api/orders/${id}/archive`, { method: 'POST', body: JSON.stringify({}) }),
   unarchive: (id: number) =>
@@ -268,6 +269,11 @@ export const deliveriesApi = {
     fetchApi<Delivery>(`/api/deliveries/${deliveryId}/complete`, {
       method: 'POST',
       body: JSON.stringify({ productionDate }),
+    }),
+  completeAllOrders: (deliveryId: number, data: CompleteDeliveryData) =>
+    fetchApi<Delivery>(`/api/deliveries/${deliveryId}/complete-all-orders`, {
+      method: 'POST',
+      body: JSON.stringify(data),
     }),
   getProfileStats: (months?: number) =>
     fetchApi<{
@@ -764,6 +770,15 @@ export const monthlyReportsApi = {
 
 // Remanent magazynu
 export { remanentApi } from '@/features/warehouse/remanent/api/remanentApi';
+
+// OKUC (DualStock) - Moduł zarządzania magazynem okuć PVC i ALU
+export {
+  okucArticlesApi,
+  okucStockApi,
+  okucDemandApi,
+  okucOrdersApi,
+  okucProportionsApi,
+} from '@/features/okuc/api/okucApi';
 
 // Konfiguracja Walut
 export const currencyConfigApi = {

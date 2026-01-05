@@ -146,4 +146,29 @@ export class SchucoParser {
     const date = this.parseDate(dateStr);
     return date ? date.toISOString() : null;
   }
+
+  /**
+   * Parse EUR amount from Schuco format
+   * Converts "62,30 €" to 62.30
+   * Converts "2 321,02 €" to 2321.02
+   */
+  parseEurAmount(amountStr: string): number | null {
+    if (!amountStr) return null;
+
+    try {
+      // Remove currency symbol and spaces
+      let cleaned = amountStr.replace(/€/g, '').trim();
+
+      // Remove thousands separator (space)
+      cleaned = cleaned.replace(/\s/g, '');
+
+      // Replace comma with dot for decimal separator
+      cleaned = cleaned.replace(/,/g, '.');
+
+      const amount = parseFloat(cleaned);
+      return isNaN(amount) ? null : amount;
+    } catch {
+      return null;
+    }
+  }
 }

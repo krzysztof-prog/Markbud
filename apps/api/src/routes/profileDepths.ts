@@ -7,6 +7,7 @@ import { prisma } from '../index.js';
 import { ProfileDepthRepository } from '../repositories/ProfileDepthRepository.js';
 import { ProfileDepthHandler } from '../handlers/profileDepthHandler.js';
 
+
 export const profileDepthRoutes: FastifyPluginAsync = async (fastify) => {
   const repository = new ProfileDepthRepository(prisma);
   const handler = new ProfileDepthHandler(repository);

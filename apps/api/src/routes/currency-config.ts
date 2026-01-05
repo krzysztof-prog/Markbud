@@ -5,11 +5,14 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { CurrencyConfigService } from '../services/currencyConfigService.js';
 import { updateCurrencyRateSchema } from '../validators/currencyConfig.js';
+import { verifyAuth } from '../middleware/auth.js';
+
 
 export const currencyConfigRoutes: FastifyPluginAsync = async (fastify) => {
   const currencyConfigService = new CurrencyConfigService(fastify.prisma);
   // GET /api/currency-config/current - Get current exchange rate
   fastify.get('/current', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Get current EUR to PLN exchange rate',
       tags: ['currency'],
@@ -48,6 +51,7 @@ export const currencyConfigRoutes: FastifyPluginAsync = async (fastify) => {
       limit?: string;
     };
   }>('/history', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Get exchange rate history',
       tags: ['currency'],
@@ -87,6 +91,7 @@ export const currencyConfigRoutes: FastifyPluginAsync = async (fastify) => {
       effectiveDate?: string;
     };
   }>('/', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Update EUR to PLN exchange rate',
       tags: ['currency'],
@@ -148,6 +153,7 @@ export const currencyConfigRoutes: FastifyPluginAsync = async (fastify) => {
       amount: number;
     };
   }>('/convert/eur-to-pln', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Convert EUR amount to PLN using current rate',
       tags: ['currency'],
@@ -197,6 +203,7 @@ export const currencyConfigRoutes: FastifyPluginAsync = async (fastify) => {
       amount: number;
     };
   }>('/convert/pln-to-eur', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Convert PLN amount to EUR using current rate',
       tags: ['currency'],

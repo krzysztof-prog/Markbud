@@ -9,14 +9,14 @@ export interface WarehouseStock {
   id: ID;
   profileId: ID;
   colorId: ID;
-  quantity: number;
+  currentStockBeams: number;  // Stan magazynowy w belkach (6m)
   profile?: Profile;
   color?: Color;
-  updatedAt: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 export interface UpdateStockData {
-  quantity: number;
+  currentStockBeams: number;
 }
 
 /**

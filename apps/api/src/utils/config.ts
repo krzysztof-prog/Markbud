@@ -18,10 +18,63 @@ export interface AppConfig {
   database: {
     url: string;
   };
+  watchFolders: {
+    okucRw: string;
+    okucDemand: string;
+  };
   environment: string;
   isDev: boolean;
   isProd: boolean;
   isTest: boolean;
+}
+
+/**
+ * Validates JWT_SECRET strength and requirements
+ */
+function validateJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  const env = process.env.NODE_ENV || 'development';
+  const isProduction = env === 'production';
+  const defaultSecret = 'dev-secret-key-change-in-production';
+
+  // PRODUCTION: Enforce strong secret
+  if (isProduction) {
+    if (!secret) {
+      throw new Error(
+        'JWT_SECRET environment variable is required in production. ' +
+        'Please set a strong secret key in your .env file. ' +
+        'Generate one with: openssl rand -base64 32'
+      );
+    }
+
+    if (secret === defaultSecret) {
+      throw new Error(
+        'Cannot use default JWT_SECRET in production! ' +
+        'Please set a secure JWT_SECRET in your .env file. ' +
+        'Generate one with: openssl rand -base64 32'
+      );
+    }
+
+    // Require minimum length for security
+    if (secret.length < 32) {
+      throw new Error(
+        `JWT_SECRET must be at least 32 characters long in production. ` +
+        `Current length: ${secret.length}. ` +
+        'Generate a secure secret with: openssl rand -base64 32'
+      );
+    }
+  }
+
+  // DEVELOPMENT: Warning for default secret
+  if (!isProduction && (!secret || secret === defaultSecret)) {
+    console.warn(
+      '\n⚠️  WARNING: Using default JWT_SECRET in development.\n' +
+      '   This is acceptable for development but NEVER use this in production!\n' +
+      '   Generate a secure secret with: openssl rand -base64 32\n'
+    );
+  }
+
+  return secret || defaultSecret;
 }
 
 /**
@@ -31,7 +84,7 @@ function validateRequiredEnvVars() {
   const required: string[] = [];
 
   if (process.env.NODE_ENV === 'production') {
-    required.push('JWT_SECRET', 'DATABASE_URL');
+    required.push('DATABASE_URL');
   }
 
   const missing = required.filter((key) => !process.env[key]);
@@ -53,13 +106,11 @@ function getConfig(): AppConfig {
   const isProd = env === 'production';
   const isTest = env === 'test';
 
-  const jwtSecret = process.env.JWT_SECRET;
-  if (!jwtSecret && isProd) {
-    throw new Error('JWT_SECRET environment variable is required in production');
-  }
+  // Validate and get JWT secret (will throw in production if invalid)
+  const jwtSecret = validateJwtSecret();
 
   // Validate port number
-  const port = parseInt(process.env.API_PORT || '3001', 10);
+  const port = parseInt(process.env.API_PORT || '4000', 10);
   if (isNaN(port) || port < 1 || port > 65535) {
     throw new Error(`Invalid API_PORT: ${process.env.API_PORT}. Must be between 1 and 65535.`);
   }
@@ -77,11 +128,15 @@ function getConfig(): AppConfig {
       credentials: true,
     },
     jwt: {
-      secret: jwtSecret || 'dev-secret-key-change-in-production',
+      secret: jwtSecret,
       expiresIn: process.env.JWT_EXPIRES_IN || '24h',
     },
     database: {
       url: process.env.DATABASE_URL || 'file:./dev.db',
+    },
+    watchFolders: {
+      okucRw: process.env.WATCH_FOLDER_OKUC_RW || './okuc_rw',
+      okucDemand: process.env.WATCH_FOLDER_OKUC_DEMAND || './okuc_zapotrzebowanie',
     },
     environment: env,
     isDev,

@@ -129,8 +129,8 @@ describe('Common Validators', () => {
       const result = paginationQuerySchema.safeParse({});
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.skip).toBeUndefined();
-        expect(result.data.take).toBeUndefined();
+        expect(result.data.skip).toBe(0); // Default is 0, not undefined
+        expect(result.data.take).toBe(50); // Default is 50, not undefined
       }
     });
 

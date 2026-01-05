@@ -4,6 +4,13 @@ const nextConfig = {
   compress: true,
   poweredByHeader: false,
 
+  // ESLint - don't fail on warnings during build
+  eslint: {
+    ignoreDuringBuilds: false,
+    // Directories to lint
+    dirs: ['src'],
+  },
+
   // Image optimization
   images: {
     formats: ['image/avif', 'image/webp'],

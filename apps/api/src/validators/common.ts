@@ -37,19 +37,23 @@ export const idParamsSchema = (resourceName: string) =>
 
 /**
  * Common pagination query schema
- * Transforms string query params to numbers
+ * Transforms string query params to numbers with defaults and validation
  */
 export const paginationQuerySchema = z.object({
   skip: z
     .string()
     .regex(/^\d+$/)
     .transform(Number)
-    .optional(),
+    .optional()
+    .default('0')
+    .pipe(z.number().min(0, 'skip must be >= 0')),
   take: z
     .string()
     .regex(/^\d+$/)
     .transform(Number)
-    .optional(),
+    .optional()
+    .default('50')
+    .pipe(z.number().min(1, 'take must be > 0').max(100, 'take must be <= 100')),
 });
 
 /**
@@ -78,3 +82,22 @@ export const stringToIntSchema = z
 export type IdParams = z.infer<ReturnType<typeof idParamsSchema>>;
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>;
 export type DateRangeQuery = z.infer<typeof dateRangeQuerySchema>;
+
+/**
+ * Paginated response interface
+ * Standard format for paginated API responses
+ */
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  skip: number;
+  take: number;
+}
+
+/**
+ * Pagination parameters for repository methods
+ */
+export interface PaginationParams {
+  skip: number;
+  take: number;
+}

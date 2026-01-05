@@ -4,6 +4,7 @@ import { GlassValidationService } from '../services/glassValidationService.js';
 export const glassValidationRoutes: FastifyPluginAsync = async (fastify) => {
   const service = new GlassValidationService(fastify.prisma);
 
+  // Glass validation endpoints (no authentication required in development)
   fastify.get('/dashboard', async (request, reply) => {
     const dashboard = await service.getDashboard();
     return reply.send(dashboard);

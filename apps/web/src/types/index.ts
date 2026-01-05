@@ -22,3 +22,4 @@ export * from './dashboard';
 export * from './settings';
 export * from './okuc';
 export * from './schuco';
+export * from './manager';

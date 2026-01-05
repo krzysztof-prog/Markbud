@@ -19,7 +19,7 @@ import {
   ColorDialog,
   ProfileDialog,
   DeleteConfirmDialog,
-} from './components';
+} from '@/features/settings/components';
 import {
   useUpdateSettings,
   usePalletTypeMutations,
@@ -27,7 +27,7 @@ import {
   useProfileMutations,
   useFileWatcher,
   useUserFolderPath,
-} from './hooks/useSettingsMutations';
+} from '@/features/settings/hooks';
 import { toast } from '@/hooks/useToast';
 
 // Types
@@ -173,7 +173,7 @@ export default function UstawieniaPage() {
     queryFn: async () => {
       const token = await getAuthToken();
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/settings/file-watcher/status`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/settings/file-watcher/status`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

@@ -6,9 +6,10 @@ import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persist
 import { useState, useEffect } from 'react';
 import { Toaster } from '@/components/ui/toaster';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
-import { AuthInitializer } from '@/components/auth-initializer';
+import { setupGlobalErrorHandler } from '@/lib/error-logger';
 
 function RealtimeSyncWrapper({ children }: { children: React.ReactNode }) {
+  // WebSocket with graceful degradation - nie blokuje gdy nie działa
   useRealtimeSync();
   return <>{children}</>;
 }
@@ -22,25 +23,27 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 2 * 60 * 1000, // 2 minutes default
-            gcTime: 10 * 60 * 1000, // 10 minutes garbage collection
-            refetchOnWindowFocus: false,
-            refetchOnMount: false,
+            staleTime: 5 * 60 * 1000, // 5 minut - dane pozostają świeże dłużej
+            gcTime: 30 * 60 * 1000, // 30 minut - cache przechowywany dłużej
+            refetchOnWindowFocus: false, // Nie pobieraj ponownie przy focus
+            refetchOnMount: false, // Nie pobieraj ponownie przy mount
+            refetchOnReconnect: true, // Pobieraj ponownie przy reconnect
             retry: (failureCount, error: unknown) => {
-              // Don't retry on 404 or 403
+              // Nie retry na 404 lub 403
               const err = error as { status?: number };
               if (err?.status === 404 || err?.status === 403) {
                 return false;
               }
-              // Retry max 2 times for other errors
-              return failureCount < 2;
+              // Maksymalnie 1 retry dla innych błędów
+              return failureCount < 1;
             },
-            retryDelay: (attemptIndex) =>
-              Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+            retryDelay: 1000, // Stałe opóźnienie 1s
+            networkMode: 'online', // Tylko online
           },
           mutations: {
-            retry: 1,
+            retry: 0, // Bez retry dla mutacji
             retryDelay: 1000,
+            networkMode: 'online',
           },
         },
       })
@@ -48,7 +51,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
-    // Create persister only on client side
+
+    // Konfiguracja globalnego error handlera
+    setupGlobalErrorHandler();
+
+    // Tworzenie persister tylko po stronie klienta
     const storagePersister = createSyncStoragePersister({
       storage: window.localStorage,
       key: 'AKROBUD_REACT_QUERY_CACHE',
@@ -64,18 +71,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
         client={queryClient}
         persistOptions={{
           persister,
-          maxAge: 24 * 60 * 60 * 1000, // 24 hours cache persistence
+          maxAge: 10 * 60 * 1000, // 10 minut - krócej niż poprzednio (24h)
           dehydrateOptions: {
             shouldDehydrateQuery: (query) => {
-              // Only persist successful queries
-              return query.state.status === 'success';
+              // Only persist successful queries without errors
+              return (
+                query.state.status === 'success' &&
+                query.state.data !== null &&
+                query.state.data !== undefined
+              );
             },
           },
         }}
       >
-        <AuthInitializer>
-          <RealtimeSyncWrapper>{children}</RealtimeSyncWrapper>
-        </AuthInitializer>
+        <RealtimeSyncWrapper>{children}</RealtimeSyncWrapper>
         <Toaster />
       </PersistQueryClientProvider>
     );
@@ -84,9 +93,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // Initial render (SSR and first client render) - use regular QueryClientProvider
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthInitializer>
-        <RealtimeSyncWrapper>{children}</RealtimeSyncWrapper>
-      </AuthInitializer>
+      <RealtimeSyncWrapper>{children}</RealtimeSyncWrapper>
       <Toaster />
     </QueryClientProvider>
   );

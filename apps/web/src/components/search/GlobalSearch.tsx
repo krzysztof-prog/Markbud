@@ -194,7 +194,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                             variant={
                               order.status === 'completed'
                                 ? 'default'
-                                : order.status === 'pending'
+                                : order.status === 'new'
                                 ? 'secondary'
                                 : 'outline'
                             }
@@ -202,8 +202,12 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                           >
                             {order.status === 'completed'
                               ? 'Zakończone'
-                              : order.status === 'pending'
-                              ? 'Oczekujące'
+                              : order.status === 'new'
+                              ? 'Nowe'
+                              : order.status === 'in_progress'
+                              ? 'W produkcji'
+                              : order.status === 'archived'
+                              ? 'Zarchiwizowane'
                               : order.status}
                           </Badge>
                         </div>
@@ -250,7 +254,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                         )}
                         {order.valuePln && (
                           <div className="font-semibold text-slate-900">
-                            {parseFloat(order.valuePln).toLocaleString('pl-PL', {
+                            {parseFloat(String(order.valuePln)).toLocaleString('pl-PL', {
                               minimumFractionDigits: 2,
                             })}{' '}
                             PLN

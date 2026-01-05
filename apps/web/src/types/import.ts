@@ -1,13 +1,23 @@
 import type { ID, Timestamp, Status } from './common';
 
 /**
+ * Błąd parsowania CSV (TASK 7)
+ */
+export interface ParseError {
+  row: number;
+  field?: string;
+  reason: string;
+  rawData: any;
+}
+
+/**
  * Import pliku (CSV, PDF)
  */
 export interface Import {
   id: ID;
   filename: string;
   fileName?: string; // Alias dla kompatybilności
-  fileType: 'uzyte_bele' | 'ceny_pdf' | 'okuc_csv' | 'order_pdf' | 'other';
+  fileType: 'uzyte_bele' | 'ceny_pdf' | 'order_pdf' | 'other';
   status: 'pending' | 'processing' | 'completed' | 'error' | 'rejected';
   createdAt: Timestamp;
   uploadedAt?: Timestamp;
@@ -50,6 +60,7 @@ export interface ImportPreview {
     invalidRecords: number;
     warnings?: string[];
   };
+  errors?: ParseError[]; // TASK 7: Błędy parsowania
   metadata?: Record<string, any>; // Additional metadata from parsers
   message?: string;
   variantConflict?: VariantConflict | null;

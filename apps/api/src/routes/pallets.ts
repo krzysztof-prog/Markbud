@@ -8,6 +8,7 @@ import { PalletOptimizerRepository } from '../repositories/PalletOptimizerReposi
 import { PalletOptimizerService } from '../services/pallet-optimizer/PalletOptimizerService.js';
 import { PalletHandler } from '../handlers/palletHandler.js';
 
+
 export const palletRoutes: FastifyPluginAsync = async (fastify) => {
   // Inicjalizacja zależności
   const repository = new PalletOptimizerRepository(prisma);

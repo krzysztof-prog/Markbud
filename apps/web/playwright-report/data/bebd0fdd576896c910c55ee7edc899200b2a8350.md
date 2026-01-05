@@ -1,0 +1,73 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e6] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e7]:
+      - img [ref=e8]
+    - generic [ref=e11]:
+      - button "Open issues overlay" [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: "2"
+          - generic [ref=e15]: "3"
+        - generic [ref=e16]:
+          - text: Issue
+          - generic [ref=e17]: s
+      - button "Collapse issues badge" [ref=e18]:
+        - img [ref=e19]
+  - alert [ref=e21]
+  - generic [ref=e22]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - generic [ref=e25]: AKROBUD
+        - button "Toggle sidebar" [ref=e26] [cursor=pointer]:
+          - img [ref=e27]
+      - navigation [ref=e29]:
+        - link "Dashboard" [ref=e31] [cursor=pointer]:
+          - /url: /
+          - img [ref=e32]
+          - generic [ref=e37]: Dashboard
+        - link "AKROBUD" [ref=e39] [cursor=pointer]:
+          - /url: /magazyn/akrobud
+          - img [ref=e40]
+          - generic [ref=e43]: AKROBUD
+        - link "Magazyn PVC" [ref=e45] [cursor=pointer]:
+          - /url: /magazyn/pvc
+          - img [ref=e46]
+          - generic [ref=e49]: Magazyn PVC
+        - link "Dostawy Schuco" [ref=e51] [cursor=pointer]:
+          - /url: /magazyn/dostawy-schuco
+          - img [ref=e52]
+          - generic [ref=e57]: Dostawy Schuco
+        - button "Szyby" [ref=e59] [cursor=pointer]:
+          - img [ref=e60]
+          - generic [ref=e63]: Szyby
+          - img [ref=e64]
+        - link "Zestawienie miesięczne" [ref=e67] [cursor=pointer]:
+          - /url: /zestawienia
+          - img [ref=e68]
+          - generic [ref=e71]: Zestawienie miesięczne
+        - link "Zestawienie zleceń" [ref=e73] [cursor=pointer]:
+          - /url: /zestawienia/zlecenia
+          - img [ref=e74]
+          - generic [ref=e77]: Zestawienie zleceń
+        - link "Importy" [ref=e79] [cursor=pointer]:
+          - /url: /importy
+          - img [ref=e80]
+          - generic [ref=e83]: Importy
+        - link "Archiwum" [ref=e85] [cursor=pointer]:
+          - /url: /archiwum
+          - img [ref=e86]
+          - generic [ref=e89]: Archiwum
+        - link "Ustawienia" [ref=e91] [cursor=pointer]:
+          - /url: /ustawienia
+          - img [ref=e92]
+          - generic [ref=e95]: Ustawienia
+      - paragraph [ref=e97]: AKROBUD v1.0.0
+    - main [ref=e98]:
+      - generic [ref=e100]:
+        - heading "404" [level=1] [ref=e101]
+        - heading "This page could not be found." [level=2] [ref=e103]
+  - region "Notifications (F8)":
+    - list
+```

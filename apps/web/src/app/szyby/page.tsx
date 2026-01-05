@@ -2,7 +2,7 @@
 
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, Truck } from 'lucide-react';
+import { FileText, Truck, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function SzybyMenuPage() {
@@ -21,12 +21,20 @@ export default function SzybyMenuPage() {
       icon: Truck,
       color: 'green',
     },
+    {
+      title: 'Statystyki',
+      description: 'Statystyki zamówień i dostaw szyb wg dat',
+      href: '/szyby/statystyki',
+      icon: BarChart3,
+      color: 'purple',
+    },
   ];
 
   const getColorClasses = (color: string) => {
     const colors = {
       blue: 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200',
       green: 'bg-green-50 text-green-600 hover:bg-green-100 border-green-200',
+      purple: 'bg-purple-50 text-purple-600 hover:bg-purple-100 border-purple-200',
     };
     return colors[color as keyof typeof colors] || colors.blue;
   };

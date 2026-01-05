@@ -4,7 +4,7 @@
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { DeliveryService } from '../services/deliveryService.js';
-import { DeliveryProtocolService } from '../services/DeliveryProtocolService.js';
+import { DeliveryProtocolService } from '../services/delivery-protocol-service.js';
 import {
   createDeliverySchema,
   updateDeliverySchema,
@@ -15,7 +15,10 @@ import {
   reorderSchema,
   addItemSchema,
   completeDeliverySchema,
+  bulkUpdateDatesSchema,
+  completeAllOrdersSchema,
 } from '../validators/delivery.js';
+import { ValidationError } from '../utils/errors.js';
 
 export class DeliveryHandler {
   private protocolService: DeliveryProtocolService;
@@ -140,6 +143,16 @@ export class DeliveryHandler {
     return reply.send(result);
   }
 
+  async completeAllOrders(
+    request: FastifyRequest<{ Params: { id: string }; Body: { productionDate?: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = deliveryParamsSchema.parse(request.params);
+    const { productionDate } = completeAllOrdersSchema.parse(request.body);
+    const result = await this.service.completeAllOrders(parseInt(id), productionDate);
+    return reply.send(result);
+  }
+
   async getCalendar(
     request: FastifyRequest<{ Querystring: { month: string; year: string } }>,
     reply: FastifyReply
@@ -150,10 +163,39 @@ export class DeliveryHandler {
     const monthNum = parseInt(month, 10);
 
     if (isNaN(yearNum) || isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
-      return reply.status(400).send({ error: 'Nieprawidłowy rok lub miesiąc' });
+      throw new ValidationError('Nieprawidłowy rok lub miesiąc');
     }
 
     const data = await this.service.getCalendarData(yearNum, monthNum);
+    return reply.send(data);
+  }
+
+  async getCalendarBatch(
+    request: FastifyRequest<{ Querystring: { months: string } }>,
+    reply: FastifyReply
+  ) {
+    // Parse months parameter
+    const monthsParam = request.query.months;
+    if (!monthsParam) {
+      throw new ValidationError('Parametr months jest wymagany');
+    }
+
+    // Parse JSON - SyntaxError will be caught by global error handler
+    let months: Array<{ month: number; year: number }>;
+    try {
+      months = JSON.parse(monthsParam);
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new ValidationError('Nieprawidłowy format JSON w parametrze months');
+      }
+      throw error;
+    }
+
+    if (!Array.isArray(months) || months.length === 0) {
+      throw new ValidationError('Parametr months musi być niepustą tablicą');
+    }
+
+    const data = await this.service.getCalendarDataBatch(months);
     return reply.send(data);
   }
 
@@ -173,7 +215,7 @@ export class DeliveryHandler {
     const monthsBack = parseInt(request.query.months || '6', 10);
 
     if (isNaN(monthsBack) || monthsBack < 1 || monthsBack > 60) {
-      return reply.status(400).send({ error: 'Invalid months parameter (must be between 1 and 60)' });
+      throw new ValidationError('Nieprawidłowy parametr months (musi być między 1 a 60)');
     }
 
     const result = await this.service.getWindowsStatsByWeekday(monthsBack);
@@ -187,7 +229,7 @@ export class DeliveryHandler {
     const monthsBack = parseInt(request.query.months || '6', 10);
 
     if (isNaN(monthsBack) || monthsBack < 1 || monthsBack > 60) {
-      return reply.status(400).send({ error: 'Invalid months parameter (must be between 1 and 60)' });
+      throw new ValidationError('Nieprawidłowy parametr months (musi być między 1 a 60)');
     }
 
     const result = await this.service.getMonthlyWindowsStats(monthsBack);
@@ -201,7 +243,7 @@ export class DeliveryHandler {
     const monthsBack = parseInt(request.query.months || '6', 10);
 
     if (isNaN(monthsBack) || monthsBack < 1 || monthsBack > 60) {
-      return reply.status(400).send({ error: 'Invalid months parameter (must be between 1 and 60)' });
+      throw new ValidationError('Nieprawidłowy parametr months (musi być między 1 a 60)');
     }
 
     const result = await this.service.getMonthlyProfileStats(monthsBack);
@@ -240,5 +282,18 @@ export class DeliveryHandler {
         `attachment; filename="${this.protocolService.generateFilename(deliveryId)}"`
       )
       .send(pdfBuffer);
+  }
+
+  async bulkUpdateDates(
+    request: FastifyRequest<{ Body: { fromDate: string; toDate: string; yearOffset: number } }>,
+    reply: FastifyReply
+  ) {
+    const validated = bulkUpdateDatesSchema.parse(request.body);
+    const result = await this.service.bulkUpdateDeliveryDates(
+      new Date(validated.fromDate),
+      new Date(validated.toDate),
+      validated.yearOffset
+    );
+    return reply.send(result);
   }
 }

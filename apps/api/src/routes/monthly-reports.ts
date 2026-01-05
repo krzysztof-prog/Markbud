@@ -5,6 +5,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { MonthlyReportService } from '../services/monthlyReportService.js';
 import { MonthlyReportExportService } from '../services/monthlyReportExportService.js';
+import { verifyAuth } from '../middleware/auth.js';
+
 
 export const monthlyReportsRoutes: FastifyPluginAsync = async (fastify) => {
   const monthlyReportService = new MonthlyReportService(fastify.prisma);
@@ -15,6 +17,7 @@ export const monthlyReportsRoutes: FastifyPluginAsync = async (fastify) => {
       limit?: string;
     };
   }>('/', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Get all monthly reports',
       tags: ['monthly-reports'],
@@ -73,6 +76,7 @@ export const monthlyReportsRoutes: FastifyPluginAsync = async (fastify) => {
       month: string;
     };
   }>('/:year/:month', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Get monthly report for specific year and month',
       tags: ['monthly-reports'],
@@ -157,6 +161,7 @@ export const monthlyReportsRoutes: FastifyPluginAsync = async (fastify) => {
       month: string;
     };
   }>('/:year/:month/generate', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Generate monthly report for specific year and month',
       tags: ['monthly-reports'],
@@ -229,6 +234,7 @@ export const monthlyReportsRoutes: FastifyPluginAsync = async (fastify) => {
       month: string;
     };
   }>('/:year/:month/export/excel', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Export monthly report to Excel',
       tags: ['monthly-reports'],
@@ -311,6 +317,7 @@ export const monthlyReportsRoutes: FastifyPluginAsync = async (fastify) => {
       month: string;
     };
   }>('/:year/:month/export/pdf', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Export monthly report to PDF',
       tags: ['monthly-reports'],
@@ -393,6 +400,7 @@ export const monthlyReportsRoutes: FastifyPluginAsync = async (fastify) => {
       month: string;
     };
   }>('/:year/:month', {
+    preHandler: verifyAuth,
     schema: {
       description: 'Delete monthly report',
       tags: ['monthly-reports'],

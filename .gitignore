@@ -42,3 +42,5 @@ nul
 
 # Claude Code session state
 .claude/.session-state/
+.claude/hooks-cache/
+.claude/tsc-cache/

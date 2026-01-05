@@ -18,15 +18,21 @@ Kompletny zestaw hooków dla projektu AKROBUD.
 |------|-----|
 | **session-context-loader** | Ładuje CLAUDE.md, README.md, anti-patterns.md (tylko raz na sesję) |
 | **skill-activation-prompt** | Auto-aktywuje skills na podstawie promptu |
+| **intent-scope-action-validator** | Sprawdza czy zadanie ma INTENT → SCOPE → ACTION (⚠️ WARNING) |
 
 ### PreToolUse (przed wykonaniem narzędzia)
 
 | Hook | Matcher | Cel |
 |------|---------|-----|
+| **npm-guard** | Bash | Blokuje npm/yarn w projekcie pnpm (🛑 BLOKUJE) |
 | **prisma-safety-guard** | Bash | Blokuje niebezpieczne komendy Prisma (`migrate reset`, `db push`) |
 | **pnpm-enforcer** | Bash | Konwertuje `npm` → `pnpm`, blokuje `yarn` |
 | **git-commit-validator** | Bash | Sprawdza TypeScript, linting przed commitem |
+| **money-validator** | Write/Edit | Blokuje parseFloat/toFixed na valuePln/valueEur (🛑 BLOKUJE) |
 | **tdd-guard** | Write/Edit | Wymusza TDD - blokuje kod bez failing testu (domyślnie OFF) |
+| **assumption-disclosure-guard** | Write/Edit | Wykrywa magiczne liczby bez komentarzy (⚠️ WARNING) |
+| **no-code-before-decision-guard** | Write/Edit | Blokuje kod w business logic jeśli NIE było pytania (🛑 BLOKUJE) |
+| **change-impact-matrix-validator** | Write/Edit | Wykrywa ripple effects (types, API, schema) (⚠️ WARNING) |
 
 ### PostToolUse (po wykonaniu narzędzia)
 
@@ -34,6 +40,7 @@ Kompletny zestaw hooków dla projektu AKROBUD.
 |------|---------|-----|
 | **post-tool-use-tracker** | Edit/Write | Śledzi edytowane pliki i repos |
 | **post-edit-checks** | Edit/Write | TypeScript check, security scan, commit reminder |
+| **self-review-gate** | Edit/Write | Checklist samooceny (INTENT? YAGNI? COMMON_MISTAKES?) (ℹ️ INFO) |
 
 ### Notification (powiadomienia)
 
@@ -66,7 +73,127 @@ npm install
 
 ## 🔧 Konfiguracja
 
-### 1. Prisma Safety Guard
+### 1. Intent-Scope-Action Validator
+
+**Typ:** UserPromptSubmit (⚠️ WARNING)
+
+**Cel:** Wymusza jasny INTENT → SCOPE → ACTION przed rozpoczęciem pracy
+
+**Jak działa:**
+- Wykrywa triggery: "dodaj", "zmień", "usuń", "zrefaktoruj"
+- Sprawdza czy prompt ma:
+  - **INTENT** - Po co? (żeby użytkownik mógł...)
+  - **SCOPE** - Co konkretnie? (w pliku X, endpoint Y)
+  - **ACTION** - Jak? (krok 1, 2, 3)
+- Jeśli brak - pokazuje reminder (nie blokuje)
+
+**Przykład:**
+```
+User: "Dodaj przycisk usuń"
+
+Hook: 💡 REMINDER
+"Rozważ dodanie:
+ 🎯 INTENT: Żeby użytkownik mógł...
+ 📦 SCOPE: W komponencie X
+ ⚡ ACTION: 1. Dodaj button, 2. Handler, 3. API"
+```
+
+### 2. NPM Guard
+
+**Typ:** PreToolUse Bash (🛑 BLOKUJE)
+
+**Cel:** Blokuje npm/yarn w projekcie pnpm
+
+**Blokuje:**
+- `npm install`, `npm add`, `npm run`
+- `yarn add`, `yarn install`
+
+**Pokazuje poprawną komendę:**
+```
+❌ npm install lodash
+✅ pnpm add lodash
+```
+
+### 3. Money Validator
+
+**Typ:** PreToolUse Write/Edit (🛑 BLOKUJE)
+
+**Cel:** Blokuje niebezpieczne operacje na kwotach
+
+**Blokowane patterny:**
+- `parseFloat(order.valuePln)` → "Użyj groszeToPln()"
+- `valuePln.toFixed(2)` → "Użyj formatPln()"
+- `valuePln / 100` → "Użyj groszeToPln()"
+- `valuePln * 100` → "Użyj plnToGrosze()"
+
+**Dlaczego:** Baza przechowuje grosze (integer), nie złotówki!
+
+### 4. Assumption Disclosure Guard
+
+**Typ:** PreToolUse Write/Edit (⚠️ WARNING)
+
+**Cel:** Wykrywa założenia które powinny być wyjaśnione
+
+**Wykrywa:**
+- Magic numbers: `const limit = 100;` (bez komentarza)
+- Timeouts: `setTimeout(fn, 3000)` (bez wyjaśnienia)
+- Hardcoded roles: `if (role === 'admin')` (bez kontekstu)
+- Slice bez wyjaśnienia: `.slice(0, 10)` (dlaczego 10?)
+
+**Sugestia:** Dodaj komentarz wyjaśniający INTENCJĘ
+
+### 5. No Code Before Decision Guard
+
+**Typ:** PreToolUse Write/Edit (🛑 BLOKUJE dla business logic)
+
+**Cel:** Wymusza HARD STOP RULE dla logiki biznesowej
+
+**Aktywuje się dla:**
+- `handlers/`, `services/`, `validators/`, `routes/`
+
+**Blokuje gdy:**
+- NIE było pytania do użytkownika (brak `?` w konwersacji)
+- NIE było potwierdzenia użytkownika
+
+**HARD STOP RULE:**
+1. ⏸️ ZATRZYMAĆ SIĘ
+2. ❓ ZADAĆ PYTANIA
+3. 🔀 ZAPROPONOWAĆ OPCJE
+4. ⏳ CZEKAĆ NA WYBÓR
+
+### 6. Change Impact Matrix Validator
+
+**Typ:** PreToolUse Write/Edit (⚠️ WARNING)
+
+**Cel:** Wykrywa zmiany które mogą mieć ripple effect
+
+**Wykrywa zmiany w:**
+- TypeScript types/interfaces (wpływ na wszystkie importy)
+- Exported API (wpływ na wszystkich użytkowników)
+- Prisma models (wpływ na migracje + queries)
+- API endpoints (wpływ na frontend)
+- Zod schemas (wpływ na walidację)
+
+**Sugestia:** Sprawdź Grep/Glob jakie pliki będą dotknięte
+
+### 7. Self-Review Gate
+
+**Typ:** PostToolUse Write/Edit (ℹ️ INFO)
+
+**Cel:** Checklist samooceny po zapisie kodu
+
+**5 pytań:**
+1. **INTENT** - Czy to odpowiada na zadanie?
+2. **YAGNI** - Czy nie za-engineerowałem?
+3. **COMMON_MISTAKES** - Czy złamałem zasady?
+4. **ARCHITECTURE** - Czy zgodne ze standardami?
+5. **RIPPLE EFFECTS** - Czy coś się zepsuje?
+
+**Nie blokuje** - to reminder przed przejściem dalej
+
+---
+
+### 8. Prisma Safety Guard
 
 **Domyślnie:** Blokuje `prisma migrate reset`, `prisma db push`
 
@@ -284,6 +411,25 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
 ---
 
-**Wersja:** 1.0
-**Data:** 2025-12-08
+## 📊 Podsumowanie Hooków
+
+**Automatyczne blokady (🛑 CRITICAL):**
+1. npm-guard - Blokuje npm/yarn
+2. money-validator - Blokuje parseFloat na kwotach
+3. no-code-before-decision-guard - Blokuje kod bez pytań (business logic)
+
+**Ostrzeżenia (⚠️ WARNING):**
+1. intent-scope-action-validator - Przypomina o strukturze zadania
+2. assumption-disclosure-guard - Przypomina o komentarzach
+3. change-impact-matrix-validator - Przypomina o ripple effects
+
+**Informacyjne (ℹ️ INFO):**
+1. self-review-gate - Checklist samooceny
+
+**Całkowita liczba hooków:** 12 (7 nowych + 5 istniejących)
+
+---
+
+**Wersja:** 2.0 (+ 5 nowych quality guards)
+**Data:** 2026-01-03
 **Projekt:** AKROBUD

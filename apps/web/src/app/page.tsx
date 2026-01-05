@@ -11,7 +11,7 @@ import dynamic from 'next/dynamic';
 import { DashboardSkeleton } from '@/components/loaders/DashboardSkeleton';
 
 const DashboardContent = dynamic(
-  () => import('@/features/dashboard/components/DashboardContent').then((mod) => mod.DashboardContent),
+  () => import('@/features/dashboard/components/DashboardContent').then((mod) => mod.default),
   {
     loading: () => <DashboardSkeleton />,
     ssr: false,

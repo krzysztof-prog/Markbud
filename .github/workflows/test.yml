@@ -1,0 +1,113 @@
+name: Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/api/src/**'
+      - 'apps/api/prisma/**'
+      - 'apps/api/package.json'
+      - 'apps/api/vitest.config.ts'
+      - 'pnpm-lock.yaml'
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        working-directory: apps/api
+        run: pnpm db:generate
+
+      - name: Run tests with coverage
+        working-directory: apps/api
+        run: pnpm test:coverage
+
+      - name: Generate coverage summary
+        id: coverage
+        working-directory: apps/api
+        run: |
+          COVERAGE=$(cat coverage/coverage-summary.json | jq -r '.total.lines.pct')
+          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+          echo "### Test Coverage: ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./apps/api/coverage/coverage-final.json
+          flags: backend
+          name: backend-tests
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Comment PR with coverage
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const coverage = '${{ steps.coverage.outputs.coverage }}';
+            const comment = `## Test Results\n\n✅ All tests passed!\n\n**Coverage:** ${coverage}%\n\n[View detailed coverage report](https://app.codecov.io/gh/${{ github.repository }}/pull/${{ github.event.pull_request.number }})`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-coverage
+          path: apps/api/coverage/
+          retention-days: 14
+
+      - name: Check coverage threshold
+        working-directory: apps/api
+        run: |
+          COVERAGE=$(cat coverage/coverage-summary.json | jq -r '.total.lines.pct')
+          THRESHOLD=70
+
+          echo "Coverage: $COVERAGE%"
+          echo "Threshold: $THRESHOLD%"
+
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "❌ Coverage $COVERAGE% is below threshold $THRESHOLD%"
+            echo "Please add more tests to improve coverage."
+            exit 1
+          else
+            echo "✅ Coverage $COVERAGE% meets threshold $THRESHOLD%"
+          fi

@@ -20,17 +20,19 @@ export function useContextualToast() {
     message,
     reason,
     variant = 'info',
-    action,
+    action: _action,
   }: ContextualToastOptions) => {
+    const variantMap = {
+      info: 'default' as const,
+      warning: 'warning' as const,
+      error: 'destructive' as const,
+      success: 'success' as const,
+    };
+
     toast({
       title,
       description: `${message} ${reason}`,
-      variant: variant === 'info' ? 'default' : variant,
-      action: action ? (
-        <button onClick={action.onClick} className="px-3 py-1 text-sm">
-          {action.label}
-        </button>
-      ) : undefined
+      variant: variantMap[variant],
     });
   };
 

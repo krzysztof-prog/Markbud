@@ -1,29 +1,49 @@
 /**
- * Import Service - Business logic layer
+ * Import Service - Business logic layer (Orchestrator)
+ *
+ * This service orchestrates import operations, delegating to specialized services:
+ *
+ * Phase 1 Services:
+ * - ImportFileSystemService: File system operations
+ * - ImportSettingsService: Settings and path resolution with caching
+ *
+ * Phase 2 Services:
+ * - ImportValidationService: File validation, duplicate detection, business rules
+ * - ImportTransactionService: Prisma transaction management, rollback, atomic operations
+ * - ImportConflictService: Variant conflict detection and resolution
  */
 
-import { writeFile, mkdir, readdir, copyFile, rename, rm } from 'fs/promises';
-import { existsSync, statSync } from 'fs';
-import path from 'path';
 import { ImportRepository } from '../repositories/ImportRepository.js';
 import { CsvParser } from './parsers/csv-parser.js';
 import { PdfParser } from './parsers/pdf-parser.js';
-import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../utils/errors.js';
+import { NotFoundError, ValidationError, ConflictError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { emitDeliveryCreated, emitOrderUpdated } from './event-emitter.js';
-import { validateUploadedFile, sanitizeFilename } from '../utils/file-validation.js';
-import { OrderVariantService, type VariantResolutionAction } from './orderVariantService.js';
+// Note: sanitizeFilename is now delegated to validationService
+import type { VariantResolutionAction } from './orderVariantService.js';
 import { ImportLockService } from './importLockService.js';
 import { prisma } from '../index.js';
+import {
+  // Phase 1 - File System and Settings
+  ImportFileSystemService,
+  importFileSystemService,
+  ImportSettingsService,
+  // Phase 2 - Validation, Transactions, Conflicts
+  ImportValidationService,
+  ImportTransactionService,
+  ImportConflictService,
+  // Phase 3 - Parsers with Feature Flags
+  getCsvParser,
+  getPdfParser,
+  useNewCsvParser,
+  useNewPdfParser,
+  logParserFeatureFlags,
+  CsvImportService,
+  PdfImportService,
+} from './import/index.js';
 
-// Default base path for imports
-const DEFAULT_IMPORTS_BASE_PATH = 'C:\\Dostawy';
-
-interface CsvFileData {
-  filepath: string;
-  filename: string;
-  relativePath: string;
-}
+// Log feature flags on module load for visibility
+logParserFeatureFlags();
 
 interface FolderImportResult {
   filename: string;
@@ -37,35 +57,40 @@ interface FolderImportResult {
 }
 
 export class ImportService {
-  private variantService: OrderVariantService;
+  // Phase 1 Services
+  private fileSystemService: ImportFileSystemService;
+  private settingsService: ImportSettingsService;
+
+  // Phase 2 Services
+  private validationService: ImportValidationService;
+  private transactionService: ImportTransactionService;
+  private conflictService: ImportConflictService;
+
+  // Utility services
   private lockService: ImportLockService;
 
   constructor(private repository: ImportRepository) {
-    this.variantService = new OrderVariantService(prisma);
+    // Phase 1 - File System and Settings
+    this.fileSystemService = importFileSystemService;
+    this.settingsService = new ImportSettingsService(prisma, repository);
+
+    // Phase 2 - Validation, Transactions, Conflicts
+    this.validationService = new ImportValidationService(prisma, repository);
+    this.transactionService = new ImportTransactionService(prisma, repository);
+    this.conflictService = new ImportConflictService(prisma, repository, this.transactionService);
+
+    // Utility services
     this.lockService = new ImportLockService(prisma);
   }
 
   /**
    * Get imports base path from settings or environment
    * Supports per-user folder settings if userId is provided
+   *
+   * Delegates to ImportSettingsService for caching and user-specific settings
    */
   async getImportsBasePath(userId?: number): Promise<string> {
-    // Check for user-specific settings first
-    if (userId) {
-      const userSettings = await prisma.userFolderSettings.findUnique({
-        where: { userId },
-      });
-      if (userSettings && userSettings.isActive) {
-        return userSettings.importsBasePath;
-      }
-    }
-
-    // Fallback to global setting
-    const settingValue = await this.repository.getSetting('importsBasePath');
-    if (settingValue) {
-      return settingValue;
-    }
-    return process.env.IMPORTS_BASE_PATH || DEFAULT_IMPORTS_BASE_PATH;
+    return this.settingsService.getImportsBasePath(userId);
   }
 
   /**
@@ -95,33 +120,26 @@ export class ImportService {
 
   /**
    * Upload and create a new file import
+   * Delegates validation to ImportValidationService
    */
   async uploadFile(filename: string, buffer: Buffer, mimeType?: string) {
-    // SECURITY: Validate file before processing
-    validateUploadedFile(filename, mimeType, buffer.length);
+    // SECURITY: Validate file before processing (using validation service)
+    this.validationService.validateUploadedFile(filename, mimeType, buffer.length);
 
-    // Determine file type based on filename
-    const lowerFilename = filename.toLowerCase();
-    let fileType = 'unknown';
+    // Determine file type based on filename (using validation service)
+    const fileType = this.validationService.detectFileType(filename);
 
-    if (lowerFilename.includes('uzyte') || lowerFilename.includes('bele') || lowerFilename.endsWith('.csv')) {
-      fileType = 'uzyte_bele';
-    } else if (lowerFilename.endsWith('.pdf')) {
-      fileType = 'ceny_pdf';
-    }
-
-    // Create uploads directory if not exists
-    const uploadsDir = path.join(process.cwd(), 'uploads');
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true });
-    }
+    // Create uploads directory if not exists (using file system service)
+    const uploadsDir = await this.fileSystemService.ensureUploadsDirectory();
 
     // Save file with unique name (sanitized for security)
-    const timestamp = Date.now();
-    const safeFilename = `${timestamp}_${sanitizeFilename(filename)}`;
-    const filepath = path.join(uploadsDir, safeFilename);
+    const safeFilename = this.fileSystemService.generateSafeFilename(
+      filename,
+      this.validationService.sanitizeFilename.bind(this.validationService)
+    );
+    const filepath = this.fileSystemService.joinPath(uploadsDir, safeFilename);
 
-    await writeFile(filepath, buffer);
+    await this.fileSystemService.writeFile(filepath, buffer);
 
     // Create database record
     const fileImport = await this.repository.create({
@@ -141,41 +159,35 @@ export class ImportService {
 
   /**
    * Auto-import PDF with price data
+   * Uses ValidationService for checks and TransactionService for DB operations
    */
   private async autoImportPdf(importId: number, filepath: string, filename: string) {
     try {
       const parser = new PdfParser();
       const preview = await parser.previewCenyPdf(filepath);
 
-      // Check if order exists
-      const order = await this.repository.findOrderByNumber(preview.orderNumber);
+      // Check if order exists (using validation service)
+      const orderCheck = await this.validationService.checkOrderExists(preview.orderNumber);
 
-      if (!order) {
-        // Zapisz cenę do pending_order_prices - będzie automatycznie przypisana gdy zlecenie się pojawi
-        await prisma.pendingOrderPrice.create({
-          data: {
-            orderNumber: preview.orderNumber,
-            reference: preview.reference || null,
-            currency: preview.currency,
-            valueNetto: preview.valueNetto,
-            valueBrutto: preview.valueBrutto || null,
-            filename,
-            filepath,
-            importId,
-            status: 'pending',
-          },
+      if (!orderCheck.exists) {
+        // Save price to pending_order_prices using transaction service
+        await this.transactionService.createPendingOrderPriceSimple({
+          orderNumber: preview.orderNumber,
+          reference: preview.reference || null,
+          currency: preview.currency,
+          valueNetto: preview.valueNetto,
+          valueBrutto: preview.valueBrutto || null,
+          filename,
+          filepath,
+          importId,
         });
 
-        // Oznacz import jako completed (cena została zapisana do pending)
-        await this.repository.update(importId, {
-          status: 'completed',
-          processedAt: new Date(),
-          metadata: JSON.stringify({
-            savedAsPending: true,
-            orderNumber: preview.orderNumber,
-            parsed: preview,
-            message: `Cena dla ${preview.orderNumber} zapisana - zostanie automatycznie przypisana gdy zlecenie sie pojawi`,
-          }),
+        // Mark import as completed using transaction service
+        await this.transactionService.markAsCompleted(importId, {
+          savedAsPending: true,
+          orderNumber: preview.orderNumber,
+          parsed: preview,
+          message: `Cena dla ${preview.orderNumber} zapisana - zostanie automatycznie przypisana gdy zlecenie sie pojawi`,
         });
 
         logger.info(`PDF price saved as pending: ${filename} -> ${preview.orderNumber} (${preview.currency} ${preview.valueNetto})`);
@@ -184,22 +196,25 @@ export class ImportService {
         return {
           fileImport: { ...fileImport, status: 'completed' },
           autoImportStatus: 'pending_order',
-          autoImportMessage: `Cena dla ${preview.orderNumber} zapisana. Zostanie automatycznie przypisana gdy zlecenie się pojawi.`,
+          autoImportMessage: `Cena dla ${preview.orderNumber} zapisana. Zostanie automatycznie przypisana gdy zlecenie sie pojawi.`,
         };
       }
 
-      // Check for duplicate
-      const existingImport = await this.repository.findDuplicatePdfImport(order.id, importId);
+      // Check for duplicate (using validation service)
+      const duplicateCheck = await this.validationService.checkDuplicatePdfImport(
+        orderCheck.orderId!,
+        importId
+      );
 
-      if (existingImport) {
+      if (duplicateCheck.isDuplicate) {
         await this.repository.update(importId, {
           status: 'pending',
           metadata: JSON.stringify({
             autoImportError: true,
             errorType: 'duplicate',
             parsed: preview,
-            existingImportId: existingImport.id,
-            existingImportDate: existingImport.processedAt,
+            existingImportId: duplicateCheck.existingImport?.id,
+            existingImportDate: duplicateCheck.existingImportDate,
             message: `Cena dla zlecenia ${preview.orderNumber} juz zostala zaimportowana`,
           }),
         });
@@ -215,14 +230,11 @@ export class ImportService {
       // All OK - process automatically
       const result = await parser.processCenyPdf(filepath);
 
-      await this.repository.update(importId, {
-        status: 'completed',
-        processedAt: new Date(),
-        metadata: JSON.stringify({
-          ...result,
-          autoImported: true,
-          parsed: preview,
-        }),
+      // Mark as completed using transaction service
+      await this.transactionService.markAsCompleted(importId, {
+        ...result,
+        autoImported: true,
+        parsed: preview,
       });
 
       logger.info(`Auto-import PDF: ${filename} -> zlecenie ${preview.orderNumber} (${preview.currency} ${preview.valueNetto})`);
@@ -258,50 +270,48 @@ export class ImportService {
 
   /**
    * Get preview of import file with variant conflict detection
+   * Uses ConflictService for variant detection
+   * TASK 7: Now includes error reporting for validation failures
    */
   async getPreview(id: number) {
     const fileImport = await this.getImportById(id);
 
     if (fileImport.fileType === 'uzyte_bele') {
-      const parser = new CsvParser();
-      const preview = await parser.previewUzyteBele(fileImport.filepath);
+      // Parse CSV with error reporting using validation service
+      const parseResult = await this.validationService.parseAndValidateCsvWithErrors(fileImport.filepath);
 
-      // Detect variant conflicts
-      let variantConflict;
-      try {
-        variantConflict = await this.variantService.detectConflicts(
-          preview.orderNumber,
-          preview
-        );
-      } catch (error) {
-        logger.error('Variant conflict detection failed', error);
-      }
+      // Detect variant conflicts using conflict service
+      const conflictResult = await this.conflictService.detectConflicts(
+        parseResult.data.orderNumber,
+        parseResult.data
+      );
 
       // Format requirements and windows as data array
       const data = [
-        ...preview.requirements.map((req: any) => ({ ...req, type: 'requirement' })),
-        ...preview.windows.map((win: any) => ({ ...win, type: 'window' })),
+        ...parseResult.data.requirements.map((req: any) => ({ ...req, type: 'requirement' })),
+        ...parseResult.data.windows.map((win: any) => ({ ...win, type: 'window' })),
       ];
 
       return {
         import: fileImport,
         data,
         summary: {
-          totalRecords: data.length,
-          validRecords: data.length,
-          invalidRecords: 0,
+          totalRecords: parseResult.summary.totalRows,
+          validRecords: parseResult.summary.successRows,
+          invalidRecords: parseResult.summary.failedRows,
         },
+        errors: parseResult.errors,
         metadata: {
-          orderNumber: preview.orderNumber,
-          totals: preview.totals,
-          variantConflict,
+          orderNumber: parseResult.data.orderNumber,
+          totals: parseResult.data.totals,
+          variantConflict: conflictResult.conflict,
         },
       };
     }
 
     if (fileImport.fileType === 'ceny_pdf') {
-      const parser = new PdfParser();
-      const preview = await parser.previewCenyPdf(fileImport.filepath);
+      // Parse PDF using validation service
+      const preview = await this.validationService.parseAndValidatePdf(fileImport.filepath);
 
       return {
         import: fileImport,
@@ -336,16 +346,14 @@ export class ImportService {
 
   /**
    * Approve and process an import
+   * Uses TransactionService for status updates and ValidationService for checks
    */
   async approveImport(id: number, action: 'overwrite' | 'add_new' = 'add_new', replaceBase: boolean = false) {
-    const fileImport = await this.getImportById(id);
+    // Validate import can be processed (using validation service)
+    const fileImport = await this.validationService.validateImportCanBeProcessed(id);
 
-    if (fileImport.status !== 'pending') {
-      throw new ValidationError('Import juz zostal przetworzony');
-    }
-
-    // Mark as processing
-    await this.repository.update(id, { status: 'processing' });
+    // Mark as processing using transaction service
+    await this.transactionService.markAsProcessing(id);
 
     try {
       let result;
@@ -355,27 +363,26 @@ export class ImportService {
       } else if (fileImport.fileType === 'ceny_pdf') {
         const parser = new PdfParser();
 
-        // Najpierw sprawdź czy zlecenie istnieje
-        const preview = await parser.previewCenyPdf(fileImport.filepath);
-        const order = await this.repository.findOrderByNumber(preview.orderNumber);
+        // Parse and validate PDF
+        const preview = await this.validationService.parseAndValidatePdf(fileImport.filepath);
 
-        if (order) {
-          // Zlecenie istnieje - przypisz cenę bezpośrednio
+        // Check if order exists
+        const orderCheck = await this.validationService.checkOrderExists(preview.orderNumber);
+
+        if (orderCheck.exists) {
+          // Order exists - assign price directly
           result = await parser.processCenyPdf(fileImport.filepath);
         } else {
-          // Zlecenie nie istnieje - zapisz do PendingOrderPrice
-          await prisma.pendingOrderPrice.create({
-            data: {
-              orderNumber: preview.orderNumber,
-              reference: preview.reference || null,
-              currency: preview.currency,
-              valueNetto: preview.valueNetto,
-              valueBrutto: preview.valueBrutto || null,
-              filename: fileImport.filename,
-              filepath: fileImport.filepath,
-              importId: id,
-              status: 'pending',
-            },
+          // Order doesn't exist - save to PendingOrderPrice using transaction service
+          await this.transactionService.createPendingOrderPriceSimple({
+            orderNumber: preview.orderNumber,
+            reference: preview.reference || null,
+            currency: preview.currency,
+            valueNetto: preview.valueNetto,
+            valueBrutto: preview.valueBrutto || null,
+            filename: fileImport.filename,
+            filepath: fileImport.filepath,
+            importId: id,
           });
 
           logger.info(`PDF price saved as pending (manual approve): ${fileImport.filename} -> ${preview.orderNumber}`);
@@ -392,20 +399,16 @@ export class ImportService {
         throw new ValidationError('Nieobslugiwany typ pliku');
       }
 
-      // Mark as completed
-      await this.repository.update(id, {
-        status: 'completed',
-        processedAt: new Date(),
-        metadata: JSON.stringify(result),
-      });
+      // Mark as completed using transaction service
+      await this.transactionService.markAsCompleted(id, result);
 
       return { success: true, result };
     } catch (error) {
-      // Mark as error
-      await this.repository.update(id, {
-        status: 'error',
-        errorMessage: error instanceof Error ? error.message : 'Nieznany blad',
-      });
+      // Mark as error using transaction service
+      await this.transactionService.markAsError(
+        id,
+        error instanceof Error ? error.message : 'Nieznany blad'
+      );
 
       throw error;
     }
@@ -413,27 +416,24 @@ export class ImportService {
 
   /**
    * Process uzyte/bele CSV import with variant resolution
+   * Uses ConflictService for resolution execution and TransactionService for DB operations
    */
   async processUzyteBeleWithResolution(
     id: number,
     resolution: VariantResolutionAction
   ): Promise<{ success: boolean; result: unknown }> {
-    const fileImport = await this.getImportById(id);
+    // Validate import can be processed
+    const fileImport = await this.validationService.validateImportCanBeProcessed(id);
 
-    if (fileImport.status !== 'pending') {
-      throw new ValidationError('Import juz zostal przetworzony');
-    }
-
-    // Mark as processing
-    await this.repository.update(id, { status: 'processing' });
+    // Mark as processing using transaction service
+    await this.transactionService.markAsProcessing(id);
 
     try {
       let result;
 
       // Parse the file to get order number and data
-      const parser = new CsvParser();
-      const preview = await parser.previewUzyteBele(fileImport.filepath);
-      const orderNumberParsed = parser.parseOrderNumber(preview.orderNumber);
+      const preview = await this.validationService.parseAndValidateCsv(fileImport.filepath);
+      const orderNumberParsed = this.conflictService.parseOrderNumber(preview.orderNumber);
 
       logger.info('Processing import with variant resolution', {
         importId: id,
@@ -441,106 +441,46 @@ export class ImportService {
         resolutionType: resolution.type,
       });
 
-      // Handle different resolution types
-      switch (resolution.type) {
-        case 'replace':
-          // Replace existing order (use replaceBase=true)
-          logger.info('Resolution: Replace existing order', {
-            targetOrder: resolution.targetOrderNumber,
-          });
-          result = await this.processUzyteBeleImport(fileImport, 'overwrite', true);
-          break;
+      // Execute resolution using conflict service
+      const resolutionResult = await this.conflictService.executeResolution(
+        resolution,
+        preview.orderNumber,
+        preview
+      );
 
-        case 'keep_both':
-          // Import as new variant - use full variant number
-          logger.info('Resolution: Keep both variants', {
-            newOrder: preview.orderNumber,
-          });
-          result = await this.processUzyteBeleImport(fileImport, 'add_new', false);
-          break;
+      logger.info('Resolution executed', {
+        action: resolutionResult.action,
+        message: resolutionResult.message,
+      });
 
-        case 'use_latest':
-          // Delete older variants, then import
-          logger.info('Resolution: Use latest variant', {
-            deleteOlder: resolution.deleteOlder,
-          });
-
-          if (resolution.deleteOlder) {
-            // Find all related orders
-            const relatedOrders = await this.variantService.findRelatedOrders(
-              orderNumberParsed.base
-            );
-
-            logger.info('Deleting older variants', {
-              count: relatedOrders.length,
-              orders: relatedOrders.map(o => o.orderNumber),
-            });
-
-            // Delete all related orders in transaction
-            await prisma.$transaction(async (tx) => {
-              for (const relatedOrder of relatedOrders) {
-                if (relatedOrder.id) {
-                  // Delete requirements first
-                  await tx.orderRequirement.deleteMany({
-                    where: { orderId: relatedOrder.id },
-                  });
-
-                  // Delete windows
-                  await tx.orderWindow.deleteMany({
-                    where: { orderId: relatedOrder.id },
-                  });
-
-                  // Delete delivery associations
-                  await tx.deliveryOrder.deleteMany({
-                    where: { orderId: relatedOrder.id },
-                  });
-
-                  // Delete the order
-                  await tx.order.delete({
-                    where: { id: relatedOrder.id },
-                  });
-
-                  logger.info(`Deleted variant ${relatedOrder.orderNumber}`);
-                }
-              }
-            });
-          }
-
-          // Import the new order
-          result = await this.processUzyteBeleImport(fileImport, 'add_new', false);
-          break;
-
-        case 'merge':
-          // Merge with existing order - not fully implemented yet
-          // For now, treat as add_new
-          logger.warn('Merge resolution not fully implemented, using add_new');
-          result = await this.processUzyteBeleImport(fileImport, 'add_new', false);
-          break;
-
-        case 'cancel':
-          // Cancel import - mark as rejected
-          await this.repository.update(id, {
-            status: 'rejected',
-            metadata: JSON.stringify({
-              resolutionType: 'cancelled',
-              cancelledAt: new Date().toISOString(),
-            }),
-          });
-          return { success: false, result: { cancelled: true } };
-
-        default:
-          throw new ValidationError('Nieznany typ rozwiazania konfliktu');
+      // Handle cancellation
+      if (resolution.type === 'cancel') {
+        await this.transactionService.markAsRejected(id, {
+          resolutionType: 'cancelled',
+          cancelledAt: new Date().toISOString(),
+        });
+        return { success: false, result: { cancelled: true } };
       }
 
-      // Mark as completed
-      await this.repository.update(id, {
-        status: 'completed',
-        processedAt: new Date(),
-        metadata: JSON.stringify({
-          ...result,
-          resolutionType: resolution.type,
-          targetOrderNumber: 'targetOrderNumber' in resolution ? resolution.targetOrderNumber : undefined,
-        }),
+      // Determine import action based on resolution type
+      let action: 'overwrite' | 'add_new' = 'add_new';
+      let replaceBase = false;
+
+      if (resolution.type === 'replace') {
+        action = 'overwrite';
+        replaceBase = true;
+      }
+
+      // Process the import
+      result = await this.processUzyteBeleImport(fileImport, action, replaceBase);
+
+      // Mark as completed using transaction service
+      await this.transactionService.markAsCompleted(id, {
+        ...result,
+        resolutionType: resolution.type,
+        targetOrderNumber: 'targetOrderNumber' in resolution ? resolution.targetOrderNumber : undefined,
+        resolutionMessage: resolutionResult.message,
+        deletedOrders: resolutionResult.deletedOrders,
       });
 
       logger.info('Import completed with variant resolution', {
@@ -551,13 +491,10 @@ export class ImportService {
 
       return { success: true, result };
     } catch (error) {
-      // Mark as error
+      // Mark as error using transaction service
       const errorMessage = error instanceof Error ? error.message : 'Nieznany blad';
 
-      await this.repository.update(id, {
-        status: 'error',
-        errorMessage,
-      });
+      await this.transactionService.markAsError(id, errorMessage);
 
       logger.error('Import failed with variant resolution', {
         importId: id,
@@ -642,24 +579,13 @@ export class ImportService {
    */
   async importFromFolder(folderPath: string, deliveryNumber: 'I' | 'II' | 'III', userId: number) {
     const basePath = await this.getImportsBasePath(userId);
-    const normalizedBase = path.resolve(basePath);
-    const normalizedFolder = path.resolve(folderPath);
+    const normalizedFolder = this.fileSystemService.normalizePath(folderPath);
 
-    // Ensure folder is within allowed base path (case-insensitive on Windows)
-    if (!normalizedFolder.toLowerCase().startsWith(normalizedBase.toLowerCase())) {
-      throw new ForbiddenError('Folder musi znajdowac sie w dozwolonej lokalizacji');
-    }
+    // Validate folder is within allowed base path (using file system service)
+    this.fileSystemService.validatePathWithinBase(normalizedFolder, basePath);
 
-    // Check if folder exists
-    if (!existsSync(normalizedFolder)) {
-      throw new NotFoundError('Folder');
-    }
-
-    // Check if it's actually a directory
-    const stats = statSync(normalizedFolder);
-    if (!stats.isDirectory()) {
-      throw new ValidationError('Sciezka nie jest folderem');
-    }
+    // Validate folder exists and is a directory (using file system service)
+    this.fileSystemService.validateDirectory(normalizedFolder);
 
     // Acquire lock for this folder
     const lock = await this.lockService.acquireLock(normalizedFolder, userId);
@@ -685,28 +611,18 @@ export class ImportService {
    * Perform the actual folder import (called within lock)
    */
   private async performFolderImport(normalizedFolder: string, deliveryNumber: 'I' | 'II' | 'III', userId: number) {
+    // Extract date from folder name using file system service
+    const folderName = this.fileSystemService.getBaseName(normalizedFolder);
+    const deliveryDate = this.fileSystemService.extractDateFromFolderName(folderName);
 
-    // Extract date from folder name (format DD.MM.YYYY)
-    const folderName = path.basename(normalizedFolder);
-    const dateMatch = folderName.match(/(\d{2})\.(\d{2})\.(\d{4})/);
-
-    if (!dateMatch) {
+    if (!deliveryDate) {
       throw new ValidationError('Brak daty w nazwie folderu', {
         format: ['Oczekiwany format: DD.MM.YYYY'],
       });
     }
 
-    const [, day, month, year] = dateMatch;
-    const deliveryDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-
-    if (isNaN(deliveryDate.getTime())) {
-      throw new ValidationError('Nieprawidlowa data', {
-        date: [`Data ${day}.${month}.${year} jest nieprawidlowa`],
-      });
-    }
-
-    // Find CSV files recursively
-    const csvFilesData = await this.findCsvFilesRecursively(normalizedFolder, 3);
+    // Find CSV files recursively using file system service
+    const csvFilesData = await this.fileSystemService.findCsvFilesRecursively(normalizedFolder, 3);
 
     if (csvFilesData.length === 0) {
       throw new ValidationError('Brak plikow CSV', {
@@ -720,15 +636,13 @@ export class ImportService {
 
     if (!delivery) {
       delivery = await this.repository.createDelivery(deliveryDate, deliveryNumber);
-      logger.info(`Utworzono nowa dostawe ${deliveryNumber} na ${day}.${month}.${year}`);
+      const dateStr = deliveryDate.toLocaleDateString('pl-PL');
+      logger.info(`Utworzono nowa dostawe ${deliveryNumber} na ${dateStr}`);
       emitDeliveryCreated(delivery);
     }
 
-    // Create uploads directory if not exists
-    const uploadsDir = path.join(process.cwd(), 'uploads');
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true });
-    }
+    // Create uploads directory if not exists using file system service
+    const uploadsDir = await this.fileSystemService.ensureUploadsDirectory();
 
     // Process each CSV file
     const results: FolderImportResult[] = [];
@@ -763,12 +677,14 @@ export class ImportService {
           }
         }
 
-        // Copy file to uploads with timestamp
-        const timestamp = Date.now();
-        const safeFilename = `${timestamp}_${csvFileData.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-        const destPath = path.join(uploadsDir, safeFilename);
+        // Copy file to uploads with timestamp using file system service
+        const safeFilename = this.fileSystemService.generateSafeFilename(
+          csvFileData.filename,
+          (name) => name.replace(/[^a-zA-Z0-9._-]/g, '_')
+        );
+        const destPath = this.fileSystemService.joinPath(uploadsDir, safeFilename);
 
-        await copyFile(csvFileData.filepath, destPath);
+        await this.fileSystemService.copyFile(csvFileData.filepath, destPath);
 
         // Create import record
         const fileImport = await this.repository.create({
@@ -825,11 +741,11 @@ export class ImportService {
     const skippedCount = results.filter((r) => r.skipped).length;
     const failCount = results.filter((r) => !r.success && !r.skipped).length;
 
-    // Move folder to archive after successful import
+    // Move folder to archive after successful import using file system service
     let archivedPath: string | null = null;
     if (successCount > 0 || skippedCount > 0) {
       try {
-        archivedPath = await this.moveFolderToArchive(normalizedFolder);
+        archivedPath = await this.fileSystemService.moveFolderToArchive(normalizedFolder);
         logger.info(`Przeniesiono folder ${folderName} do archiwum: ${archivedPath}`);
       } catch (archiveError) {
         logger.error(`Blad przenoszenia folderu do archiwum: ${archiveError instanceof Error ? archiveError.message : 'Nieznany blad'}`);
@@ -861,7 +777,7 @@ export class ImportService {
   async listFolders(userId?: number) {
     const basePath = await this.getImportsBasePath(userId);
 
-    if (!existsSync(basePath)) {
+    if (!this.fileSystemService.exists(basePath)) {
       return {
         error: 'Folder bazowy nie istnieje',
         details: `Skonfiguruj IMPORTS_BASE_PATH w .env lub utworz folder: ${basePath}`,
@@ -871,19 +787,19 @@ export class ImportService {
     }
 
     try {
-      const entries = await readdir(basePath, { withFileTypes: true });
+      const entries = await this.fileSystemService.readDirectory(basePath);
       const folders = entries
         .filter((entry) => entry.isDirectory())
         .map((entry) => {
           const folderName = entry.name;
-          const fullPath = path.join(basePath, folderName);
-          const dateMatch = folderName.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+          const fullPath = this.fileSystemService.joinPath(basePath, folderName);
+          const extractedDate = this.fileSystemService.extractDateFromFolderName(folderName);
 
           return {
             name: folderName,
             path: fullPath,
-            hasDate: !!dateMatch,
-            date: dateMatch ? `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}` : null,
+            hasDate: !!extractedDate,
+            date: extractedDate ? extractedDate.toISOString().split('T')[0] : null,
           };
         })
         .filter((folder) => folder.hasDate)
@@ -908,28 +824,17 @@ export class ImportService {
    */
   async archiveFolder(folderPath: string, userId?: number): Promise<string> {
     const basePath = await this.getImportsBasePath(userId);
-    const normalizedBase = path.resolve(basePath);
-    const normalizedFolder = path.resolve(folderPath);
+    const normalizedFolder = this.fileSystemService.normalizePath(folderPath);
 
-    // Ensure folder is within allowed base path (case-insensitive on Windows)
-    if (!normalizedFolder.toLowerCase().startsWith(normalizedBase.toLowerCase())) {
-      throw new ForbiddenError('Folder musi znajdowac sie w dozwolonej lokalizacji');
-    }
+    // Validate folder is within allowed base path (using file system service)
+    this.fileSystemService.validatePathWithinBase(normalizedFolder, basePath);
 
-    // Check if folder exists
-    if (!existsSync(normalizedFolder)) {
-      throw new NotFoundError('Folder');
-    }
+    // Validate folder exists and is a directory (using file system service)
+    this.fileSystemService.validateDirectory(normalizedFolder);
 
-    // Check if it's actually a directory
-    const stats = statSync(normalizedFolder);
-    if (!stats.isDirectory()) {
-      throw new ValidationError('Sciezka nie jest folderem');
-    }
-
-    // Use the existing moveFolderToArchive method
-    const archivedPath = await this.moveFolderToArchive(normalizedFolder);
-    logger.info(`Folder ${path.basename(normalizedFolder)} zarchiwizowany: ${archivedPath}`);
+    // Use the file system service to move folder to archive
+    const archivedPath = await this.fileSystemService.moveFolderToArchive(normalizedFolder);
+    logger.info(`Folder ${this.fileSystemService.getBaseName(normalizedFolder)} zarchiwizowany: ${archivedPath}`);
 
     return archivedPath;
   }
@@ -941,28 +846,17 @@ export class ImportService {
    */
   async deleteFolder(folderPath: string, userId?: number): Promise<void> {
     const basePath = await this.getImportsBasePath(userId);
-    const normalizedBase = path.resolve(basePath);
-    const normalizedFolder = path.resolve(folderPath);
+    const normalizedFolder = this.fileSystemService.normalizePath(folderPath);
 
-    // Ensure folder is within allowed base path (case-insensitive on Windows)
-    if (!normalizedFolder.toLowerCase().startsWith(normalizedBase.toLowerCase())) {
-      throw new ForbiddenError('Folder musi znajdowac sie w dozwolonej lokalizacji');
-    }
+    // Validate folder is within allowed base path (using file system service)
+    this.fileSystemService.validatePathWithinBase(normalizedFolder, basePath);
 
-    // Check if folder exists
-    if (!existsSync(normalizedFolder)) {
-      throw new NotFoundError('Folder');
-    }
+    // Validate folder exists and is a directory (using file system service)
+    this.fileSystemService.validateDirectory(normalizedFolder);
 
-    // Check if it's actually a directory
-    const stats = statSync(normalizedFolder);
-    if (!stats.isDirectory()) {
-      throw new ValidationError('Sciezka nie jest folderem');
-    }
-
-    // Delete folder recursively
-    await rm(normalizedFolder, { recursive: true, force: true });
-    logger.info(`Folder ${path.basename(normalizedFolder)} usuniety: ${normalizedFolder}`);
+    // Delete folder recursively using file system service
+    await this.fileSystemService.deleteDirectory(normalizedFolder);
+    logger.info(`Folder ${this.fileSystemService.getBaseName(normalizedFolder)} usuniety: ${normalizedFolder}`);
   }
 
   /**
@@ -971,35 +865,22 @@ export class ImportService {
    */
   async scanFolder(folderPath: string, userId?: number) {
     const basePath = await this.getImportsBasePath(userId);
-    const normalizedBase = path.resolve(basePath);
-    const normalizedFolder = path.resolve(folderPath);
+    const normalizedFolder = this.fileSystemService.normalizePath(folderPath);
 
-    // Ensure folder is within allowed base path
-    if (!normalizedFolder.toLowerCase().startsWith(normalizedBase.toLowerCase())) {
-      throw new ForbiddenError('Folder musi znajdowac sie w dozwolonej lokalizacji');
-    }
+    // Validate folder is within allowed base path (using file system service)
+    this.fileSystemService.validatePathWithinBase(normalizedFolder, basePath);
 
-    if (!existsSync(normalizedFolder)) {
-      throw new NotFoundError('Folder');
-    }
+    // Validate folder exists and is a directory (using file system service)
+    this.fileSystemService.validateDirectory(normalizedFolder);
 
-    const stats = statSync(normalizedFolder);
-    if (!stats.isDirectory()) {
-      throw new ValidationError('Sciezka nie jest folderem');
-    }
+    // Extract date from folder name using file system service
+    const folderName = this.fileSystemService.getBaseName(normalizedFolder);
+    const extractedDate = this.fileSystemService.extractDateFromFolderName(folderName);
 
-    // Extract date from folder name
-    const folderName = path.basename(normalizedFolder);
-    const dateMatch = folderName.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+    const detectedDate = extractedDate ? extractedDate.toISOString().split('T')[0] : null;
 
-    let detectedDate: string | null = null;
-    if (dateMatch) {
-      const [, day, month, year] = dateMatch;
-      detectedDate = `${year}-${month}-${day}`;
-    }
-
-    // Find CSV files recursively
-    const csvFilesData = await this.findCsvFilesRecursively(normalizedFolder, 3);
+    // Find CSV files recursively using file system service
+    const csvFilesData = await this.fileSystemService.findCsvFilesRecursively(normalizedFolder, 3);
 
     // Get preview of each file and check for duplicates + variant conflicts
     const parser = new CsvParser();
@@ -1042,31 +923,24 @@ export class ImportService {
           };
         }
 
-        // Check for variant conflicts
+        // Check for variant conflicts using conflict service
         let variantConflict: {
           hasConflict: boolean;
           conflictType?: string;
           recommendation?: string;
         } | undefined;
 
-        try {
-          const conflict = await this.variantService.detectConflicts(
-            preview.orderNumber,
-            preview
-          );
+        const conflictResult = await this.conflictService.detectConflicts(
+          preview.orderNumber,
+          preview
+        );
 
-          if (conflict) {
-            variantConflict = {
-              hasConflict: true,
-              conflictType: conflict.type,
-              recommendation: conflict.recommendation,
-            };
-          }
-        } catch (variantError) {
-          logger.error('Variant detection failed for preview', {
-            orderNumber: preview.orderNumber,
-            error: variantError,
-          });
+        if (conflictResult.hasConflict && conflictResult.conflict) {
+          variantConflict = {
+            hasConflict: true,
+            conflictType: conflictResult.conflict.type,
+            recommendation: conflictResult.conflict.recommendation,
+          };
         }
 
         previews.push({
@@ -1104,121 +978,57 @@ export class ImportService {
     };
   }
 
-  /**
-   * Recursively find CSV files with "uzyte" or "bele" in name
-   */
-  private async findCsvFilesRecursively(
-    dirPath: string,
-    maxDepth: number = 3,
-    currentDepth: number = 0
-  ): Promise<CsvFileData[]> {
-    const results: CsvFileData[] = [];
-
-    if (currentDepth > maxDepth) {
-      return results;
-    }
-
-    try {
-      const entries = await readdir(dirPath, { withFileTypes: true });
-
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-
-        if (entry.isDirectory()) {
-          const subResults = await this.findCsvFilesRecursively(fullPath, maxDepth, currentDepth + 1);
-          results.push(...subResults);
-        } else if (entry.isFile()) {
-          const lowerName = entry.name.toLowerCase();
-          if (lowerName.endsWith('.csv') && (lowerName.includes('uzyte') || lowerName.includes('bele'))) {
-            const relativePath = path.relative(dirPath, fullPath);
-            results.push({
-              filepath: fullPath,
-              filename: entry.name,
-              relativePath,
-            });
-          }
-        }
-      }
-    } catch (error) {
-      logger.error(`Blad podczas skanowania ${dirPath}: ${error instanceof Error ? error.message : 'Nieznany blad'}`);
-    }
-
-    return results;
-  }
-
-  /**
-   * Move imported folder to archive subfolder
-   * Creates "archiwum" subfolder in the parent directory if it doesn't exist
-   */
-  private async moveFolderToArchive(folderPath: string): Promise<string> {
-    const parentDir = path.dirname(folderPath);
-    const folderName = path.basename(folderPath);
-    const archiveDir = path.join(parentDir, 'archiwum');
-    const archivePath = path.join(archiveDir, folderName);
-
-    // Create archive directory if it doesn't exist
-    if (!existsSync(archiveDir)) {
-      await mkdir(archiveDir, { recursive: true });
-      logger.info(`Utworzono folder archiwum: ${archiveDir}`);
-    }
-
-    // Check if destination already exists (shouldn't happen, but handle gracefully)
-    if (existsSync(archivePath)) {
-      // Add timestamp to make it unique
-      const timestamp = Date.now();
-      const uniqueArchivePath = path.join(archiveDir, `${folderName}_${timestamp}`);
-      await rename(folderPath, uniqueArchivePath);
-      return uniqueArchivePath;
-    }
-
-    // Move folder to archive
-    await rename(folderPath, archivePath);
-    return archivePath;
-  }
+  // Note: findCsvFilesRecursively and moveFolderToArchive methods have been extracted
+  // to ImportFileSystemService for better separation of concerns and testability.
 
   /**
    * Preview file by filepath with variant conflict detection
+   * Uses ValidationService for parsing and ConflictService for conflicts
+   * TASK 7: Now includes error reporting for validation failures
    */
   async previewByFilepath(filepath: string): Promise<any> {
-    // Validate filepath exists
-    if (!existsSync(filepath)) {
+    // Validate filepath exists using file system service
+    if (!this.fileSystemService.exists(filepath)) {
       throw new NotFoundError('File');
     }
 
-    const parser = new CsvParser();
-    const preview = await parser.previewUzyteBele(filepath);
+    // Parse and validate CSV with error reporting using validation service
+    const parseResult = await this.validationService.parseAndValidateCsvWithErrors(filepath);
 
-    // Check for variant conflicts
-    const variantConflict = await this.variantService.detectConflicts(preview.orderNumber, preview);
+    // Check for variant conflicts using conflict service
+    const conflictResult = await this.conflictService.detectConflicts(parseResult.data.orderNumber, parseResult.data);
 
     return {
-      ...preview,
-      variantConflict,
+      ...parseResult.data,
+      errors: parseResult.errors,
+      summary: parseResult.summary,
+      variantConflict: conflictResult.conflict,
     };
   }
 
   /**
    * Process import with optional variant resolution
+   * Uses ValidationService for parsing and ConflictService for resolution
    */
   async processImport(
     filepath: string,
     deliveryNumber?: 'I' | 'II' | 'III',
     resolution?: VariantResolutionAction
   ) {
-    // Validate filepath exists
-    if (!existsSync(filepath)) {
+    // Validate filepath exists using file system service
+    if (!this.fileSystemService.exists(filepath)) {
       throw new NotFoundError('File');
     }
 
-    const parser = new CsvParser();
-    const preview = await parser.previewUzyteBele(filepath);
+    // Parse and validate CSV using validation service
+    const preview = await this.validationService.parseAndValidateCsv(filepath);
 
     // Check for variant conflicts if no resolution provided
-    const variantConflict = await this.variantService.detectConflicts(preview.orderNumber, preview);
+    const conflictResult = await this.conflictService.detectConflicts(preview.orderNumber, preview);
 
-    if (variantConflict && !resolution) {
+    if (conflictResult.hasConflict && !resolution) {
       throw new ValidationError('Variant conflict detected - resolution required', {
-        variantConflict: [JSON.stringify(variantConflict)],
+        variantConflict: [JSON.stringify(conflictResult.conflict)],
       });
     }
 
@@ -1230,50 +1040,41 @@ export class ImportService {
       };
     }
 
-    // Process based on resolution strategy
+    // Execute resolution if provided using conflict service
+    if (resolution) {
+      const resolutionResult = await this.conflictService.executeResolution(
+        resolution,
+        preview.orderNumber,
+        preview
+      );
+
+      logger.info('Resolution executed for processImport', {
+        action: resolutionResult.action,
+        message: resolutionResult.message,
+      });
+    }
+
+    // Determine import action based on resolution type
     let action: 'overwrite' | 'add_new' = 'add_new';
     let replaceBase = false;
 
-    if (resolution) {
-      switch (resolution.type) {
-        case 'replace':
-          action = 'overwrite';
-          break;
-        case 'merge':
-          action = 'add_new';
-          replaceBase = false;
-          break;
-        case 'use_latest':
-          // Delete older variants if requested
-          if (resolution.deleteOlder && variantConflict) {
-            for (const existingOrder of variantConflict.existingOrders) {
-              if (existingOrder.id) {
-                await this.repository.deleteOrder(existingOrder.id);
-                logger.info(`Deleted older variant: ${existingOrder.orderNumber}`);
-              }
-            }
-          }
-          action = 'add_new';
-          break;
-        case 'keep_both':
-          action = 'add_new';
-          break;
-      }
+    if (resolution && resolution.type === 'replace') {
+      action = 'overwrite';
+      replaceBase = true;
     }
 
-    // Create uploads directory if not exists
-    const uploadsDir = path.join(process.cwd(), 'uploads');
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true });
-    }
+    // Create uploads directory if not exists using file system service
+    const uploadsDir = await this.fileSystemService.ensureUploadsDirectory();
 
-    // Copy file to uploads with timestamp
-    const timestamp = Date.now();
-    const filename = path.basename(filepath);
-    const safeFilename = `${timestamp}_${sanitizeFilename(filename)}`;
-    const destPath = path.join(uploadsDir, safeFilename);
+    // Copy file to uploads with timestamp using file system service
+    const filename = this.fileSystemService.getBaseName(filepath);
+    const safeFilename = this.fileSystemService.generateSafeFilename(
+      filename,
+      this.validationService.sanitizeFilename.bind(this.validationService)
+    );
+    const destPath = this.fileSystemService.joinPath(uploadsDir, safeFilename);
 
-    await copyFile(filepath, destPath);
+    await this.fileSystemService.copyFile(filepath, destPath);
 
     // Create import record
     const fileImport = await this.repository.create({
@@ -1285,27 +1086,20 @@ export class ImportService {
 
     try {
       // Process file
+      const parser = new CsvParser();
       const result = await parser.processUzyteBele(destPath, action, replaceBase);
 
-      // Update import as completed
-      await this.repository.update(fileImport.id, {
-        status: 'completed',
-        processedAt: new Date(),
-        metadata: JSON.stringify({ ...result, resolution }),
-      });
+      // Update import as completed using transaction service
+      await this.transactionService.markAsCompleted(fileImport.id, { ...result, resolution });
 
       // Add to delivery if specified
       if (deliveryNumber && result.orderId) {
-        // Extract date from filepath or use current date
-        const folderPath = path.dirname(filepath);
-        const folderName = path.basename(folderPath);
-        const dateMatch = folderName.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+        // Extract date from filepath or use current date (using file system service)
+        const folderPath = this.fileSystemService.getDirName(filepath);
+        const folderName = this.fileSystemService.getBaseName(folderPath);
+        const extractedDate = this.fileSystemService.extractDateFromFolderName(folderName);
 
-        let deliveryDate = new Date();
-        if (dateMatch) {
-          const [, day, month, year] = dateMatch;
-          deliveryDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-        }
+        const deliveryDate = extractedDate || new Date();
 
         // Find or create delivery
         let delivery = await this.repository.findDeliveryByDateAndNumber(deliveryDate, deliveryNumber);
@@ -1338,11 +1132,11 @@ export class ImportService {
         importId: fileImport.id,
       };
     } catch (error) {
-      // Mark as error
-      await this.repository.update(fileImport.id, {
-        status: 'error',
-        errorMessage: error instanceof Error ? error.message : 'Nieznany blad',
-      });
+      // Mark as error using transaction service
+      await this.transactionService.markAsError(
+        fileImport.id,
+        error instanceof Error ? error.message : 'Nieznany blad'
+      );
 
       throw error;
     }

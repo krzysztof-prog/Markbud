@@ -1,6 +1,7 @@
 import { toast } from '@/hooks/useToast';
 import { ToastAction } from '@/components/ui/toast';
 import * as React from 'react';
+import { getErrorMessage as getCentralErrorMessage, getErrorAction } from './error-messages';
 
 export const showSuccessToast = (title: string, description?: string) => {
   toast({
@@ -124,18 +125,28 @@ export const showCategorizedErrorToast = (
   }
 };
 
+/**
+ * Pobiera user-friendly komunikat błędu (używa centralnego systemu)
+ *
+ * @deprecated Użyj getCentralErrorMessage z error-messages.ts bezpośrednio
+ */
 export const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === 'object' && error !== null) {
-    const err = error as { response?: { data?: { message?: string } }; message?: string };
-    if (err.response?.data?.message) {
-      return err.response.data.message;
-    }
-    if (typeof err.message === 'string') {
-      return err.message;
-    }
-  }
-  return 'Coś poszło nie tak';
+  return getCentralErrorMessage(error);
+};
+
+/**
+ * Pokazuje toast z błędem używając centralnego systemu error-messages
+ * Automatycznie dodaje sugerowaną akcję jeśli jest dostępna
+ */
+export const showApiErrorToast = (title: string, error: unknown) => {
+  const message = getCentralErrorMessage(error);
+  const action = getErrorAction(error);
+
+  const description = action ? `${message} ${action}` : message;
+
+  toast({
+    title,
+    description,
+    variant: 'destructive',
+  });
 };

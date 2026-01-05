@@ -1,0 +1,154 @@
+================================================================================
+AUDIT: TypeScript Types vs API Repository Returns - AKROBUD
+================================================================================
+
+Typ: Order
+Brakujące pola w TypeScript:
+  - notes (zwracane w findById)
+  - deliveryDate (zwracane w findById)
+  - productionDate (zwracane w findById)
+  - deliveryOrders (zwracane w findById)
+  - orderNotes (zwracane w findById)
+
+Pola w typie ale nie zwracane z API:
+  - deliveryId (nigdy nie zwracane)
+  - clientName (nigdy nie zwracane)
+  - priority (nigdy nie zwracane)
+  - updatedAt (brak w findAll, jest w findById)
+
+Dodatkowe problemy:
+  - Windows w findAll() zwraca tylko: id, profileType, reference
+  - Powinny być: id, widthMm, heightMm, profileType, quantity, reference
+
+Plik TypeScript: c:\Users\Krzysztof\Desktop\AKROBUD\apps\web\src\types\order.ts
+Repository: c:\Users\Krzysztof\Desktop\AKROBUD\apps\api\src\repositories\OrderRepository.ts
+
+================================================================================
+
+Typ: Delivery
+Brakujące pola w TypeScript:
+  - deliveryOrders (zwracane w findById, ale typ definiuje "orders" - inny format!)
+  - deliveryItems (zwracane w findById)
+
+Pola w typie ale nie zwracane z API (wydają się nieużywane):
+  - weekNumber (nigdy nie zwracane)
+  - year (nigdy nie zwracane)
+  - colorId (nigdy nie zwracane)
+  - isUnassigned (nigdy nie zwracane)
+  - orders (typ oczekuje Order[], ale API zwraca deliveryOrders z inną strukturą)
+  - ordersCount (nigdy nie zwracane)
+  - totalWindows (nigdy nie zwracane)
+  - totalGlass (nigdy nie zwracane)
+  - totalPallets (nigdy nie zwracane)
+  - totalValue (nigdy nie zwracane)
+
+Niezgodność struktury:
+  - Typ oczekuje: orders?: Order[]
+  - API zwraca: deliveryOrders: Array<{ orderId, position, order: {...} }>
+
+Plik TypeScript: c:\Users\Krzysztof\Desktop\AKROBUD\apps\web\src\types\delivery.ts
+Repository: c:\Users\Krzysztof\Desktop\AKROBUD\apps\api\src\repositories\DeliveryRepository.ts
+
+================================================================================
+
+Typ: Profile
+Brakujące pola w TypeScript:
+  - articleNumber (zwracane w findById)
+  - profileColors (zwracane w findById)
+
+Plik TypeScript: c:\Users\Krzysztof\Desktop\AKROBUD\apps\web\src\types\profile.ts
+Repository: c:\Users\Krzysztof\Desktop\AKROBUD\apps\api\src\repositories\ProfileRepository.ts
+
+================================================================================
+
+Typ: Color
+Brakujące pola w TypeScript:
+  - profileColors (zwracane w findById)
+
+Pola w typie ale ewentualnie nie zwracane:
+  - isVisible (w findAll bierze wszystkie pola, ale w findById nie widać w select)
+
+Plik TypeScript: c:\Users\Krzysztof\Desktop\AKROBUD\apps\web\src\types\color.ts
+Repository: c:\Users\Krzysztof\Desktop\AKROBUD\apps\api\src\repositories\ColorRepository.ts
+
+================================================================================
+
+Typ: WarehouseStock
+KRYTYCZNY PROBLEM - Niezgodność nazwy pola:
+  - Typ definiuje: quantity: number
+  - API zwraca: currentStockBeams: number
+  !! To zupełnie inne pole!!
+
+Brakujące pola w TypeScript:
+  - currentStockBeams (zwracane w getStock)
+
+Plik TypeScript: c:\Users\Krzysztof\Desktop\AKROBUD\apps\web\src\types\warehouse.ts
+Repository: c:\Users\Krzysztof\Desktop\AKROBUD\apps\api\src\repositories\WarehouseRepository.ts
+
+================================================================================
+
+Typ: Requirement (zagnieżdżone w OrderRepository)
+KRYTYCZNY PROBLEM - Niezgodność nazwy pola:
+  - Typ definiuje: quantity: number
+  - API zwraca: beamsCount: number
+  !! To ZUPEŁNIE INNE znaczenie (quantity = liczba, beamsCount = belki profili)!!
+
+Brakujące pola w TypeScript:
+  - beamsCount (zwracane w OrderRepository.findById())
+  - meters (zwracane w OrderRepository.findById())
+  - restMm (zwracane w OrderRepository.findById())
+
+Pola w typie ale nie zwracane:
+  - orderId (nie zwracane, bo jest w zagnieżdżeniu w requirements[] order'u)
+
+Plik TypeScript: c:\Users\Krzysztof\Desktop\AKROBUD\apps\web\src\types\requirement.ts
+Repository: Zagnieżdżone w c:\Users\Krzysztof\Desktop\AKROBUD\apps\api\src\repositories\OrderRepository.ts (findById)
+
+================================================================================
+
+Typ: GlassDelivery, GlassOrder, GlassDeliveryItem, GlassOrderItem
+PROBLEM - Brakują całe interfejsy!
+  - Nie istnieje apps\web\src\types\glass-delivery.ts
+  - API ma routes: /glass-deliveries, /glass-orders, /glass-validations
+  - API ma models w Prisma: GlassDelivery, GlassDeliveryItem, GlassOrder, GlassOrderItem, GlassOrderValidation
+  - Service: apps\api\src\services\glassDeliveryService.ts zwraca te dane
+  - Brakuje typów dla frontendu!
+
+Pola zwracane w API (wg schema Prisma):
+  GlassDelivery: id, rackNumber, customerOrderNumber, supplierOrderNumber, deliveryDate, fileImportId, createdAt, items
+  GlassDeliveryItem: id, glassDeliveryId, glassOrderId, orderNumber, orderSuffix, position, widthMm, heightMm, quantity, glassComposition, serialNumber, clientCode, matchStatus, matchedItemId, createdAt
+  GlassOrder: id, glassOrderNumber, orderDate, supplier, orderedBy, expectedDeliveryDate, actualDeliveryDate, status, notes, createdAt, updatedAt
+  GlassOrderItem: id, glassOrderId, orderNumber, orderSuffix, widthMm, heightMm, quantity, glassComposition, createdAt
+
+Routes:
+  - c:\Users\Krzysztof\Desktop\AKROBUD\apps\api\src\routes\glass-deliveries.ts
+  - c:\Users\Krzysztof\Desktop\AKROBUD\apps\api\src\routes\glass-orders.ts
+  - c:\Users\Krzysztof\Desktop\AKROBUD\apps\api\src\routes\glass-validations.ts
+
+Services:
+  - c:\Users\Krzysztof\Desktop\AKROBUD\apps\api\src\services\glassDeliveryService.ts
+
+Plik TypeScript: BRAK! Potrzebny apps\web\src\types\glass-delivery.ts
+Repository: c:\Users\Krzysztof\Desktop\AKROBUD\apps\api\src\routes\glass-deliveries.ts (nie ma dedykowanego repository)
+
+================================================================================
+
+Typ: PalletOptimizer
+Status: OK - typy są zsynchronizowane z API
+
+Plik TypeScript: c:\Users\Krzysztof\Desktop\AKROBUD\apps\web\src\types\pallet.ts
+Repository: c:\Users\Krzysztof\Desktop\AKROBUD\apps\api\src\repositories\PalletOptimizerRepository.ts
+
+================================================================================
+
+PODSUMOWANIE KRYTYCZNYCH NIEZGODNOŚCI:
+
+1. CRITICAL - Requirement.quantity vs beamsCount (zupełnie inne znaczenie)
+2. CRITICAL - WarehouseStock.quantity vs currentStockBeams (zupełnie inne znaczenie)
+3. HIGH - Order: brakuje 5+ pól (notes, deliveryDate, productionDate, deliveryOrders, orderNotes)
+4. HIGH - Delivery: struktura niezgodna (orders vs deliveryOrders), brakuje 10+ pól
+5. HIGH - Brakują całe interfejsy dla GlassDelivery/GlassOrder
+6. MEDIUM - Order.Window: findAll nie zwraca wszystkich wymaganych pól
+7. LOW - Profile, Color: brakuje kilku zagnieżdżonych pól
+
+================================================================================

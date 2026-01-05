@@ -1,0 +1,413 @@
+{
+  "audit": {
+    "date": "2025-12-19",
+    "project": "AKROBUD",
+    "scope": "TypeScript types vs API repository field returns",
+    "total_types_audited": 9,
+    "critical_issues": 2,
+    "high_issues": 4,
+    "medium_issues": 3,
+    "low_issues": 3
+  },
+  "findings": [
+    {
+      "type_name": "Order",
+      "severity": "HIGH",
+      "type_file": "apps/web/src/types/order.ts",
+      "repository_file": "apps/api/src/repositories/OrderRepository.ts",
+      "missing_fields_in_typescript": [
+        {
+          "field": "notes",
+          "returned_from": "findById()",
+          "type": "string | null"
+        },
+        {
+          "field": "deliveryDate",
+          "returned_from": "findById()",
+          "type": "Date"
+        },
+        {
+          "field": "productionDate",
+          "returned_from": "findById()",
+          "type": "Date"
+        },
+        {
+          "field": "deliveryOrders",
+          "returned_from": "findById()",
+          "type": "Array<{ id, deliveryId, delivery }>"
+        },
+        {
+          "field": "orderNotes",
+          "returned_from": "findById()",
+          "type": "Array<{ id, content, createdAt }>"
+        }
+      ],
+      "fields_in_type_not_returned": [
+        {
+          "field": "deliveryId",
+          "reason": "Never returned from any repository method"
+        },
+        {
+          "field": "clientName",
+          "reason": "Never returned from any repository method"
+        },
+        {
+          "field": "priority",
+          "reason": "Never returned from any repository method"
+        },
+        {
+          "field": "updatedAt",
+          "reason": "Not returned in findAll(), present in findById()"
+        }
+      ],
+      "additional_issues": [
+        {
+          "issue": "Windows in findAll() incomplete",
+          "current_return": ["id", "profileType", "reference"],
+          "should_include": ["id", "widthMm", "heightMm", "profileType", "quantity", "reference"]
+        },
+        {
+          "issue": "Requirement fields mismatch",
+          "current_return": ["id", "profileId", "colorId", "beamsCount", "meters", "restMm"],
+          "type_defines": ["id", "orderId", "profileId", "colorId", "quantity"],
+          "severity": "CRITICAL"
+        }
+      ]
+    },
+    {
+      "type_name": "Delivery",
+      "severity": "HIGH",
+      "type_file": "apps/web/src/types/delivery.ts",
+      "repository_file": "apps/api/src/repositories/DeliveryRepository.ts",
+      "missing_fields_in_typescript": [
+        {
+          "field": "deliveryOrders",
+          "returned_from": "findById()",
+          "type": "Array<{ deliveryId, orderId, position, order }>"
+        },
+        {
+          "field": "deliveryItems",
+          "returned_from": "findById()",
+          "type": "Array<DeliveryItem>"
+        }
+      ],
+      "fields_in_type_not_returned": [
+        {
+          "field": "weekNumber",
+          "reason": "Never returned from any method"
+        },
+        {
+          "field": "year",
+          "reason": "Never returned from any method"
+        },
+        {
+          "field": "colorId",
+          "reason": "Never returned from any method"
+        },
+        {
+          "field": "isUnassigned",
+          "reason": "Never returned from any method"
+        },
+        {
+          "field": "orders",
+          "reason": "Type expects Order[], but API returns deliveryOrders with different structure"
+        },
+        {
+          "field": "ordersCount",
+          "reason": "Never returned from any method"
+        },
+        {
+          "field": "totalWindows",
+          "reason": "Never returned from any method"
+        },
+        {
+          "field": "totalGlass",
+          "reason": "Never returned from any method"
+        },
+        {
+          "field": "totalPallets",
+          "reason": "Never returned from any method"
+        },
+        {
+          "field": "totalValue",
+          "reason": "Never returned from any method"
+        }
+      ],
+      "structure_issues": [
+        {
+          "issue": "Fundamental structure mismatch",
+          "type_expects": "orders?: Order[]",
+          "api_returns": "deliveryOrders: Array<{ orderId, position, order: { id, orderNumber, status, values, windows, requirements } }>"
+        }
+      ]
+    },
+    {
+      "type_name": "Profile",
+      "severity": "LOW",
+      "type_file": "apps/web/src/types/profile.ts",
+      "repository_file": "apps/api/src/repositories/ProfileRepository.ts",
+      "missing_fields_in_typescript": [
+        {
+          "field": "articleNumber",
+          "returned_from": "findById()",
+          "type": "string"
+        },
+        {
+          "field": "profileColors",
+          "returned_from": "findById()",
+          "type": "Array<ProfileColor>"
+        }
+      ]
+    },
+    {
+      "type_name": "Color",
+      "severity": "LOW",
+      "type_file": "apps/web/src/types/color.ts",
+      "repository_file": "apps/api/src/repositories/ColorRepository.ts",
+      "missing_fields_in_typescript": [
+        {
+          "field": "profileColors",
+          "returned_from": "findById()",
+          "type": "Array<ProfileColor>"
+        }
+      ],
+      "potential_issues": [
+        {
+          "field": "isVisible",
+          "in_type": true,
+          "in_findById_select": false,
+          "note": "May be included from all fields, but not explicitly selected"
+        }
+      ]
+    },
+    {
+      "type_name": "WarehouseStock",
+      "severity": "CRITICAL",
+      "type_file": "apps/web/src/types/warehouse.ts",
+      "repository_file": "apps/api/src/repositories/WarehouseRepository.ts",
+      "critical_mismatch": {
+        "issue": "Field name mismatch - different meaning",
+        "type_field": "quantity: number",
+        "api_field": "currentStockBeams: number",
+        "impact": "Type error when accessing undefined 'quantity' field on API response"
+      },
+      "missing_fields_in_typescript": [
+        {
+          "field": "currentStockBeams",
+          "returned_from": "getStock()",
+          "type": "number"
+        }
+      ],
+      "fields_in_type_not_returned": [
+        {
+          "field": "quantity",
+          "reason": "API returns currentStockBeams instead"
+        }
+      ]
+    },
+    {
+      "type_name": "Requirement",
+      "severity": "CRITICAL",
+      "type_file": "apps/web/src/types/requirement.ts",
+      "repository_file": "apps/api/src/repositories/OrderRepository.ts (nested in findById)",
+      "critical_mismatch": {
+        "issue": "Field name mismatch - completely different meaning",
+        "type_field": "quantity: number",
+        "api_field": "beamsCount: number",
+        "explanation": "quantity implies count of items, beamsCount means count of profile beams - different semantic",
+        "impact": "Type error when accessing undefined 'quantity' field on API response"
+      },
+      "missing_fields_in_typescript": [
+        {
+          "field": "beamsCount",
+          "returned_from": "OrderRepository.findById().requirements[]",
+          "type": "number"
+        },
+        {
+          "field": "meters",
+          "returned_from": "OrderRepository.findById().requirements[]",
+          "type": "number"
+        },
+        {
+          "field": "restMm",
+          "returned_from": "OrderRepository.findById().requirements[]",
+          "type": "number"
+        }
+      ],
+      "fields_in_type_not_returned": [
+        {
+          "field": "orderId",
+          "reason": "Not returned in API response (implied from context)"
+        },
+        {
+          "field": "quantity",
+          "reason": "API returns beamsCount instead"
+        }
+      ]
+    },
+    {
+      "type_name": "GlassDelivery",
+      "severity": "HIGH",
+      "type_file": "MISSING - needs to be created",
+      "should_be_created_at": "apps/web/src/types/glass-delivery.ts",
+      "api_routes": [
+        "apps/api/src/routes/glass-deliveries.ts",
+        "apps/api/src/routes/glass-orders.ts",
+        "apps/api/src/routes/glass-validations.ts"
+      ],
+      "api_service": "apps/api/src/services/glassDeliveryService.ts",
+      "prisma_models": [
+        "GlassDelivery",
+        "GlassDeliveryItem",
+        "GlassOrder",
+        "GlassOrderItem",
+        "GlassOrderValidation"
+      ],
+      "required_interfaces": [
+        {
+          "interface_name": "GlassDelivery",
+          "fields": [
+            "id: number",
+            "rackNumber: string",
+            "customerOrderNumber: string",
+            "supplierOrderNumber?: string",
+            "deliveryDate: string",
+            "fileImportId?: number",
+            "createdAt: string",
+            "items: GlassDeliveryItem[]"
+          ]
+        },
+        {
+          "interface_name": "GlassDeliveryItem",
+          "fields": [
+            "id: number",
+            "glassDeliveryId: number",
+            "glassOrderId?: number",
+            "orderNumber: string",
+            "orderSuffix?: string",
+            "position: string",
+            "widthMm: number",
+            "heightMm: number",
+            "quantity: number",
+            "glassComposition?: string",
+            "serialNumber?: string",
+            "clientCode?: string",
+            "matchStatus: 'pending' | 'matched' | 'conflict' | 'unmatched'",
+            "matchedItemId?: number",
+            "createdAt: string"
+          ]
+        },
+        {
+          "interface_name": "GlassOrder",
+          "fields": [
+            "id: number",
+            "glassOrderNumber: string",
+            "orderDate: string",
+            "supplier: string",
+            "orderedBy?: string",
+            "expectedDeliveryDate?: string",
+            "actualDeliveryDate?: string",
+            "status: string",
+            "notes?: string",
+            "createdAt: string",
+            "updatedAt: string",
+            "items: GlassOrderItem[]"
+          ]
+        },
+        {
+          "interface_name": "GlassOrderItem",
+          "fields": [
+            "id: number",
+            "glassOrderId: number",
+            "orderNumber: string",
+            "orderSuffix?: string",
+            "widthMm: number",
+            "heightMm: number",
+            "quantity: number",
+            "glassComposition?: string",
+            "createdAt: string"
+          ]
+        },
+        {
+          "interface_name": "GlassOrderValidation",
+          "fields": [
+            "id: number",
+            "glassOrderId?: number",
+            "orderNumber: string",
+            "validationType: string",
+            "severity: 'error' | 'warning' | 'info'",
+            "message: string",
+            "details?: string",
+            "resolved: boolean",
+            "resolvedAt?: string",
+            "resolvedBy?: string",
+            "notes?: string",
+            "createdAt: string",
+            "updatedAt: string"
+          ]
+        }
+      ]
+    },
+    {
+      "type_name": "PalletOptimizer",
+      "severity": "OK",
+      "type_file": "apps/web/src/types/pallet.ts",
+      "repository_file": "apps/api/src/repositories/PalletOptimizerRepository.ts",
+      "status": "Types are synchronized with API",
+      "issues": []
+    }
+  ],
+  "recommendations": {
+    "priority_1_critical": [
+      {
+        "issue": "Fix Requirement.quantity vs beamsCount",
+        "action": "Change type Requirement.quantity to beamsCount, add meters and restMm fields",
+        "files_to_change": ["apps/web/src/types/requirement.ts"]
+      },
+      {
+        "issue": "Fix WarehouseStock.quantity vs currentStockBeams",
+        "action": "Change type WarehouseStock.quantity to currentStockBeams",
+        "files_to_change": ["apps/web/src/types/warehouse.ts"]
+      }
+    ],
+    "priority_2_high": [
+      {
+        "issue": "Add missing Order fields",
+        "action": "Add notes, deliveryDate, productionDate, deliveryOrders, orderNotes to Order interface",
+        "files_to_change": ["apps/web/src/types/order.ts"]
+      },
+      {
+        "issue": "Fix Order.Window fields in findAll()",
+        "action": "Ensure OrderRepository.findAll() returns complete window fields (widthMm, heightMm, quantity)",
+        "files_to_change": ["apps/api/src/repositories/OrderRepository.ts"]
+      },
+      {
+        "issue": "Fix Delivery structure",
+        "action": "Change from 'orders' to 'deliveryOrders' with proper nested structure, add deliveryItems",
+        "files_to_change": ["apps/web/src/types/delivery.ts"]
+      },
+      {
+        "issue": "Create Glass types",
+        "action": "Create new file apps/web/src/types/glass-delivery.ts with all glass-related interfaces",
+        "files_to_change": ["apps/web/src/types/glass-delivery.ts (create)", "apps/web/src/types/index.ts"]
+      }
+    ],
+    "priority_3_medium": [
+      {
+        "issue": "Clarify unused Order fields",
+        "action": "Determine if deliveryId, clientName, priority are used. If not, remove from type.",
+        "files_to_change": ["apps/web/src/types/order.ts"]
+      },
+      {
+        "issue": "Add missing nested fields",
+        "action": "Add articleNumber to Profile, profileColors to Profile and Color",
+        "files_to_change": ["apps/web/src/types/profile.ts", "apps/web/src/types/color.ts"]
+      },
+      {
+        "issue": "Clarify unused Delivery fields",
+        "action": "Confirm if weekNumber, year, colorId, isUnassigned, orders, ordersCount, total* fields are needed",
+        "files_to_change": ["apps/web/src/types/delivery.ts"]
+      }
+    ]
+  }
+}

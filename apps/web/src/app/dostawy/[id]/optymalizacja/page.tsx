@@ -24,6 +24,7 @@ import { deliveriesApi } from '@/lib/api';
 import { ArrowLeft, Download, Trash2, RefreshCw, Package, Settings2, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { DEFAULT_OPTIMIZATION_OPTIONS, type OptimizationOptions } from '@/types/pallet';
 import { PalletVisualization, PalletVisualizationLegend } from '@/features/pallets/components';
+import type { ApiError } from '@/types/common';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -123,7 +124,8 @@ function OptimizationContent({ deliveryId }: { deliveryId: number }) {
   }
 
   // Handle errors other than 404
-  if (error && (error as any).status !== 404) {
+  const apiError = error ? (error as unknown as ApiError) : undefined;
+  if (error && apiError?.status !== 404) {
     return (
       <Card>
         <CardHeader>
@@ -274,7 +276,7 @@ function OptimizationContent({ deliveryId }: { deliveryId: number }) {
   );
 
   // Jeśli brak optymalizacji (404) lub brak danych
-  if (!optimization || (error && (error as any).status === 404)) {
+  if (!optimization || (error && apiError?.status === 404)) {
     return (
       <div className="space-y-4">
         {optionsPanel}

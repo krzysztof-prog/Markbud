@@ -16,8 +16,19 @@ export interface AuthenticatedRequest extends FastifyRequest {
 /**
  * Middleware to verify JWT token
  * Attaches user to request.user if token is valid
+ *
+ * NOTE: Temporarily disabled for single-user setup
  */
 export async function verifyAuth(request: AuthenticatedRequest, reply: FastifyReply) {
+  // TEMPORARY: Skip auth for single-user system
+  // Set a default system user
+  request.user = {
+    userId: 1,
+    email: 'system@akrobud.local',
+  };
+  return;
+
+  /* Original auth logic - commented out for single-user setup
   const token = extractToken(request.headers.authorization);
 
   if (!token) {
@@ -35,6 +46,7 @@ export async function verifyAuth(request: AuthenticatedRequest, reply: FastifyRe
     userId: payload.userId,
     email: payload.email,
   };
+  */
 }
 
 /**

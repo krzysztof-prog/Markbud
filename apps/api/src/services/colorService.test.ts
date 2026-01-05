@@ -175,4 +175,31 @@ describe('ColorService', () => {
       expect(mockPrisma.color.delete).not.toHaveBeenCalled();
     });
   });
+
+  describe('updateProfileColorVisibility', () => {
+    it('should update profile color visibility', async () => {
+      const mockResult = {
+        profileId: 1,
+        colorId: 1,
+        isVisible: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockPrisma.profileColor.update.mockResolvedValue(mockResult);
+
+      const result = await service.updateProfileColorVisibility(1, 1, false);
+
+      expect(result).toEqual(mockResult);
+      expect(mockPrisma.profileColor.update).toHaveBeenCalledWith({
+        where: {
+          profileId_colorId: {
+            profileId: 1,
+            colorId: 1,
+          },
+        },
+        data: { isVisible: false },
+      });
+    });
+  });
 });

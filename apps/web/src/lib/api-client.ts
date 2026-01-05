@@ -1,12 +1,18 @@
 /**
  * API Client - wspólny helper do komunikacji z backendem
+ *
+ * NOTE: No authentication required - single-user system
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+import { getErrorMessage, getErrorAction } from './error-messages';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export interface ApiError extends Error {
   status?: number;
   data?: Record<string, unknown>;
+  userMessage?: string;
+  userAction?: string;
 }
 
 /**
@@ -46,6 +52,11 @@ export async function fetchApi<T>(endpoint: string, options?: RequestInit): Prom
       const error: ApiError = new Error(data.error || `HTTP Error: ${response.status}`);
       error.status = response.status;
       error.data = data;
+
+      // Add user-friendly messages
+      error.userMessage = getErrorMessage({ response: { status: response.status, data } });
+      error.userAction = getErrorAction({ response: { status: response.status, data } }) || undefined;
+
       throw error;
     }
 
@@ -80,6 +91,9 @@ export async function fetchApi<T>(endpoint: string, options?: RequestInit): Prom
 export async function uploadFile<T>(endpoint: string, file: File): Promise<T> {
   const url = `${API_URL}${endpoint}`;
 
+  console.log('[uploadFile] Starting upload to:', url);
+  console.log('[uploadFile] File:', file.name, 'size:', file.size, 'type:', file.type);
+
   // Validate file size before upload (10MB limit)
   const maxSize = 10 * 1024 * 1024; // 10MB
   if (file.size > maxSize) {
@@ -95,12 +109,17 @@ export async function uploadFile<T>(endpoint: string, file: File): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 210000); // 3.5 minutes for file uploads
 
+  console.log('[uploadFile] Sending fetch request...');
+  const startTime = Date.now();
+
   try {
     const response = await fetch(url, {
       method: 'POST',
       body: formData,
       signal: controller.signal,
     });
+
+    console.log('[uploadFile] Response received after', Date.now() - startTime, 'ms, status:', response.status);
 
     clearTimeout(timeoutId);
 
@@ -109,21 +128,30 @@ export async function uploadFile<T>(endpoint: string, file: File): Promise<T> {
       const error: ApiError = new Error(data.error || `HTTP Error: ${response.status}`);
       error.status = response.status;
       error.data = data;
+
+      // Add user-friendly messages
+      error.userMessage = getErrorMessage({ response: { status: response.status, data } });
+      error.userAction = getErrorAction({ response: { status: response.status, data } }) || undefined;
+
       throw error;
     }
 
     return response.json();
   } catch (error) {
+    const elapsed = Date.now() - startTime;
+    console.error('[uploadFile] Error after', elapsed, 'ms:', error);
     clearTimeout(timeoutId);
 
     if (error instanceof DOMException && error.name === 'AbortError') {
       // Timeout error
+      console.error('[uploadFile] Request was aborted (timeout or manual)');
       const timeoutError: ApiError = new Error('Czas oczekiwania na upload pliku upłynął. Spróbuj ponownie.');
       timeoutError.status = 408;
       throw timeoutError;
     }
 
     if (error instanceof TypeError) {
+      console.error('[uploadFile] Network/TypeError:', error.message);
       const networkError: ApiError = new Error('Błąd połączenia sieciowego. Sprawdź połączenie internetowe.');
       networkError.status = 0;
       throw networkError;
@@ -142,7 +170,9 @@ export async function fetchBlob(endpoint: string): Promise<Blob> {
   const timeoutId = setTimeout(() => controller.abort(), 210000);
 
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, {
+      signal: controller.signal,
+    });
     clearTimeout(timeoutId);
 
     if (!response.ok) {
@@ -150,6 +180,11 @@ export async function fetchBlob(endpoint: string): Promise<Blob> {
       const error: ApiError = new Error(data.error || `HTTP Error: ${response.status}`);
       error.status = response.status;
       error.data = data;
+
+      // Add user-friendly messages
+      error.userMessage = getErrorMessage({ response: { status: response.status, data } });
+      error.userAction = getErrorAction({ response: { status: response.status, data } }) || undefined;
+
       throw error;
     }
 
@@ -177,8 +212,11 @@ export async function fetchBlob(endpoint: string): Promise<Blob> {
  */
 export async function checkExists(endpoint: string): Promise<boolean> {
   const url = `${API_URL}${endpoint}`;
+
   try {
-    const response = await fetch(url, { method: 'HEAD' });
+    const response = await fetch(url, {
+      method: 'HEAD',
+    });
     return response.ok;
   } catch {
     return false;

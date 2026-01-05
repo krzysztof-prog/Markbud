@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DeliveryHandler } from './deliveryHandler.js';
 import { DeliveryService } from '../services/deliveryService.js';
-import { DeliveryProtocolService } from '../services/DeliveryProtocolService.js';
+import { DeliveryProtocolService } from '../services/delivery-protocol-service.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 
 describe('DeliveryHandler', () => {

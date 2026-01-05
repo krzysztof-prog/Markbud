@@ -430,7 +430,7 @@ export default function DostawySchucoPageContent() {
                   </div>
                   <MobileScrollHint />
                   <div className="overflow-x-auto max-w-full max-h-[600px] overflow-y-auto">
-                    <table className="w-full text-sm min-w-[1200px]">
+                    <table className="w-full text-sm min-w-[900px]">
                       <thead className="bg-slate-50 border-b sticky top-0 z-10">
                         <tr>
                           <th className="px-4 py-3 text-left font-semibold text-slate-900">
@@ -440,16 +440,13 @@ export default function DostawySchucoPageContent() {
                             Nr zamówienia
                           </th>
                           <th className="px-4 py-3 text-left font-semibold text-slate-900">
+                            Tydzień dostawy
+                          </th>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-900">
                             Zlecenie
                           </th>
                           <th className="px-4 py-3 text-left font-semibold text-slate-900">
                             Status wysyłki
-                          </th>
-                          <th className="px-4 py-3 text-left font-semibold text-slate-900">
-                            Tydzień dostawy
-                          </th>
-                          <th className="px-4 py-3 text-left font-semibold text-slate-900">
-                            Rodzaj zamówienia
                           </th>
                           <th className="px-4 py-3 text-right font-semibold text-slate-900">
                             Suma
@@ -476,12 +473,11 @@ export default function DostawySchucoPageContent() {
                                 )}
                               </td>
                               <td className="px-4 py-3 font-mono">{delivery.orderNumber}</td>
+                              <td className="px-4 py-3">{delivery.deliveryWeek || '-'}</td>
                               <td className="px-4 py-3">{delivery.orderName}</td>
                               <td className="px-4 py-3">
                                 <Badge className={getShippingStatusBadge(delivery.shippingStatus)}>{delivery.shippingStatus}</Badge>
                               </td>
-                              <td className="px-4 py-3">{delivery.deliveryWeek || '-'}</td>
-                              <td className="px-4 py-3">{delivery.orderType || '-'}</td>
                               <td className="px-4 py-3 text-right font-semibold">
                                 {delivery.totalAmount || '-'}
                               </td>

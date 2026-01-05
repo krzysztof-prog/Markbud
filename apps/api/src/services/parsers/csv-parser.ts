@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import csvParser from 'csv-parser';
 import { prisma } from '../../index.js';
-import { GlassDeliveryService } from '../glassDeliveryService.js';
+import { GlassDeliveryService } from '../glass-delivery/index.js';
+import { SchucoLinkService } from '../schuco/schucoLinkService.js';
 import { logger } from '../../utils/logger.js';
 
 // Stałe z specyfikacji
@@ -23,6 +24,30 @@ interface UzyteBeleWindow {
   typProfilu: string;
   ilosc: number;
   referencja: string;
+}
+
+/**
+ * Informacja o błędzie parsowania
+ */
+export interface ParseError {
+  row: number;
+  field?: string;
+  reason: string;
+  rawData: any;
+}
+
+/**
+ * Wynik parsowania z informacjami o błędach
+ */
+export interface ParseResult<T> {
+  data: T;
+  errors: ParseError[];
+  summary: {
+    totalRows: number;
+    successRows: number;
+    failedRows: number;
+    skippedRows: number;
+  };
 }
 
 export interface ParsedUzyteBele {
@@ -143,8 +168,11 @@ export class CsvParser {
    * Format: X-profil-kolor, np. 19016050 → 9016 = profil, 050 = kolor
    */
   parseArticleNumber(articleNumber: string): { profileNumber: string; colorCode: string } {
+    // Usuń sufiks "p" jeśli istnieje (np. "19016000p" → "19016000")
+    const cleanedNumber = articleNumber.replace(/p$/i, '');
+
     // Usuń pierwszy znak (nic nie znaczy)
-    const withoutPrefix = articleNumber.substring(1);
+    const withoutPrefix = cleanedNumber.substring(1);
 
     // Ostatnie 3 znaki to kod koloru
     const colorCode = withoutPrefix.slice(-3);
@@ -233,6 +261,92 @@ export class CsvParser {
     }
 
     return parsed;
+  }
+
+  /**
+   * Podgląd pliku "użyte bele" z raportowaniem błędów walidacji
+   * Zwraca ParseResult z listą błędów dla wierszy które nie przeszły walidacji
+   */
+  async previewUzyteBeleWithErrors(filepath: string): Promise<ParseResult<ParsedUzyteBele>> {
+    const errors: ParseError[] = [];
+    let totalRows = 0;
+    let successRows = 0;
+    let failedRows = 0;
+
+    // Parsuj plik
+    const parsed = await this.parseUzyteBeleFile(filepath);
+
+    // Parsuj numer zlecenia
+    const orderNumberParsed = this.parseOrderNumber(parsed.orderNumber);
+    parsed.orderNumberParsed = orderNumberParsed;
+
+    // Walidacja requirements - sprawdź czy profile i kolory istnieją w bazie
+    totalRows = parsed.requirements.length;
+
+    for (let i = 0; i < parsed.requirements.length; i++) {
+      const req = parsed.requirements[i];
+      let hasError = false;
+
+      // Sprawdź czy profil istnieje
+      const profile = await prisma.profile.findFirst({
+        where: { number: req.profileNumber },
+      });
+
+      if (!profile) {
+        errors.push({
+          row: i + 1,
+          field: 'profile',
+          reason: `Profil ${req.profileNumber} nie znaleziony w systemie`,
+          rawData: req,
+        });
+        hasError = true;
+        failedRows++;
+      }
+
+      // Sprawdź czy kolor istnieje
+      const color = await prisma.color.findFirst({
+        where: { code: req.colorCode },
+      });
+
+      if (!color) {
+        errors.push({
+          row: i + 1,
+          field: 'color',
+          reason: `Kolor ${req.colorCode} nie znaleziony w systemie`,
+          rawData: req,
+        });
+        hasError = true;
+        if (!hasError) failedRows++; // Zlicz tylko raz per wiersz
+      }
+
+      if (!hasError) {
+        successRows++;
+      }
+    }
+
+    // Sprawdź konflikty wariantów
+    if (orderNumberParsed.suffix) {
+      const baseOrder = await prisma.order.findUnique({
+        where: { orderNumber: orderNumberParsed.base },
+      });
+
+      parsed.conflict = {
+        baseOrderExists: baseOrder !== null,
+        baseOrderId: baseOrder?.id,
+        baseOrderNumber: baseOrder?.orderNumber,
+      };
+    }
+
+    return {
+      data: parsed,
+      errors,
+      summary: {
+        totalRows,
+        successRows,
+        failedRows,
+        skippedRows: 0,
+      },
+    };
   }
 
   /**
@@ -476,6 +590,18 @@ export class CsvParser {
         logger.warn(`Błąd re-matchingu dostaw szyb dla ${targetOrderNumber}: ${error instanceof Error ? error.message : 'Nieznany błąd'}`);
       }
 
+      // AUTOMATYCZNE POWIĄZYWANIE SCHUCO (PO ZAKOŃCZENIU TRANSAKCJI)
+      // Sprawdź czy istnieją dostawy Schuco czekające na powiązanie z tym zleceniem
+      try {
+        const schucoLinkService = new SchucoLinkService(prisma);
+        const linksCreated = await schucoLinkService.linkOrderToWaitingDeliveries(targetOrderNumber);
+        if (linksCreated > 0) {
+          logger.info(`Auto-linked ${linksCreated} Schuco delivery/ies to order ${targetOrderNumber}`);
+        }
+      } catch (error) {
+        logger.warn(`Failed to auto-link Schuco deliveries for ${targetOrderNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+
       return result;
     });
   }
@@ -583,8 +709,9 @@ export class CsvParser {
           const nowychBel = parseInt(parts[2]) || 0;
           const reszta = parseInt(parts[3]) || 0;
 
-          // Sprawdź czy to wygląda jak poprawny numer artykułu (same cyfry)
-          if (!numArt.match(/^\d+$/)) {
+          // Sprawdź czy to wygląda jak poprawny numer artykułu (8 cyfr, opcjonalnie "p" na końcu)
+          // Przykłady: 19016000, 18866000, 19016000p
+          if (!numArt.match(/^\d{8}p?$/i)) {
             continue;
           }
 

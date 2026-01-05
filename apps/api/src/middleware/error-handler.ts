@@ -4,6 +4,7 @@
 
 import type { FastifyInstance, FastifyError, FastifyRequest, FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
+import { Prisma } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 
@@ -33,7 +34,7 @@ export function setupErrorHandler(fastify: FastifyInstance) {
           validation[path].push(err.message);
         });
 
-        logger.warn('Validation error', {
+        logger.warn('Błąd walidacji', {
           requestId,
           path: request.url,
           method: request.method,
@@ -42,8 +43,8 @@ export function setupErrorHandler(fastify: FastifyInstance) {
 
         const response: ErrorResponse = {
           statusCode: 400,
-          error: 'Bad Request',
-          message: 'Validation failed',
+          error: 'Nieprawidłowe dane',
+          message: 'Walidacja nie powiodła się',
           code: 'VALIDATION_ERROR',
           validation,
           timestamp: new Date().toISOString(),
@@ -51,6 +52,114 @@ export function setupErrorHandler(fastify: FastifyInstance) {
         };
 
         return reply.status(400).send(response);
+      }
+
+      // Handle Prisma known errors
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        const prismaError = handlePrismaKnownError(error);
+
+        logger.warn('Błąd Prisma', {
+          requestId,
+          prismaCode: error.code,
+          statusCode: prismaError.statusCode,
+          path: request.url,
+          method: request.method,
+        });
+
+        const response: ErrorResponse = {
+          statusCode: prismaError.statusCode,
+          error: getErrorName(prismaError.statusCode),
+          message: prismaError.message,
+          code: prismaError.code,
+          timestamp: new Date().toISOString(),
+          requestId,
+        };
+
+        return reply.status(prismaError.statusCode).send(response);
+      }
+
+      // Handle Prisma validation errors
+      if (error instanceof Prisma.PrismaClientValidationError) {
+        logger.warn('Błąd walidacji schematu Prisma', {
+          requestId,
+          path: request.url,
+          method: request.method,
+          error: error.message,
+        });
+
+        const response: ErrorResponse = {
+          statusCode: 400,
+          error: 'Nieprawidłowe dane',
+          message: 'Błąd walidacji danych dla bazy',
+          code: 'PRISMA_VALIDATION_ERROR',
+          timestamp: new Date().toISOString(),
+          requestId,
+        };
+
+        return reply.status(400).send(response);
+      }
+
+      // Handle Prisma initialization errors
+      if (error instanceof Prisma.PrismaClientInitializationError) {
+        logger.error('Błąd inicjalizacji Prisma', {
+          requestId,
+          path: request.url,
+          method: request.method,
+          errorCode: error.errorCode,
+        });
+
+        const response: ErrorResponse = {
+          statusCode: 503,
+          error: 'Usługa niedostępna',
+          message: 'Nie można połączyć z bazą danych',
+          code: 'DATABASE_CONNECTION_ERROR',
+          timestamp: new Date().toISOString(),
+          requestId,
+        };
+
+        return reply.status(503).send(response);
+      }
+
+      // Handle Prisma unknown errors
+      if (error instanceof Prisma.PrismaClientUnknownRequestError) {
+        logger.error('Nieznany błąd Prisma', {
+          requestId,
+          path: request.url,
+          method: request.method,
+          error: error.message,
+        });
+
+        const response: ErrorResponse = {
+          statusCode: 500,
+          error: 'Błąd serwera',
+          message: 'Wystąpił nieoczekiwany błąd bazy danych',
+          code: 'DATABASE_UNKNOWN_ERROR',
+          timestamp: new Date().toISOString(),
+          requestId,
+        };
+
+        return reply.status(500).send(response);
+      }
+
+      // Handle Prisma Rust panic errors
+      if (error instanceof Prisma.PrismaClientRustPanicError) {
+        logger.error('Krytyczny błąd Prisma (Rust panic)', {
+          requestId,
+          path: request.url,
+          method: request.method,
+          error: error.message,
+        });
+
+        const response: ErrorResponse = {
+          statusCode: 500,
+          error: 'Błąd serwera',
+          message: 'Krytyczny błąd bazy danych',
+          code: 'DATABASE_CRITICAL_ERROR',
+          timestamp: new Date().toISOString(),
+          requestId,
+        };
+
+        return reply.status(500).send(response);
       }
 
       // Handle custom AppError
@@ -96,17 +205,17 @@ export function setupErrorHandler(fastify: FastifyInstance) {
       }
 
       // Handle unexpected errors
-      logger.error('Unhandled error', error, {
+      logger.error('Nieobsłużony błąd', error, {
         requestId,
         path: request.url,
         method: request.method,
       });
 
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = error instanceof Error ? error.message : 'Nieznany błąd';
       const response: ErrorResponse = {
         statusCode: 500,
-        error: 'Internal Server Error',
-        message: process.env.NODE_ENV === 'production' ? 'An unexpected error occurred' : errorMessage,
+        error: 'Błąd serwera',
+        message: process.env.NODE_ENV === 'production' ? 'Wystąpił nieoczekiwany błąd' : errorMessage,
         code: 'INTERNAL_SERVER_ERROR',
         timestamp: new Date().toISOString(),
         requestId,
@@ -119,12 +228,94 @@ export function setupErrorHandler(fastify: FastifyInstance) {
 
 function getErrorName(statusCode: number): string {
   const names: Record<number, string> = {
-    400: 'Bad Request',
-    401: 'Unauthorized',
-    403: 'Forbidden',
-    404: 'Not Found',
-    409: 'Conflict',
-    500: 'Internal Server Error',
+    400: 'Nieprawidłowe dane',
+    401: 'Brak autoryzacji',
+    403: 'Brak uprawnień',
+    404: 'Nie znaleziono',
+    409: 'Konflikt',
+    500: 'Błąd serwera',
+    503: 'Usługa niedostępna',
   };
-  return names[statusCode] || 'Error';
+  return names[statusCode] || 'Błąd';
+}
+
+/**
+ * Obsługa znanych błędów Prisma
+ */
+function handlePrismaKnownError(error: Prisma.PrismaClientKnownRequestError): {
+  message: string;
+  code: string;
+  statusCode: number;
+} {
+  switch (error.code) {
+    case 'P2002': {
+      // Naruszenie ograniczenia unikalności
+      const target = error.meta?.target as string[] | undefined;
+      const field = target ? target[0] : 'pole';
+      return {
+        message: `Rekord z wartością ${field} już istnieje`,
+        code: 'CONFLICT',
+        statusCode: 409,
+      };
+    }
+
+    case 'P2025':
+      // Rekord nie znaleziony
+      return {
+        message: 'Rekord nie został znaleziony',
+        code: 'NOT_FOUND',
+        statusCode: 404,
+      };
+
+    case 'P2003': {
+      // Naruszenie klucza obcego
+      const field = error.meta?.field_name as string | undefined;
+      return {
+        message: `Nieprawidłowe odniesienie: ${field || 'powiązany rekord'} nie istnieje`,
+        code: 'VALIDATION_ERROR',
+        statusCode: 400,
+      };
+    }
+
+    case 'P2014':
+      // Naruszenie wymaganej relacji
+      return {
+        message: 'Nie można usunąć rekordu posiadającego powiązane rekordy',
+        code: 'CONFLICT',
+        statusCode: 409,
+      };
+
+    case 'P2016':
+      // Query interpretation error
+      return {
+        message: 'Błąd interpretacji zapytania do bazy danych',
+        code: 'DATABASE_ERROR',
+        statusCode: 500,
+      };
+
+    case 'P2021':
+      // Table does not exist
+      return {
+        message: 'Tabela nie istnieje w bazie danych',
+        code: 'DATABASE_ERROR',
+        statusCode: 500,
+      };
+
+    case 'P2022':
+      // Column does not exist
+      return {
+        message: 'Kolumna nie istnieje w bazie danych',
+        code: 'DATABASE_ERROR',
+        statusCode: 500,
+      };
+
+    default:
+      // Nieznany błąd Prisma
+      logger.error('Nieobsłużony kod błędu Prisma:', { code: error.code, meta: error.meta });
+      return {
+        message: 'Operacja bazodanowa nie powiodła się',
+        code: 'DATABASE_ERROR',
+        statusCode: 500,
+      };
+  }
 }

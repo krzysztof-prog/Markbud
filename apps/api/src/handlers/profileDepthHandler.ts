@@ -9,6 +9,7 @@ import {
   updateProfileDepthSchema,
   profileDepthParamsSchema,
 } from '../validators/profileDepth.js';
+import { NotFoundError } from '../utils/errors.js';
 
 export class ProfileDepthHandler {
   constructor(private repository: ProfileDepthRepository) {}
@@ -34,7 +35,7 @@ export class ProfileDepthHandler {
     const profileDepth = await this.repository.getById(parseInt(id));
 
     if (!profileDepth) {
-      return reply.status(404).send({ error: 'Profile depth not found' });
+      throw new NotFoundError('Głębokość profilu');
     }
 
     return reply.send(profileDepth);

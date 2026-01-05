@@ -2,7 +2,7 @@
 
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Package, Warehouse, Box, Lock } from 'lucide-react';
+import { Package, Warehouse, Box, Lock, Settings } from 'lucide-react';
 import Link from 'next/link';
 
 export default function MagazynMenuPage() {
@@ -29,10 +29,10 @@ export default function MagazynMenuPage() {
       color: 'purple',
     },
     {
-      title: 'Magazyn Okuć',
-      description: 'Magazyn okuć i akcesoriów',
+      title: 'Okucia',
+      description: 'Magazyn okuć okiennych PVC i ALU',
       href: '/magazyn/okuc',
-      icon: Lock,
+      icon: Settings,
       color: 'orange',
     },
   ];

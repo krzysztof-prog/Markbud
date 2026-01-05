@@ -166,37 +166,65 @@ export class ImportLockService {
   }
 
   /**
-   * Release a lock by its ID
+   * Release a lock by its ID or folder path
    *
-   * @param lockId - ID of the lock to release
+   * @param lockIdOrPath - ID of the lock to release or folder path
    */
-  async releaseLock(lockId: number): Promise<void> {
-    logger.info('Releasing import lock', { lockId });
+  async releaseLock(lockIdOrPath: number | string): Promise<void> {
+    if (typeof lockIdOrPath === 'number') {
+      logger.info('Releasing import lock by ID', { lockId: lockIdOrPath });
 
-    try {
-      await this.prisma.importLock.delete({
-        where: { id: lockId },
-      });
+      try {
+        await this.prisma.importLock.delete({
+          where: { id: lockIdOrPath },
+        });
 
-      logger.info('Lock released successfully', { lockId });
-    } catch (error) {
-      // Handle case where lock doesn't exist (already expired/deleted)
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2025') {
-          logger.warn('Lock not found - may have already been released or expired', {
-            lockId,
-          });
-          return;
+        logger.info('Lock released successfully', { lockId: lockIdOrPath });
+      } catch (error) {
+        // Handle case where lock doesn't exist (already expired/deleted)
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+          if (error.code === 'P2025') {
+            logger.warn('Lock not found - may have already been released or expired', {
+              lockId: lockIdOrPath,
+            });
+            return;
+          }
         }
-      }
 
-      logger.error('Error releasing import lock', error, { lockId });
-      throw error;
+        logger.error('Error releasing import lock', error, { lockId: lockIdOrPath });
+        throw error;
+      }
+    } else {
+      // Release by folder path
+      logger.info('Releasing import lock by folder path', { folderPath: lockIdOrPath });
+
+      try {
+        await this.prisma.importLock.delete({
+          where: { folderPath: lockIdOrPath },
+        });
+
+        logger.info('Lock released successfully', { folderPath: lockIdOrPath });
+      } catch (error) {
+        // Handle case where lock doesn't exist (already expired/deleted)
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+          if (error.code === 'P2025') {
+            logger.warn('Lock not found - may have already been released or expired', {
+              folderPath: lockIdOrPath,
+            });
+            return;
+          }
+        }
+
+        logger.error('Error releasing import lock', error, { folderPath: lockIdOrPath });
+        throw error;
+      }
     }
   }
 
   /**
    * Check if a folder is currently locked
+   *
+   * FIXED: Now uses transaction to prevent race condition during expired lock cleanup
    *
    * @param folderPath - Path to check
    * @returns Lock with user info if locked and not expired, null otherwise
@@ -204,53 +232,65 @@ export class ImportLockService {
   async checkLock(folderPath: string): Promise<ImportLockWithUser | null> {
     logger.debug('Checking import lock', { folderPath });
 
-    const lock = await this.prisma.importLock.findUnique({
-      where: { folderPath },
-      include: {
-        user: {
-          select: { name: true },
+    // Use transaction to atomically check and delete expired locks
+    return this.prisma.$transaction(async (tx) => {
+      const lock = await tx.importLock.findUnique({
+        where: { folderPath },
+        include: {
+          user: {
+            select: { name: true },
+          },
         },
-      },
-    });
+      });
 
-    if (!lock) {
-      logger.debug('No lock found for folder', { folderPath });
-      return null;
-    }
+      if (!lock) {
+        logger.debug('No lock found for folder', { folderPath });
+        return null;
+      }
 
-    // Check if expired
-    const isExpired = new Date() > lock.expiresAt;
+      // Check if expired
+      const isExpired = new Date() > lock.expiresAt;
 
-    if (isExpired) {
-      logger.debug('Lock found but expired', {
+      if (isExpired) {
+        logger.debug('Lock found but expired, deleting atomically', {
+          lockId: lock.id,
+          folderPath,
+          expiresAt: lock.expiresAt,
+        });
+
+        try {
+          // Delete within transaction - atomic with the check
+          await tx.importLock.delete({
+            where: { id: lock.id },
+          });
+
+          logger.debug('Expired lock deleted successfully', { lockId: lock.id });
+        } catch (error) {
+          // Handle P2025 (record not found) - another transaction deleted it
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+            logger.debug('Lock already deleted by another process', { lockId: lock.id });
+          } else {
+            // Unexpected error - log but still return null
+            logger.warn('Unexpected error deleting expired lock', {
+              lockId: lock.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
+        return null;
+      }
+
+      logger.debug('Active lock found', {
         lockId: lock.id,
         folderPath,
+        userId: lock.userId,
+        userName: lock.user.name,
         expiresAt: lock.expiresAt,
       });
 
-      // Clean up expired lock
-      await this.prisma.importLock.delete({
-        where: { id: lock.id },
-      }).catch((error) => {
-        // Log but don't throw - another process may have deleted it
-        logger.warn('Failed to delete expired lock during check', {
-          lockId: lock.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-
-      return null;
-    }
-
-    logger.debug('Active lock found', {
-      lockId: lock.id,
-      folderPath,
-      userId: lock.userId,
-      userName: lock.user.name,
-      expiresAt: lock.expiresAt,
+      return lock;
     });
-
-    return lock;
   }
 
   /**

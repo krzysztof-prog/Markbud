@@ -17,7 +17,7 @@ interface WebSocketMessage {
   event?: DataChangeEvent;
 }
 
-const WS_URL = process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') || 'ws://localhost:4000';
+const WS_URL = process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') || 'ws://localhost:3001';
 const RECONNECT_INTERVAL = 3000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 
@@ -49,10 +49,6 @@ export function useRealtimeSync() {
         'order:deleted': ['orders', 'deliveries-calendar-continuous', 'deliveries-calendar-batch'],
         'warehouse:stock_updated': ['warehouse'],
         'warehouse:stock_changed': ['warehouse'],
-        'okuc:stock_updated': ['okuc-stock', 'okuc-articles'],
-        'okuc:article_created': ['okuc-articles'],
-        'okuc:article_updated': ['okuc-articles'],
-        'okuc:article_deleted': ['okuc-articles'],
       };
 
       const keysToInvalidate = queryKeyMap[event.type] || [];
@@ -79,8 +75,6 @@ export function useRealtimeSync() {
           'order:created': 'Nowe zlecenie',
           'order:deleted': 'Zlecenie usunięte',
           'warehouse:stock_changed': 'Stan magazynu zmienił się',
-          'okuc:article_created': 'Nowy artykuł Okuć',
-          'okuc:article_deleted': 'Artykuł Okuć usunięty',
         };
 
         const message = messages[event.type];
@@ -161,11 +155,18 @@ export function useRealtimeSync() {
     }
 
     try {
-      // Get authentication token
-      const token = await getAuthToken();
+      // Get authentication token - używamy timeout aby nie blokować
+      const tokenPromise = getAuthToken();
+      const timeoutPromise = new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), 2000) // Max 2s na pobranie tokenu
+      );
+
+      const token = await Promise.race([tokenPromise, timeoutPromise]);
 
       if (!token) {
-        wsLogger.error('No authentication token available, cannot connect to WebSocket');
+        wsLogger.warn('No authentication token available - WebSocket disabled');
+        // NIE próbuj reconnect - brak tokenu to nie błąd przejściowy
+        reconnectAttemptsRef.current = MAX_RECONNECT_ATTEMPTS;
         return;
       }
 
@@ -180,50 +181,71 @@ export function useRealtimeSync() {
         isConnectedRef.current = true;
         reconnectAttemptsRef.current = 0;
         resetHeartbeatTimeoutRef.current?.();
-        showInfoToast('Połączenie', 'Synchronizacja w real-time aktywna');
+        // NIE pokazuj toast - zbyt nachalne, user nie musi wiedzieć o WebSocket
+        // showInfoToast('Połączenie', 'Synchronizacja w real-time aktywna');
       };
 
       wsRef.current.onmessage = handleMessage;
 
-      wsRef.current.onerror = () => {
-        wsLogger.warn('WebSocket error occurred, attempting to reconnect');
+      wsRef.current.onerror = (error) => {
+        wsLogger.warn('WebSocket error occurred', error);
         isConnectedRef.current = false;
+        // NIE próbuj od razu reconnect - czekaj na onclose
       };
 
-      wsRef.current.onclose = () => {
-        wsLogger.log('Disconnected');
+      wsRef.current.onclose = (event) => {
+        wsLogger.log('Disconnected', { code: event.code, reason: event.reason });
         isConnectedRef.current = false;
 
         if (heartbeatTimeoutRef.current) {
           clearTimeout(heartbeatTimeoutRef.current);
         }
 
-        // Spróbuj ponownie połączyć się
+        // Jeśli zamknięcie było z powodu błędu auth (1008), nie reconnect
+        if (event.code === 1008) {
+          wsLogger.warn('WebSocket closed due to auth error - not reconnecting');
+          reconnectAttemptsRef.current = MAX_RECONNECT_ATTEMPTS;
+          return;
+        }
+
+        // Spróbuj ponownie połączyć się (z exponential backoff)
         if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttemptsRef.current++;
+          const delay = Math.min(
+            RECONNECT_INTERVAL * Math.pow(1.5, reconnectAttemptsRef.current - 1),
+            30000 // Max 30s
+          );
+
           wsLogger.log(
-            `Reconnecting... (attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`
+            `Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`
           );
 
           reconnectTimeoutRef.current = setTimeout(() => {
-            // Call async connect function
             connectRef.current?.();
-          }, RECONNECT_INTERVAL);
+          }, delay);
         } else {
-          wsLogger.error('Max reconnection attempts reached');
+          wsLogger.warn('Max reconnection attempts reached - WebSocket disabled');
         }
       };
     } catch (error) {
       wsLogger.error('Connection error:', error);
       isConnectedRef.current = false;
 
-      // Spróbuj ponownie
+      // Jeśli błąd przy tworzeniu WebSocket, nie próbuj zbyt agresywnie
       if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttemptsRef.current++;
+        const delay = Math.min(
+          RECONNECT_INTERVAL * Math.pow(2, reconnectAttemptsRef.current - 1),
+          60000 // Max 60s dla błędów inicjalizacji
+        );
+
+        wsLogger.log(`Will retry in ${delay}ms after connection error`);
+
         reconnectTimeoutRef.current = setTimeout(() => {
-          // Call async connect function
           connectRef.current?.();
-        }, RECONNECT_INTERVAL);
+        }, delay);
+      } else {
+        wsLogger.warn('Max reconnection attempts reached after errors - WebSocket disabled');
       }
     }
   }, [handleMessage]); // handleMessage jest teraz stabilny

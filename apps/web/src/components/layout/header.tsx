@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '@/lib/api';
 import Link from 'next/link';
 import { GlobalSearch } from '@/components/search/GlobalSearch';
+import type { Alert } from '@/types';
 
 interface HeaderProps {
   title: string;
@@ -132,7 +133,7 @@ export function Header({ title, alertsCount = 0, children }: HeaderProps) {
 
               <div className="divide-y">
                 {alerts && alerts.length > 0 ? (
-                  alerts.map((alert: any, index: number) => (
+                  alerts.map((alert: Alert, index: number) => (
                     <div
                       key={index}
                       className="p-4 hover:bg-slate-50 transition-colors"

@@ -185,7 +185,7 @@ export default function MagazynAkrobudPageContent() {
                 </Link>
               </div>
 
-              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'zlecenia' | 'magazyn' | 'historia')}>
                 <TabsList className="w-full md:w-auto">
                   <TabsTrigger value="zlecenia" className="flex-1 md:flex-none text-xs md:text-sm">Tabela zleceń</TabsTrigger>
                   <TabsTrigger value="magazyn" className="flex-1 md:flex-none text-xs md:text-sm">Stan magazynowy</TabsTrigger>
@@ -362,7 +362,7 @@ function OrdersTable({
 }
 
 // Tabela magazynowa
-function WarehouseTable({ data, isLoading, colorId }: { data: any[]; isLoading: boolean; colorId: number }) {
+function WarehouseTable({ data, isLoading, colorId }: { data: WarehouseTableRow[]; isLoading: boolean; colorId: number }) {
   const queryClient = useQueryClient();
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [expandedHistory, setExpandedHistory] = useState<Set<number>>(new Set());
@@ -403,8 +403,8 @@ function WarehouseTable({ data, isLoading, colorId }: { data: any[]; isLoading: 
   });
 
   const updateOrderMutation = useMutation({
-    mutationFn: ({ orderId, status }: { orderId: number; status: string }) =>
-      warehouseOrdersApi.update(orderId, { status: status as any }),
+    mutationFn: ({ orderId, status }: { orderId: number; status: 'pending' | 'received' | 'cancelled' }) =>
+      warehouseOrdersApi.update(orderId, { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['warehouse', colorId] });
       showSuccessToast('Status zaktualizowany', 'Pomyślnie zaktualizowano status zamówienia');

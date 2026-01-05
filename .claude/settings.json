@@ -30,6 +30,10 @@
           {
             "type": "command",
             "command": "npx --prefix .claude/hooks tsx .claude/hooks/skill-activation-prompt.ts"
+          },
+          {
+            "type": "command",
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/intent-scope-action-validator.ts"
           }
         ]
       }
@@ -38,6 +42,10 @@
       {
         "matcher": "Bash",
         "hooks": [
+          {
+            "type": "command",
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/npm-guard.ts"
+          },
           {
             "type": "command",
             "command": "npx --prefix .claude/hooks tsx .claude/hooks/prisma-safety-guard.ts"
@@ -57,7 +65,23 @@
         "hooks": [
           {
             "type": "command",
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/money-validator.ts"
+          },
+          {
+            "type": "command",
             "command": "npx --prefix .claude/hooks tsx .claude/hooks/tdd-guard.ts"
+          },
+          {
+            "type": "command",
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/assumption-disclosure-guard.ts"
+          },
+          {
+            "type": "command",
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/no-code-before-decision-guard.ts"
+          },
+          {
+            "type": "command",
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/change-impact-matrix-validator.ts"
           }
         ]
       }
@@ -73,6 +97,10 @@
           {
             "type": "command",
             "command": "npx --prefix .claude/hooks tsx .claude/hooks/post-edit-checks.ts"
+          },
+          {
+            "type": "command",
+            "command": "npx --prefix .claude/hooks tsx .claude/hooks/self-review-gate.ts"
           }
         ]
       }
@@ -83,16 +111,6 @@
           {
             "type": "command",
             "command": "npx --prefix .claude/hooks tsx .claude/hooks/notification-handler.ts"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "npx --prefix .claude/hooks tsx .claude/hooks/final-validation.ts"
           }
         ]
       }

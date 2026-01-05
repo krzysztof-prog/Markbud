@@ -36,8 +36,8 @@ describe('ProfileHandler', () => {
   describe('getAll', () => {
     it('should return all profiles', async () => {
       const mockProfiles = [
-        { id: 1, number: 'P001', name: 'Profile 1', description: null, createdAt: new Date(), updatedAt: new Date() },
-        { id: 2, number: 'P002', name: 'Profile 2', description: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 1, number: 'P001', name: 'Profile 1', description: null, articleNumber: null, sortOrder: 0, createdAt: new Date(), updatedAt: new Date() },
+        { id: 2, number: 'P002', name: 'Profile 2', description: null, articleNumber: null, sortOrder: 0, createdAt: new Date(), updatedAt: new Date() },
       ];
 
       vi.mocked(service.getAllProfiles).mockResolvedValue(mockProfiles);
@@ -57,6 +57,8 @@ describe('ProfileHandler', () => {
         number: 'P001',
         name: 'Profile 1',
         description: null,
+        articleNumber: null,
+        sortOrder: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
         profileColors: [],
@@ -91,7 +93,7 @@ describe('ProfileHandler', () => {
   describe('create', () => {
     it('should create profile and return 201', async () => {
       const input = { number: 'P001', name: 'New Profile', description: 'Test' };
-      const mockCreated = { id: 1, ...input, createdAt: new Date(), updatedAt: new Date() };
+      const mockCreated = { id: 1, ...input, articleNumber: null, sortOrder: 0, createdAt: new Date(), updatedAt: new Date() };
 
       vi.mocked(service.createProfile).mockResolvedValue(mockCreated);
       const reply = createMockReply();
@@ -132,6 +134,8 @@ describe('ProfileHandler', () => {
         number: 'P001',
         name: 'Updated Name',
         description: null,
+        articleNumber: null,
+        sortOrder: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       };

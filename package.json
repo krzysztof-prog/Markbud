@@ -3,9 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/kill-dev-servers.js",
+    "validate": "node scripts/validate-config.js",
+    "predev": "node scripts/validate-config.js && node scripts/kill-dev-servers.js",
     "dev": "turbo dev",
+    "predev:web": "node scripts/kill-dev-servers.js",
     "dev:web": "pnpm --filter @akrobud/web dev",
+    "predev:api": "node scripts/kill-dev-servers.js",
     "dev:api": "pnpm --filter @akrobud/api dev",
     "build": "turbo build",
     "build:web": "pnpm --filter @akrobud/web build",
@@ -19,6 +22,8 @@
     "db:studio": "pnpm --filter @akrobud/api db:studio",
     "db:reset": "pnpm --filter @akrobud/api db:reset",
     "lint": "turbo lint",
+    "test:e2e": "pnpm --filter @akrobud/web test:e2e",
+    "prepare": "husky || true",
     "clean": "turbo clean",
     "kill": "node scripts/kill-dev-servers.js",
     "bd": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe",
@@ -27,6 +32,15 @@
     "bd:info": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe info"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@typescript-eslint/eslint-plugin": "^8.51.0",
+    "@typescript-eslint/parser": "^8.51.0",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "husky": "^9.1.7",
+    "prettier": "^3.7.4",
+    "puppeteer": "^24.31.0",
     "turbo": "^2.6.3",
     "typescript": "^5.3.3"
   },

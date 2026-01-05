@@ -224,3 +224,86 @@ export function toRomanNumeral(num: number): string {
   const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
   return romanNumerals[num - 1] || String(num);
 }
+
+/**
+ * Get ISO week number from date
+ * @param date - Date to get week number from
+ * @returns ISO week number (1-53)
+ */
+export function getWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return weekNum;
+}
+
+/**
+ * Get date range from now to N days in the future
+ * @param daysFromNow - Number of days from today
+ * @returns Object with start (now) and end date
+ */
+export function getDateRangeFromNow(daysFromNow: number): { start: Date; end: Date } {
+  const now = new Date();
+  const end = new Date(now.getTime() + daysFromNow * 24 * 60 * 60 * 1000);
+  return { start: now, end };
+}
+
+/**
+ * Get start and end dates for N weeks from a starting date
+ * @param startDate - Starting date (usually start of current week)
+ * @param weekIndex - Week index (0 = current week, 1 = next week, etc.)
+ * @returns Object with start and end dates for the week
+ */
+export function getWeekRangeByIndex(startDate: Date, weekIndex: number): { start: Date; end: Date } {
+  const start = new Date(startDate);
+  start.setDate(startDate.getDate() + (weekIndex * 7));
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
+}
+
+/**
+ * Check if a date is within a range (inclusive)
+ * @param date - Date to check
+ * @param start - Start of range
+ * @param end - End of range
+ * @returns True if date is within range
+ */
+export function isDateInRange(date: Date, start: Date, end: Date): boolean {
+  return date >= start && date <= end;
+}
+
+/**
+ * Get start of month with optional month/year parameters
+ * @param month - Month (1-12, default: current month)
+ * @param year - Year (default: current year)
+ * @returns Date object set to first day of month at 00:00:00
+ */
+export function getMonthStart(month?: number, year?: number): Date {
+  const now = new Date();
+  const targetMonth = month !== undefined ? month - 1 : now.getMonth();
+  const targetYear = year !== undefined ? year : now.getFullYear();
+
+  return new Date(targetYear, targetMonth, 1, 0, 0, 0, 0);
+}
+
+/**
+ * Get end of month with optional month/year parameters
+ * @param month - Month (1-12, default: current month)
+ * @param year - Year (default: current year)
+ * @returns Date object set to last day of month at 23:59:59.999
+ */
+export function getMonthEnd(month?: number, year?: number): Date {
+  const now = new Date();
+  const targetMonth = month !== undefined ? month - 1 : now.getMonth();
+  const targetYear = year !== undefined ? year : now.getFullYear();
+
+  // Get first day of next month, then subtract 1ms
+  const nextMonth = new Date(targetYear, targetMonth + 1, 1, 0, 0, 0, 0);
+  return new Date(nextMonth.getTime() - 1);
+}

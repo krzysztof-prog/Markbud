@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { SchucoService } from '../services/schuco/schucoService.js';
 import { GetDeliveriesQuery, getDeliveriesQuerySchema } from '../validators/schuco.js';
 import { logger } from '../utils/logger.js';
+import { NotFoundError, InternalServerError } from '../utils/errors.js';
 
 export class SchucoHandler {
   private schucoService: SchucoService;
@@ -12,105 +13,73 @@ export class SchucoHandler {
 
   /**
    * GET /api/schuco/deliveries
-   * Get Schuco deliveries with pagination
+   * Pobiera dostawy Schuco z paginacją
    */
   getDeliveries = async (
     request: FastifyRequest<{ Querystring: GetDeliveriesQuery }>,
     reply: FastifyReply
   ) => {
-    try {
-      const { page, pageSize } = getDeliveriesQuerySchema.parse(request.query);
-
-      const result = await this.schucoService.getDeliveries(page, pageSize);
-
-      return reply.code(200).send(result);
-    } catch (error) {
-      logger.error('[SchucoHandler] Error getting deliveries:', error);
-      return reply.code(500).send({ error: 'Failed to get deliveries' });
-    }
+    const { page, pageSize } = getDeliveriesQuerySchema.parse(request.query);
+    const result = await this.schucoService.getDeliveries(page, pageSize);
+    return reply.code(200).send(result);
   };
 
   /**
    * POST /api/schuco/refresh
-   * Trigger manual refresh - scrape and store new data
+   * Ręczne odświeżenie - pobiera i zapisuje nowe dane
    */
   refreshDeliveries = async (
     request: FastifyRequest<{ Body: { headless?: boolean } }>,
     reply: FastifyReply
   ) => {
-    try {
-      const { headless = true } = request.body || {};
-      logger.info(`[SchucoHandler] Manual refresh triggered (headless: ${headless})`);
+    const { headless = true } = request.body || {};
+    logger.info(`[SchucoHandler] Ręczne odświeżenie (headless: ${headless})`);
 
-      // Increase socket timeout for this long-running request (3.5 minutes)
-      request.raw.setTimeout(210000);
+    // Zwiększ timeout dla długotrwałego requesta (3.5 minuty)
+    request.raw.setTimeout(210000);
 
-      const result = await this.schucoService.fetchAndStoreDeliveries(headless);
+    const result = await this.schucoService.fetchAndStoreDeliveries(headless);
 
-      if (result.success) {
-        return reply.code(200).send({
-          message: 'Deliveries refreshed successfully',
-          recordsCount: result.recordsCount,
-          durationMs: result.durationMs,
-        });
-      } else {
-        return reply.code(500).send({
-          error: 'Failed to refresh deliveries',
-          message: result.errorMessage,
-        });
-      }
-    } catch (error) {
-      logger.error('[SchucoHandler] Error refreshing deliveries:', error);
-      return reply.code(500).send({ error: 'Failed to refresh deliveries' });
+    if (result.success) {
+      return reply.code(200).send({
+        message: 'Dostawy odświeżone pomyślnie',
+        recordsCount: result.recordsCount,
+        durationMs: result.durationMs,
+      });
+    } else {
+      throw new InternalServerError(result.errorMessage || 'Błąd odświeżania dostaw Schuco');
     }
   };
 
   /**
    * GET /api/schuco/status
-   * Get status of last fetch
+   * Pobiera status ostatniego pobrania
    */
   getStatus = async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const status = await this.schucoService.getLastFetchStatus();
+    const status = await this.schucoService.getLastFetchStatus();
 
-      if (!status) {
-        return reply.code(404).send({ error: 'No fetch history found' });
-      }
-
-      return reply.code(200).send(status);
-    } catch (error) {
-      logger.error('[SchucoHandler] Error getting status:', error);
-      return reply.code(500).send({ error: 'Failed to get status' });
+    if (!status) {
+      throw new NotFoundError('Historia pobierania');
     }
+
+    return reply.code(200).send(status);
   };
 
   /**
    * GET /api/schuco/logs
-   * Get fetch history logs
+   * Pobiera historię logów pobierania
    */
   getLogs = async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const logs = await this.schucoService.getFetchLogs();
-
-      return reply.code(200).send(logs);
-    } catch (error) {
-      logger.error('[SchucoHandler] Error getting logs:', error);
-      return reply.code(500).send({ error: 'Failed to get logs' });
-    }
+    const logs = await this.schucoService.getFetchLogs();
+    return reply.code(200).send(logs);
   };
 
   /**
    * GET /api/schuco/statistics
-   * Get delivery statistics by changeType
+   * Pobiera statystyki dostaw według typu zmiany
    */
   getStatistics = async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const statistics = await this.schucoService.getStatistics();
-
-      return reply.code(200).send(statistics);
-    } catch (error) {
-      logger.error('[SchucoHandler] Error getting statistics:', error);
-      return reply.code(500).send({ error: 'Failed to get statistics' });
-    }
+    const statistics = await this.schucoService.getStatistics();
+    return reply.code(200).send(statistics);
   };
 }

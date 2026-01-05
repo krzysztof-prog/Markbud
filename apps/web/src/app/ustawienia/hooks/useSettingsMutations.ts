@@ -7,7 +7,7 @@ import { settingsApi, colorsApi, profilesApi } from '@/lib/api';
 import type { UpdateColorData, UpdateProfileData, PalletType } from '@/types';
 import { getAuthToken } from '@/lib/auth-token';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 /**
  * Hook for updating settings

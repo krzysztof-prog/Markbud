@@ -1,5 +1,6 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync} from 'fastify';
 import { prisma } from '../index.js';
+
 
 // Polskie święta stałe
 const POLISH_HOLIDAYS = [

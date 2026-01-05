@@ -216,6 +216,7 @@ export async function parseOkucRwCsv(
 ): Promise<ParsedOkucRw> {
   // Temporarily disabled - TypeScript errors in okuc module
   throw new Error('Okuc RW parser temporarily disabled due to TypeScript errors');
+  /* eslint-disable-next-line no-unreachable */
   const buffer = await fs.promises.readFile(filePath);
   const content = decodeBuffer(buffer);
 
@@ -338,6 +339,7 @@ export async function parseOkucDemandCsv(
 ): Promise<ParsedOkucDemand> {
   // Temporarily disabled - TypeScript errors in okuc module
   throw new Error('Okuc Demand parser temporarily disabled due to TypeScript errors');
+  /* eslint-disable-next-line no-unreachable */
   const buffer = await fs.promises.readFile(filePath);
   const content = decodeBuffer(buffer);
 

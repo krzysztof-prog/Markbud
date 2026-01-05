@@ -1,0 +1,198 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e6] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e7]:
+      - img [ref=e8]
+    - generic [ref=e11]:
+      - button "Open issues overlay" [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: "2"
+          - generic [ref=e15]: "3"
+        - generic [ref=e16]:
+          - text: Issue
+          - generic [ref=e17]: s
+      - button "Collapse issues badge" [ref=e18]:
+        - img [ref=e19]
+  - alert [ref=e21]
+  - generic [ref=e22]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - generic [ref=e25]: AKROBUD
+        - button "Toggle sidebar" [ref=e26] [cursor=pointer]:
+          - img [ref=e27]
+      - navigation [ref=e29]:
+        - link "Dashboard" [ref=e31] [cursor=pointer]:
+          - /url: /
+          - img [ref=e32]
+          - generic [ref=e37]: Dashboard
+        - link "AKROBUD" [ref=e39] [cursor=pointer]:
+          - /url: /magazyn/akrobud
+          - img [ref=e40]
+          - generic [ref=e43]: AKROBUD
+        - link "Magazyn PVC" [ref=e45] [cursor=pointer]:
+          - /url: /magazyn/pvc
+          - img [ref=e46]
+          - generic [ref=e49]: Magazyn PVC
+        - link "Dostawy Schuco" [ref=e51] [cursor=pointer]:
+          - /url: /magazyn/dostawy-schuco
+          - img [ref=e52]
+          - generic [ref=e57]: Dostawy Schuco
+        - button "Szyby" [ref=e59] [cursor=pointer]:
+          - img [ref=e60]
+          - generic [ref=e63]: Szyby
+          - img [ref=e64]
+        - link "Zestawienie miesięczne" [ref=e67] [cursor=pointer]:
+          - /url: /zestawienia
+          - img [ref=e68]
+          - generic [ref=e71]: Zestawienie miesięczne
+        - link "Zestawienie zleceń" [ref=e73] [cursor=pointer]:
+          - /url: /zestawienia/zlecenia
+          - img [ref=e74]
+          - generic [ref=e77]: Zestawienie zleceń
+        - link "Importy" [ref=e79] [cursor=pointer]:
+          - /url: /importy
+          - img [ref=e80]
+          - generic [ref=e83]: Importy
+        - link "Archiwum" [ref=e85] [cursor=pointer]:
+          - /url: /archiwum
+          - img [ref=e86]
+          - generic [ref=e89]: Archiwum
+        - link "Ustawienia" [ref=e91] [cursor=pointer]:
+          - /url: /ustawienia
+          - img [ref=e92]
+          - generic [ref=e95]: Ustawienia
+      - paragraph [ref=e97]: AKROBUD v1.0.0
+    - main [ref=e98]:
+      - generic [ref=e99]:
+        - generic [ref=e100]:
+          - generic [ref=e101]:
+            - heading "Dostawy Schuco" [level=1] [ref=e102]
+            - link "Powrót do menu" [ref=e104] [cursor=pointer]:
+              - /url: /magazyn
+              - img [ref=e105]
+              - text: Powrót do menu
+          - generic [ref=e107]:
+            - button "Szukaj ⌘ K" [ref=e108] [cursor=pointer]:
+              - img [ref=e109]
+              - generic [ref=e112]: Szukaj
+              - generic [ref=e113]:
+                - generic [ref=e114]: ⌘
+                - text: K
+            - button "Otwórz powiadomienia" [ref=e116] [cursor=pointer]:
+              - img [ref=e117]
+        - navigation "Breadcrumb" [ref=e121]:
+          - link "Strona główna" [ref=e122] [cursor=pointer]:
+            - /url: /
+            - img [ref=e123]
+          - img [ref=e126]
+          - link "Magazyn" [ref=e128] [cursor=pointer]:
+            - /url: /magazyn
+            - img [ref=e130]
+            - text: Magazyn
+          - img [ref=e133]
+          - generic [ref=e135]: Dostawy Schuco
+        - generic [ref=e137]:
+          - tablist [ref=e138]:
+            - tab "Dostawy" [selected] [ref=e139] [cursor=pointer]
+            - tab "Historia pobrań" [ref=e140] [cursor=pointer]
+          - tabpanel "Dostawy" [ref=e141]:
+            - generic [ref=e142]:
+              - generic [ref=e145]:
+                - img [ref=e146]
+                - heading "Lista zamówień (0)" [level=3] [ref=e151]
+              - table [ref=e154]:
+                - rowgroup [ref=e155]:
+                  - row [ref=e156]:
+                    - columnheader [ref=e157]
+                    - columnheader [ref=e159]
+                    - columnheader [ref=e161]
+                    - columnheader [ref=e163]
+                    - columnheader [ref=e165]
+                    - columnheader [ref=e167]
+                    - columnheader [ref=e169]
+                - rowgroup [ref=e171]:
+                  - row [ref=e172]:
+                    - cell [ref=e173]
+                    - cell [ref=e175]
+                    - cell [ref=e177]
+                    - cell [ref=e179]
+                    - cell [ref=e181]
+                    - cell [ref=e183]
+                    - cell [ref=e185]
+                  - row [ref=e187]:
+                    - cell [ref=e188]
+                    - cell [ref=e190]
+                    - cell [ref=e192]
+                    - cell [ref=e194]
+                    - cell [ref=e196]
+                    - cell [ref=e198]
+                    - cell [ref=e200]
+                  - row [ref=e202]:
+                    - cell [ref=e203]
+                    - cell [ref=e205]
+                    - cell [ref=e207]
+                    - cell [ref=e209]
+                    - cell [ref=e211]
+                    - cell [ref=e213]
+                    - cell [ref=e215]
+                  - row [ref=e217]:
+                    - cell [ref=e218]
+                    - cell [ref=e220]
+                    - cell [ref=e222]
+                    - cell [ref=e224]
+                    - cell [ref=e226]
+                    - cell [ref=e228]
+                    - cell [ref=e230]
+                  - row [ref=e232]:
+                    - cell [ref=e233]
+                    - cell [ref=e235]
+                    - cell [ref=e237]
+                    - cell [ref=e239]
+                    - cell [ref=e241]
+                    - cell [ref=e243]
+                    - cell [ref=e245]
+                  - row [ref=e247]:
+                    - cell [ref=e248]
+                    - cell [ref=e250]
+                    - cell [ref=e252]
+                    - cell [ref=e254]
+                    - cell [ref=e256]
+                    - cell [ref=e258]
+                    - cell [ref=e260]
+                  - row [ref=e262]:
+                    - cell [ref=e263]
+                    - cell [ref=e265]
+                    - cell [ref=e267]
+                    - cell [ref=e269]
+                    - cell [ref=e271]
+                    - cell [ref=e273]
+                    - cell [ref=e275]
+                  - row [ref=e277]:
+                    - cell [ref=e278]
+                    - cell [ref=e280]
+                    - cell [ref=e282]
+                    - cell [ref=e284]
+                    - cell [ref=e286]
+                    - cell [ref=e288]
+                    - cell [ref=e290]
+                  - row [ref=e292]:
+                    - cell [ref=e293]
+                    - cell [ref=e295]
+                    - cell [ref=e297]
+                    - cell [ref=e299]
+                    - cell [ref=e301]
+                    - cell [ref=e303]
+                    - cell [ref=e305]
+                  - row [ref=e307]:
+                    - cell [ref=e308]
+                    - cell [ref=e310]
+                    - cell [ref=e312]
+                    - cell [ref=e314]
+                    - cell [ref=e316]
+                    - cell [ref=e318]
+                    - cell [ref=e320]
+  - region "Notifications (F8)":
+    - list
+```

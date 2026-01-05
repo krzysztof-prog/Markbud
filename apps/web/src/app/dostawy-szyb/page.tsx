@@ -30,14 +30,27 @@ export default function GlassDeliveriesPage() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleImport = async () => {
-    for (const file of files) {
+  const handleImport = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    console.log('[handleImport] Starting import for', files.length, 'files');
+
+    // Copy files array to avoid issues with state changes during upload
+    const filesToUpload = [...files];
+
+    for (const file of filesToUpload) {
+      console.log('[handleImport] Uploading file:', file.name);
       try {
         await importMutation.mutateAsync(file);
-      } catch {
+        console.log('[handleImport] File uploaded successfully:', file.name);
+      } catch (error) {
+        console.error('[handleImport] File upload failed:', file.name, error);
         // Error handled in mutation
       }
     }
+
+    console.log('[handleImport] All files processed, clearing list');
     setFiles([]);
   };
 
@@ -81,12 +94,13 @@ export default function GlassDeliveriesPage() {
                       className="flex items-center justify-between bg-gray-50 p-2 rounded"
                     >
                       <span className="text-sm truncate">{file.name}</span>
-                      <Button variant="ghost" size="sm" onClick={() => removeFile(index)}>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => removeFile(index)}>
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
                   ))}
                   <Button
+                    type="button"
                     onClick={handleImport}
                     disabled={importMutation.isPending}
                     className="w-full mt-2"

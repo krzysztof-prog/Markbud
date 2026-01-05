@@ -97,7 +97,7 @@ export class PdfParser {
     const glassCount = glassCountMatch ? parseInt(glassCountMatch[1]) : undefined;
 
     // Waga
-    const weightMatch = text.match(/waga[:\s]+([\d,\.]+)/i);
+    const weightMatch = text.match(/waga[:\s]+([\d,.]+)/i);
     const weight = weightMatch ? parseFloat(weightMatch[1].replace(',', '.')) : undefined;
 
     return {
@@ -144,26 +144,26 @@ export class PdfParser {
 
     // Wzorzec 1: Szukaj sklejonego netto+VAT po brutto (format: "575,64\n468,00107,64")
     // brutto\nnetto+vat - gdzie netto i vat są sklejone
-    const sklejoneMatch = text.match(/(\d+[,\.]\d{2})[\s\n\r]+(\d+[,\.]\d{2})(\d+[,\.]\d{2})/);
+    const sklejoneMatch = text.match(/(\d+[,.]\d{2})[\s\n\r]+(\d+[,.]\d{2})(\d+[,.]\d{2})/);
     if (sklejoneMatch) {
       // sklejoneMatch[2] to netto (468,00)
       return this.parseNumber(sklejoneMatch[2]);
     }
 
     // Wzorzec 2: "Suma netto" bezpośrednio
-    const nettoMatch = text.match(/suma\s*netto[:\s]*([\d,\.]+)/i);
+    const nettoMatch = text.match(/suma\s*netto[:\s]*([\d,.]+)/i);
     if (nettoMatch) {
       return this.parseNumber(nettoMatch[1]);
     }
 
     // Wzorzec 3: "Suma" z wartościami w tabeli (ze spacjami)
-    const sumaMatch = text.match(/Suma\s+([\d\s,\.]+)\s+([\d\s,\.]+)\s+([\d\s,\.]+)/i);
+    const sumaMatch = text.match(/Suma\s+([\d\s,.]+)\s+([\d\s,.]+)\s+([\d\s,.]+)/i);
     if (sumaMatch) {
       return this.parseNumber(sumaMatch[1]);
     }
 
     // Wzorzec 4: "468,00 107,64 575,64" - netto, VAT, brutto ze spacjami
-    const tripleMatch = text.match(/([\d]+[,\.][\d]{2})\s+([\d]+[,\.][\d]{2})\s+([\d]+[,\.][\d]{2})/);
+    const tripleMatch = text.match(/([\d]+[,.][\d]{2})\s+([\d]+[,.][\d]{2})\s+([\d]+[,.][\d]{2})/);
     if (tripleMatch) {
       return this.parseNumber(tripleMatch[1]);
     }
@@ -178,19 +178,19 @@ export class PdfParser {
     // Format PDF: "575,64\n468,00107,64" - brutto na górze, potem netto+VAT sklejone
 
     // Wzorzec 1: brutto przed sklejonym netto+VAT
-    const sklejoneMatch = text.match(/(\d+[,\.]\d{2})[\s\n\r]+(\d+[,\.]\d{2})(\d+[,\.]\d{2})/);
+    const sklejoneMatch = text.match(/(\d+[,.]\d{2})[\s\n\r]+(\d+[,.]\d{2})(\d+[,.]\d{2})/);
     if (sklejoneMatch) {
       // sklejoneMatch[1] to brutto (575,64)
       return this.parseNumber(sklejoneMatch[1]);
     }
 
     // Wzorzec 2: "Suma" z wartościami w tabeli
-    const sumaMatch = text.match(/Suma\s+([\d\s,\.]+)\s+([\d\s,\.]+)\s+([\d\s,\.]+)/i);
+    const sumaMatch = text.match(/Suma\s+([\d\s,.]+)\s+([\d\s,.]+)\s+([\d\s,.]+)/i);
     if (sumaMatch) {
       return this.parseNumber(sumaMatch[3]);
     }
 
-    const bruttoMatch = text.match(/brutto[:\s]*([\d,\.]+)/i);
+    const bruttoMatch = text.match(/brutto[:\s]*([\d,.]+)/i);
     if (bruttoMatch) {
       return this.parseNumber(bruttoMatch[1]);
     }

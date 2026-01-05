@@ -10,7 +10,9 @@ export interface Requirement {
   orderId: ID;
   profileId: ID;
   colorId: ID;
-  quantity: number;
+  beamsCount: number;  // Liczba belek (belki = 6m)
+  meters?: number;      // Długość w metrach
+  restMm?: number;      // Reszta w milimetrach
   profile?: Profile;
   color?: Color;
   createdAt: Timestamp;
@@ -20,13 +22,17 @@ export interface Requirement {
 export interface CreateRequirementData {
   profileId: number;
   colorId: number;
-  quantity: number;
+  beamsCount: number;
+  meters?: number;
+  restMm?: number;
 }
 
 export interface UpdateRequirementData {
   profileId?: number;
   colorId?: number;
-  quantity?: number;
+  beamsCount?: number;
+  meters?: number;
+  restMm?: number;
 }
 
 /**

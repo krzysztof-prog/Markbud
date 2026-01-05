@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { getAuthToken } from '@/lib/auth-token';
 import {
   Dialog,
   DialogContent,
@@ -35,14 +36,19 @@ interface FolderBrowserProps {
   description?: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 async function browseFolders(path: string): Promise<BrowseFoldersResponse> {
   const url = path
     ? `${API_URL}/api/settings/browse-folders?path=${encodeURIComponent(path)}`
     : `${API_URL}/api/settings/browse-folders`;
 
-  const response = await fetch(url);
+  const token = await getAuthToken();
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error || 'Nie udalo sie wczytac folderow');
@@ -51,9 +57,13 @@ async function browseFolders(path: string): Promise<BrowseFoldersResponse> {
 }
 
 async function validateFolder(path: string): Promise<{ valid: boolean; error?: string }> {
+  const token = await getAuthToken();
   const response = await fetch(`${API_URL}/api/settings/validate-folder`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
     body: JSON.stringify({ path }),
   });
   return response.json();

@@ -1,0 +1,141 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e7] [cursor=pointer]:
+    - img [ref=e8]
+  - alert [ref=e11]
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - generic [ref=e15]: AKROBUD
+        - button "Toggle sidebar" [ref=e16] [cursor=pointer]:
+          - img [ref=e17]
+      - navigation [ref=e19]:
+        - link "Dashboard" [ref=e21] [cursor=pointer]:
+          - /url: /
+          - img [ref=e22]
+          - generic [ref=e27]: Dashboard
+        - link "AKROBUD" [ref=e29] [cursor=pointer]:
+          - /url: /magazyn/akrobud
+          - img [ref=e30]
+          - generic [ref=e33]: AKROBUD
+        - link "Magazyn PVC" [ref=e35] [cursor=pointer]:
+          - /url: /magazyn/pvc
+          - img [ref=e36]
+          - generic [ref=e39]: Magazyn PVC
+        - link "Dostawy Schuco" [ref=e41] [cursor=pointer]:
+          - /url: /magazyn/dostawy-schuco
+          - img [ref=e42]
+          - generic [ref=e47]: Dostawy Schuco
+        - button "Szyby" [ref=e49] [cursor=pointer]:
+          - img [ref=e50]
+          - generic [ref=e53]: Szyby
+          - img [ref=e54]
+        - link "Zestawienie miesięczne" [ref=e57] [cursor=pointer]:
+          - /url: /zestawienia
+          - img [ref=e58]
+          - generic [ref=e61]: Zestawienie miesięczne
+        - link "Zestawienie zleceń" [ref=e63] [cursor=pointer]:
+          - /url: /zestawienia/zlecenia
+          - img [ref=e64]
+          - generic [ref=e67]: Zestawienie zleceń
+        - link "Importy" [ref=e69] [cursor=pointer]:
+          - /url: /importy
+          - img [ref=e70]
+          - generic [ref=e73]: Importy
+        - link "Archiwum" [ref=e75] [cursor=pointer]:
+          - /url: /archiwum
+          - img [ref=e76]
+          - generic [ref=e79]: Archiwum
+        - link "Ustawienia" [ref=e81] [cursor=pointer]:
+          - /url: /ustawienia
+          - img [ref=e82]
+          - generic [ref=e85]: Ustawienia
+      - paragraph [ref=e87]: AKROBUD v1.0.0
+    - main [ref=e88]:
+      - generic [ref=e89]:
+        - generic [ref=e90]:
+          - generic [ref=e91]:
+            - heading "AKROBUD" [level=1] [ref=e92]
+            - link "Powrót do magazynu" [ref=e94] [cursor=pointer]:
+              - /url: /magazyn
+              - button "Powrót do magazynu" [ref=e95]:
+                - img [ref=e96]
+                - text: Powrót do magazynu
+          - generic [ref=e98]:
+            - button "Szukaj ⌘ K" [ref=e99] [cursor=pointer]:
+              - img [ref=e100]
+              - generic [ref=e103]: Szukaj
+              - generic [ref=e104]:
+                - generic [ref=e105]: ⌘
+                - text: K
+            - button "Otwórz powiadomienia" [ref=e107] [cursor=pointer]:
+              - img [ref=e108]
+        - navigation "Breadcrumb" [ref=e112]:
+          - link "Strona główna" [ref=e113] [cursor=pointer]:
+            - /url: /
+            - img [ref=e114]
+          - img [ref=e117]
+          - link "Magazyn" [ref=e119] [cursor=pointer]:
+            - /url: /magazyn
+          - img [ref=e120]
+          - generic [ref=e122]:
+            - img [ref=e124]
+            - text: AKROBUD
+        - generic [ref=e128]:
+          - generic [ref=e129]:
+            - heading "Magazyn profili AKROBUD" [level=2] [ref=e130]
+            - paragraph [ref=e131]: Zarządzaj stanem magazynowym, zleceniami i historią profili aluminiowych
+          - generic [ref=e132]:
+            - link "Tabela zleceń Przegląd zleceń produkcyjnych i zapotrzebowania na profile Otwórz →" [ref=e133] [cursor=pointer]:
+              - /url: /magazyn/akrobud/szczegoly?tab=zlecenia
+              - generic [ref=e134]:
+                - generic [ref=e135]:
+                  - img [ref=e137]
+                  - heading "Tabela zleceń" [level=3] [ref=e140]
+                  - paragraph [ref=e141]: Przegląd zleceń produkcyjnych i zapotrzebowania na profile
+                - generic [ref=e142]: Otwórz →
+            - link "Stan magazynowy Aktualny stan magazynu profili i zamówienia Otwórz →" [ref=e143] [cursor=pointer]:
+              - /url: /magazyn/akrobud/szczegoly?tab=magazyn
+              - generic [ref=e144]:
+                - generic [ref=e145]:
+                  - img [ref=e147]
+                  - heading "Stan magazynowy" [level=3] [ref=e151]
+                  - paragraph [ref=e152]: Aktualny stan magazynu profili i zamówienia
+                - generic [ref=e153]: Otwórz →
+            - link "Profile na dostawy Zarządzanie profilami przeznaczonymi na dostawy Otwórz →" [ref=e154] [cursor=pointer]:
+              - /url: /magazyn/akrobud/profile-na-dostawy
+              - generic [ref=e155]:
+                - generic [ref=e156]:
+                  - img [ref=e158]
+                  - heading "Profile na dostawy" [level=3] [ref=e163]
+                  - paragraph [ref=e164]: Zarządzanie profilami przeznaczonymi na dostawy
+                - generic [ref=e165]: Otwórz →
+            - link "Dostawy Lista dostaw i optymalizacja palet Otwórz →" [ref=e166] [cursor=pointer]:
+              - /url: /dostawy
+              - generic [ref=e167]:
+                - generic [ref=e168]:
+                  - img [ref=e170]
+                  - heading "Dostawy" [level=3] [ref=e175]
+                  - paragraph [ref=e176]: Lista dostaw i optymalizacja palet
+                - generic [ref=e177]: Otwórz →
+            - link "Historia Historia zmian stanów magazynowych Otwórz →" [ref=e178] [cursor=pointer]:
+              - /url: /magazyn/akrobud/szczegoly?tab=historia
+              - generic [ref=e179]:
+                - generic [ref=e180]:
+                  - img [ref=e182]
+                  - heading "Historia" [level=3] [ref=e186]
+                  - paragraph [ref=e187]: Historia zmian stanów magazynowych
+                - generic [ref=e188]: Otwórz →
+            - link "Remanent Wykonaj inwentaryzację magazynu Otwórz →" [ref=e189] [cursor=pointer]:
+              - /url: /magazyn/akrobud/remanent
+              - generic [ref=e190]:
+                - generic [ref=e191]:
+                  - img [ref=e193]
+                  - heading "Remanent" [level=3] [ref=e197]
+                  - paragraph [ref=e198]: Wykonaj inwentaryzację magazynu
+                - generic [ref=e199]: Otwórz →
+  - region "Notifications (F8)":
+    - list
+```

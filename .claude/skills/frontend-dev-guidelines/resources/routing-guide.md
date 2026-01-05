@@ -1,16 +1,17 @@
 # Routing Guide
 
-TanStack Router implementation with folder-based routing and lazy loading patterns.
+Next.js App Router implementation with folder-based routing and lazy loading patterns.
 
 ---
 
-## TanStack Router Overview
+## Next.js App Router Overview
 
-**TanStack Router** with file-based routing:
+**Next.js App Router** with file-based routing:
 - Folder structure defines routes
-- Lazy loading for code splitting
-- Type-safe routing
-- Breadcrumb loaders
+- `page.tsx` files create route segments
+- `layout.tsx` for shared layouts
+- Server Components by default
+- Client Components with `'use client'` directive
 
 ---
 
@@ -19,165 +20,112 @@ TanStack Router implementation with folder-based routing and lazy loading patter
 ### Directory Structure
 
 ```
-routes/
-  __root.tsx                    # Root layout
-  index.tsx                     # Home route (/)
-  posts/
-    index.tsx                   # /posts
-    create/
-      index.tsx                 # /posts/create
-    $postId.tsx                 # /posts/:postId (dynamic)
-  comments/
-    index.tsx                   # /comments
+app/
+  page.tsx                      # Home route (/)
+  layout.tsx                    # Root layout
+  dostawy/
+    page.tsx                    # /dostawy
+    [id]/
+      page.tsx                  # /dostawy/:id (dynamic)
+      optymalizacja/
+        page.tsx                # /dostawy/:id/optymalizacja
+  zlecenia/
+    page.tsx                    # /zlecenia
+  magazyn/
+    page.tsx                    # /magazyn
+    akrobud/
+      page.tsx                  # /magazyn/akrobud
 ```
 
-**Pattern**:
-- `index.tsx` = Route at that path
-- `$param.tsx` = Dynamic parameter
+**Pattern:**
+- `page.tsx` = Route at that path
+- `[param]/` = Dynamic parameter folder
+- `layout.tsx` = Shared layout for children
 - Nested folders = Nested routes
 
 ---
 
 ## Basic Route Pattern
 
-### Example from posts/index.tsx
+### Example: dostawy/page.tsx
 
 ```typescript
-/**
- * Posts route component
- * Displays the main blog posts list
- */
+'use client';
 
-import { createFileRoute } from '@tanstack/react-router';
-import { lazy } from 'react';
+import { Suspense } from 'react';
+import { DeliveriesList } from '@/features/deliveries/components/DeliveriesList';
+import { LoadingSkeleton } from '@/components/ui/loading-skeleton';
 
-// Lazy load the page component
-const PostsList = lazy(() =>
-    import('@/features/posts/components/PostsList').then(
-        (module) => ({ default: module.PostsList }),
-    ),
-);
-
-export const Route = createFileRoute('/posts/')({
-    component: PostsPage,
-    // Define breadcrumb data
-    loader: () => ({
-        crumb: 'Posts',
-    }),
-});
-
-function PostsPage() {
+export default function DeliveriesPage() {
     return (
-        <PostsList
-            title='All Posts'
-            showFilters={true}
-        />
+        <div className="container mx-auto py-6">
+            <h1 className="text-2xl font-bold mb-6">Dostawy</h1>
+            <Suspense fallback={<LoadingSkeleton />}>
+                <DeliveriesList />
+            </Suspense>
+        </div>
     );
 }
-
-export default PostsPage;
 ```
 
 **Key Points:**
-- Lazy load heavy components
-- `createFileRoute` with route path
-- `loader` for breadcrumb data
-- Page component renders content
-- Export both Route and component
+- `'use client'` for client-side interactivity
+- Suspense boundary for data fetching
+- Lazy loading with Suspense fallback
+- Clean page structure
 
 ---
 
-## Lazy Loading Routes
+## Lazy Loading Components
 
-### Named Export Pattern
+### Using React.lazy with Suspense
 
 ```typescript
-import { lazy } from 'react';
+'use client';
 
-// For named exports, use .then() to map to default
-const MyPage = lazy(() =>
-    import('@/features/my-feature/components/MyPage').then(
-        (module) => ({ default: module.MyPage })
-    )
+import React, { Suspense, lazy } from 'react';
+
+// Lazy load heavy components
+const DeliveryOptimizer = lazy(() =>
+    import('@/features/deliveries/components/DeliveryOptimizer')
 );
+
+export default function OptimizationPage() {
+    return (
+        <Suspense fallback={<div className="animate-pulse bg-gray-200 h-96 rounded" />}>
+            <DeliveryOptimizer />
+        </Suspense>
+    );
+}
 ```
 
-### Default Export Pattern
+### Using next/dynamic
 
 ```typescript
-import { lazy } from 'react';
+'use client';
 
-// For default exports, simpler syntax
-const MyPage = lazy(() => import('@/features/my-feature/components/MyPage'));
+import dynamic from 'next/dynamic';
+
+// Dynamic import with loading state
+const DeliveryCalendar = dynamic(
+    () => import('@/features/deliveries/components/DeliveryCalendar'),
+    {
+        loading: () => <div className="animate-pulse bg-gray-200 h-64 rounded" />,
+        ssr: false, // Disable SSR if component uses browser APIs
+    }
+);
+
+export default function CalendarPage() {
+    return <DeliveryCalendar />;
+}
 ```
 
-### Why Lazy Load Routes?
+### Why Lazy Load?
 
 - Code splitting - smaller initial bundle
 - Faster initial page load
-- Load route code only when navigated to
-- Better performance
-
----
-
-## createFileRoute
-
-### Basic Configuration
-
-```typescript
-export const Route = createFileRoute('/my-route/')({
-    component: MyRoutePage,
-});
-
-function MyRoutePage() {
-    return <div>My Route Content</div>;
-}
-```
-
-### With Breadcrumb Loader
-
-```typescript
-export const Route = createFileRoute('/my-route/')({
-    component: MyRoutePage,
-    loader: () => ({
-        crumb: 'My Route Title',
-    }),
-});
-```
-
-Breadcrumb appears in navigation/app bar automatically.
-
-### With Data Loader
-
-```typescript
-export const Route = createFileRoute('/my-route/')({
-    component: MyRoutePage,
-    loader: async () => {
-        // Can prefetch data here
-        const data = await api.getData();
-        return { crumb: 'My Route', data };
-    },
-});
-```
-
-### With Search Params
-
-```typescript
-export const Route = createFileRoute('/search/')({
-    component: SearchPage,
-    validateSearch: (search: Record<string, unknown>) => {
-        return {
-            query: (search.query as string) || '',
-            page: Number(search.page) || 1,
-        };
-    },
-});
-
-function SearchPage() {
-    const { query, page } = Route.useSearch();
-    // Use query and page
-}
-```
+- Load component code only when needed
+- Better Core Web Vitals
 
 ---
 
@@ -186,32 +134,58 @@ function SearchPage() {
 ### Parameter Routes
 
 ```typescript
-// routes/users/$userId.tsx
+// app/dostawy/[id]/page.tsx
 
-export const Route = createFileRoute('/users/$userId')({
-    component: UserPage,
-});
+'use client';
 
-function UserPage() {
-    const { userId } = Route.useParams();
+import { useParams } from 'next/navigation';
+import { DeliveryDetail } from '@/features/deliveries/components/DeliveryDetail';
 
-    return <UserProfile userId={userId} />;
+export default function DeliveryPage() {
+    const params = useParams();
+    const deliveryId = params.id as string;
+
+    return <DeliveryDetail id={deliveryId} />;
 }
 ```
 
 ### Multiple Parameters
 
 ```typescript
-// routes/posts/$postId/comments/$commentId.tsx
+// app/zlecenia/[orderId]/pozycje/[itemId]/page.tsx
 
-export const Route = createFileRoute('/posts/$postId/comments/$commentId')({
-    component: CommentPage,
-});
+'use client';
 
-function CommentPage() {
-    const { postId, commentId } = Route.useParams();
+import { useParams } from 'next/navigation';
 
-    return <CommentEditor postId={postId} commentId={commentId} />;
+export default function OrderItemPage() {
+    const params = useParams();
+    const { orderId, itemId } = params as { orderId: string; itemId: string };
+
+    return (
+        <div>
+            <h1>Order: {orderId}</h1>
+            <h2>Item: {itemId}</h2>
+        </div>
+    );
+}
+```
+
+### Catch-all Routes
+
+```typescript
+// app/docs/[...slug]/page.tsx
+// Matches /docs/a, /docs/a/b, /docs/a/b/c, etc.
+
+'use client';
+
+import { useParams } from 'next/navigation';
+
+export default function DocsPage() {
+    const params = useParams();
+    const slug = params.slug as string[];
+
+    return <div>Path: {slug.join('/')}</div>;
 }
 ```
 
@@ -222,64 +196,113 @@ function CommentPage() {
 ### Programmatic Navigation
 
 ```typescript
-import { useNavigate } from '@tanstack/react-router';
+'use client';
 
-export const MyComponent: React.FC = () => {
-    const navigate = useNavigate();
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
 
-    const handleClick = () => {
-        navigate({ to: '/posts' });
+export const NavigationExample: React.FC = () => {
+    const router = useRouter();
+
+    const handleNavigate = () => {
+        router.push('/dostawy');
     };
 
-    return <Button onClick={handleClick}>View Posts</Button>;
+    const handleBack = () => {
+        router.back();
+    };
+
+    return (
+        <div className="space-x-2">
+            <Button onClick={handleNavigate}>Go to Deliveries</Button>
+            <Button variant="outline" onClick={handleBack}>Back</Button>
+        </div>
+    );
 };
 ```
 
-### With Parameters
+### Link Component
 
 ```typescript
-const handleNavigate = () => {
-    navigate({
-        to: '/users/$userId',
-        params: { userId: '123' },
-    });
-};
+import Link from 'next/link';
+
+// Basic link
+<Link href="/dostawy" className="text-blue-600 hover:underline">
+    Dostawy
+</Link>
+
+// Link with dynamic parameter
+<Link href={`/dostawy/${delivery.id}`}>
+    View Details
+</Link>
+
+// Link with query params
+<Link href={{ pathname: '/zlecenia', query: { status: 'active' } }}>
+    Active Orders
+</Link>
 ```
 
-### With Search Params
+### Navigation with Search Params
 
 ```typescript
-const handleSearch = () => {
-    navigate({
-        to: '/search',
-        search: { query: 'test', page: 1 },
-    });
+'use client';
+
+import { useRouter, useSearchParams } from 'next/navigation';
+
+export const FilterExample: React.FC = () => {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+
+    const handleFilter = (status: string) => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('status', status);
+        router.push(`/zlecenia?${params.toString()}`);
+    };
+
+    return (
+        <button onClick={() => handleFilter('active')}>
+            Filter Active
+        </button>
+    );
 };
 ```
 
 ---
 
-## Route Layout Pattern
+## Layouts
 
-### Root Layout (__root.tsx)
+### Root Layout (app/layout.tsx)
 
 ```typescript
-import { createRootRoute, Outlet } from '@tanstack/react-router';
-import { Box } from '@mui/material';
-import { CustomAppBar } from '~components/CustomAppBar';
+import { Inter } from 'next/font/google';
+import { Sidebar } from '@/components/layout/sidebar';
+import { Header } from '@/components/layout/header';
+import './globals.css';
 
-export const Route = createRootRoute({
-    component: RootLayout,
-});
+const inter = Inter({ subsets: ['latin'] });
 
-function RootLayout() {
+export const metadata = {
+    title: 'AKROBUD',
+    description: 'Production management system',
+};
+
+export default function RootLayout({
+    children,
+}: {
+    children: React.ReactNode;
+}) {
     return (
-        <Box>
-            <CustomAppBar />
-            <Box sx={{ p: 2 }}>
-                <Outlet />  {/* Child routes render here */}
-            </Box>
-        </Box>
+        <html lang="pl">
+            <body className={inter.className}>
+                <div className="flex min-h-screen">
+                    <Sidebar />
+                    <div className="flex-1">
+                        <Header />
+                        <main className="p-6">{children}</main>
+                    </div>
+                </div>
+            </body>
+        </html>
     );
 }
 ```
@@ -287,20 +310,187 @@ function RootLayout() {
 ### Nested Layouts
 
 ```typescript
-// routes/dashboard/index.tsx
-export const Route = createFileRoute('/dashboard/')({
-    component: DashboardLayout,
-});
+// app/magazyn/layout.tsx
 
-function DashboardLayout() {
+export default function WarehouseLayout({
+    children,
+}: {
+    children: React.ReactNode;
+}) {
     return (
-        <Box>
-            <DashboardSidebar />
-            <Box sx={{ flex: 1 }}>
-                <Outlet />  {/* Nested routes */}
-            </Box>
-        </Box>
+        <div className="grid grid-cols-[200px_1fr] gap-4">
+            <nav className="bg-gray-100 p-4 rounded">
+                <h2 className="font-bold mb-4">Magazyn</h2>
+                <ul className="space-y-2">
+                    <li><Link href="/magazyn">Overview</Link></li>
+                    <li><Link href="/magazyn/akrobud">Akrobud</Link></li>
+                    <li><Link href="/magazyn/dostawy-schuco">Schuco</Link></li>
+                </ul>
+            </nav>
+            <div>{children}</div>
+        </div>
     );
+}
+```
+
+---
+
+## Loading States
+
+### Loading UI (loading.tsx)
+
+```typescript
+// app/dostawy/loading.tsx
+// Automatically shown while page loads
+
+export default function Loading() {
+    return (
+        <div className="space-y-4">
+            <div className="h-8 bg-gray-200 rounded animate-pulse w-48" />
+            <div className="h-64 bg-gray-200 rounded animate-pulse" />
+        </div>
+    );
+}
+```
+
+### Streaming with Suspense
+
+```typescript
+// app/dashboard/page.tsx
+
+import { Suspense } from 'react';
+
+export default function DashboardPage() {
+    return (
+        <div className="space-y-6">
+            <h1 className="text-2xl font-bold">Dashboard</h1>
+
+            <div className="grid grid-cols-3 gap-4">
+                <Suspense fallback={<StatCardSkeleton />}>
+                    <OrdersStats />
+                </Suspense>
+
+                <Suspense fallback={<StatCardSkeleton />}>
+                    <DeliveriesStats />
+                </Suspense>
+
+                <Suspense fallback={<StatCardSkeleton />}>
+                    <WarehouseStats />
+                </Suspense>
+            </div>
+        </div>
+    );
+}
+```
+
+---
+
+## Error Handling
+
+### Error Boundary (error.tsx)
+
+```typescript
+// app/dostawy/error.tsx
+'use client';
+
+import { Button } from '@/components/ui/button';
+
+export default function Error({
+    error,
+    reset,
+}: {
+    error: Error & { digest?: string };
+    reset: () => void;
+}) {
+    return (
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+            <h2 className="text-xl font-semibold mb-4">Coś poszło nie tak!</h2>
+            <p className="text-gray-600 mb-4">{error.message}</p>
+            <Button onClick={reset}>Spróbuj ponownie</Button>
+        </div>
+    );
+}
+```
+
+### Not Found (not-found.tsx)
+
+```typescript
+// app/not-found.tsx
+
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+
+export default function NotFound() {
+    return (
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+            <h2 className="text-2xl font-bold mb-4">404 - Nie znaleziono</h2>
+            <p className="text-gray-600 mb-4">
+                Strona, której szukasz nie istnieje.
+            </p>
+            <Link href="/">
+                <Button>Wróć do strony głównej</Button>
+            </Link>
+        </div>
+    );
+}
+```
+
+---
+
+## Route Groups
+
+Group routes without affecting URL:
+
+```
+app/
+  (marketing)/
+    about/page.tsx          # /about
+    contact/page.tsx        # /contact
+  (dashboard)/
+    dashboard/page.tsx      # /dashboard
+    settings/page.tsx       # /settings
+```
+
+---
+
+## Metadata
+
+### Static Metadata
+
+```typescript
+// app/dostawy/page.tsx
+
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+    title: 'Dostawy | AKROBUD',
+    description: 'Zarządzanie dostawami',
+};
+
+export default function DeliveriesPage() {
+    return <div>...</div>;
+}
+```
+
+### Dynamic Metadata
+
+```typescript
+// app/dostawy/[id]/page.tsx
+
+import type { Metadata } from 'next';
+
+type Props = {
+    params: { id: string };
+};
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+    return {
+        title: `Dostawa ${params.id} | AKROBUD`,
+    };
+}
+
+export default function DeliveryPage({ params }: Props) {
+    return <div>Delivery: {params.id}</div>;
 }
 ```
 
@@ -309,40 +499,53 @@ function DashboardLayout() {
 ## Complete Route Example
 
 ```typescript
-/**
- * User profile route
- * Path: /users/:userId
- */
+// app/dostawy/[id]/page.tsx
 
-import { createFileRoute } from '@tanstack/react-router';
-import { lazy } from 'react';
-import { SuspenseLoader } from '~components/SuspenseLoader';
+'use client';
 
-// Lazy load heavy component
-const UserProfile = lazy(() =>
-    import('@/features/users/components/UserProfile').then(
-        (module) => ({ default: module.UserProfile })
-    )
+import { Suspense, lazy } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft } from 'lucide-react';
+
+const DeliveryDetail = lazy(() =>
+    import('@/features/deliveries/components/DeliveryDetail')
 );
 
-export const Route = createFileRoute('/users/$userId')({
-    component: UserPage,
-    loader: () => ({
-        crumb: 'User Profile',
-    }),
-});
-
-function UserPage() {
-    const { userId } = Route.useParams();
+export default function DeliveryPage() {
+    const params = useParams();
+    const router = useRouter();
+    const deliveryId = params.id as string;
 
     return (
-        <SuspenseLoader>
-            <UserProfile userId={userId} />
-        </SuspenseLoader>
+        <div className="container mx-auto py-6">
+            <div className="flex items-center gap-4 mb-6">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => router.back()}
+                >
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Wróć
+                </Button>
+                <h1 className="text-2xl font-bold">
+                    Dostawa #{deliveryId}
+                </h1>
+            </div>
+
+            <Suspense
+                fallback={
+                    <div className="space-y-4">
+                        <div className="h-8 bg-gray-200 rounded animate-pulse" />
+                        <div className="h-64 bg-gray-200 rounded animate-pulse" />
+                    </div>
+                }
+            >
+                <DeliveryDetail id={deliveryId} />
+            </Suspense>
+        </div>
     );
 }
-
-export default UserPage;
 ```
 
 ---
@@ -350,15 +553,18 @@ export default UserPage;
 ## Summary
 
 **Routing Checklist:**
-- ✅ Folder-based: `routes/my-route/index.tsx`
-- ✅ Lazy load components: `React.lazy(() => import())`
-- ✅ Use `createFileRoute` with route path
-- ✅ Add breadcrumb in `loader` function
-- ✅ Wrap in `SuspenseLoader` for loading states
-- ✅ Use `Route.useParams()` for dynamic params
-- ✅ Use `useNavigate()` for programmatic navigation
+- ✅ Folder-based: `app/my-route/page.tsx`
+- ✅ Use `'use client'` for interactive pages
+- ✅ Lazy load components with `React.lazy` or `next/dynamic`
+- ✅ Wrap in `<Suspense>` for loading states
+- ✅ Use `useParams()` for dynamic params
+- ✅ Use `useRouter()` for programmatic navigation
+- ✅ Use `<Link>` for declarative navigation
+- ✅ Add `loading.tsx` for automatic loading states
+- ✅ Add `error.tsx` for error boundaries
+- ❌ Don't use TanStack Router (this project uses Next.js)
 
 **See Also:**
 - [component-patterns.md](component-patterns.md) - Lazy loading patterns
-- [loading-and-error-states.md](loading-and-error-states.md) - SuspenseLoader usage
+- [loading-and-error-states.md](loading-and-error-states.md) - Suspense usage
 - [complete-examples.md](complete-examples.md) - Full route examples

@@ -440,7 +440,7 @@ For complete examples, see [resources/complete-examples.md](resources/complete-e
 
 ## Stack Details
 
-**Framework:** React 18 + Next.js 14
+**Framework:** React 19 + Next.js 15.x (App Router)
 **Styling:** TailwindCSS 3.4
 **UI Library:** Shadcn/ui (Radix UI based)
 **Data Fetching:** TanStack Query v5
@@ -459,5 +459,5 @@ For complete examples, see [resources/complete-examples.md](resources/complete-e
 ---
 
 **Skill Status**: Production-ready ✅
-**Stack**: React 18 + Next.js 14 + TailwindCSS + Shadcn/ui ✅
+**Stack**: React 19 + Next.js 15.x + TailwindCSS + Shadcn/ui ✅
 **Progressive Disclosure**: 11 resource files ✅

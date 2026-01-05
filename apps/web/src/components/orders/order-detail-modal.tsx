@@ -176,21 +176,21 @@ export function OrderDetailModal({
                     <span className="text-slate-500">Status:</span>{' '}
                     <Badge
                       variant={
-                        order.status === 'pending'
+                        order.status === 'new'
                           ? 'secondary'
                           : order.status === 'completed'
                           ? 'default'
                           : 'outline'
                       }
                     >
-                      {order.status === 'pending'
-                        ? 'Oczekujące'
+                      {order.status === 'new'
+                        ? 'Nowe'
+                        : order.status === 'in_progress'
+                        ? 'W produkcji'
                         : order.status === 'completed'
                         ? 'Zakończone'
                         : order.status === 'archived'
                         ? 'Zarchiwizowane'
-                        : order.status === 'active'
-                        ? 'Aktywne'
                         : order.status}
                     </Badge>
                   </div>

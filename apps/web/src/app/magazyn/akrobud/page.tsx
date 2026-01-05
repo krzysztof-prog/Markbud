@@ -4,7 +4,7 @@ import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
-import { FileText, Package, History, ClipboardCheck, Warehouse, ArrowLeft } from 'lucide-react';
+import { FileText, Package, History, ClipboardCheck, Warehouse, ArrowLeft, Truck, PackageCheck } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AkrobudMenuPage() {
@@ -22,6 +22,20 @@ export default function AkrobudMenuPage() {
       href: '/magazyn/akrobud/szczegoly?tab=magazyn',
       icon: Package,
       color: 'green',
+    },
+    {
+      title: 'Profile na dostawy',
+      description: 'Zarządzanie profilami przeznaczonymi na dostawy',
+      href: '/magazyn/akrobud/profile-na-dostawy',
+      icon: PackageCheck,
+      color: 'teal',
+    },
+    {
+      title: 'Dostawy',
+      description: 'Lista dostaw i optymalizacja palet',
+      href: '/dostawy',
+      icon: Truck,
+      color: 'indigo',
     },
     {
       title: 'Historia',
@@ -43,6 +57,8 @@ export default function AkrobudMenuPage() {
     const colors = {
       blue: 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200',
       green: 'bg-green-50 text-green-600 hover:bg-green-100 border-green-200',
+      teal: 'bg-teal-50 text-teal-600 hover:bg-teal-100 border-teal-200',
+      indigo: 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200',
       purple: 'bg-purple-50 text-purple-600 hover:bg-purple-100 border-purple-200',
       orange: 'bg-orange-50 text-orange-600 hover:bg-orange-100 border-orange-200',
     };
@@ -76,7 +92,7 @@ export default function AkrobudMenuPage() {
             <p className="text-slate-600">Zarządzaj stanem magazynowym, zleceniami i historią profili aluminiowych</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {akrobudOptions.map((option) => {
               const Icon = option.icon;
               return (
