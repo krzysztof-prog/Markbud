@@ -38,13 +38,13 @@ export class GlassOrderService {
       );
     }
 
-    // If replacing, delete the old one first
-    if (existing && replaceExisting) {
-      await this.delete(existing.id);
-    }
-
-    // Use transaction for atomicity
+    // Use transaction for atomicity (delete + create in same transaction)
     return this.prisma.$transaction(async (tx) => {
+      // If replacing, delete the old one first (WITHIN transaction for atomicity)
+      if (existing && replaceExisting) {
+        await this.deleteTx(tx, existing.id, existing.items);
+      }
+
       // Create GlassOrder with items
       const glassOrder = await tx.glassOrder.create({
         data: {
@@ -219,51 +219,63 @@ export class GlassOrderService {
 
     // Use transaction for atomicity
     await this.prisma.$transaction(async (tx) => {
-      // Decrement Order.orderedGlassCount and update status
-      const byOrder = new Map<string, number>();
-      for (const item of glassOrder.items) {
-        const current = byOrder.get(item.orderNumber) || 0;
-        byOrder.set(item.orderNumber, current + item.quantity);
-      }
+      await this.deleteTx(tx, id, glassOrder.items);
+    });
+  }
 
-      for (const [orderNumber, quantity] of byOrder) {
-        const order = await tx.order.findUnique({
-          where: { orderNumber },
-        });
+  /**
+   * Transaction-aware delete - do użycia wewnątrz istniejącej transakcji
+   * Używane w importFromTxt z replaceExisting=true dla atomowości
+   */
+  private async deleteTx(
+    tx: Prisma.TransactionClient,
+    id: number,
+    items: Array<{ orderNumber: string; quantity: number }>
+  ) {
+    // Decrement Order.orderedGlassCount and update status
+    const byOrder = new Map<string, number>();
+    for (const item of items) {
+      const current = byOrder.get(item.orderNumber) || 0;
+      byOrder.set(item.orderNumber, current + item.quantity);
+    }
 
-        if (order) {
-          const newOrderedCount = Math.max(0, (order.orderedGlassCount || 0) - quantity);
-          const delivered = order.deliveredGlassCount || 0;
-
-          // Recalculate status
-          let newStatus = 'not_ordered';
-          if (newOrderedCount === 0) {
-            newStatus = delivered > 0 ? 'over_delivered' : 'not_ordered';
-          } else if (delivered === 0) {
-            newStatus = 'ordered';
-          } else if (delivered < newOrderedCount) {
-            newStatus = 'partially_delivered';
-          } else if (delivered === newOrderedCount) {
-            newStatus = 'delivered';
-          } else {
-            newStatus = 'over_delivered';
-          }
-
-          await tx.order.update({
-            where: { orderNumber },
-            data: {
-              orderedGlassCount: newOrderedCount,
-              glassOrderStatus: newStatus,
-            },
-          });
-        }
-      }
-
-      // Soft delete: set deletedAt instead of hard delete
-      await tx.glassOrder.update({
-        where: { id },
-        data: { deletedAt: new Date() },
+    for (const [orderNumber, quantity] of byOrder) {
+      const order = await tx.order.findUnique({
+        where: { orderNumber },
       });
+
+      if (order) {
+        const newOrderedCount = Math.max(0, (order.orderedGlassCount || 0) - quantity);
+        const delivered = order.deliveredGlassCount || 0;
+
+        // Recalculate status
+        let newStatus = 'not_ordered';
+        if (newOrderedCount === 0) {
+          newStatus = delivered > 0 ? 'over_delivered' : 'not_ordered';
+        } else if (delivered === 0) {
+          newStatus = 'ordered';
+        } else if (delivered < newOrderedCount) {
+          newStatus = 'partially_delivered';
+        } else if (delivered === newOrderedCount) {
+          newStatus = 'delivered';
+        } else {
+          newStatus = 'over_delivered';
+        }
+
+        await tx.order.update({
+          where: { orderNumber },
+          data: {
+            orderedGlassCount: newOrderedCount,
+            glassOrderStatus: newStatus,
+          },
+        });
+      }
+    }
+
+    // Soft delete: set deletedAt instead of hard delete
+    await tx.glassOrder.update({
+      where: { id },
+      data: { deletedAt: new Date() },
     });
   }
 

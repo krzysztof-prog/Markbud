@@ -1,0 +1,469 @@
+import chokidar, { type FSWatcher } from 'chokidar';
+import path from 'path';
+import { existsSync } from 'fs';
+import { readdir, copyFile } from 'fs/promises';
+import type { PrismaClient } from '@prisma/client';
+import { CsvParser } from '../parsers/csv-parser.js';
+import { logger } from '../../utils/logger.js';
+import { emitDeliveryCreated, emitOrderUpdated } from '../event-emitter.js';
+import type { IFileWatcher, DeliveryNumber, WatcherConfig } from './types.js';
+import {
+  getSetting,
+  extractDateFromFolderName,
+  extractDeliveryNumber,
+  formatDeliveryNumber,
+  archiveFolder,
+  ensureDirectoryExists,
+  generateSafeFilename,
+} from './utils.js';
+
+/**
+ * Domyślna konfiguracja watchera dla "użyte bele"
+ */
+const DEFAULT_CONFIG: WatcherConfig = {
+  stabilityThreshold: 3000, // 3s - poczekaj aż folder jest stabilny
+  pollInterval: 100,
+};
+
+/**
+ * Watcher dla folderów "użyte bele"
+ * Automatycznie importuje pliki CSV z podfolderów
+ */
+export class UzyteBeleWatcher implements IFileWatcher {
+  private prisma: PrismaClient;
+  private watchers: FSWatcher[] = [];
+  private config: WatcherConfig;
+
+  constructor(prisma: PrismaClient, config: WatcherConfig = DEFAULT_CONFIG) {
+    this.prisma = prisma;
+    this.config = config;
+  }
+
+  /**
+   * Uruchamia watcher dla podanej ścieżki bazowej
+   */
+  async start(basePath: string): Promise<void> {
+    const absolutePath = path.resolve(basePath);
+
+    if (!existsSync(absolutePath)) {
+      console.log(`   ⚠️ Folder nie istnieje: ${absolutePath}`);
+      return;
+    }
+
+    // Najpierw zeskanuj istniejące foldery
+    await this.scanExistingFolders(absolutePath);
+
+    // Uruchom nasłuchiwanie nowych podfolderów
+    this.watchForNewFolders(absolutePath);
+
+    console.log(`   🔍 Nasłuchuję nowych podfolderów w: ${absolutePath}`);
+  }
+
+  /**
+   * Zatrzymuje wszystkie watchery
+   */
+  async stop(): Promise<void> {
+    for (const watcher of this.watchers) {
+      await watcher.close();
+    }
+    this.watchers = [];
+  }
+
+  /**
+   * Zwraca listę aktywnych watcherów
+   */
+  getWatchers(): FSWatcher[] {
+    return this.watchers;
+  }
+
+  /**
+   * Skanuje istniejące podfoldery w "użyte bele" i importuje pliki CSV
+   */
+  async scanExistingFolders(basePath: string): Promise<void> {
+    console.log(`   🔍 Skanuję istniejące foldery w: ${basePath}`);
+
+    try {
+      const entries = await readdir(basePath, { withFileTypes: true });
+
+      // Filtruj tylko foldery z datą w formacie DD.MM.YYYY
+      const dateFolders = entries.filter((entry) => {
+        if (!entry.isDirectory()) return false;
+        return /\d{2}\.\d{2}\.\d{4}/.test(entry.name);
+      });
+
+      if (dateFolders.length === 0) {
+        console.log(`   ℹ️ Brak folderów z datą do zaimportowania`);
+        return;
+      }
+
+      console.log(`   📂 Znaleziono ${dateFolders.length} folderów z datą`);
+
+      for (const folder of dateFolders) {
+        const folderPath = path.join(basePath, folder.name);
+        await this.handleNewFolder(folderPath);
+      }
+    } catch (error) {
+      logger.error(
+        `Błąd skanowania ${basePath}: ${error instanceof Error ? error.message : 'Nieznany błąd'}`
+      );
+    }
+  }
+
+  /**
+   * Nasłuchuje nowych PODFOLDERÓW i automatycznie importuje pliki CSV
+   */
+  private watchForNewFolders(basePath: string): void {
+    const watcher = chokidar.watch(basePath, {
+      persistent: true,
+      ignoreInitial: true, // Ignoruj istniejące na start
+      depth: 1, // Tylko pierwszy poziom podfolderów
+      awaitWriteFinish: {
+        stabilityThreshold: this.config.stabilityThreshold,
+        pollInterval: this.config.pollInterval,
+      },
+    });
+
+    watcher
+      .on('addDir', async (folderPath) => {
+        // Ignoruj sam folder bazowy
+        if (folderPath === basePath) {
+          return;
+        }
+
+        console.log(`📁 Wykryto nowy podfolder: ${folderPath}`);
+        await this.handleNewFolder(folderPath);
+      })
+      .on('error', (error) => {
+        logger.error(`❌ Błąd File Watcher dla podfolderów ${basePath}: ${error}`);
+      });
+
+    this.watchers.push(watcher);
+  }
+
+  /**
+   * Obsługuje nowy podfolder - automatyczny import wszystkich CSV
+   */
+  private async handleNewFolder(folderPath: string): Promise<void> {
+    const folderName = path.basename(folderPath);
+
+    // Wyciągnij datę z nazwy folderu
+    const deliveryDate = extractDateFromFolderName(folderName);
+
+    if (!deliveryDate) {
+      logger.warn(`   ⚠️ Folder "${folderName}" nie zawiera daty w formacie DD.MM.YYYY - pomijam`);
+      return;
+    }
+
+    logger.info(
+      `   📅 Wykryto folder z datą: ${deliveryDate.toLocaleDateString('pl-PL')}`
+    );
+
+    // Wyciągnij numer dostawy z nazwy folderu (opcjonalnie)
+    const deliveryNumber = extractDeliveryNumber(folderName);
+    logger.info(`   📦 Numer dostawy: ${deliveryNumber}`);
+
+    try {
+      await this.importFolder(folderPath, deliveryDate, deliveryNumber, folderName);
+    } catch (error) {
+      logger.error(
+        `   ❌ Błąd importu folderu "${folderName}": ${error instanceof Error ? error.message : 'Nieznany błąd'}`
+      );
+    }
+  }
+
+  /**
+   * Automatyczny import folderu (podobnie jak POST /api/imports/folder)
+   */
+  private async importFolder(
+    folderPath: string,
+    deliveryDate: Date,
+    deliveryNumber: DeliveryNumber,
+    folderName: string
+  ): Promise<void> {
+    // Znajdź wszystkie pliki CSV rekursywnie
+    const csvFiles = await this.findCsvFiles(folderPath);
+
+    if (csvFiles.length === 0) {
+      logger.warn(`   ⚠️ Brak plików CSV w folderze "${folderName}"`);
+      return;
+    }
+
+    logger.info(`   📄 Znaleziono ${csvFiles.length} plików CSV`);
+
+    // Generuj pełny numer dostawy w formacie DD.MM.YYYY_X
+    const fullDeliveryNumber = formatDeliveryNumber(deliveryDate, deliveryNumber);
+
+    // Znajdź lub utwórz dostawę
+    const delivery = await this.findOrCreateDelivery(
+      deliveryDate,
+      deliveryNumber,
+      fullDeliveryNumber
+    );
+
+    // Utwórz folder uploads jeśli nie istnieje
+    const uploadsDir = path.join(process.cwd(), 'uploads');
+    await ensureDirectoryExists(uploadsDir);
+
+    const parser = new CsvParser();
+    let successCount = 0;
+    let failCount = 0;
+
+    // Przetwórz każdy plik CSV
+    for (const csvFile of csvFiles) {
+      const result = await this.processFile(csvFile, folderPath, uploadsDir, parser, delivery.id);
+
+      if (result === 'success') {
+        successCount++;
+      } else if (result === 'failed') {
+        failCount++;
+      }
+      // 'skipped' - plik już był zaimportowany lub oczekuje na decyzję
+    }
+
+    logger.info(
+      `   🎉 Import zakończony: ${successCount}/${csvFiles.length} plików zaimportowano pomyślnie`
+    );
+
+    // Archiwizuj folder jeśli wszystkie pliki zostały pomyślnie zaimportowane
+    if (successCount > 0 && failCount === 0) {
+      const uzyteBelePath = await this.getBasePath();
+      await archiveFolder(folderPath, uzyteBelePath);
+    } else if (failCount > 0) {
+      logger.warn(`   ⚠️ Folder NIE został zarchiwizowany - wykryto ${failCount} błędów`);
+    }
+  }
+
+  /**
+   * Znajduje lub tworzy dostawę dla podanej daty i numeru
+   */
+  private async findOrCreateDelivery(
+    deliveryDate: Date,
+    deliveryNumber: DeliveryNumber,
+    fullDeliveryNumber: string
+  ): Promise<{ id: number; deliveryNumber: string | null }> {
+    // Znajdź wszystkie dostawy w tym dniu
+    const deliveriesOnDay = await this.prisma.delivery.findMany({
+      where: {
+        deliveryDate: {
+          gte: new Date(
+            deliveryDate.getFullYear(),
+            deliveryDate.getMonth(),
+            deliveryDate.getDate()
+          ),
+          lt: new Date(
+            deliveryDate.getFullYear(),
+            deliveryDate.getMonth(),
+            deliveryDate.getDate() + 1
+          ),
+        },
+      },
+    });
+
+    // Szukaj dostawy która kończy się tym samym sufiksem (I, II, III, etc.)
+    let delivery = deliveriesOnDay.find((d) =>
+      d.deliveryNumber?.endsWith(`_${deliveryNumber}`)
+    );
+
+    if (!delivery) {
+      delivery = await this.prisma.delivery.create({
+        data: {
+          deliveryDate,
+          deliveryNumber: fullDeliveryNumber,
+          status: 'planned',
+        },
+      });
+      logger.info(
+        `   ✨ Utworzono nową dostawę ${fullDeliveryNumber} na ${deliveryDate.toLocaleDateString('pl-PL')}`
+      );
+      emitDeliveryCreated(delivery);
+    } else {
+      logger.info(
+        `   📦 Używam istniejącej dostawy ${delivery.deliveryNumber} (ID: ${delivery.id})`
+      );
+    }
+
+    return delivery;
+  }
+
+  /**
+   * Przetwarza pojedynczy plik CSV
+   * @returns 'success' | 'failed' | 'skipped'
+   */
+  private async processFile(
+    csvFile: string,
+    folderPath: string,
+    uploadsDir: string,
+    parser: CsvParser,
+    deliveryId: number
+  ): Promise<'success' | 'failed' | 'skipped'> {
+    try {
+      const originalFilename = path.basename(csvFile);
+
+      // Sprawdź czy ten plik (po nazwie oryginalnej) był już importowany
+      const alreadyImported = await this.prisma.fileImport.findFirst({
+        where: {
+          filename: { contains: originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_') },
+          status: { in: ['completed', 'processing'] },
+        },
+      });
+
+      if (alreadyImported) {
+        logger.info(`   ⏭️ Plik ${originalFilename} już był zaimportowany, pomijam`);
+        return 'skipped';
+      }
+
+      const safeFilename = generateSafeFilename(originalFilename);
+      const destPath = path.join(uploadsDir, safeFilename);
+
+      await copyFile(csvFile, destPath);
+
+      const relativePath = path.relative(folderPath, csvFile);
+
+      // Sprawdź czy plik ma konflikt (zlecenie z sufiksem gdzie bazowe ISTNIEJE)
+      const preview = await parser.previewUzyteBele(destPath);
+
+      // Konflikt występuje TYLKO gdy:
+      // - zlecenie ma sufiks (-a, -b, itp.) ORAZ
+      // - zlecenie bazowe ISTNIEJE w bazie
+      const hasRealConflict = preview.conflict?.baseOrderExists === true;
+
+      if (hasRealConflict) {
+        // Jeśli jest konflikt (bazowe istnieje), zostaw jako PENDING i poczekaj na decyzję użytkownika
+        await this.prisma.fileImport.create({
+          data: {
+            filename: safeFilename,
+            filepath: destPath,
+            fileType: 'uzyte_bele',
+            status: 'pending',
+            metadata: JSON.stringify({
+              preview,
+              deliveryId,
+              autoDetectedConflict: true,
+            }),
+          },
+        });
+
+        logger.warn(
+          `   ⚠️ Konflikt: ${relativePath} → zlecenie ${preview.orderNumber} (bazowe ${preview.conflict?.baseOrderNumber} ISTNIEJE)`
+        );
+        logger.info(`   ⏸️ Plik oczekuje na decyzję użytkownika`);
+        return 'skipped';
+      }
+
+      // Brak konfliktu - przetwórz automatycznie
+      const fileImport = await this.prisma.fileImport.create({
+        data: {
+          filename: safeFilename,
+          filepath: destPath,
+          fileType: 'uzyte_bele',
+          status: 'processing',
+        },
+      });
+
+      // Przetwórz plik
+      const result = await parser.processUzyteBele(destPath, 'add_new');
+
+      // Zaktualizuj jako completed
+      await this.prisma.fileImport.update({
+        where: { id: fileImport.id },
+        data: {
+          status: 'completed',
+          processedAt: new Date(),
+          metadata: JSON.stringify(result),
+        },
+      });
+
+      // Pobierz numer zlecenia
+      const order = await this.prisma.order.findUnique({
+        where: { id: result.orderId },
+        select: { orderNumber: true },
+      });
+
+      // Dodaj zlecenie do dostawy
+      await this.addOrderToDelivery(deliveryId, result.orderId);
+
+      logger.info(`   ✅ Zaimportowano: ${relativePath} → zlecenie ${order?.orderNumber}`);
+      return 'success';
+    } catch (error) {
+      logger.error(
+        `   ❌ Błąd importu ${csvFile}: ${error instanceof Error ? error.message : 'Nieznany błąd'}`
+      );
+      return 'failed';
+    }
+  }
+
+  /**
+   * Dodaje zlecenie do dostawy jeśli jeszcze nie jest przypisane
+   */
+  private async addOrderToDelivery(deliveryId: number, orderId: number): Promise<void> {
+    const existingDeliveryOrder = await this.prisma.deliveryOrder.findUnique({
+      where: {
+        deliveryId_orderId: {
+          deliveryId,
+          orderId,
+        },
+      },
+    });
+
+    if (!existingDeliveryOrder) {
+      const maxPosition = await this.prisma.deliveryOrder.aggregate({
+        where: { deliveryId },
+        _max: { position: true },
+      });
+
+      await this.prisma.deliveryOrder.create({
+        data: {
+          deliveryId,
+          orderId,
+          position: (maxPosition._max.position || 0) + 1,
+        },
+      });
+
+      emitOrderUpdated({ id: orderId });
+    }
+  }
+
+  /**
+   * Rekursywnie znajduje wszystkie pliki CSV w folderze
+   */
+  private async findCsvFiles(folderPath: string): Promise<string[]> {
+    const results: string[] = [];
+
+    try {
+      const entries = await readdir(folderPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(folderPath, entry.name);
+
+        if (entry.isDirectory()) {
+          // Rekursywnie przeszukaj podfolder
+          const subResults = await this.findCsvFiles(fullPath);
+          results.push(...subResults);
+        } else if (entry.isFile()) {
+          const lowerName = entry.name.toLowerCase();
+          if (lowerName.endsWith('.csv') && (lowerName.includes('uzyte') || lowerName.includes('bele'))) {
+            results.push(fullPath);
+          }
+        }
+      }
+    } catch (error) {
+      logger.error(
+        `Błąd skanowania ${folderPath}: ${error instanceof Error ? error.message : 'Nieznany błąd'}`
+      );
+    }
+
+    return results;
+  }
+
+  /**
+   * Pobiera bazową ścieżkę folderu "użyte bele"
+   */
+  private async getBasePath(): Promise<string> {
+    const projectRoot = path.resolve(__dirname, '../../../../../');
+    return (
+      process.env.WATCH_FOLDER_UZYTE_BELE ||
+      (await getSetting(this.prisma, 'watchFolderUzyteBele')) ||
+      path.join(projectRoot, 'uzyte bele')
+    );
+  }
+}

@@ -29,10 +29,10 @@ import { glassOrderRoutes } from './routes/glass-orders.js';
 import { glassDeliveryRoutes } from './routes/glass-deliveries.js';
 import { glassValidationRoutes } from './routes/glass-validations.js';
 import { pendingOrderPriceCleanupRoutes } from './routes/pending-order-price-cleanup.js';
-// import { okucRoutes } from './routes/okuc/index.js'; // Temporarily disabled - TypeScript errors
+import { okucRoutes } from './routes/okuc.js';
 
 // Services
-import { FileWatcherService } from './services/file-watcher.js';
+import { FileWatcherService } from './services/file-watcher/index.js';
 import { startSchucoScheduler, stopSchucoScheduler } from './services/schuco/schucoScheduler.js';
 import { startPendingPriceCleanupScheduler, stopPendingPriceCleanupScheduler } from './services/pendingOrderPriceCleanupScheduler.js';
 import { startImportLockCleanupScheduler, stopImportLockCleanupScheduler } from './services/importLockCleanupScheduler.js';
@@ -169,7 +169,7 @@ await fastify.register(glassValidationRoutes, { prefix: '/api/glass-validations'
 await fastify.register(pendingOrderPriceCleanupRoutes, { prefix: '/api/cleanup/pending-prices' });
 
 // DualStock (Okuc) Routes
-// await fastify.register(okucRoutes, { prefix: '/api/okuc' }); // Temporarily disabled - TypeScript errors
+await fastify.register(okucRoutes, { prefix: '/api/okuc' });
 
 // Health checks
 fastify.get('/api/health', {
@@ -283,4 +283,7 @@ const start = async () => {
   }
 };
 
-start();
+// Only start server if not in test environment
+if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+  start();
+}
