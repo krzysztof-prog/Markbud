@@ -24,7 +24,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type React from 'react';
 
 type NavigationItem = {
@@ -69,6 +69,8 @@ export function Sidebar() {
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const navRef = useRef<HTMLElement>(null);
 
   const toggleExpanded = (href: string) => {
     setExpandedItems((prev) =>
@@ -77,6 +79,43 @@ export function Sidebar() {
   };
 
   const closeMobile = () => setMobileOpen(false);
+
+  // Keyboard navigation dla sidebar (Arrow Up/Down, Home, End)
+  const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
+    const focusableItems = navRef.current?.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled])'
+    );
+    if (!focusableItems || focusableItems.length === 0) return;
+
+    const itemsArray = Array.from(focusableItems);
+    const currentIndex = focusedIndex >= 0 ? focusedIndex : 0;
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        const nextIndex = (currentIndex + 1) % itemsArray.length;
+        setFocusedIndex(nextIndex);
+        itemsArray[nextIndex]?.focus();
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        const prevIndex = currentIndex > 0 ? currentIndex - 1 : itemsArray.length - 1;
+        setFocusedIndex(prevIndex);
+        itemsArray[prevIndex]?.focus();
+        break;
+      case 'Home':
+        event.preventDefault();
+        setFocusedIndex(0);
+        itemsArray[0]?.focus();
+        break;
+      case 'End':
+        event.preventDefault();
+        const lastIndex = itemsArray.length - 1;
+        setFocusedIndex(lastIndex);
+        itemsArray[lastIndex]?.focus();
+        break;
+    }
+  }, [focusedIndex]);
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -156,7 +195,13 @@ export function Sidebar() {
         </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      <nav
+        ref={navRef}
+        className="flex-1 space-y-1 px-3 py-4"
+        onKeyDown={handleKeyDown}
+        role="navigation"
+        aria-label="Menu główne"
+      >
         {navigation.map((item) => {
           // Dla "/zestawienia" tylko dokładne dopasowanie, aby nie podświetlać przy podstronach
           const isActive = item.href === '/zestawienia'
