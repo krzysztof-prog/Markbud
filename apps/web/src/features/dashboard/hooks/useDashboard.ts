@@ -30,7 +30,8 @@ export function useDashboard() {
   const query = useQuery({
     queryKey: DASHBOARD_QUERY_KEY,
     queryFn: dashboardApi.getDashboard,
-    staleTime: 2 * 60 * 1000, // 2 minuty
+    staleTime: 5 * 60 * 1000, // 5 minut - dane dashboard rzadko sie zmieniaja
+    gcTime: 10 * 60 * 1000, // 10 minut w cache
   });
 
   // TanStack Query v5: Show toast on error
@@ -56,7 +57,8 @@ export function useAlerts() {
   const query = useQuery({
     queryKey: ALERTS_QUERY_KEY,
     queryFn: dashboardApi.getAlerts,
-    staleTime: 1 * 60 * 1000, // 1 minuta
+    staleTime: 2 * 60 * 1000, // 2 minuty - alerty zmieniaja sie rzadko
+    gcTime: 5 * 60 * 1000, // 5 minut w cache
   });
 
   // TanStack Query v5: Show toast on error
@@ -82,7 +84,8 @@ export function useWeeklyStats() {
   const query = useQuery({
     queryKey: WEEKLY_STATS_QUERY_KEY,
     queryFn: dashboardApi.getWeeklyStats,
-    staleTime: 5 * 60 * 1000, // 5 minut
+    staleTime: 5 * 60 * 1000, // 5 minut - statystyki tygodniowe rzadko sie zmieniaja
+    gcTime: 15 * 60 * 1000, // 15 minut w cache
   });
 
   // TanStack Query v5: Show toast on error

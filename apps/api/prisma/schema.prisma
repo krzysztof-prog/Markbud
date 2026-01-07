@@ -717,6 +717,7 @@ model OkucArticle {
   // Audit
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
 
   // Relacje
   aliases            OkucArticleAlias[]
@@ -731,6 +732,7 @@ model OkucArticle {
   @@index([usedInAlu])
   @@index([orderClass, sizeClass])
   @@index([articleId])
+  @@index([deletedAt])
   @@map("okuc_articles")
 }
 
@@ -763,6 +765,7 @@ model OkucProportion {
   isActive        Boolean       @default(true) @map("is_active")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
+  deletedAt       DateTime?     @map("deleted_at")
 
   sourceArticle   OkucArticle   @relation("SourceArticle", fields: [sourceArticleId], references: [id], onDelete: Cascade)
   targetArticle   OkucArticle   @relation("TargetArticle", fields: [targetArticleId], references: [id], onDelete: Cascade)
@@ -771,6 +774,7 @@ model OkucProportion {
   @@index([sourceArticleId])
   @@index([targetArticleId])
   @@index([isActive])
+  @@index([deletedAt])
   @@map("okuc_proportions")
 }
 
@@ -818,6 +822,7 @@ model OkucDemand {
   // Timestamps
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
+  deletedAt        DateTime?     @map("deleted_at")
 
   article          OkucArticle   @relation(fields: [articleId], references: [id], onDelete: Restrict)
   order            Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
@@ -828,6 +833,7 @@ model OkucDemand {
   @@index([orderId])
   @@index([source])
   @@index([expectedWeek, status])
+  @@index([deletedAt])
   @@map("okuc_demands")
 }
 
@@ -851,6 +857,7 @@ model OkucOrder {
   createdAt            DateTime        @default(now()) @map("created_at")
   createdById          Int?            @map("created_by_id")
   updatedAt            DateTime        @updatedAt @map("updated_at")
+  deletedAt            DateTime?       @map("deleted_at")
 
   items                OkucOrderItem[]
   createdBy            User?           @relation("OkucOrderCreatedBy", fields: [createdById], references: [id])
@@ -859,6 +866,7 @@ model OkucOrder {
   @@index([status])
   @@index([expectedDeliveryDate])
   @@index([status, basketType])
+  @@index([deletedAt])
   @@map("okuc_orders")
 }
 

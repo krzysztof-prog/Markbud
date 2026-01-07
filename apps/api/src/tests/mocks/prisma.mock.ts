@@ -177,6 +177,26 @@ export const createMockPrisma = () => {
       update: vi.fn(),
       delete: vi.fn(),
     },
+    // Schuco models
+    schucoDelivery: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      count: vi.fn(),
+    },
+    orderSchucoLink: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      createMany: vi.fn(),
+      update: vi.fn(),
+      upsert: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+      count: vi.fn(),
+    },
     $transaction: vi.fn(),
     $queryRaw: vi.fn(),
   } as any;

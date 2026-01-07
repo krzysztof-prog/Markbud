@@ -25,6 +25,8 @@ export function Header({ title, alertsCount = 0, children }: HeaderProps) {
     queryKey: ['alerts'],
     queryFn: dashboardApi.getAlerts,
     enabled: isDropdownOpen,
+    staleTime: 2 * 60 * 1000, // 2 minuty - alerty zmieniaja sie rzadko
+    gcTime: 5 * 60 * 1000, // 5 minut w cache
   });
 
   // Zamknij dropdown po kliknięciu poza nim lub naciśnięciu ESC

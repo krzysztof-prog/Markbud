@@ -320,6 +320,7 @@ export class SchucoService {
   /**
    * Create order links for a Schuco delivery
    * Also updates order value from Schuco delivery if available
+   * Uses batch operations to avoid N+1 queries
    */
   private async createOrderLinks(schucoDeliveryId: number, orderNumbers: string[]): Promise<number> {
     if (orderNumbers.length === 0) {
@@ -338,7 +339,7 @@ export class SchucoService {
       eurValue = this.parser.parseEurAmount(schucoDelivery.totalAmount);
     }
 
-    // Find matching orders
+    // Batch lookup: find all matching orders at once
     const orders = await this.prisma.order.findMany({
       where: {
         orderNumber: {
@@ -352,43 +353,49 @@ export class SchucoService {
       return 0;
     }
 
-    let linksCreated = 0;
-    for (const order of orders) {
-      try {
-        // Create/update order link
-        await this.prisma.orderSchucoLink.upsert({
+    // Get existing links to avoid duplicates (batch lookup)
+    const existingLinks = await this.prisma.orderSchucoLink.findMany({
+      where: {
+        schucoDeliveryId: schucoDeliveryId,
+        orderId: { in: orders.map((o) => o.id) },
+      },
+      select: { orderId: true },
+    });
+    const existingOrderIds = new Set(existingLinks.map((l) => l.orderId));
+
+    // Filter orders that need new links
+    const ordersNeedingLinks = orders.filter((o) => !existingOrderIds.has(o.id));
+
+    // Batch create: create all new links at once
+    // SQLite nie wspiera skipDuplicates, wiec filtrujemy przed insertem
+    if (ordersNeedingLinks.length > 0) {
+      await this.prisma.orderSchucoLink.createMany({
+        data: ordersNeedingLinks.map((order) => ({
+          orderId: order.id,
+          schucoDeliveryId: schucoDeliveryId,
+          linkedBy: 'auto',
+        })),
+      });
+    }
+
+    // Batch update: update EUR values for orders that don't have them
+    if (eurValue !== null) {
+      const ordersNeedingEurUpdate = orders.filter((o) => o.valueEur === null);
+      if (ordersNeedingEurUpdate.length > 0) {
+        await this.prisma.order.updateMany({
           where: {
-            orderId_schucoDeliveryId: {
-              orderId: order.id,
-              schucoDeliveryId: schucoDeliveryId,
-            },
+            id: { in: ordersNeedingEurUpdate.map((o) => o.id) },
+            valueEur: null, // Double-check to prevent race conditions
           },
-          create: {
-            orderId: order.id,
-            schucoDeliveryId: schucoDeliveryId,
-            linkedBy: 'auto',
-          },
-          update: {
-            // Link already exists, no update needed
-          },
+          data: { valueEur: eurValue },
         });
-
-        // Update order value if EUR value is available and order doesn't have a value yet
-        if (eurValue !== null && order.valueEur === null) {
-          await this.prisma.order.update({
-            where: { id: order.id },
-            data: { valueEur: eurValue },
-          });
-          logger.info(`[SchucoService] Updated order ${order.orderNumber} with EUR value: ${eurValue}`);
-        }
-
-        linksCreated++;
-      } catch (error) {
-        logger.error(`[SchucoService] Error creating link for order ${order.orderNumber}:`, error);
+        logger.info(
+          `[SchucoService] Updated ${ordersNeedingEurUpdate.length} orders with EUR value: ${eurValue}`
+        );
       }
     }
 
-    return linksCreated;
+    return ordersNeedingLinks.length;
   }
 
   /**

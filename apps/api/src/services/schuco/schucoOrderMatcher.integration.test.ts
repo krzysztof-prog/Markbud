@@ -36,6 +36,7 @@ describe('SchucoOrderMatcher - Integration Tests', () => {
         upsert: vi.fn(),
         findMany: vi.fn(),
         create: vi.fn(),
+        createMany: vi.fn(),
         delete: vi.fn(),
       },
       $transaction: vi.fn((callback) => callback(prismaMock)),
@@ -99,7 +100,9 @@ describe('SchucoOrderMatcher - Integration Tests', () => {
         { id: 101, orderNumber: '54365' },
       ]);
 
-      prismaMock.orderSchucoLink.upsert.mockResolvedValue({});
+      // Mock batch operations
+      prismaMock.orderSchucoLink.findMany.mockResolvedValue([]);
+      prismaMock.orderSchucoLink.createMany.mockResolvedValue({ count: 2 });
 
       const result = await matcher.processSchucoDelivery(1);
 
@@ -117,8 +120,15 @@ describe('SchucoOrderMatcher - Integration Tests', () => {
             in: ['54255', '54365'],
           },
         },
+        select: { id: true, orderNumber: true },
       });
-      expect(prismaMock.orderSchucoLink.upsert).toHaveBeenCalledTimes(2);
+      expect(prismaMock.orderSchucoLink.createMany).toHaveBeenCalledTimes(1);
+      expect(prismaMock.orderSchucoLink.createMany).toHaveBeenCalledWith({
+        data: [
+          { orderId: 100, schucoDeliveryId: 1, linkedBy: 'auto' },
+          { orderId: 101, schucoDeliveryId: 1, linkedBy: 'auto' },
+        ],
+      });
     });
 
     it('should return 0 when no matching orders found', async () => {
@@ -158,7 +168,9 @@ describe('SchucoOrderMatcher - Integration Tests', () => {
         { id: 100, orderNumber: '54255' },
       ]);
 
-      prismaMock.orderSchucoLink.upsert.mockRejectedValue(new Error('DB error'));
+      // Mock batch operations - error during createMany
+      prismaMock.orderSchucoLink.findMany.mockResolvedValue([]);
+      prismaMock.orderSchucoLink.createMany.mockRejectedValue(new Error('DB error'));
 
       const result = await matcher.processSchucoDelivery(1);
 
@@ -168,22 +180,19 @@ describe('SchucoOrderMatcher - Integration Tests', () => {
 
   describe('processAllDeliveries', () => {
     it('should process all deliveries and return statistics', async () => {
+      // processAllDeliveries first calls findMany with select: { id, orderNumber }
+      // The orderNumber is used to extract order numbers and determine warehouse items
       prismaMock.schucoDelivery.findMany.mockResolvedValue([
-        { id: 1 },
-        { id: 2 },
-        { id: 3 },
+        { id: 1, orderNumber: '123/2026/54255' }, // Has 5-digit order number -> not warehouse
+        { id: 2, orderNumber: 'PALETA-2026-001' }, // No 5-digit number -> warehouse item
+        { id: 3, orderNumber: '456/2026/54365' }, // Has 5-digit order number -> not warehouse
       ]);
 
-      // Mock individual deliveries
+      // For non-warehouse items, processSchucoDelivery is called which does findUnique
       prismaMock.schucoDelivery.findUnique
         .mockResolvedValueOnce({
           id: 1,
           orderNumber: '123/2026/54255',
-          shippingStatus: 'Otwarte',
-        })
-        .mockResolvedValueOnce({
-          id: 2,
-          orderNumber: 'PALETA-2026-001',
           shippingStatus: 'Otwarte',
         })
         .mockResolvedValueOnce({
@@ -194,25 +203,21 @@ describe('SchucoOrderMatcher - Integration Tests', () => {
 
       prismaMock.schucoDelivery.update.mockResolvedValue({});
 
+      // order.findMany is called for each non-warehouse delivery to find matching orders
       prismaMock.order.findMany
-        .mockResolvedValueOnce([{ id: 100, orderNumber: '54255' }])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ id: 101, orderNumber: '54365' }]);
+        .mockResolvedValueOnce([{ id: 100, orderNumber: '54255' }]) // Match for delivery 1
+        .mockResolvedValueOnce([{ id: 101, orderNumber: '54365' }]); // Match for delivery 3
 
-      prismaMock.orderSchucoLink.upsert.mockResolvedValue({});
-
-      // Mock warehouse item check
-      prismaMock.schucoDelivery.findUnique
-        .mockResolvedValueOnce({ isWarehouseItem: false })
-        .mockResolvedValueOnce({ isWarehouseItem: true })
-        .mockResolvedValueOnce({ isWarehouseItem: false });
+      // Mock batch operations - no existing links, so new ones will be created
+      prismaMock.orderSchucoLink.findMany.mockResolvedValue([]);
+      prismaMock.orderSchucoLink.createMany.mockResolvedValue({ count: 1 });
 
       const result = await matcher.processAllDeliveries();
 
       expect(result.total).toBe(3);
       expect(result.processed).toBe(3);
-      expect(result.linksCreated).toBeGreaterThanOrEqual(1); // At least one link created
-      expect(result.warehouseItems).toBeGreaterThanOrEqual(0); // May have warehouse items
+      expect(result.linksCreated).toBe(2); // Two deliveries with matching orders
+      expect(result.warehouseItems).toBe(1); // One warehouse item (PALETA-2026-001)
     });
 
     it('should handle empty database', async () => {
@@ -448,7 +453,9 @@ describe('SchucoOrderMatcher - Integration Tests', () => {
         { id: 100, orderNumber: '54255' },
       ]);
 
-      prismaMock.orderSchucoLink.upsert.mockResolvedValue({});
+      // Mock batch operations (new API - uses findMany + createMany instead of upsert)
+      prismaMock.orderSchucoLink.findMany.mockResolvedValue([]); // No existing links
+      prismaMock.orderSchucoLink.createMany.mockResolvedValue({ count: 1 });
 
       const result = await matcher.processSchucoDelivery(1);
 
@@ -472,7 +479,9 @@ describe('SchucoOrderMatcher - Integration Tests', () => {
         { id: 100, orderNumber: '54255' },
       ]);
 
-      prismaMock.orderSchucoLink.upsert.mockResolvedValue({});
+      // Mock batch operations
+      prismaMock.orderSchucoLink.findMany.mockResolvedValue([]);
+      prismaMock.orderSchucoLink.createMany.mockResolvedValue({ count: 1 });
 
       const result = await matcher.processSchucoDelivery(1);
 
@@ -498,7 +507,9 @@ describe('SchucoOrderMatcher - Integration Tests', () => {
         { id: 100, orderNumber: '54255' },
       ]);
 
-      prismaMock.orderSchucoLink.upsert.mockResolvedValue({});
+      // Mock batch operations
+      prismaMock.orderSchucoLink.findMany.mockResolvedValue([]);
+      prismaMock.orderSchucoLink.createMany.mockResolvedValue({ count: 1 });
 
       const result = await matcher.processSchucoDelivery(1);
 

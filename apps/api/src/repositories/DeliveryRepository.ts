@@ -31,53 +31,69 @@ export class DeliveryRepository {
       where.status = filters.status;
     }
 
-    // Get total count for pagination
-    const total = await this.prisma.delivery.count({ where });
-
-    // Get paginated data
-    const data = await this.prisma.delivery.findMany({
-      where,
-      select: {
-        id: true,
-        deliveryDate: true,
-        deliveryNumber: true,
-        status: true,
-        notes: true,
-        createdAt: true,
-        updatedAt: true,
-        deliveryOrders: {
-          select: {
-            deliveryId: true,
-            orderId: true,
-            position: true,
-            order: {
-              select: {
-                id: true,
-                orderNumber: true,
-                valuePln: true,
-                valueEur: true,
-                totalWindows: true,
-                totalSashes: true,
-                totalGlasses: true,
-                windows: {
-                  select: {
-                    reference: true,
+    // Execute count and findMany in parallel using transaction
+    const [total, rawData] = await this.prisma.$transaction([
+      this.prisma.delivery.count({ where }),
+      this.prisma.delivery.findMany({
+        where,
+        select: {
+          id: true,
+          deliveryDate: true,
+          deliveryNumber: true,
+          status: true,
+          notes: true,
+          createdAt: true,
+          updatedAt: true,
+          deliveryOrders: {
+            select: {
+              deliveryId: true,
+              orderId: true,
+              position: true,
+              order: {
+                select: {
+                  id: true,
+                  orderNumber: true,
+                  valuePln: true,
+                  valueEur: true,
+                  totalWindows: true,
+                  totalSashes: true,
+                  totalGlasses: true,
+                  windows: {
+                    select: {
+                      reference: true,
+                    },
+                    // Removed distinct - causes full table scan in SQLite
+                    // Deduplication done in application layer below
                   },
-                  distinct: ['reference'],
                 },
               },
             },
+            orderBy: { position: 'asc' },
           },
-          orderBy: { position: 'asc' },
+          _count: {
+            select: { deliveryOrders: true },
+          },
         },
-        _count: {
-          select: { deliveryOrders: true },
+        orderBy: { deliveryDate: 'asc' },
+        skip: pagination?.skip ?? 0,
+        take: pagination?.take ?? 50,
+      }),
+    ]);
+
+    // Deduplicate windows references in application layer (faster than SQLite distinct)
+    const data = rawData.map((delivery) => ({
+      ...delivery,
+      deliveryOrders: delivery.deliveryOrders.map((deliveryOrder) => ({
+        ...deliveryOrder,
+        order: {
+          ...deliveryOrder.order,
+          windows: deliveryOrder.order.windows.filter(
+            (window, index, self) =>
+              index === self.findIndex((w) => w.reference === window.reference)
+          ),
         },
-      },
-      orderBy: { deliveryDate: 'asc' },
-      skip: pagination?.skip ?? 0,
-      take: pagination?.take ?? 50,
-    });
+      })),
+    }));
 
     return {
       data,

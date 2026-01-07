@@ -156,6 +156,7 @@ export class SchucoOrderMatcher {
 
   /**
    * Przetwarza zamówienie Schuco i tworzy powiązania ze zleceniami
+   * Uses batch operations to avoid N+1 queries
    *
    * @param schucoDeliveryId - ID zamówienia Schuco
    * @returns liczba utworzonych powiązań
@@ -187,13 +188,14 @@ export class SchucoOrderMatcher {
       return 0;
     }
 
-    // Znajdź zlecenia pasujące do numerów
+    // Batch lookup: znajdź wszystkie zlecenia pasujące do numerów
     const orders = await this.prisma.order.findMany({
       where: {
         orderNumber: {
           in: orderNumbers,
         },
       },
+      select: { id: true, orderNumber: true },
     });
 
     if (orders.length === 0) {
@@ -203,41 +205,53 @@ export class SchucoOrderMatcher {
       return 0;
     }
 
-    // Utwórz powiązania
-    let linksCreated = 0;
-    for (const order of orders) {
-      try {
-        await this.prisma.orderSchucoLink.upsert({
-          where: {
-            orderId_schucoDeliveryId: {
-              orderId: order.id,
-              schucoDeliveryId: schucoDeliveryId,
-            },
-          },
-          create: {
-            orderId: order.id,
-            schucoDeliveryId: schucoDeliveryId,
-            linkedBy: 'auto',
-          },
-          update: {
-            linkedAt: new Date(),
-          },
-        });
-        linksCreated++;
-      } catch (error) {
-        logger.error(`[SchucoOrderMatcher] Error linking order ${order.orderNumber}:`, error);
-      }
+    // Batch lookup: znajdź istniejące linki aby uniknąć duplikatów
+    const existingLinks = await this.prisma.orderSchucoLink.findMany({
+      where: {
+        schucoDeliveryId: schucoDeliveryId,
+        orderId: { in: orders.map((o) => o.id) },
+      },
+      select: { orderId: true },
+    });
+    const existingOrderIds = new Set(existingLinks.map((l) => l.orderId));
+
+    // Filtruj zamówienia które potrzebują nowych linków
+    const ordersNeedingLinks = orders.filter((o) => !existingOrderIds.has(o.id));
+
+    if (ordersNeedingLinks.length === 0) {
+      logger.info(
+        `[SchucoOrderMatcher] All links already exist for delivery ${delivery.orderNumber}`
+      );
+      return 0;
+    }
+
+    // Batch create: utwórz wszystkie nowe powiązania jednocześnie
+    // SQLite nie wspiera skipDuplicates, więc filtrujemy przed insertem
+    try {
+      await this.prisma.orderSchucoLink.createMany({
+        data: ordersNeedingLinks.map((order) => ({
+          orderId: order.id,
+          schucoDeliveryId: schucoDeliveryId,
+          linkedBy: 'auto',
+        })),
+      });
+    } catch (error) {
+      logger.error(
+        `[SchucoOrderMatcher] Error creating links for delivery ${delivery.orderNumber}: ${error}`
+      );
+      return 0;
     }
 
     logger.info(
-      `[SchucoOrderMatcher] Created ${linksCreated} links for delivery ${delivery.orderNumber}`
+      `[SchucoOrderMatcher] Created ${ordersNeedingLinks.length} links for delivery ${delivery.orderNumber}`
     );
-    return linksCreated;
+    return ordersNeedingLinks.length;
   }
 
   /**
    * Przetwarza wszystkie zamówienia Schuco i tworzy powiązania
    * Używane do początkowej synchronizacji lub naprawy
+   * Uses batch operations where possible
    *
    * @returns statystyki przetwarzania
    */
@@ -249,8 +263,9 @@ export class SchucoOrderMatcher {
   }> {
     logger.info('[SchucoOrderMatcher] Processing all Schuco deliveries...');
 
+    // Pobierz wszystkie deliveries z orderNumber (potrzebne do ekstrakcji numerow)
     const deliveries = await this.prisma.schucoDelivery.findMany({
-      select: { id: true },
+      select: { id: true, orderNumber: true },
     });
 
     let processed = 0;
@@ -258,21 +273,25 @@ export class SchucoOrderMatcher {
     let warehouseItems = 0;
 
     for (const delivery of deliveries) {
-      const links = await this.processSchucoDelivery(delivery.id);
-      processed++;
+      // Sprawdz czy warehouse item bez dodatkowego query
+      const extractedNums = extractOrderNumbers(delivery.orderNumber);
+      const isWarehouse = extractedNums.length === 0;
 
-      if (links > 0) {
-        linksCreated += links;
-      } else {
-        // Sprawdź czy to towar magazynowy
-        const updated = await this.prisma.schucoDelivery.findUnique({
+      if (isWarehouse) {
+        // Aktualizuj jako warehouse item
+        await this.prisma.schucoDelivery.update({
           where: { id: delivery.id },
-          select: { isWarehouseItem: true },
+          data: {
+            isWarehouseItem: true,
+            extractedOrderNums: null,
+          },
         });
-        if (updated?.isWarehouseItem) {
-          warehouseItems++;
-        }
+        warehouseItems++;
+      } else {
+        const links = await this.processSchucoDelivery(delivery.id);
+        linksCreated += links;
       }
+      processed++;
     }
 
     logger.info(
