@@ -9,7 +9,10 @@ export const glassOrderRoutes: FastifyPluginAsync = async (fastify) => {
   // Glass order endpoints (no authentication required in development)
   fastify.get('/', handler.getAll.bind(handler));
   fastify.get<{ Params: { id: string } }>('/:id', handler.getById.bind(handler));
+
+  // Import endpoint (debug logging moved to handler)
   fastify.post('/import', handler.importFromTxt.bind(handler));
+
   fastify.delete<{ Params: { id: string } }>('/:id', handler.delete.bind(handler));
   fastify.get<{ Params: { id: string } }>('/:id/summary', handler.getSummary.bind(handler));
   fastify.get<{ Params: { id: string } }>('/:id/validations', handler.getValidations.bind(handler));

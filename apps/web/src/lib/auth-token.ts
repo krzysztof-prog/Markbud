@@ -7,9 +7,15 @@
 
 const TOKEN_STORAGE_KEY = 'akrobud_auth_token';
 
+// Singleton promise do zapobiegania wielokrotnym równoczesnym requestom o token
+let pendingTokenRequest: Promise<string | null> | null = null;
+
 /**
  * Get the authentication token from localStorage
  * For development, fetches a demo token from the API if none exists
+ *
+ * UWAGA: Ta funkcja używa singleton pattern żeby zapobiec wielu równoczesnym
+ * requestom o nowy token (np. gdy wiele komponentów mountuje się jednocześnie)
  */
 export async function getAuthToken(): Promise<string | null> {
   if (typeof window === 'undefined') {
@@ -22,19 +28,29 @@ export async function getAuthToken(): Promise<string | null> {
     return storedToken;
   }
 
-  // For development: fetch a demo token from the API
-  // This should be replaced with actual login flow in production
-  try {
-    const token = await fetchDemoToken();
-    if (token) {
-      localStorage.setItem(TOKEN_STORAGE_KEY, token);
-      return token;
-    }
-  } catch (error) {
-    console.error('Failed to fetch demo token:', error);
+  // Jeśli już jest request w trakcie, czekaj na niego
+  if (pendingTokenRequest) {
+    return pendingTokenRequest;
   }
 
-  return null;
+  // For development: fetch a demo token from the API
+  // This should be replaced with actual login flow in production
+  pendingTokenRequest = (async () => {
+    try {
+      const token = await fetchDemoToken();
+      if (token) {
+        localStorage.setItem(TOKEN_STORAGE_KEY, token);
+        return token;
+      }
+    } catch (error) {
+      console.error('Failed to fetch demo token:', error);
+    } finally {
+      pendingTokenRequest = null; // Resetuj po zakończeniu
+    }
+    return null;
+  })();
+
+  return pendingTokenRequest;
 }
 
 /**

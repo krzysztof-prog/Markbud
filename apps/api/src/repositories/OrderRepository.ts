@@ -63,17 +63,7 @@ export class OrderRepository {
           archivedAt: true,
           // Usunięto pełną tablicę windows - używamy _count.windows dla list view
           // Redukcja danych o ~70%
-          glassOrderItems: {
-            select: {
-              glassOrder: {
-                select: {
-                  expectedDeliveryDate: true,
-                  actualDeliveryDate: true,
-                },
-              },
-            },
-            take: 1, // Only need first one for delivery date
-          },
+          // Removed glassOrderItems - relation no longer exists (FK constraint removed)
           deliveryDate: true,
           schucoLinks: {
             select: {
@@ -116,17 +106,10 @@ export class OrderRepository {
       }),
     ]);
 
-    // Populate glassDeliveryDate from related glass order if not set
+    // Use glassDeliveryDate from Order model directly
     const data = rawData.map(order => {
-      const glassDeliveryDate = order.glassDeliveryDate ||
-        (order.glassOrderItems?.[0]?.glassOrder?.expectedDeliveryDate ?? null);
-
-      // Remove glassOrderItems from response (internal use only)
-      const { glassOrderItems, ...orderData } = order as any;
-
       return {
-        ...orderData,
-        glassDeliveryDate,
+        ...order,
       };
     });
 

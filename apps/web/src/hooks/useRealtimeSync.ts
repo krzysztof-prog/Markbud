@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { showInfoToast } from '@/lib/toast-helpers';
+import { showInfoToast, showErrorToast } from '@/lib/toast-helpers';
 import { wsLogger } from '@/lib/logger';
-import { getAuthToken } from '@/lib/auth-token';
+import { getAuthToken, clearAuthToken } from '@/lib/auth-token';
 
 interface DataChangeEvent {
   type: string;
@@ -15,24 +15,62 @@ interface DataChangeEvent {
 interface WebSocketMessage {
   type: string;
   event?: DataChangeEvent;
+  code?: string;
+  message?: string;
+  shouldRetry?: boolean;
 }
 
 const WS_URL = process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') || 'ws://localhost:3001';
 const RECONNECT_INTERVAL = 3000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 
-export function useRealtimeSync() {
+interface UseRealtimeSyncOptions {
+  enabled?: boolean;
+}
+
+export function useRealtimeSync({ enabled = true }: UseRealtimeSyncOptions = {}) {
   const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isConnectedRef = useRef(false);
   const heartbeatTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Flaga do zatrzymania reconnect po błędzie auth (token expired/invalid)
+  const authErrorRef = useRef(false);
+  const authErrorToastShownRef = useRef(false);
 
   // Stabilne referencje dla funkcji - używamy ref pattern aby uniknąć re-kreacji
   const handlePingRef = useRef<(() => void) | undefined>(undefined);
   const resetHeartbeatTimeoutRef = useRef<(() => void) | undefined>(undefined);
   const handleDataChangeRef = useRef<((event: DataChangeEvent) => void) | undefined>(undefined);
+  const handleAuthErrorRef = useRef<((message: WebSocketMessage) => void) | undefined>(undefined);
+
+  // Funkcja do obsługi błędów autoryzacji (token expired/invalid)
+  const handleAuthError = useCallback((message: WebSocketMessage) => {
+    wsLogger.warn('WebSocket auth error:', message.code, message.message);
+    authErrorRef.current = true;
+
+    // Wyczyść stary token - przy następnym połączeniu spróbuje pobrać nowy
+    clearAuthToken();
+
+    // Pokaż toast tylko raz
+    if (!authErrorToastShownRef.current) {
+      authErrorToastShownRef.current = true;
+
+      if (message.code === 'TOKEN_EXPIRED') {
+        showErrorToast(
+          'Sesja wygasła',
+          'Odśwież stronę aby wznowić synchronizację w czasie rzeczywistym'
+        );
+      } else {
+        showErrorToast(
+          'Błąd autoryzacji',
+          'Synchronizacja w czasie rzeczywistym niedostępna'
+        );
+      }
+    }
+  }, []);
+  handleAuthErrorRef.current = handleAuthError;
 
   // Funkcja do obsługi zmian danych - przechowujemy aktualną wersję w ref
   const handleDataChange = useCallback(
@@ -135,6 +173,13 @@ export function useRealtimeSync() {
       } else if (message.type === 'dataChange' && message.event) {
         resetHeartbeatTimeoutRef.current?.();
         handleDataChangeRef.current?.(message.event);
+      } else if (message.type === 'error') {
+        // Obsługa błędów autoryzacji - zatrzymaj reconnect
+        if (message.code === 'TOKEN_EXPIRED' || message.code === 'TOKEN_INVALID' || message.code === 'NO_TOKEN') {
+          handleAuthErrorRef.current?.(message);
+        } else {
+          wsLogger.warn('WebSocket error:', message.message);
+        }
       }
     } catch (error) {
       // Loguj tylko błąd bez szczegółów, aby uniknąć logowania całego obiektu
@@ -152,6 +197,12 @@ export function useRealtimeSync() {
   const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return; // Już połączeni
+    }
+
+    // Sprawdź czy był błąd auth - nie próbuj reconnect
+    if (authErrorRef.current) {
+      wsLogger.warn('WebSocket reconnect skipped due to auth error');
+      return;
     }
 
     try {
@@ -199,6 +250,12 @@ export function useRealtimeSync() {
 
         if (heartbeatTimeoutRef.current) {
           clearTimeout(heartbeatTimeoutRef.current);
+        }
+
+        // Jeśli był błąd auth (obsłużony przez handleMessage), nie reconnect
+        if (authErrorRef.current) {
+          wsLogger.warn('WebSocket closed after auth error - not reconnecting');
+          return;
         }
 
         // Jeśli zamknięcie było z powodu błędu auth (1008), nie reconnect
@@ -251,11 +308,28 @@ export function useRealtimeSync() {
   }, [handleMessage]); // handleMessage jest teraz stabilny
   connectRef.current = connect;
 
-  // Cleanup - teraz z pustym dependency array, bo wszystko jest w ref-ach
+  // Cleanup - teraz z enabled w dependency array
   useEffect(() => {
-    connectRef.current?.();
+    // Nie łącz się gdy wyłączony
+    if (!enabled) {
+      return;
+    }
+
+    // Flaga do sprawdzenia czy komponent jest jeszcze zamontowany
+    // (ważne dla React Strict Mode który montuje 2x w development)
+    let isMounted = true;
+
+    // Opóźnij połączenie o 100ms żeby dać czas na ewentualny unmount (Strict Mode)
+    const connectTimeout = setTimeout(() => {
+      if (isMounted) {
+        connectRef.current?.();
+      }
+    }, 100);
 
     return () => {
+      isMounted = false;
+      clearTimeout(connectTimeout);
+
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
@@ -268,7 +342,7 @@ export function useRealtimeSync() {
         wsRef.current.close();
       }
     };
-  }, []); // Puste dependency array - połączenie jest nawiązane tylko raz!
+  }, [enabled]); // Tylko enabled w dependency - połączenie nawiązane raz gdy enabled=true
 
   return {
     isConnected: isConnectedRef.current,
