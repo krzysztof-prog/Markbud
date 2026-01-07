@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ordersApi, settingsApi, currencyConfigApi } from '@/lib/api';
 import { formatDate, formatCurrency } from '@/lib/utils';
+import { groszeToPln, centyToEur, formatGrosze, formatCenty, type Grosze, type Centy } from '@/lib/money';
 import { useDebounce } from '@/hooks/useDebounce';
 import type { Order, SchucoDeliveryLink } from '@/types';
 import {
@@ -500,12 +501,14 @@ export default function ZestawienieZlecenPage() {
           bValue = b.totalWindows || b._count?.windows || 0;
           break;
         case 'valuePln':
-          aValue = a.valuePln != null ? (typeof a.valuePln === 'number' ? a.valuePln : parseFloat(a.valuePln)) : 0;
-          bValue = b.valuePln != null ? (typeof b.valuePln === 'number' ? b.valuePln : parseFloat(b.valuePln)) : 0;
+          // Wartosci sa przechowywane jako grosze (integer)
+          aValue = typeof a.valuePln === 'number' ? a.valuePln : 0;
+          bValue = typeof b.valuePln === 'number' ? b.valuePln : 0;
           break;
         case 'valueEur':
-          aValue = a.valueEur != null ? (typeof a.valueEur === 'number' ? a.valueEur : parseFloat(a.valueEur)) : 0;
-          bValue = b.valueEur != null ? (typeof b.valueEur === 'number' ? b.valueEur : parseFloat(b.valueEur)) : 0;
+          // Wartosci sa przechowywane jako centy (integer)
+          aValue = typeof a.valueEur === 'number' ? a.valueEur : 0;
+          bValue = typeof b.valueEur === 'number' ? b.valueEur : 0;
           break;
         case 'orderStatus':
           aValue = a.orderStatus || '';
@@ -555,11 +558,14 @@ export default function ZestawienieZlecenPage() {
       totalGlasses: number;
     }
 
+    // Wartosci w bazie sa przechowywane jako grosze/centy (integer)
+    // Stats sa przekazywane do OrdersStatsModal w jednostkach zlotych/euro
     return allOrders.reduce(
       (acc: StatsAccumulator, order: ExtendedOrder) => {
         acc.totalOrders++;
-        acc.totalValuePln += order.valuePln != null ? (typeof order.valuePln === 'number' ? order.valuePln : parseFloat(order.valuePln)) : 0;
-        acc.totalValueEur += order.valueEur != null ? (typeof order.valueEur === 'number' ? order.valueEur : parseFloat(order.valueEur)) : 0;
+        // Konwertuj grosze na PLN i centy na EUR
+        acc.totalValuePln += typeof order.valuePln === 'number' ? groszeToPln(order.valuePln as Grosze) : 0;
+        acc.totalValueEur += typeof order.valueEur === 'number' ? centyToEur(order.valueEur as Centy) : 0;
         acc.totalWindows += order.totalWindows || order._count?.windows || 0;
         acc.totalSashes += order.totalSashes || 0;
         acc.totalGlasses += order.totalGlasses || 0;
@@ -589,14 +595,8 @@ export default function ZestawienieZlecenPage() {
       case 'client':
         return order.client || 'Bez klienta';
       case 'system':
-        if (order.windows && order.windows.length > 0) {
-          const profileTypes = order.windows
-            .map((w) => w.profileType)
-            .filter((type): type is string => !!type)
-            .filter((type, index, self) => self.indexOf(type) === index);
-          return profileTypes.join(', ') || 'Bez systemu';
-        }
-        return 'Bez systemu';
+        // Użyj pola system z Order (wypełniane podczas importu CSV)
+        return order.system || 'Bez systemu';
       case 'deadline-day':
         return order.deadline ? getDayKey(new Date(order.deadline)) : 'Bez terminu';
       case 'deadline-week':
@@ -740,25 +740,11 @@ export default function ZestawienieZlecenPage() {
       case 'client':
         return formatClientName(order.client);
       case 'project':
-        // Pobierz wszystkie unikalne referencje z okien
-        if (order.windows && order.windows.length > 0) {
-          const references = order.windows
-            .map((w) => w.reference)
-            .filter((ref): ref is string => !!ref)
-            .filter((ref, index, self) => self.indexOf(ref) === index);
-          return references.join(', ');
-        }
-        return '';
+        // Użyj pola project z Order (wypełniane podczas importu CSV)
+        return order.project || '';
       case 'system':
-        // Pobierz wszystkie unikalne typy profili z okien
-        if (order.windows && order.windows.length > 0) {
-          const profileTypes = order.windows
-            .map((w) => w.profileType)
-            .filter((type): type is string => !!type)
-            .filter((type, index, self) => self.indexOf(type) === index);
-          return profileTypes.join(', ');
-        }
-        return '';
+        // Użyj pola system z Order (wypełniane podczas importu CSV)
+        return order.system || '';
       case 'totalWindows':
         return String(order.totalWindows || order._count?.windows || 0);
       case 'totalSashes':
@@ -766,9 +752,11 @@ export default function ZestawienieZlecenPage() {
       case 'glasses':
         return String(order.totalGlasses || 0);
       case 'valuePln':
-        return order.valuePln != null ? formatCurrency(typeof order.valuePln === 'number' ? order.valuePln : parseFloat(order.valuePln), 'PLN') : '';
+        // Wartosci sa przechowywane jako grosze - konwertuj na PLN dla eksportu CSV
+        return typeof order.valuePln === 'number' ? formatGrosze(order.valuePln as Grosze) : '';
       case 'valueEur':
-        return order.valueEur != null ? formatCurrency(typeof order.valueEur === 'number' ? order.valueEur : parseFloat(order.valueEur), 'EUR') : '';
+        // Wartosci sa przechowywane jako centy - konwertuj na EUR dla eksportu CSV
+        return typeof order.valueEur === 'number' ? formatCenty(order.valueEur as Centy) : '';
       case 'orderStatus':
         // Użyj statusu Schuco jeśli są powiązane zamówienia, w przeciwnym razie Order.status (eksport CSV)
         const schucoStatusCsv = aggregateSchucoStatus(order.schucoLinks);
@@ -1030,10 +1018,12 @@ export default function ZestawienieZlecenPage() {
             </td>
           );
         }
+        // Wartosci sa przechowywane jako grosze/centy (integer)
         // Jeśli jest valuePln - pokaż bezpośrednio, jeśli nie ma ale jest valueEur - przelicz
-        const plnValue = order.valuePln != null ? (typeof order.valuePln === 'number' ? order.valuePln : parseFloat(order.valuePln)) : null;
-        const eurForPln = order.valueEur != null ? (typeof order.valueEur === 'number' ? order.valueEur : parseFloat(order.valueEur)) : null;
-        const plnFromEur = plnValue == null && eurForPln != null ? eurForPln * eurRate : null;
+        const plnValueGrosze = typeof order.valuePln === 'number' ? order.valuePln : null;
+        const eurForPlnCenty = typeof order.valueEur === 'number' ? order.valueEur : null;
+        // Przelicz EUR na PLN: (centy -> EUR) * kurs = PLN
+        const plnFromEur = plnValueGrosze == null && eurForPlnCenty != null ? centyToEur(eurForPlnCenty as Centy) * eurRate : null;
         return (
           <td
             key={column.id}
@@ -1041,8 +1031,8 @@ export default function ZestawienieZlecenPage() {
             onClick={() => startEdit(order.id, 'valuePln', order.valuePln != null ? String(order.valuePln) : '')}
           >
             <div className="flex items-center gap-2 justify-between">
-              {plnValue != null ? (
-                <span>{formatCurrency(plnValue, 'PLN')}</span>
+              {plnValueGrosze != null ? (
+                <span>{formatGrosze(plnValueGrosze as Grosze)}</span>
               ) : plnFromEur != null ? (
                 <span className="text-muted-foreground">~{formatCurrency(plnFromEur, 'PLN')}</span>
               ) : (
@@ -1089,7 +1079,8 @@ export default function ZestawienieZlecenPage() {
             </td>
           );
         }
-        const eurValue = order.valueEur != null ? (typeof order.valueEur === 'number' ? order.valueEur : parseFloat(order.valueEur)) : null;
+        // Wartosci sa przechowywane jako centy (integer)
+        const eurValueCenty = typeof order.valueEur === 'number' ? order.valueEur : null;
         return (
           <td
             key={column.id}
@@ -1097,7 +1088,7 @@ export default function ZestawienieZlecenPage() {
             onClick={() => startEdit(order.id, 'valueEur', order.valueEur != null ? String(order.valueEur) : '')}
           >
             <div className="flex items-center gap-2 justify-between">
-              <span>{eurValue != null ? formatCurrency(eurValue, 'EUR') : '-'}</span>
+              <span>{eurValueCenty != null ? formatCenty(eurValueCenty as Centy) : '-'}</span>
               <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50" />
             </div>
           </td>
