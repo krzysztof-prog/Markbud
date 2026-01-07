@@ -8,9 +8,11 @@ import { Toaster } from '@/components/ui/toaster';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 import { setupGlobalErrorHandler } from '@/lib/error-logger';
 
-function RealtimeSyncWrapper({ children }: { children: React.ReactNode }) {
+function RealtimeSyncWrapper({ children, enabled }: { children: React.ReactNode; enabled: boolean }) {
   // WebSocket with graceful degradation - nie blokuje gdy nie działa
-  useRealtimeSync();
+  // enabled=false podczas initial render, true dopiero po mount z persister
+  // żeby uniknąć podwójnego WebSocket connection
+  useRealtimeSync({ enabled });
   return <>{children}</>;
 }
 
@@ -84,16 +86,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
           },
         }}
       >
-        <RealtimeSyncWrapper>{children}</RealtimeSyncWrapper>
+        <RealtimeSyncWrapper enabled>{children}</RealtimeSyncWrapper>
         <Toaster />
       </PersistQueryClientProvider>
     );
   }
 
   // Initial render (SSR and first client render) - use regular QueryClientProvider
+  // WebSocket wyłączony - będzie włączony dopiero po full mount z persister
   return (
     <QueryClientProvider client={queryClient}>
-      <RealtimeSyncWrapper>{children}</RealtimeSyncWrapper>
+      <RealtimeSyncWrapper enabled={false}>{children}</RealtimeSyncWrapper>
       <Toaster />
     </QueryClientProvider>
   );

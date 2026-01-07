@@ -3,6 +3,7 @@
 import { Eye } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { groszeToPln, centyToEur, type Grosze, type Centy } from '@/lib/money';
 
 interface DeliveryDetailsProps {
   delivery: {
@@ -84,27 +85,31 @@ export default function DeliveryDetails({
                   <div className="flex items-center gap-3">
                     <div className="text-xs text-right">
                       <div className="font-medium">
-                        {(() => {
-                          const plnValue = order.valuePln ? parseFloat(String(order.valuePln)) : 0;
-                          return !isNaN(plnValue) && plnValue > 0
-                            ? plnValue.toLocaleString('pl-PL', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })
-                            : '0,00';
-                        })()}{' '}
+                        {/* valuePln jest w groszach - konwertuj na PLN */}
+                        {order.valuePln
+                          ? groszeToPln(
+                              (typeof order.valuePln === 'number'
+                                ? order.valuePln
+                                : parseInt(String(order.valuePln), 10)) as Grosze
+                            ).toLocaleString('pl-PL', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })
+                          : '0,00'}{' '}
                         PLN
                       </div>
                       <div className="text-slate-500">
-                        {(() => {
-                          const eurValue = order.valueEur ? parseFloat(String(order.valueEur)) : 0;
-                          return !isNaN(eurValue) && eurValue > 0
-                            ? eurValue.toLocaleString('pl-PL', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })
-                            : '0,00';
-                        })()}{' '}
+                        {/* valueEur jest w centach - konwertuj na EUR */}
+                        {order.valueEur
+                          ? centyToEur(
+                              (typeof order.valueEur === 'number'
+                                ? order.valueEur
+                                : parseInt(String(order.valueEur), 10)) as Centy
+                            ).toLocaleString('pl-PL', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })
+                          : '0,00'}{' '}
                         EUR
                       </div>
                     </div>

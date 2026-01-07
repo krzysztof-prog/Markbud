@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ordersApi } from '@/lib/api';
 import { toast } from '@/hooks/useToast';
+import { formatGrosze, formatCenty, type Grosze, type Centy } from '@/lib/money';
 import { Package, Layers, Grid3X3, Calendar, FileText, FileDown, ChevronDown, ChevronUp, Truck } from 'lucide-react';
 import type { Order, Window, SchucoDeliveryLink } from '@/types';
 import type { Requirement } from '@/types';
@@ -206,13 +207,13 @@ export function OrderDetailModal({
                   {order.valuePln && (
                     <div>
                       <span className="text-slate-500">Wartość PLN:</span>{' '}
-                      <span className="font-medium">{parseFloat(String(order.valuePln)).toFixed(2)} zł</span>
+                      <span className="font-medium">{formatGrosze(order.valuePln as Grosze)}</span>
                     </div>
                   )}
                   {order.valueEur && (
                     <div>
                       <span className="text-slate-500">Wartość EUR:</span>{' '}
-                      <span className="font-medium">{parseFloat(String(order.valueEur)).toFixed(2)} €</span>
+                      <span className="font-medium">{formatCenty(order.valueEur as Centy)}</span>
                     </div>
                   )}
                   {order.invoiceNumber && (

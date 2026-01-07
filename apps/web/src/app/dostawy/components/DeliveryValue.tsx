@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { groszeToPln, centyToEur, type Grosze, type Centy } from '@/lib/money';
 
 interface DeliveryValueProps {
   delivery: {
@@ -14,28 +15,33 @@ interface DeliveryValueProps {
 }
 
 export const DeliveryValue = ({ delivery }: DeliveryValueProps) => {
+  // Wartości są w groszach/centach - sumuj w jednostkach bazowych, konwertuj na końcu
   const { totalPln, totalEur } = useMemo(() => {
-    let sumPln = 0;
-    let sumEur = 0;
+    let sumGrosze = 0;
+    let sumCenty = 0;
 
     if (delivery.deliveryOrders && Array.isArray(delivery.deliveryOrders)) {
       delivery.deliveryOrders.forEach(({ order }) => {
         if (order.valuePln !== null && order.valuePln !== undefined) {
-          const plnValue = parseFloat(String(order.valuePln));
-          if (!isNaN(plnValue)) {
-            sumPln += plnValue;
+          const grosze = typeof order.valuePln === 'number' ? order.valuePln : parseInt(String(order.valuePln), 10);
+          if (!isNaN(grosze)) {
+            sumGrosze += grosze;
           }
         }
         if (order.valueEur !== null && order.valueEur !== undefined) {
-          const eurValue = parseFloat(String(order.valueEur));
-          if (!isNaN(eurValue)) {
-            sumEur += eurValue;
+          const centy = typeof order.valueEur === 'number' ? order.valueEur : parseInt(String(order.valueEur), 10);
+          if (!isNaN(centy)) {
+            sumCenty += centy;
           }
         }
       });
     }
 
-    return { totalPln: sumPln, totalEur: sumEur };
+    // Konwertuj grosze na PLN i centy na EUR
+    return {
+      totalPln: groszeToPln(sumGrosze as Grosze),
+      totalEur: centyToEur(sumCenty as Centy)
+    };
   }, [delivery.deliveryOrders]);
 
   if (totalPln === 0 && totalEur === 0) {

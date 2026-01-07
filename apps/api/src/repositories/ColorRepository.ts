@@ -74,23 +74,52 @@ export class ColorRepository {
   }
 
   async createProfileColorLinks(colorId: number, profileIds: number[]): Promise<void> {
-    await this.prisma.profileColor.createMany({
-      data: profileIds.map((profileId) => ({
-        profileId,
-        colorId,
-        isVisible: true,
-      })),
-    });
+    // SQLite nie wspiera skipDuplicates - sprawdzamy ręcznie
+    for (const profileId of profileIds) {
+      const existing = await this.prisma.profileColor.findUnique({
+        where: {
+          profileId_colorId: {
+            profileId,
+            colorId,
+          },
+        },
+      });
+
+      if (!existing) {
+        await this.prisma.profileColor.create({
+          data: {
+            profileId,
+            colorId,
+            isVisible: true,
+          },
+        });
+      }
+    }
   }
 
   async createWarehouseStockEntries(colorId: number, profileIds: number[]): Promise<void> {
-    await this.prisma.warehouseStock.createMany({
-      data: profileIds.map((profileId) => ({
-        profileId,
-        colorId,
-        currentStockBeams: 0,
-      })),
-    });
+    // SQLite nie wspiera skipDuplicates - sprawdzamy ręcznie
+    for (const profileId of profileIds) {
+      const existing = await this.prisma.warehouseStock.findUnique({
+        where: {
+          profileId_colorId: {
+            profileId,
+            colorId,
+          },
+        },
+      });
+
+      if (!existing) {
+        await this.prisma.warehouseStock.create({
+          data: {
+            profileId,
+            colorId,
+            currentStockBeams: 0,
+            updatedById: 1, // System user ID
+          },
+        });
+      }
+    }
   }
 
   async updateProfileColorVisibility(profileId: number, colorId: number, isVisible: boolean) {

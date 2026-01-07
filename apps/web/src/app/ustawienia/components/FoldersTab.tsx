@@ -66,15 +66,8 @@ export function FoldersTab({
             value={settings.importsBasePath || ''}
             onChange={(path) => onSettingChange('importsBasePath', path)}
             label="Folder importów dostaw (CSV z PROF)"
-            placeholder="C:\Dostawy"
+            placeholder="//192.168.1.6/Public/Markbud_import/dostawy"
             description="Folder zawierający podfoldery z datami dostaw (np. 01.12.2025)"
-          />
-          <FolderBrowser
-            value={settings.importsCenyPath || ''}
-            onChange={(path) => onSettingChange('importsCenyPath', path)}
-            label="Folder importu cen"
-            placeholder="C:\Ceny"
-            description="Folder z plikami cenników do importu"
           />
         </CardContent>
       </Card>
@@ -170,12 +163,6 @@ export function FoldersTab({
                   <strong>Folder importów dostaw:</strong>{' '}
                   <code className="text-xs bg-muted px-1 rounded">
                     {fileWatcherStatus.paths?.importsBasePath || 'nie ustawiono'}
-                  </code>
-                </p>
-                <p>
-                  <strong>Folder importu cen:</strong>{' '}
-                  <code className="text-xs bg-muted px-1 rounded">
-                    {fileWatcherStatus.paths?.importsCenyPath || 'nie ustawiono'}
                   </code>
                 </p>
                 <p>

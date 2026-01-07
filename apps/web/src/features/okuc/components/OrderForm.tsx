@@ -89,7 +89,7 @@ export function OrderForm({
         const formattedItems = order.items.map(item => ({
           articleId: item.articleId,
           orderedQty: item.orderedQty,
-          unitPrice: item.unitPrice ? groszeToPln(item.unitPrice as Grosze) : 0,
+          unitPrice: item.unitPrice ? groszeToPln(item.unitPrice) : 0,
           deliveryWeek: '', // Backend nie ma tego pola w OkucOrderItem, może być undefined
         }));
         setItems(formattedItems);

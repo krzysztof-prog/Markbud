@@ -159,13 +159,13 @@ export default function OkucLandingPage() {
               </Card>
             </TabsContent>
 
-            {/* Tab: Stan magazynu - Placeholder */}
+            {/* Tab: Stan magazynu - Link do strony stanu */}
             <TabsContent value="stock" className="mt-6">
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center border-2 border-slate-300">
-                      <Warehouse className="h-5 w-5 text-slate-500" />
+                    <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center border-2 border-green-200">
+                      <Warehouse className="h-5 w-5 text-green-600" />
                     </div>
                     <div>
                       <CardTitle>Stan magazynu</CardTitle>
@@ -176,21 +176,23 @@ export default function OkucLandingPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-2 text-slate-500">
-                    <AlertCircle className="h-5 w-5" />
-                    <p>Funkcjonalność w przygotowaniu...</p>
-                  </div>
+                  <Link href="/magazyn/okuc/stan">
+                    <Button className="w-full sm:w-auto">
+                      Przejdź do stanu magazynu
+                      <Warehouse className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
                 </CardContent>
               </Card>
             </TabsContent>
 
-            {/* Tab: Zapotrzebowanie - Placeholder */}
+            {/* Tab: Zapotrzebowanie - Link do strony zapotrzebowania */}
             <TabsContent value="requirements" className="mt-6">
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center border-2 border-slate-300">
-                      <Package className="h-5 w-5 text-slate-500" />
+                    <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center border-2 border-purple-200">
+                      <Package className="h-5 w-5 text-purple-600" />
                     </div>
                     <div>
                       <CardTitle>Zapotrzebowanie</CardTitle>
@@ -201,21 +203,23 @@ export default function OkucLandingPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-2 text-slate-500">
-                    <AlertCircle className="h-5 w-5" />
-                    <p>Funkcjonalność w przygotowaniu...</p>
-                  </div>
+                  <Link href="/magazyn/okuc/zapotrzebowanie">
+                    <Button className="w-full sm:w-auto">
+                      Przejdź do zapotrzebowania
+                      <Package className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
                 </CardContent>
               </Card>
             </TabsContent>
 
-            {/* Tab: Zamówienia - Placeholder */}
+            {/* Tab: Zamówienia - Link do strony zamówień */}
             <TabsContent value="orders" className="mt-6">
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center border-2 border-slate-300">
-                      <ShoppingCart className="h-5 w-5 text-slate-500" />
+                    <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center border-2 border-orange-200">
+                      <ShoppingCart className="h-5 w-5 text-orange-600" />
                     </div>
                     <div>
                       <CardTitle>Zamówienia</CardTitle>
@@ -226,10 +230,12 @@ export default function OkucLandingPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-2 text-slate-500">
-                    <AlertCircle className="h-5 w-5" />
-                    <p>Funkcjonalność w przygotowaniu...</p>
-                  </div>
+                  <Link href="/magazyn/okuc/zamowienia">
+                    <Button className="w-full sm:w-auto">
+                      Przejdź do zamówień
+                      <ShoppingCart className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
                 </CardContent>
               </Card>
             </TabsContent>

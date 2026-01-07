@@ -422,13 +422,30 @@ export class DeliveryRepository {
       orderBy: { deliveryDate: 'asc' },
     });
 
+    // Pobierz zlecenia bez aktywnej dostawy
+    // (wykluczamy zlecenia przypisane do soft-deleted dostaw)
     const unassignedOrders = await this.prisma.order.findMany({
       where: {
         archivedAt: null,
         status: { notIn: ['archived'] },
-        deliveryOrders: {
-          none: {},
-        },
+        OR: [
+          // Zlecenia bez żadnych powiązań
+          {
+            deliveryOrders: {
+              none: {},
+            },
+          },
+          // Zlecenia przypisane tylko do soft-deleted dostaw
+          {
+            deliveryOrders: {
+              every: {
+                delivery: {
+                  deletedAt: { not: null },
+                },
+              },
+            },
+          },
+        ],
       },
       select: {
         id: true,

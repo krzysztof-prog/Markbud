@@ -1,16 +1,15 @@
-﻿/**
+/**
  * OKUC Hooks - Public exports
  *
  * Centralne eksporty React Query hooks dla modułu OKUC (DualStock)
  */
 
+// ============================================================================
+// ARTICLES
+// ============================================================================
 export {
   // Query keys
   okucArticlesKeys,
-  okucStockKeys,
-  okucDemandKeys,
-  okucOrdersKeys,
-  okucProportionsKeys,
 
   // Articles hooks
   useOkucArticles,
@@ -19,35 +18,50 @@ export {
   useUpdateOkucArticle,
   useDeleteOkucArticle,
   useOkucArticleAliases,
+} from './useOkucArticles';
+
+// ============================================================================
+// STOCK
+// ============================================================================
+export {
+  // Query keys
+  okucStockKeys,
 
   // Stock hooks
   useOkucStock,
-  useOkucStockByWarehouse,
-  useUpdateOkucStock,
+  useOkucStockSummary,
+  useOkucStockBelowMinimum,
+  useOkucStockById,
+  useOkucStockByArticle,
   useOkucStockHistory,
+  useUpdateOkucStock,
+  useAdjustOkucStock,
+} from './useOkucStock';
+
+// ============================================================================
+// DEMAND
+// ============================================================================
+export {
+  // Query keys
+  okucDemandKeys,
 
   // Demand hooks
   useOkucDemands,
+  useOkucDemandSummary,
+  useOkucDemandById,
   useCreateOkucDemand,
   useUpdateOkucDemand,
   useDeleteOkucDemand,
+} from './useOkucDemand';
 
-  // Orders hooks (placeholder - będą w useOkucOrders)
-  // useOkucOrders,
-  // useOkucOrder,
-  // useCreateOkucOrder,
-  // useUpdateOkucOrder,
-  // useSendOkucOrder,
-  // useConfirmOkucOrderDelivery,
-
-  // Proportions hooks (placeholder)
-  // useOkucProportions,
-  // useUpdateOkucProportion,
-} from './useOkucArticles';
-
-// Orders hooks - Import z useOkucOrders
+// ============================================================================
+// ORDERS
+// ============================================================================
 export {
+  // Query keys
   okucOrdersKeys,
+
+  // Orders hooks
   useOkucOrders,
   useOkucOrder,
   useOkucOrdersStats,

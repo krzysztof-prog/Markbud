@@ -58,9 +58,9 @@ CREATE TABLE warehouse_history_new (
   FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE RESTRICT
 );
 
-INSERT INTO warehouse_history_new
+INSERT INTO warehouse_history_new (id, profile_id, color_id, calculated_stock, actual_stock, difference, previous_stock, current_stock, change_type, notes, recorded_at, recorded_by_id)
 SELECT id, profile_id, color_id, calculated_stock, actual_stock, difference,
-       previous_stock, current_stock, change_type, notes, recorded_at, recorded_by_id
+       NULL, NULL, NULL, NULL, recorded_at, recorded_by_id
 FROM warehouse_history;
 
 DROP TABLE warehouse_history;

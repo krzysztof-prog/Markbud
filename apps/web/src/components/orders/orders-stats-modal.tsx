@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/utils';
+import { groszeToPln, type Grosze } from '@/lib/money';
 import { FileText, TrendingUp, DollarSign, Layers } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
@@ -36,6 +37,7 @@ export const OrdersStatsModal: React.FC<OrdersStatsModalProps> = ({
   eurRate,
 }) => {
   // Obliczanie dodatkowych statystyk
+  // Wartosci w bazie sa przechowywane jako grosze (integer)
   const ordersByStatus = React.useMemo(() => {
     const grouped: Record<string, { count: number; value: number }> = {};
 
@@ -45,7 +47,9 @@ export const OrdersStatsModal: React.FC<OrdersStatsModalProps> = ({
         grouped[status] = { count: 0, value: 0 };
       }
       grouped[status].count++;
-      grouped[status].value += parseFloat(order.valuePln || '0');
+      // Konwertuj grosze na PLN dla wykresu
+      const valueInGrosze = typeof order.valuePln === 'number' ? order.valuePln : 0;
+      grouped[status].value += groszeToPln(valueInGrosze as Grosze);
     });
 
     return Object.entries(grouped).map(([status, data]) => ({

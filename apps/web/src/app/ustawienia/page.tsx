@@ -10,7 +10,6 @@ import { useFormValidation } from '@/hooks/useFormValidation';
 import {
   GeneralSettingsTab,
   FoldersTab,
-  UserFolderTab,
   GlassWatchTab,
   PalletTypesTab,
   ColorsTab,
@@ -437,7 +436,6 @@ export default function UstawieniaPage() {
           <TabsList className="mb-6">
             <TabsTrigger value="general">Ogólne</TabsTrigger>
             <TabsTrigger value="folders">Foldery</TabsTrigger>
-            <TabsTrigger value="user-folder">Mój folder</TabsTrigger>
             <TabsTrigger value="glass">Auto-watch Szyb</TabsTrigger>
             <TabsTrigger value="pallets">Palety</TabsTrigger>
             <TabsTrigger value="colors">Kolory</TabsTrigger>
@@ -465,17 +463,6 @@ export default function UstawieniaPage() {
               fileWatcherStatus={fileWatcherStatus}
               isUpdatePending={updateSettingsMutation.isPending}
               isRestartPending={restartFileWatcherMutation.isPending}
-            />
-          </TabsContent>
-
-          <TabsContent value="user-folder">
-            <UserFolderTab
-              userFolderPath={userFolderPath}
-              globalFolderPath={settings.importsBasePath || ''}
-              hasChanges={userFolderHasChanges}
-              onPathChange={handleUserFolderPathChange}
-              onSave={handleSaveUserFolder}
-              isPending={updateUserFolderMutation.isPending}
             />
           </TabsContent>
 

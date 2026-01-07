@@ -41,7 +41,7 @@ import type { WarehouseType, SubWarehouse } from '@/types/okuc';
 export default function OkucStockPage() {
   // === STATE - Filtry ===
   const [warehouseType, setWarehouseType] = useState<'all' | WarehouseType>('all');
-  const [subWarehouse, setSubWarehouse] = useState<'all' | SubWarehouse>('all');
+  const [subWarehouse, setSubWarehouse] = useState<'all' | NonNullable<SubWarehouse>>('all');
   const [belowMinOnly, setBelowMinOnly] = useState(false);
   const [isDeletingId, setIsDeletingId] = useState<number | undefined>(undefined);
 
@@ -163,7 +163,7 @@ export default function OkucStockPage() {
                 <Label htmlFor="subWarehouse">Podmagazyn</Label>
                 <Select
                   value={subWarehouse}
-                  onValueChange={(v) => setSubWarehouse(v as any)}
+                  onValueChange={(v) => setSubWarehouse(v as 'all' | NonNullable<SubWarehouse>)}
                 >
                   <SelectTrigger id="subWarehouse">
                     <SelectValue />
@@ -232,7 +232,7 @@ export default function OkucStockPage() {
           <StockTable
             stocks={filteredStocks}
             onUpdate={handleUpdateStock}
-            isDeletingId={isDeletingId}
+            isUpdatingId={isDeletingId}
           />
         )}
       </div>

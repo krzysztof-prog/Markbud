@@ -104,7 +104,7 @@ model Order {
   deliveredGlassCount Int?                @default(0) @map("delivered_glass_count")
   glassOrderStatus    String?             @default("not_ordered") @map("glass_order_status")
   deliveryOrders      DeliveryOrder[]
-  glassOrderItems     GlassOrderItem[]
+  // Removed glassOrderItems relation - no FK constraint (glass orders can exist without production order)
   monthlyReportItems  MonthlyReportItem[]
   orderNotes          Note[]
   requirements        OrderRequirement[]
@@ -552,7 +552,8 @@ model GlassOrderItem {
   heightMm     Int        @map("height_mm")
   quantity     Int
   createdAt    DateTime   @default(now()) @map("created_at")
-  order        Order?     @relation(fields: [orderNumber], references: [orderNumber], onDelete: Cascade)
+  // Removed FK constraint - allow glass orders even when production order doesn't exist yet
+  // Validation warnings are created via GlassOrderValidation table
   glassOrder   GlassOrder @relation(fields: [glassOrderId], references: [id], onDelete: Cascade)
 
   @@unique([glassOrderId, position])

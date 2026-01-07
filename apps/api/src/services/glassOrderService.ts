@@ -72,7 +72,7 @@ export class GlassOrderService {
       });
 
       // Match with production orders and update counts (within transaction)
-      await this.matchWithProductionOrdersTx(tx, glassOrder.id);
+      await this.matchWithProductionOrdersTx(tx, glassOrder.id, glassOrder.expectedDeliveryDate);
 
       return glassOrder;
     });
@@ -81,7 +81,8 @@ export class GlassOrderService {
   // Transaction-aware version for import
   private async matchWithProductionOrdersTx(
     tx: Prisma.TransactionClient,
-    glassOrderId: number
+    glassOrderId: number,
+    expectedDeliveryDate: Date | null
   ) {
     const items = await tx.glassOrderItem.findMany({
       where: { glassOrderId },
@@ -110,6 +111,9 @@ export class GlassOrderService {
           data: {
             orderedGlassCount: { increment: quantity },
             glassOrderStatus: 'ordered',
+            // Copy expected delivery date from glass order to production order
+            // (will be updated later from delivery confirmation)
+            glassDeliveryDate: expectedDeliveryDate,
           },
         });
       } else {
@@ -130,6 +134,12 @@ export class GlassOrderService {
 
   // Legacy non-transaction version (kept for compatibility)
   async matchWithProductionOrders(glassOrderId: number) {
+    // Get glass order with expected delivery date
+    const glassOrder = await this.prisma.glassOrder.findUnique({
+      where: { id: glassOrderId },
+      select: { expectedDeliveryDate: true },
+    });
+
     const items = await this.prisma.glassOrderItem.findMany({
       where: { glassOrderId },
     });
@@ -154,6 +164,8 @@ export class GlassOrderService {
           data: {
             orderedGlassCount: { increment: quantity },
             glassOrderStatus: 'ordered',
+            // Copy expected delivery date from glass order
+            glassDeliveryDate: glassOrder?.expectedDeliveryDate ?? null,
           },
         });
       } else {

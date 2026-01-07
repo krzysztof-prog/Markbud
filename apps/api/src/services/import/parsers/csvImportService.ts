@@ -26,6 +26,9 @@ import type {
 } from './types.js';
 import { BEAM_LENGTH_MM, REST_ROUNDING_MM } from './types.js';
 
+// Typ dla transakcji Prisma
+type PrismaTransaction = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
+
 /**
  * CSV Import Service Implementation
  *
@@ -318,10 +321,8 @@ export class CsvImportService implements ICsvImportService {
           });
         }
 
-        // Add requirements
-        for (const req of parsed.requirements) {
-          await this.upsertRequirement(tx, order.id, req);
-        }
+        // Add requirements - batch fetch profiles and colors first to avoid N+1
+        await this.processRequirementsBatch(tx, order.id, parsed.requirements);
 
         // Add windows
         for (const win of parsed.windows) {
@@ -400,7 +401,7 @@ export class CsvImportService implements ICsvImportService {
    * Get EUR value from linked Schuco delivery
    */
   private async getEurValueFromSchuco(
-    tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0],
+    tx: PrismaTransaction,
     orderNumber: string
   ): Promise<number | undefined> {
     const schucoLink = await tx.orderSchucoLink.findFirst({
@@ -426,7 +427,7 @@ export class CsvImportService implements ICsvImportService {
    * Get pending price for order
    */
   private async getPendingPrice(
-    tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0],
+    tx: PrismaTransaction,
     orderNumber: string
   ) {
     return tx.pendingOrderPrice.findFirst({
@@ -439,10 +440,194 @@ export class CsvImportService implements ICsvImportService {
   }
 
   /**
+   * Process requirements in batch to avoid N+1 query problem
+   * Instead of 3+ queries per requirement, we do:
+   * - 1 batch query for all profiles
+   * - 1 batch query for all colors
+   * - N upserts for requirements (unavoidable with upsert logic)
+   */
+  private async processRequirementsBatch(
+    tx: PrismaTransaction,
+    orderId: number,
+    requirements: ParsedRequirement[]
+  ): Promise<void> {
+    if (requirements.length === 0) return;
+
+    // Zbieramy wszystkie potrzebne identyfikatory
+    const profileNumbers = [...new Set(requirements.map(r => r.profileNumber).filter(Boolean))];
+    const articleNumbers = [...new Set(requirements.map(r => r.articleNumber).filter(Boolean))];
+    const colorCodes = [...new Set(requirements.map(r => r.colorCode).filter(Boolean))];
+
+    // Batch fetch profiles - jedno zapytanie zamiast N
+    const profiles = await tx.profile.findMany({
+      where: {
+        OR: [
+          { number: { in: profileNumbers } },
+          { articleNumber: { in: articleNumbers } },
+        ],
+      },
+    });
+
+    // Tworzymy mapy dla szybkiego dostepu O(1)
+    const profileByNumber = new Map(profiles.map(p => [p.number, p]));
+    const profileByArticle = new Map(
+      profiles.filter(p => p.articleNumber).map(p => [p.articleNumber!, p])
+    );
+
+    // Batch fetch colors - jedno zapytanie zamiast N
+    const colors = await tx.color.findMany({
+      where: { code: { in: colorCodes } },
+    });
+    const colorByCode = new Map(colors.map(c => [c.code, c]));
+
+    // Zbieramy profile do utworzenia i do aktualizacji
+    const profilesToCreate: Array<{ number: string; name: string; articleNumber: string }> = [];
+    const profilesToUpdate: Array<{ id: number; articleNumber: string }> = [];
+
+    // Pierwszy przebieg - identyfikujemy brakujace profile
+    for (const req of requirements) {
+      let profile = profileByNumber.get(req.profileNumber);
+
+      if (!profile) {
+        profile = profileByArticle.get(req.articleNumber);
+      }
+
+      if (!profile) {
+        // Profile nie istnieje - dodajemy do listy do utworzenia
+        // Sprawdzamy czy juz nie dodalismy tego samego profilu
+        const alreadyToCreate = profilesToCreate.find(p => p.number === req.profileNumber);
+        if (!alreadyToCreate) {
+          profilesToCreate.push({
+            number: req.profileNumber,
+            name: req.profileNumber,
+            articleNumber: req.articleNumber,
+          });
+        }
+      } else if (!profile.articleNumber && req.articleNumber) {
+        // Profil istnieje ale nie ma articleNumber - aktualizujemy
+        const alreadyToUpdate = profilesToUpdate.find(p => p.id === profile!.id);
+        if (!alreadyToUpdate) {
+          profilesToUpdate.push({
+            id: profile.id,
+            articleNumber: req.articleNumber,
+          });
+        }
+      }
+    }
+
+    // Batch create nowych profili
+    if (profilesToCreate.length > 0) {
+      // SQLite nie wspiera skipDuplicates, wiec uzywamy pojedynczych upsert
+      // dla nowych profili - to nadal jest szybsze niz N+1 queries
+      for (const profileData of profilesToCreate) {
+        await tx.profile.upsert({
+          where: { number: profileData.number },
+          update: {}, // Nic nie aktualizujemy jesli juz istnieje
+          create: profileData,
+        });
+      }
+
+      // Pobieramy nowo utworzone profile
+      const newProfiles = await tx.profile.findMany({
+        where: { number: { in: profilesToCreate.map(p => p.number) } },
+      });
+
+      // Dodajemy do map
+      for (const p of newProfiles) {
+        profileByNumber.set(p.number, p);
+        if (p.articleNumber) {
+          profileByArticle.set(p.articleNumber, p);
+        }
+      }
+
+      if (this.debug) {
+        logger.info(`Batch created ${profilesToCreate.length} new profiles`);
+      }
+    }
+
+    // Batch update profili bez articleNumber
+    // Niestety Prisma nie wspiera batch update z roznymi wartosciami,
+    // ale to sa rzadkie przypadki wiec OK
+    for (const update of profilesToUpdate) {
+      const updated = await tx.profile.update({
+        where: { id: update.id },
+        data: { articleNumber: update.articleNumber },
+      });
+      profileByNumber.set(updated.number, updated);
+      if (updated.articleNumber) {
+        profileByArticle.set(updated.articleNumber, updated);
+      }
+    }
+
+    // Teraz przetwarzamy requirements - kazdy wymaga upsert
+    // ale przynajmniej nie robimy juz zapytan o profile i kolory
+    const requirementsToUpsert: Array<{
+      orderId: number;
+      profileId: number;
+      colorId: number;
+      beamsCount: number;
+      meters: number;
+      restMm: number;
+    }> = [];
+
+    for (const req of requirements) {
+      // Znajdz profil w mapie (teraz O(1) zamiast zapytania do DB)
+      let profile = profileByNumber.get(req.profileNumber);
+      if (!profile) {
+        profile = profileByArticle.get(req.articleNumber);
+      }
+
+      if (!profile) {
+        // To nie powinno sie zdarzyc po batch create, ale dla bezpieczenstwa
+        logger.warn(`Profile ${req.profileNumber} not found after batch create, skipping`);
+        continue;
+      }
+
+      // Znajdz kolor w mapie
+      const color = colorByCode.get(req.colorCode);
+      if (!color) {
+        logger.warn(`Color ${req.colorCode} not found, skipping`);
+        continue;
+      }
+
+      requirementsToUpsert.push({
+        orderId,
+        profileId: profile.id,
+        colorId: color.id,
+        beamsCount: req.calculatedBeams,
+        meters: req.calculatedMeters,
+        restMm: req.originalRest,
+      });
+    }
+
+    // Wykonujemy upserty
+    // Niestety createMany nie obsluguje upsert, wiec musimy robic pojedynczo
+    // ale przynajmniej nie robimy juz zapytan o profile i kolory
+    for (const data of requirementsToUpsert) {
+      await tx.orderRequirement.upsert({
+        where: {
+          orderId_profileId_colorId: {
+            orderId: data.orderId,
+            profileId: data.profileId,
+            colorId: data.colorId,
+          },
+        },
+        update: {
+          beamsCount: data.beamsCount,
+          meters: data.meters,
+          restMm: data.restMm,
+        },
+        create: data,
+      });
+    }
+  }
+
+  /**
    * Upsert a requirement for an order
+   * @deprecated Use processRequirementsBatch instead to avoid N+1 queries
    */
   private async upsertRequirement(
-    tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0],
+    tx: PrismaTransaction,
     orderId: number,
     req: ParsedRequirement
   ): Promise<void> {
@@ -678,11 +863,32 @@ export class CsvImportService implements ICsvImportService {
       }
     }
 
+    // Automatyczne wypełnienie project i system z danych okien
+    // jeśli nie zostały sparsowane z metadanych CSV
+    let finalProject = project;
+    let finalSystem = system;
+
+    if ((!finalProject || finalProject.trim() === '') && windows.length > 0) {
+      // Pobierz unikalne referencje z okien
+      const references = [...new Set(windows.map(w => w.referencja).filter(Boolean))];
+      if (references.length > 0) {
+        finalProject = references.join(', ');
+      }
+    }
+
+    if ((!finalSystem || finalSystem.trim() === '') && windows.length > 0) {
+      // Pobierz unikalne typy profili z okien
+      const profileTypes = [...new Set(windows.map(w => w.typProfilu).filter(Boolean))];
+      if (profileTypes.length > 0) {
+        finalSystem = profileTypes.join(', ');
+      }
+    }
+
     return {
       orderNumber,
       client,
-      project,
-      system,
+      project: finalProject,
+      system: finalSystem,
       deadline,
       pvcDeliveryDate,
       requirements,

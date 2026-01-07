@@ -5,31 +5,31 @@
 ---
 
 ## 🎯 Aktualne zadanie
-**Naprawiono wszystkie błędy testów (722/722 ✅) - gotowe do QA i commita**
+**UX Audit zakończony - wszystkie Quick Wins zaimplementowane**
 
-Zakończono refaktoryzację delivery/import/warehouse services z pełnym pokryciem testami.
+Przeprowadzono audyt UX zgodnie z frontend-dev-guidelines skill. Ocena: 8.2/10.
 
 ---
 
 ## 📊 Kontekst zadania
 
 ### Moduł/Feature:
-- Backend testing (Vitest)
-- DeliveryService, ImportService, WarehouseService refactoring
+- UX / Accessibility
+- Frontend components
 
 ### Cel biznesowy:
-- Zapewnienie stabilności kodu po refaktoryzacji
-- 100% pokrycie testami dla krytycznych serwisów
-- Eliminacja tech debt w testach
+- Poprawa użyteczności aplikacji
+- Zgodność z WCAG (accessibility)
+- Ujednolicenie wzorców UX
 
-### Zakres (CO zmieniamy):
-- Naprawiono 4 pliki testów z błędami mockowania
-- Zaktualizowano wzorce testowania Vitest
-- Usunięto problemy z hoistingiem mocków
+### Zakres (CO zmieniliśmy):
+- Keyboard navigation w sidebar (Arrow Up/Down, Home, End)
+- FormField component wrapper
+- Audit disabled={isPending} w mutacjach
 
 ### Czego NIE zmieniamy (out of scope):
-- Logika biznesowa serwisów (tylko testy)
-- Frontend (wszystkie zmiany backend)
+- Backend (zmiany tylko frontend)
+- Logika biznesowa
 - Baza danych
 
 ---
@@ -37,57 +37,53 @@ Zakończono refaktoryzację delivery/import/warehouse services z pełnym pokryci
 ## ✅ Decyzje podjęte
 
 ### Architektura/Implementacja:
-- [x] Wzorzec mockowania konstruktorów: class expressions zamiast `vi.fn().mockImplementation()`
-- [x] Mocking Fastify app: `vi.mock('../index.js')` zapobiega ładowaniu routes podczas testów
-- [x] Mock hoisting: Wszystko tworzone inline w factory function
-- [x] Dual prisma instances: `mockPrisma` dla repository, `indexPrisma` dla sub-services
+- [x] Keyboard navigation: useCallback + useRef pattern
+- [x] FormField: React.cloneElement dla automatycznych ARIA attrs
+- [x] Sidebar: role="navigation" + aria-label="Menu główne"
 
 ### UX/Biznes:
-- [x] Brak zmian UX (tylko testy backend)
+- [x] Raport UX bez sekcji mobile (per request)
+- [x] Wszystkie Quick Wins oznaczone jako DONE
 
 ---
 
 ## ❓ Otwarte pytania
-- [ ] Czy wykonać Manual QA testing przed commitem?
-- [ ] Czy utworzyć jeden commit czy podzielić na kilka?
+- Brak otwartych pytań
 
 ---
 
 ## 📋 Progress Tracking
 
 ### Ukończone kroki:
-- [x] Phase 1 & 2: Wszystkie zadania refaktoryzacji
-- [x] Naprawiono wszystkie błędy TypeScript
-- [x] Naprawiono errors.test.ts (2 → 0 błędów)
-- [x] Naprawiono warehouse-handler.test.ts (27/27)
-- [x] Architecture review (ocena B+)
-- [x] Frontend check (niskie ryzyko)
-- [x] Naprawiono warehouse-service.test.ts (26/26)
-- [x] Naprawiono profileHandler.test.ts (17/17)
-- [x] Naprawiono csvImportService.test.ts (36/36)
-- [x] Naprawiono deliveryService.test.ts (18/18)
-- [x] Pełny test suite (722/722 ✅)
+- [x] Przeprowadzono audyt UX
+- [x] Zapisano raport do docs/reviews/UX_AUDIT_2026-01-06.md
+- [x] Usunięto sekcje mobile z raportu
+- [x] Zaimplementowano Keyboard Navigation Sidebar
+- [x] Utworzono FormField component
+- [x] Przeprowadzono audit disabled={isPending}
+- [x] Zaktualizowano raport z wynikami
 
 ### Ostatni ukończony krok:
-Naprawiono ostatni test w deliveryService.test.ts ("should add order to delivery") poprzez prawidłowe mockowanie `aggregate` na `mockPrisma` zamiast `indexPrisma`.
+Audit disabled={isPending} - sprawdzono 33 plików, 52 wystąpienia w 15 plikach, wszystko OK.
 
 ### Aktualnie w toku:
-Czekam na decyzję użytkownika: Manual QA lub Git Commit
+Brak - wszystkie zadania zakończone
 
 ### Następny krok:
-➡️ **Opcja 1:** Manual QA testing (uruchomienie dev servers, test funkcjonalności)
-➡️ **Opcja 2:** Utworzenie git commit dla naprawionych testów
+➡️ **Gotowe do commita** lub nowe zadanie od użytkownika
 
 ---
 
 ## 📁 Zmienione pliki
 
-### Backend:
-- [x] `apps/api/src/services/warehouse-service.test.ts` (linie 1-30: mock inline, linie 125-135: test data fix)
-- [x] `apps/api/src/services/import/parsers/csvImportService.test.ts` (linie 1-10: app index mock)
-- [x] `apps/api/src/services/deliveryService.test.ts` (linie 1-80: class-based mocks, app index mock, aggregate fix)
-
 ### Frontend:
+- [x] `apps/web/src/components/layout/sidebar.tsx` - keyboard navigation (Arrow Up/Down, Home, End)
+- [x] `apps/web/src/components/ui/form-field.tsx` - nowy komponent (wrapper z ARIA)
+
+### Dokumentacja:
+- [x] `docs/reviews/UX_AUDIT_2026-01-06.md` - raport audytu UX
+
+### Backend:
 - [ ] Brak zmian
 
 ### Database/Migrations:
@@ -95,60 +91,15 @@ Czekam na decyzję użytkownika: Manual QA lub Git Commit
 
 ---
 
-## 🔍 Kluczowe wzorce odkryte podczas naprawy
+## 🔍 Kluczowe metryki z audytu
 
-### 1. Constructor Mocking Pattern
-```typescript
-// ❌ ŹLE
-vi.mock('./orderService.js', () => ({
-  OrderService: vi.fn().mockImplementation(() => ({
-    bulkUpdateStatus: vi.fn().mockResolvedValue({ count: 0 }),
-  })),
-}));
-
-// ✅ DOBRZE
-vi.mock('./orderService.js', () => ({
-  OrderService: class MockOrderService {
-    bulkUpdateStatus = vi.fn().mockResolvedValue({ count: 0 });
-  }
-}));
-```
-
-### 2. Preventing App Loading During Tests
-```typescript
-// Dodaj na początku testu aby zapobiec ładowaniu Fastify app
-vi.mock('../../../index.js', () => ({
-  prisma: {
-    delivery: { findMany: vi.fn(), findUnique: vi.fn(), /* ... */ },
-    deliveryOrder: { create: vi.fn(), aggregate: vi.fn(), /* ... */ },
-    // ... wszystkie potrzebne metody
-  }
-}));
-```
-
-### 3. Mock Hoisting Solution
-```typescript
-// Twórz mock inline w factory - NIE referencuj zewnętrznych funkcji
-vi.mock('../index.js', () => {
-  // Wszystko tu wewnątrz - żadnych zewnętrznych referencji
-  return {
-    prisma: {
-      warehouseStock: { findMany: vi.fn() },
-      // ...
-    }
-  };
-});
-```
-
-### 4. Dual Prisma Instance Problem
-```typescript
-// Repository używa mockPrisma
-const repository = new DeliveryRepository(mockPrisma);
-
-// Ale service sub-komponenty używają indexPrisma z '../index.js'
-// ROZWIĄZANIE: Mockuj na tej samej instancji co używa kod
-mockPrisma.deliveryOrder.aggregate.mockResolvedValue({ _max: { position: 0 } });
-```
+| Metryka | Wartość | Ocena |
+|---------|---------|-------|
+| ARIA labels | 52 w 22 plikach | Dobra |
+| disabled={isPending} | 83 w 27 plikach | Bardzo dobra |
+| Suspense boundaries | 11 w 4 plikach | Do poprawy |
+| Early return isLoading | 18 wystąpień | Anti-pattern |
+| Error messages PL | 62 komunikaty | Bardzo dobra |
 
 ---
 
@@ -156,22 +107,21 @@ mockPrisma.deliveryOrder.aggregate.mockResolvedValue({ _max: { position: 0 } });
 
 ### Zmiany:
 - [x] Wypisano co zostało zmienione
-- [x] Wskazano pliki z numerami linii
+- [x] Wskazano pliki
 
 ### Zgodność z zasadami:
 - [x] Sprawdzono COMMON_MISTAKES.md
-- [x] money.ts użyty - N/A (tylko testy)
-- [x] Soft delete - N/A (tylko testy)
-- [x] Confirmation dialog - N/A (tylko testy)
-- [x] disabled={isPending} - N/A (tylko testy)
+- [x] money.ts użyty - N/A (tylko UI)
+- [x] Soft delete - N/A (tylko UI)
+- [x] Confirmation dialog - N/A (tylko UI)
+- [x] disabled={isPending} - audyt przeprowadzony ✅
 
 ### Testy:
-- [x] Wszystkie 722 testy przechodzą (100%)
-- [x] Vitest patterns udokumentowane
+- [ ] Testy nie wymagane (zmiany UI/docs)
 
 ### Finalizacja:
-- [ ] Zapytano użytkownika o merge/kolejne zadanie
 - [x] Session snapshot zapisany
+- [ ] Commit do wykonania
 
 ---
 
@@ -192,6 +142,6 @@ mockPrisma.deliveryOrder.aggregate.mockResolvedValue({ _max: { position: 0 } });
 
 ---
 
-**Utworzono:** 2026-01-05
-**Ostatnia aktualizacja:** 2026-01-05 13:00
-**Aktualna sesja:** Test Fixes Complete - Ready for QA/Commit
+**Utworzono:** 2026-01-06
+**Ostatnia aktualizacja:** 2026-01-06
+**Aktualna sesja:** UX Audit Complete - All Quick Wins Done

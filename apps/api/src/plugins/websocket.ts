@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import fastifyWebsocket, { type SocketStream } from '@fastify/websocket';
 import { eventEmitter } from '../services/event-emitter.js';
-import { decodeToken } from '../utils/jwt.js';
+import { decodeTokenWithError } from '../utils/jwt.js';
 import { logger } from '../utils/logger.js';
 
 interface DataChangeEvent {
@@ -177,18 +177,32 @@ export async function setupWebSocket(fastify: FastifyInstance) {
       logger.warn('WebSocket connection rejected: No authentication token', {
         ip: connection.socket.remoteAddress,
       });
-      connection.write(JSON.stringify({ type: 'error', message: 'Brak tokenu autoryzacji' }));
+      connection.write(JSON.stringify({ type: 'error', code: 'NO_TOKEN', message: 'Brak tokenu autoryzacji' }));
       connection.end();
       return;
     }
 
-    const payload = decodeToken(token);
+    const { payload, error: tokenError } = decodeTokenWithError(token);
 
     if (!payload) {
-      logger.warn('WebSocket connection rejected: Invalid token', {
+      // Rozróżniamy typ błędu tokenu - frontend może podjąć odpowiednią akcję
+      const errorCode = tokenError === 'expired' ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID';
+      const errorMessage = tokenError === 'expired'
+        ? 'Sesja wygasła - zaloguj się ponownie'
+        : 'Nieprawidłowy token autoryzacji';
+
+      logger.warn(`WebSocket connection rejected: ${errorCode}`, {
         ip: connection.socket.remoteAddress,
+        tokenError,
       });
-      connection.write(JSON.stringify({ type: 'error', message: 'Nieprawidłowy token autoryzacji' }));
+
+      // Wysyłamy specjalny kod błędu który frontend może rozpoznać
+      connection.write(JSON.stringify({
+        type: 'error',
+        code: errorCode,
+        message: errorMessage,
+        shouldRetry: false  // Informacja dla frontendu że nie ma sensu retry
+      }));
       connection.end();
       return;
     }

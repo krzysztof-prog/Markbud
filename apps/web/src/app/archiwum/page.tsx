@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ordersApi } from '@/lib/api';
-import { formatDate, formatCurrency } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
+import { formatGrosze, formatCenty, type Grosze, type Centy } from '@/lib/money';
 import { Archive, RotateCcw, Trash2, Search } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 import type { Order } from '@/types';
@@ -93,10 +94,12 @@ export default function ArchiwumPage() {
                           {order.archivedAt ? formatDate(order.archivedAt) : '-'}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          {order.valuePln ? formatCurrency(parseFloat(String(order.valuePln)), 'PLN') : '-'}
+                          {/* valuePln jest w groszach */}
+                          {order.valuePln ? formatGrosze(order.valuePln as Grosze) : '-'}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          {order.valueEur ? formatCurrency(parseFloat(String(order.valueEur)), 'EUR') : '-'}
+                          {/* valueEur jest w centach */}
+                          {order.valueEur ? formatCenty(order.valueEur as Centy) : '-'}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-center gap-2">

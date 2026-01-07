@@ -14,6 +14,11 @@ export { DeleteArticleDialog } from './DeleteArticleDialog';
 export { StockTable } from './StockTable';
 export { StockSummaryCards } from './StockSummaryCards';
 
+// Demand
+export { DemandTable } from './DemandTable';
+export { DemandForm } from './DemandForm';
+export { DeleteDemandDialog } from './DeleteDemandDialog';
+
 // Orders
 export { OrdersTable } from './OrdersTable';
 export { OrderForm } from './OrderForm';

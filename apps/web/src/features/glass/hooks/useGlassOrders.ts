@@ -47,12 +47,12 @@ export function useImportGlassOrder() {
       showSuccessToast('Import udany', `Zamowienie ${data.glassOrderNumber} zaimportowane`);
     },
     onError: (error: any) => {
-      // Don't show toast for conflict errors - they're handled by the modal
+      // Don't show toast for conflict errors (409) - they're handled by the modal in component
       if (error?.status !== 409) {
         showErrorToast('Blad importu', getErrorMessage(error));
       }
-      // Re-throw to allow component to handle it
-      throw error;
+      // NOTE: Don't re-throw here! React Query doesn't allow it in onError.
+      // Component will catch error via mutateAsync().catch() instead.
     },
   });
 }

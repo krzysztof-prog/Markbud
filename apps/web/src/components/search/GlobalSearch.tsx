@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ordersApi } from '@/lib/api';
+import { formatGrosze, type Grosze } from '@/lib/money';
 import type { Order } from '@/types';
 import { useRouter } from 'next/navigation';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -254,10 +255,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                         )}
                         {order.valuePln && (
                           <div className="font-semibold text-slate-900">
-                            {parseFloat(String(order.valuePln)).toLocaleString('pl-PL', {
-                              minimumFractionDigits: 2,
-                            })}{' '}
-                            PLN
+                            {formatGrosze(order.valuePln as Grosze)}
                           </div>
                         )}
                       </div>

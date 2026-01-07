@@ -23,6 +23,16 @@ export function setupErrorHandler(fastify: FastifyInstance) {
     async (error: FastifyError | Error | AppError, request: FastifyRequest, reply: FastifyReply) => {
       const requestId = request.id;
 
+      // Log ALL errors for debugging
+      console.error('🚨 [ErrorHandler] Error caught:', {
+        name: error.name,
+        message: error.message,
+        statusCode: (error as FastifyError).statusCode,
+        url: request.url,
+        method: request.method,
+        headers: request.headers
+      });
+
       // Handle Zod validation errors
       if (error instanceof ZodError) {
         const validation: Record<string, string[]> = {};
