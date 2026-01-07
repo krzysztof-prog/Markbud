@@ -115,4 +115,72 @@ export class ProfileRepository {
       )
     );
   }
+
+  /**
+   * Pobiera wszystkie kolory z bazy
+   */
+  async getAllColors() {
+    return this.prisma.color.findMany({
+      select: { id: true },
+    });
+  }
+
+  /**
+   * Tworzy powiązania ProfileColor dla danego profilu ze wszystkimi kolorami
+   * Pomija kombinacje które już istnieją (SQLite nie wspiera skipDuplicates)
+   */
+  async createProfileColorLinks(profileId: number, colorIds: number[]): Promise<void> {
+    for (const colorId of colorIds) {
+      // Sprawdź czy kombinacja już istnieje
+      const existing = await this.prisma.profileColor.findUnique({
+        where: {
+          profileId_colorId: {
+            profileId,
+            colorId,
+          },
+        },
+      });
+
+      // Twórz tylko jeśli nie istnieje
+      if (!existing) {
+        await this.prisma.profileColor.create({
+          data: {
+            profileId,
+            colorId,
+            isVisible: true,
+          },
+        });
+      }
+    }
+  }
+
+  /**
+   * Tworzy wpisy WarehouseStock dla danego profilu ze wszystkimi kolorami
+   * Pomija kombinacje które już istnieją (SQLite nie wspiera skipDuplicates)
+   */
+  async createWarehouseStockEntries(profileId: number, colorIds: number[]): Promise<void> {
+    for (const colorId of colorIds) {
+      // Sprawdź czy kombinacja już istnieje
+      const existing = await this.prisma.warehouseStock.findUnique({
+        where: {
+          profileId_colorId: {
+            profileId,
+            colorId,
+          },
+        },
+      });
+
+      // Twórz tylko jeśli nie istnieje
+      if (!existing) {
+        await this.prisma.warehouseStock.create({
+          data: {
+            profileId,
+            colorId,
+            currentStockBeams: 0,
+            updatedById: 1, // System user ID
+          },
+        });
+      }
+    }
+  }
 }

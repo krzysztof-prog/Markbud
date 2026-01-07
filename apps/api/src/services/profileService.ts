@@ -47,6 +47,13 @@ export class ProfileService {
 
     const created = await this.repository.create(data);
 
+    // Automatycznie twórz powiązania z kolorami (podobnie jak ColorService)
+    const colors = await this.repository.getAllColors();
+    const colorIds = colors.map((c) => c.id);
+
+    await this.repository.createProfileColorLinks(created.id, colorIds);
+    await this.repository.createWarehouseStockEntries(created.id, colorIds);
+
     // Invalidate all profiles cache
     cacheService.invalidateOnProfileChange();
 
