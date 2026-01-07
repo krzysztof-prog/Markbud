@@ -8,8 +8,13 @@ import { useLatestImportSummary } from '../hooks/useGlassDeliveries';
 export function LatestImportSummary() {
   const { data, isLoading } = useLatestImportSummary();
 
+  // Spójny wrapper dla wszystkich stanów - zapobiega layout shift
   if (isLoading) {
-    return <CardSkeleton />;
+    return (
+      <Card>
+        <CardSkeleton />
+      </Card>
+    );
   }
 
   if (!data) {

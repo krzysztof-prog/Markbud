@@ -8,8 +8,13 @@ import { useValidationDashboard } from '../hooks/useGlassDeliveries';
 export function GlassValidationPanel() {
   const { data: dashboard, isLoading } = useValidationDashboard();
 
+  // Spójny wrapper Card dla wszystkich stanów - zapobiega layout shift
   if (isLoading) {
-    return <CardSkeleton />;
+    return (
+      <Card>
+        <CardSkeleton />
+      </Card>
+    );
   }
 
   if (!dashboard) {

@@ -26,35 +26,44 @@ export function GlassDeliveriesTable() {
   const { data: deliveries, isLoading, error } = useGlassDeliveries();
   const deleteMutation = useDeleteGlassDelivery();
 
-  if (isLoading) {
-    return <TableSkeleton rows={5} columns={5} />;
-  }
-
-  if (error) {
-    return (
-      <EmptyState
-        icon={<AlertCircle className="h-12 w-12" />}
-        title="Blad ladowania"
-        description={error.message}
-      />
-    );
-  }
-
-  if (!deliveries?.length) {
-    return (
-      <EmptyState
-        icon={<Package className="h-12 w-12" />}
-        title="Brak dostaw szyb"
-        description="Zaimportuj pliki CSV, aby rozpoczac."
-      />
-    );
-  }
-
   const handleDelete = (id: number) => {
     if (confirm('Czy na pewno chcesz usunac te dostawe?')) {
       deleteMutation.mutate(id);
     }
   };
+
+  // Spójny wrapper dla wszystkich stanów - zapobiega layout shift
+  if (isLoading) {
+    return (
+      <div className="rounded-md border">
+        <TableSkeleton rows={5} columns={5} />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-md border p-6">
+        <EmptyState
+          icon={<AlertCircle className="h-12 w-12" />}
+          title="Błąd ładowania"
+          description={error.message}
+        />
+      </div>
+    );
+  }
+
+  if (!deliveries?.length) {
+    return (
+      <div className="rounded-md border p-6">
+        <EmptyState
+          icon={<Package className="h-12 w-12" />}
+          title="Brak dostaw szyb"
+          description="Zaimportuj pliki CSV, aby rozpocząć."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-md border">
@@ -62,7 +71,7 @@ export function GlassDeliveriesTable() {
         <TableHeader>
           <TableRow>
             <TableHead>Numer stojaka</TableHead>
-            <TableHead>Zamowienie klienta</TableHead>
+            <TableHead>Zamówienie klienta</TableHead>
             <TableHead>Data dostawy</TableHead>
             <TableHead className="text-center">Pozycje</TableHead>
             <TableHead className="w-[70px]"></TableHead>

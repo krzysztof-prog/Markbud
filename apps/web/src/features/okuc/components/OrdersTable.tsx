@@ -175,19 +175,28 @@ export function OrdersTable({
     }
   };
 
+  // Spójny wrapper dla wszystkich stanów - zapobiega layout shift
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <p className="text-muted-foreground">Ładowanie zamówień...</p>
-      </div>
+      <>
+        <div className="rounded-md border">
+          <div className="flex items-center justify-center py-8">
+            <p className="text-muted-foreground">Ładowanie zamówień...</p>
+          </div>
+        </div>
+      </>
     );
   }
 
   if (!orders || orders.length === 0) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <p className="text-muted-foreground">Brak zamówień do wyświetlenia.</p>
-      </div>
+      <>
+        <div className="rounded-md border">
+          <div className="flex items-center justify-center py-8">
+            <p className="text-muted-foreground">Brak zamówień do wyświetlenia.</p>
+          </div>
+        </div>
+      </>
     );
   }
 

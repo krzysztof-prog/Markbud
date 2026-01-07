@@ -55,25 +55,34 @@ export function WarehouseHistory({ colorId, colorName }: WarehouseHistoryProps) 
     return { groupedByDate: grouped, sortedDates: sorted };
   }, [history]);
 
+  // Renderowanie warunkowe bez early returns - zapobiega layout shift
   if (isLoading) {
-    return <TableSkeleton rows={10} columns={5} />;
+    return (
+      <div className="space-y-6">
+        <TableSkeleton rows={10} columns={5} />
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div className="text-center py-8 text-red-500">
-        Błąd ładowania historii: {error instanceof Error ? error.message : 'Nieznany błąd'}
+      <div className="space-y-6">
+        <div className="text-center py-8 text-red-500">
+          Błąd ładowania historii: {error instanceof Error ? error.message : 'Nieznany błąd'}
+        </div>
       </div>
     );
   }
 
   if (!history || history.length === 0) {
     return (
-      <EmptyState
-        icon={<History className="h-12 w-12" />}
-        title="Brak historii"
-        description={`Dla koloru ${colorName || ''} nie ma jeszcze żadnych wpisów historii magazynu.`}
-      />
+      <div className="space-y-6">
+        <EmptyState
+          icon={<History className="h-12 w-12" />}
+          title="Brak historii"
+          description={`Dla koloru ${colorName || ''} nie ma jeszcze żadnych wpisów historii magazynu.`}
+        />
+      </div>
     );
   }
 

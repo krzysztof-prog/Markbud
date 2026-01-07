@@ -38,6 +38,7 @@ export const StockSummaryCards: React.FC<StockSummaryCardsProps> = ({
     return `${type} - ${subMap[subWarehouse] || subWarehouse}`;
   };
 
+  // Spójny wrapper dla wszystkich stanów - zapobiega layout shift
   // Loading skeleton
   if (isLoading) {
     return (
@@ -63,13 +64,15 @@ export const StockSummaryCards: React.FC<StockSummaryCardsProps> = ({
   // Pusta lista
   if (summary.length === 0) {
     return (
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-center py-8 text-gray-500">
-            Brak danych do wyświetlenia
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center py-8 text-gray-500">
+              Brak danych do wyświetlenia
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 

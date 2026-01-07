@@ -49,49 +49,51 @@ export class GlassDeliveryQueryService {
 
   /**
    * Delete a glass delivery and update related order counts
+   * Używa transakcji dla atomowości i batch updates dla wydajności
    */
   async delete(id: number): Promise<void> {
-    const delivery = await this.prisma.glassDelivery.findUnique({
-      where: { id },
-      include: { items: true },
-    });
+    await this.prisma.$transaction(async (tx) => {
+      const delivery = await tx.glassDelivery.findUnique({
+        where: { id },
+        include: { items: true },
+      });
 
-    if (!delivery) {
-      throw new Error('Dostawa nie istnieje');
-    }
-
-    // Collect all order numbers from this delivery
-    const orderNumbers = [...new Set(delivery.items.map((item) => item.orderNumber))];
-
-    // Decrement Order.deliveredGlassCount
-    const byOrder = new Map<string, number>();
-    for (const item of delivery.items) {
-      if (item.matchStatus === 'matched' || item.matchStatus === 'conflict') {
-        const current = byOrder.get(item.orderNumber) || 0;
-        byOrder.set(item.orderNumber, current + item.quantity);
+      if (!delivery) {
+        throw new Error('Dostawa nie istnieje');
       }
-    }
 
-    for (const [orderNumber, quantity] of byOrder) {
-      await this.prisma.order.updateMany({
-        where: { orderNumber },
-        data: {
-          deliveredGlassCount: { decrement: quantity },
-        },
+      // Collect order updates - grupuj ilości po numerze zlecenia
+      const orderUpdates = new Map<string, number>();
+      for (const item of delivery.items) {
+        if (item.matchStatus === 'matched' || item.matchStatus === 'conflict') {
+          const current = orderUpdates.get(item.orderNumber) || 0;
+          orderUpdates.set(item.orderNumber, current + item.quantity);
+        }
+      }
+
+      // Batch update orders - wykonaj wszystkie updateMany równolegle
+      const updatePromises = Array.from(orderUpdates.entries()).map(
+        ([orderNumber, quantity]) =>
+          tx.order.updateMany({
+            where: { orderNumber },
+            data: { deliveredGlassCount: { decrement: quantity } },
+          })
+      );
+      await Promise.all(updatePromises);
+
+      // Delete validations related to this delivery's order numbers
+      const orderNumbers = [...new Set(delivery.items.map((item) => item.orderNumber))];
+      if (orderNumbers.length > 0) {
+        await tx.glassOrderValidation.deleteMany({
+          where: { orderNumber: { in: orderNumbers } },
+        });
+      }
+
+      // Hard delete - model GlassDelivery nie ma pola deletedAt
+      // TODO: Rozważyć dodanie soft delete do modelu GlassDelivery w przyszłości
+      await tx.glassDelivery.delete({
+        where: { id },
       });
-    }
-
-    // Delete validations related to this delivery's order numbers
-    if (orderNumbers.length > 0) {
-      await this.prisma.glassOrderValidation.deleteMany({
-        where: {
-          orderNumber: { in: orderNumbers },
-        },
-      });
-    }
-
-    await this.prisma.glassDelivery.delete({
-      where: { id },
     });
   }
 

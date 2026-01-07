@@ -30,18 +30,23 @@ export function OrderItemsTable({
   items,
   isLoading = false,
 }: OrderItemsTableProps) {
+  // Spójny wrapper dla wszystkich stanów - zapobiega layout shift
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <p className="text-muted-foreground">Ładowanie pozycji zamówienia...</p>
+      <div className="rounded-md border">
+        <div className="flex items-center justify-center py-8">
+          <p className="text-muted-foreground">Ładowanie pozycji zamówienia...</p>
+        </div>
       </div>
     );
   }
 
   if (!items || items.length === 0) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <p className="text-muted-foreground">Brak pozycji w zamówieniu.</p>
+      <div className="rounded-md border">
+        <div className="flex items-center justify-center py-8">
+          <p className="text-muted-foreground">Brak pozycji w zamówieniu.</p>
+        </div>
       </div>
     );
   }

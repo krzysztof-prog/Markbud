@@ -46,35 +46,44 @@ export function GlassOrdersTable() {
   const deleteMutation = useDeleteGlassOrder();
   const [selectedOrder, setSelectedOrder] = useState<GlassOrder | null>(null);
 
-  if (isLoading) {
-    return <TableSkeleton rows={5} columns={8} />;
-  }
-
-  if (error) {
-    return (
-      <EmptyState
-        icon={<AlertCircle className="h-12 w-12" />}
-        title="Blad ladowania"
-        description={error.message}
-      />
-    );
-  }
-
-  if (!orders?.length) {
-    return (
-      <EmptyState
-        icon={<FileText className="h-12 w-12" />}
-        title="Brak zamowien szyb"
-        description="Zaimportuj pliki TXT, aby rozpoczac."
-      />
-    );
-  }
-
   const handleDelete = (id: number) => {
     if (confirm('Czy na pewno chcesz usunac to zamowienie?')) {
       deleteMutation.mutate(id);
     }
   };
+
+  // Spójny wrapper dla wszystkich stanów - zapobiega layout shift
+  if (isLoading) {
+    return (
+      <div className="rounded-md border">
+        <TableSkeleton rows={5} columns={8} />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-md border p-6">
+        <EmptyState
+          icon={<AlertCircle className="h-12 w-12" />}
+          title="Błąd ładowania"
+          description={error.message}
+        />
+      </div>
+    );
+  }
+
+  if (!orders?.length) {
+    return (
+      <div className="rounded-md border p-6">
+        <EmptyState
+          icon={<FileText className="h-12 w-12" />}
+          title="Brak zamówień szyb"
+          description="Zaimportuj pliki TXT, aby rozpocząć."
+        />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -82,7 +91,7 @@ export function GlassOrdersTable() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Numer zamowienia</TableHead>
+              <TableHead>Numer zamówienia</TableHead>
               <TableHead>Data</TableHead>
               <TableHead>Dostawca</TableHead>
               <TableHead className="text-center">Pozycje</TableHead>

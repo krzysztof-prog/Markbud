@@ -118,9 +118,17 @@ function OptimizationContent({ deliveryId }: { deliveryId: number }) {
     }
   };
 
-  // Show loading state
+  // Spójny wrapper dla loading state - zapobiega layout shift
   if (isLoading) {
-    return <TableSkeleton rows={5} />;
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardContent className="pt-6">
+            <TableSkeleton rows={5} />
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   // Handle errors other than 404

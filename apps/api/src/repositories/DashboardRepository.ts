@@ -29,6 +29,7 @@ export class DashboardRepository {
   async getUpcomingDeliveries(startDate: Date, endDate: Date) {
     return this.prisma.delivery.findMany({
       where: {
+        deletedAt: null, // Filtruj tylko aktywne dostawy (soft delete)
         deliveryDate: {
           gte: startDate,
           lte: endDate,
@@ -102,6 +103,7 @@ export class DashboardRepository {
   async getShortages(): Promise<ShortageResult[]> {
     // Single query with LEFT JOIN for optimal performance
     // Groups by profile+color and calculates shortage
+    // Filtruje tylko aktywne stany magazynowe (bez soft-deleted)
     const shortages = await this.prisma.$queryRaw<ShortageResult[]>`
       SELECT
         ws.profile_id as "profileId",
@@ -122,6 +124,7 @@ export class DashboardRepository {
       LEFT JOIN orders o ON o.id = req.order_id
         AND o.archived_at IS NULL
         AND o.status NOT IN ('archived', 'completed')
+      WHERE ws.deleted_at IS NULL
       GROUP BY
         ws.profile_id,
         ws.color_id,
@@ -144,6 +147,7 @@ export class DashboardRepository {
   async countTodayDeliveries(startOfDay: Date, endOfDay: Date): Promise<number> {
     return this.prisma.delivery.count({
       where: {
+        deletedAt: null, // Filtruj tylko aktywne dostawy (soft delete)
         deliveryDate: {
           gte: startOfDay,
           lt: endOfDay,
@@ -162,6 +166,7 @@ export class DashboardRepository {
    */
   async getWeeklyStats(startDate: Date, endDate: Date): Promise<WeekStatRaw[]> {
     // Note: delivery_date is stored as INTEGER (unix timestamp in milliseconds)
+    // Filtruje tylko aktywne dostawy (bez soft-deleted)
     const weekStats = await this.prisma.$queryRaw<WeekStatRaw[]>`
       SELECT
         DATE(datetime(d.delivery_date/1000, 'unixepoch')) as "deliveryDate",
@@ -173,6 +178,7 @@ export class DashboardRepository {
       LEFT JOIN order_windows ow ON ow.order_id = do.order_id
       WHERE d.delivery_date >= ${startDate}
         AND d.delivery_date < ${endDate}
+        AND d.deleted_at IS NULL
       GROUP BY DATE(datetime(d.delivery_date/1000, 'unixepoch'))
       ORDER BY d.delivery_date ASC
     `;
@@ -211,6 +217,7 @@ export class DashboardRepository {
   async countDeliveriesInRange(startDate: Date, endDate: Date): Promise<number> {
     return this.prisma.delivery.count({
       where: {
+        deletedAt: null, // Filtruj tylko aktywne dostawy (soft delete)
         deliveryDate: {
           gte: startDate,
           lte: endDate,

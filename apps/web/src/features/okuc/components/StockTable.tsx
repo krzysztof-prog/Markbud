@@ -18,7 +18,7 @@ import type { OkucStock } from '@/types/okuc';
 interface StockTableProps {
   stocks: OkucStock[];
   isLoading?: boolean;
-  onUpdate: (id: number, quantity: number) => void;
+  onUpdate: (id: number, quantity: number, version: number, reason?: string) => void;
   isUpdatingId?: number;
 }
 
@@ -65,7 +65,7 @@ export const StockTable: React.FC<StockTableProps> = ({
 
   // Zapisz zmiany
   const handleSaveEdit = useCallback(
-    (stockId: number) => {
+    (stock: OkucStock) => {
       const quantity = parseInt(editValue, 10);
 
       // Walidacja frontend: tylko dodatnia lub zero
@@ -73,7 +73,7 @@ export const StockTable: React.FC<StockTableProps> = ({
         return;
       }
 
-      onUpdate(stockId, quantity);
+      onUpdate(stock.id, quantity, stock.version);
       setEditingId(null);
       setEditValue('');
     },
@@ -196,20 +196,25 @@ export const StockTable: React.FC<StockTableProps> = ({
     </TableHead>
   );
 
+  // Spójny wrapper dla wszystkich stanów - zapobiega layout shift
   if (isLoading) {
     return (
-      <div className="space-y-2">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-12 bg-gray-200 rounded animate-pulse" />
-        ))}
+      <div className="border rounded-lg">
+        <div className="space-y-2 p-4">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-12 bg-gray-200 rounded animate-pulse" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (stocks.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500">
-        Brak danych do wyświetlenia
+      <div className="border rounded-lg">
+        <div className="text-center py-8 text-gray-500">
+          Brak danych do wyświetlenia
+        </div>
       </div>
     );
   }
@@ -278,7 +283,7 @@ export const StockTable: React.FC<StockTableProps> = ({
                         className="w-24 h-8"
                         autoFocus
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveEdit(stock.id);
+                          if (e.key === 'Enter') handleSaveEdit(stock);
                           if (e.key === 'Escape') handleCancelEdit();
                         }}
                       />
@@ -286,7 +291,7 @@ export const StockTable: React.FC<StockTableProps> = ({
                         size="sm"
                         variant="ghost"
                         className="h-8 w-8 p-0"
-                        onClick={() => handleSaveEdit(stock.id)}
+                        onClick={() => handleSaveEdit(stock)}
                         disabled={isUpdating}
                       >
                         <Check className="h-4 w-4 text-green-600" />

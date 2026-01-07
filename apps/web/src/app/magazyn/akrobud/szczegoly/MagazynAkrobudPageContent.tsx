@@ -246,18 +246,35 @@ function OrdersTable({
   isLoading: boolean;
   onOrderClick?: (orderId: number, orderNumber: string) => void;
 }) {
+  // Spójny wrapper dla wszystkich stanów - zapobiega layout shift
   if (isLoading) {
-    return <TableSkeleton rows={8} columns={6} />;
+    return (
+      <>
+        <MobileScrollHint />
+        <Card>
+          <CardContent className="p-0">
+            <TableSkeleton rows={8} columns={6} />
+          </CardContent>
+        </Card>
+      </>
+    );
   }
 
   if (!data?.orders?.length) {
     return (
-      <EmptyState
-        icon={<FileText className="h-12 w-12" />}
-        title="Brak zleceń"
-        description="Nie znaleziono żadnych aktywnych zleceń dla tego koloru. Zlecenia pojawią się tutaj po dodaniu zamówień wymagających tego profilu."
-        className="min-h-[300px]"
-      />
+      <>
+        <MobileScrollHint />
+        <Card>
+          <CardContent className="p-0">
+            <EmptyState
+              icon={<FileText className="h-12 w-12" />}
+              title="Brak zleceń"
+              description="Nie znaleziono żadnych aktywnych zleceń dla tego koloru. Zlecenia pojawią się tutaj po dodaniu zamówień wymagających tego profilu."
+              className="min-h-[300px]"
+            />
+          </CardContent>
+        </Card>
+      </>
     );
   }
 
@@ -456,18 +473,35 @@ function WarehouseTable({ data, isLoading, colorId }: { data: WarehouseTableRow[
     });
   };
 
+  // Spójny wrapper dla wszystkich stanów - zapobiega layout shift
   if (isLoading) {
-    return <TableSkeleton rows={6} columns={8} />;
+    return (
+      <>
+        <MobileScrollHint />
+        <Card>
+          <CardContent className="p-0">
+            <TableSkeleton rows={6} columns={8} />
+          </CardContent>
+        </Card>
+      </>
+    );
   }
 
   if (!data?.length) {
     return (
-      <EmptyState
-        icon={<Package className="h-12 w-12" />}
-        title="Brak danych magazynowych"
-        description="Nie znaleziono informacji o stanach magazynowych dla tego koloru. Dane pojawią się automatycznie po dodaniu profili i zleceń."
-        className="min-h-[300px]"
-      />
+      <>
+        <MobileScrollHint />
+        <Card>
+          <CardContent className="p-0">
+            <EmptyState
+              icon={<Package className="h-12 w-12" />}
+              title="Brak danych magazynowych"
+              description="Nie znaleziono informacji o stanach magazynowych dla tego koloru. Dane pojawią się automatycznie po dodaniu profili i zleceń."
+              className="min-h-[300px]"
+            />
+          </CardContent>
+        </Card>
+      </>
     );
   }
 

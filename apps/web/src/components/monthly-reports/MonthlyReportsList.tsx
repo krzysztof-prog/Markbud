@@ -65,36 +65,34 @@ export function MonthlyReportsList({ limit = 12 }: MonthlyReportsListProps) {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="grid grid-cols-1 gap-4">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={i} className="animate-pulse">
-            <CardContent className="pt-6">
-              <div className="h-20 bg-slate-200 rounded" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    );
-  }
+  // Skeleton dla stanu ładowania
+  const LoadingSkeleton = (
+    <div className="grid grid-cols-1 gap-4">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Card key={i} className="animate-pulse">
+          <CardContent className="pt-6">
+            <div className="h-20 bg-slate-200 rounded" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
 
-  if (!reports || reports.length === 0) {
-    return (
-      <Card className="bg-slate-50 border-slate-200">
-        <CardContent className="pt-6">
-          <p className="text-sm text-slate-600 text-center">
-            Brak wygenerowanych raportów. Generuj raport za pomocą formularza powyżej.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  // Pusty stan
+  const EmptyState = (
+    <Card className="bg-slate-50 border-slate-200">
+      <CardContent className="pt-6">
+        <p className="text-sm text-slate-600 text-center">
+          Brak wygenerowanych raportów. Generuj raport za pomocą formularza powyżej.
+        </p>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Historia raportów</h3>
-      {reports.map((report) => (
+      {isLoading ? LoadingSkeleton : !reports || reports.length === 0 ? EmptyState : reports.map((report) => (
         <Card key={`${report.year}-${report.month}`}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">

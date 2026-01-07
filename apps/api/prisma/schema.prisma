@@ -119,6 +119,7 @@ model Order {
   @@index([invoiceNumber, deliveryDate])
   @@index([status, archivedAt])
   @@index([glassOrderStatus])
+  @@index([glassOrderStatus, archivedAt])
   @@index([deliveryDate, status])
   @@map("orders")
 }
@@ -240,6 +241,7 @@ model Delivery {
   @@index([deliveryDate, status])
   @@index([status, deliveryDate])
   @@index([deletedAt])
+  @@index([status, deletedAt])
   @@map("deliveries")
 }
 
@@ -252,6 +254,7 @@ model DeliveryOrder {
   delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
   @@unique([deliveryId, orderId])
+  @@index([deliveryId, position])
   @@map("delivery_orders")
 }
 

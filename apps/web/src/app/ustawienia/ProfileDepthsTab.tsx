@@ -137,11 +137,29 @@ export function ProfileDepthsTab() {
     deleteMutation.mutate(deleteDialog.id);
   };
 
+  // Spójny wrapper dla loading state - zapobiega layout shift
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-      </div>
+      <>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Ruler className="h-5 w-5" />
+                Głębokości profili
+              </CardTitle>
+              <CardDescription>
+                Zdefiniuj głębokości zajmowane przez różne typy profili na paletach
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-center p-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </>
     );
   }
 

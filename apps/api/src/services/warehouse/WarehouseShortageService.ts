@@ -19,8 +19,11 @@ export class WarehouseShortageService {
    * @returns Array of shortages sorted by severity (highest shortage first)
    */
   async getAllShortages(): Promise<Shortage[]> {
-    // Fetch all warehouse stocks
+    // Fetch all warehouse stocks (tylko aktywne - bez soft-deleted)
     const stocks = await prisma.warehouseStock.findMany({
+      where: {
+        deletedAt: null, // Filtruj tylko aktywne stany magazynowe
+      },
       select: {
         profileId: true,
         colorId: true,

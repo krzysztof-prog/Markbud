@@ -383,10 +383,14 @@ export default function UstawieniaPage() {
     }
   };
 
+  // Spójny wrapper dla loading state - zapobiega layout shift
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      <div className="flex flex-col h-full">
+        <Header title="Ustawienia" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        </div>
       </div>
     );
   }
