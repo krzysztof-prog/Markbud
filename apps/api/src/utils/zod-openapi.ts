@@ -7,12 +7,33 @@
 
 import type { ZodTypeAny } from 'zod';
 
+interface JsonSchema {
+  type?: string;
+  format?: string;
+  enum?: unknown[];
+  items?: JsonSchema;
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  nullable?: boolean;
+  oneOf?: JsonSchema[];
+}
+
+interface ZodDef {
+  typeName: string;
+  type?: ZodTypeAny;
+  innerType?: ZodTypeAny;
+  values?: unknown[];
+  shape?: () => Record<string, ZodTypeAny>;
+  options?: ZodTypeAny[];
+  schema?: ZodTypeAny;
+}
+
 /**
  * Convert a Zod schema to OpenAPI JSON Schema
  * This is a simplified converter that handles common Zod types
  */
-export function zodToJsonSchema(schema: ZodTypeAny): any {
-  const def = (schema as any)._def;
+export function zodToJsonSchema(schema: ZodTypeAny): JsonSchema {
+  const def = (schema as unknown as { _def: ZodDef })._def;
   const typeName = def.typeName;
 
   switch (typeName) {
@@ -32,21 +53,24 @@ export function zodToJsonSchema(schema: ZodTypeAny): any {
       return { type: 'string', enum: def.values };
 
     case 'ZodArray':
+      if (!def.type) {
+        throw new Error('ZodArray missing type definition');
+      }
       return {
         type: 'array',
         items: zodToJsonSchema(def.type),
       };
 
     case 'ZodObject': {
-      const shape = def.shape();
-      const properties: Record<string, any> = {};
+      const shape = def.shape!();
+      const properties: Record<string, JsonSchema> = {};
       const required: string[] = [];
 
       for (const [key, value] of Object.entries(shape)) {
         properties[key] = zodToJsonSchema(value as ZodTypeAny);
 
         // Check if field is required (not optional)
-        const fieldDef = (value as any)._def;
+        const fieldDef = (value as unknown as { _def: ZodDef })._def;
         if (fieldDef.typeName !== 'ZodOptional' && fieldDef.typeName !== 'ZodNullable') {
           required.push(key);
         }
@@ -60,9 +84,15 @@ export function zodToJsonSchema(schema: ZodTypeAny): any {
     }
 
     case 'ZodOptional':
+      if (!def.innerType) {
+        throw new Error('ZodOptional missing innerType definition');
+      }
       return zodToJsonSchema(def.innerType);
 
     case 'ZodNullable': {
+      if (!def.innerType) {
+        throw new Error('ZodNullable missing innerType definition');
+      }
       const innerSchema = zodToJsonSchema(def.innerType);
       return {
         ...innerSchema,
@@ -71,11 +101,17 @@ export function zodToJsonSchema(schema: ZodTypeAny): any {
     }
 
     case 'ZodUnion':
+      if (!def.options) {
+        throw new Error('ZodUnion missing options definition');
+      }
       return {
         oneOf: def.options.map((option: ZodTypeAny) => zodToJsonSchema(option)),
       };
 
     case 'ZodEffects':
+      if (!def.schema) {
+        throw new Error('ZodEffects missing schema definition');
+      }
       // For transforms, just return the input type
       return zodToJsonSchema(def.schema);
 
@@ -112,7 +148,7 @@ export const successResponseSchema = {
 /**
  * Create a paginated response schema
  */
-export function paginatedResponseSchema(itemSchema: any) {
+export function paginatedResponseSchema(itemSchema: JsonSchema) {
   return {
     type: 'object',
     properties: {

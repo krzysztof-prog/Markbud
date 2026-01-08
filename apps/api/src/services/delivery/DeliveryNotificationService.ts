@@ -33,7 +33,7 @@ export type DeliveryNotificationType =
 /**
  * Base notification data structure
  */
-export interface NotificationPayload {
+export interface NotificationPayload extends Record<string, unknown> {
   type: DeliveryNotificationType;
   deliveryId: number;
   timestamp: Date;

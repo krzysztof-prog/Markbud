@@ -99,7 +99,7 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
 
   // === LOCAL STATE ===
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
-  const [showNewDeliveryDialog, setShowNewDeliveryDialog] = useState(false);
+  const [_showNewDeliveryDialog, setShowNewDeliveryDialog] = useState(false);
   const [newDeliveryDate, setNewDeliveryDate] = useState('');
   const [newDeliveryNotes, setNewDeliveryNotes] = useState('');
   const [deliveryToDelete, setDeliveryToDelete] = useState<Delivery | null>(null);
@@ -188,7 +188,7 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
   }, [selectedOrderId]);
 
   // === EVENT HANDLERS ===
-  const handleCreateDelivery = () => {
+  const _handleCreateDelivery = () => {
     if (!validation.validateAll({ deliveryDate: newDeliveryDate })) {
       validation.touch('deliveryDate');
       return;

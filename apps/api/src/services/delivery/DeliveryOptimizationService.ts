@@ -15,7 +15,7 @@
 import { PalletOptimizerService, type OptimizationResult, type OptimizationOptions } from '../pallet-optimizer/PalletOptimizerService.js';
 import { PalletOptimizerRepository } from '../../repositories/PalletOptimizerRepository.js';
 import { DeliveryRepository } from '../../repositories/DeliveryRepository.js';
-import { ValidationError, NotFoundError } from '../../utils/errors.js';
+import { ValidationError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
 import type { PrismaClient } from '@prisma/client';
 
@@ -88,7 +88,7 @@ export class DeliveryOptimizationService {
 
     // Log warnings if any
     if (validation.warnings.length > 0) {
-      logger.warn(`Optimization warnings for delivery ${deliveryId}:`, validation.warnings);
+      logger.warn(`Optimization warnings for delivery ${deliveryId}:`, { warnings: validation.warnings });
     }
 
     // Delegate to PalletOptimizerService

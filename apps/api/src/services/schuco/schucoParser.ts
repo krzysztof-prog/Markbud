@@ -16,6 +16,7 @@ export interface SchucoDeliveryRow {
   orderType: string;        // Kolumna 10: rodzaj zamówienia
   totalAmount: string;      // Kolumna 11: Suma
   rawData: Record<string, string>; // Cały wiersz
+  [key: string]: string | Record<string, string>; // Index signature dla Record compatibility
 }
 
 export class SchucoParser {
@@ -83,7 +84,7 @@ export class SchucoParser {
             if (this.isValidRow(deliveryRow)) {
               results.push(deliveryRow);
             } else {
-              logger.warn('[SchucoParser] Skipping invalid row:', deliveryRow);
+              logger.warn('[SchucoParser] Skipping invalid row:', { row: deliveryRow });
             }
           } catch (error) {
             logger.error('[SchucoParser] Error parsing row:', error, row);

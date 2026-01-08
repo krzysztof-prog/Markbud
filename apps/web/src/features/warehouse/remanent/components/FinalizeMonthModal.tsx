@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DestructiveActionDialog } from '@/components/ui/destructive-action-dialog';
-import { Archive, AlertTriangle, Calendar, Package, CheckCircle } from 'lucide-react';
+import { Archive, AlertTriangle, Calendar, CheckCircle } from 'lucide-react';
 import type { FinalizeMonthResponse } from '@/types/warehouse';
 import { useContextualToast } from '@/hooks/useContextualToast';
 
