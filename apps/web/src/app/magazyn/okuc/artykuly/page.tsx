@@ -50,7 +50,7 @@ export default function OkucArticlesPage() {
   // === STATE ===
   const [selectedArticle, setSelectedArticle] = useState<OkucArticle | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [_isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   // Filtry
   const [searchQuery, setSearchQuery] = useState('');
@@ -145,7 +145,7 @@ export default function OkucArticlesPage() {
     }
   };
 
-  const handleFormSubmit = (data: any) => {
+  const handleFormSubmit = (data: Partial<OkucArticle>) => {
     if (selectedArticle) {
       updateMutation.mutate({ id: selectedArticle.id, data });
     } else {
@@ -199,7 +199,7 @@ export default function OkucArticlesPage() {
             {/* PVC */}
             <div className="space-y-2">
               <Label htmlFor="filterPvc">PVC</Label>
-              <Select value={filterPvc} onValueChange={(v) => setFilterPvc(v as any)}>
+              <Select value={filterPvc} onValueChange={(v) => setFilterPvc(v as 'all' | 'yes' | 'no')}>
                 <SelectTrigger id="filterPvc">
                   <SelectValue />
                 </SelectTrigger>
@@ -214,7 +214,7 @@ export default function OkucArticlesPage() {
             {/* ALU */}
             <div className="space-y-2">
               <Label htmlFor="filterAlu">ALU</Label>
-              <Select value={filterAlu} onValueChange={(v) => setFilterAlu(v as any)}>
+              <Select value={filterAlu} onValueChange={(v) => setFilterAlu(v as 'all' | 'yes' | 'no')}>
                 <SelectTrigger id="filterAlu">
                   <SelectValue />
                 </SelectTrigger>
@@ -231,7 +231,7 @@ export default function OkucArticlesPage() {
               <Label htmlFor="filterOrderClass">Klasa zamówienia</Label>
               <Select
                 value={filterOrderClass}
-                onValueChange={(v) => setFilterOrderClass(v as any)}
+                onValueChange={(v) => setFilterOrderClass(v as OrderClass | 'all')}
               >
                 <SelectTrigger id="filterOrderClass">
                   <SelectValue />
@@ -249,7 +249,7 @@ export default function OkucArticlesPage() {
               <Label htmlFor="filterSizeClass">Klasa wielkości</Label>
               <Select
                 value={filterSizeClass}
-                onValueChange={(v) => setFilterSizeClass(v as any)}
+                onValueChange={(v) => setFilterSizeClass(v as SizeClass | 'all')}
               >
                 <SelectTrigger id="filterSizeClass">
                   <SelectValue />

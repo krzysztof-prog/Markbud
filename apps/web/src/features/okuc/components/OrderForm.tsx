@@ -36,7 +36,7 @@ import {
 import { Trash2, Plus } from 'lucide-react';
 import type { OkucOrder, BasketType, CreateOkucOrderInput } from '@/types/okuc';
 import { plnToGrosze, groszeToPln } from '@/lib/money';
-import type { Grosze, PLN } from '@/lib/money';
+import type { PLN } from '@/lib/money';
 import { useOkucArticles } from '@/features/okuc/hooks';
 
 interface OrderFormProps {

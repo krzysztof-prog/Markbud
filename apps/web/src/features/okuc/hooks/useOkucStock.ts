@@ -16,11 +16,9 @@ import { toast } from '@/hooks/useToast';
 import type {
   OkucStock,
   StockFilters,
-  StockSummary,
   UpdateStockInput,
   WarehouseType,
   SubWarehouse,
-  OkucHistory,
   HistoryFilters,
 } from '@/types/okuc';
 

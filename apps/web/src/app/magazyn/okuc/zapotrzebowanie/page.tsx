@@ -136,7 +136,7 @@ export default function OkucDemandPage() {
     }
   };
 
-  const handleFormSubmit = (data: any) => {
+  const handleFormSubmit = (data: Partial<OkucDemand>) => {
     if (selectedDemand) {
       updateMutation.mutate({ id: selectedDemand.id, data });
     } else {

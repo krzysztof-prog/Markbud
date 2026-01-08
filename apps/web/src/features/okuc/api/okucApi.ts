@@ -18,7 +18,6 @@ import type {
   ImportArticlesResponse,
   OkucStock,
   UpdateStockInput,
-  AdjustStockInput,
   StockFilters,
   StockSummary,
   OkucHistory,

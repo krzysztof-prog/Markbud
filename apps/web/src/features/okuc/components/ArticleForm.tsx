@@ -135,7 +135,7 @@ export function ArticleForm({
 
     if (isEditing) {
       // Dla edycji nie wysyłamy articleId (nie można zmienić)
-      const { articleId, ...updateData } = formData;
+      const { articleId: _articleId, ...updateData } = formData;
       onSubmit(updateData);
     } else {
       onSubmit(formData);

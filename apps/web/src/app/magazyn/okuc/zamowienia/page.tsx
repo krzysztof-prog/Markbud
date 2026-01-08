@@ -112,7 +112,7 @@ export default function OkucOrdersPage() {
     sendMutation.mutate(orderId);
   };
 
-  const handleFormSubmit = (data: any) => {
+  const handleFormSubmit = (data: Partial<OkucOrder>) => {
     if (formMode === 'edit' && selectedOrder) {
       updateMutation.mutate({ id: selectedOrder.id, data });
     } else if (formMode === 'create') {

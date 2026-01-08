@@ -139,7 +139,7 @@ export default function OkucStockPage() {
               <Select
                 value={warehouseType}
                 onValueChange={(v) => {
-                  setWarehouseType(v as any);
+                  setWarehouseType(v as 'all' | WarehouseType);
                   // Reset podmagazynu gdy zmieniamy magazyn
                   if (v !== 'pvc') {
                     setSubWarehouse('all');

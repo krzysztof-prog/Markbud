@@ -81,12 +81,6 @@ export const StockSummaryCards: React.FC<StockSummaryCardsProps> = ({
       {summary.map((item, index) => {
         const warehouseName = formatWarehouseName(item.warehouseType, item.subWarehouse);
 
-        // Obliczenia dla % (opcjonalnie można dodać w przyszłości)
-        const belowMinPercent =
-          item.totalArticles > 0
-            ? Math.round((item.criticalCount / item.totalArticles) * 100)
-            : 0;
-
         return (
           <Card key={`${item.warehouseType}-${item.subWarehouse || 'main'}-${index}`}>
             <CardHeader>

@@ -94,7 +94,9 @@ export function DemandTable({ demands, onEdit, onDelete, isDeletingId }: DemandT
   const sortedDemands = useMemo(() => {
     const sorted = [...demands];
     sorted.sort((a, b) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic sorting requires accessing dynamic properties
       let aValue: any = a[sortColumn];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic sorting requires accessing dynamic properties
       let bValue: any = b[sortColumn];
 
       // Special handling dla articleId (relation)
