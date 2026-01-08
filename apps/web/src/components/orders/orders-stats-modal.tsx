@@ -11,8 +11,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/utils';
 import { groszeToPln, type Grosze } from '@/lib/money';
-import { FileText, TrendingUp, DollarSign, Layers } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { FileText, TrendingUp, DollarSign } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface OrdersStatsModalProps {
   open: boolean;
@@ -25,17 +25,17 @@ interface OrdersStatsModalProps {
     totalSashes: number;
     totalGlasses: number;
   };
-  allOrders: any[];
+  allOrders: { status?: string; valuePln?: number }[];
   eurRate: number;
 }
 
-export const OrdersStatsModal: React.FC<OrdersStatsModalProps> = ({
+export const OrdersStatsModal = ({
   open,
   onOpenChange,
   stats,
   allOrders,
   eurRate,
-}) => {
+}: OrdersStatsModalProps) => {
   // Obliczanie dodatkowych statystyk
   // Wartosci w bazie sa przechowywane jako grosze (integer)
   const ordersByStatus = React.useMemo(() => {

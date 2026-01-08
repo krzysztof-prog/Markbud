@@ -14,7 +14,7 @@ import { ordersApi } from '@/lib/api';
 import { toast } from '@/hooks/useToast';
 import { formatGrosze, formatCenty, type Grosze, type Centy } from '@/lib/money';
 import { Package, Layers, Grid3X3, Calendar, FileText, FileDown, ChevronDown, ChevronUp, Truck } from 'lucide-react';
-import type { Order, Window, SchucoDeliveryLink } from '@/types';
+import type { Order, SchucoDeliveryLink } from '@/types';
 import type { Requirement } from '@/types';
 
 // Extended order with additional fields from PDF/imports
@@ -52,6 +52,7 @@ export function OrderDetailModal({
 }: OrderDetailModalProps) {
   const { data: order, isLoading } = useQuery<OrderDetail>({
     queryKey: ['order-detail', orderId],
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- enabled check guarantees orderId is not null
     queryFn: () => ordersApi.getById(orderId!) as Promise<OrderDetail>,
     enabled: !!orderId && open,
   });

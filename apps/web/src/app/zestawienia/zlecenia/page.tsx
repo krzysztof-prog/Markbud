@@ -6,7 +6,7 @@ import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ordersApi, settingsApi, currencyConfigApi } from '@/lib/api';
+import { ordersApi, settingsApi } from '@/lib/api';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { groszeToPln, centyToEur, formatGrosze, formatCenty, type Grosze, type Centy } from '@/lib/money';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -20,7 +20,6 @@ import {
   Settings,
   Eye,
   EyeOff,
-  Filter,
   Check,
   X,
   Pencil,
@@ -142,6 +141,7 @@ const getAkrobudDeliveryDate = (deliveryOrders: DeliveryOrderInfo[] | undefined)
   // Filtruj tylko te z datą dostawy
   const withDelivery = deliveryOrders
     .filter(d => d.delivery?.deliveryDate)
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Filtrowane wyżej: delivery?.deliveryDate istnieje
     .map(d => d.delivery!.deliveryDate as string);
 
   if (withDelivery.length === 0) return null;
@@ -256,7 +256,7 @@ export default function ZestawienieZlecenPage() {
           setEditValue(formattedDate);
           return;
         }
-      } catch (e) {
+      } catch {
         // Jeśli błąd parsowania, użyj oryginalnej wartości
       }
     }
@@ -363,7 +363,7 @@ export default function ZestawienieZlecenPage() {
     queryFn: async () => {
       const response = await ordersApi.getAll({ archived: 'false' });
       // API zwraca {data: [...]} zamiast samej tablicy
-      return (response as any)?.data || response;
+      return (response as { data?: unknown[] })?.data || response;
     },
   });
 
@@ -372,7 +372,7 @@ export default function ZestawienieZlecenPage() {
     queryFn: async () => {
       const response = await ordersApi.getAll({ archived: 'true' });
       // API zwraca {data: [...]} zamiast samej tablicy
-      return (response as any)?.data || response;
+      return (response as { data?: unknown[] })?.data || response;
     },
   });
 
@@ -412,7 +412,7 @@ export default function ZestawienieZlecenPage() {
         return String(order.totalSashes || 0);
       case 'glasses':
         return String(order.totalGlasses || 0);
-      case 'glassDeliveryDate':
+      case 'glassDeliveryDate': {
         const ordered = order.orderedGlassCount || 0;
         const delivered = order.deliveredGlassCount || 0;
         if (ordered === 0) return '';
@@ -420,15 +420,17 @@ export default function ZestawienieZlecenPage() {
         if (delivered > 0) return `Częściowo: ${delivered}/${ordered}`;
         if (order.glassDeliveryDate) return formatDateShort(order.glassDeliveryDate);
         return 'Brak daty';
+      }
       case 'valuePln':
         return order.valuePln != null ? String(order.valuePln) : '';
       case 'valueEur':
         return order.valueEur != null ? String(order.valueEur) : '';
-      case 'orderStatus':
+      case 'orderStatus': {
         // Użyj statusu Schuco jeśli są powiązane zamówienia, w przeciwnym razie Order.status
         const schucoStatusVal = aggregateSchucoStatus(order.schucoLinks);
         return schucoStatusVal || order.status || '';
-      case 'pvcDelivery':
+      }
+      case 'pvcDelivery': {
         // Użyj tygodnia dostawy Schuco jeśli są powiązane zamówienia
         const schucoWeekVal = getEarliestSchucoDelivery(order.schucoLinks);
         if (schucoWeekVal) return formatDeliveryWeek(schucoWeekVal);
@@ -437,11 +439,13 @@ export default function ZestawienieZlecenPage() {
           return formatDate(order.deliveryDate);
         }
         return order.pvcDeliveryDate ? formatDate(order.pvcDeliveryDate) : '';
-      case 'deadline':
+      }
+      case 'deadline': {
         // Priorytet: data dostawy Akrobud > ręcznie ustawiony deadline
         const akrobudDeliveryDateVal = getAkrobudDeliveryDate(order.deliveryOrders);
         if (akrobudDeliveryDateVal) return formatDateShort(akrobudDeliveryDateVal);
         return order.deadline ? formatDate(order.deadline) : '';
+      }
       case 'archived':
         return order.archivedAt ? 'Archiwum' : 'Aktywne';
       default:
@@ -480,59 +484,71 @@ export default function ZestawienieZlecenPage() {
       let bValue: string | number | undefined;
 
       switch (sortField) {
-        case 'orderNumber':
+        case 'orderNumber': {
           aValue = a.orderNumber || '';
           bValue = b.orderNumber || '';
           break;
-        case 'client':
+        }
+        case 'client': {
           aValue = a.client || '';
           bValue = b.client || '';
           break;
-        case 'project':
+        }
+        case 'project': {
           aValue = a.project || '';
           bValue = b.project || '';
           break;
-        case 'system':
+        }
+        case 'system': {
           aValue = a.system || '';
           bValue = b.system || '';
           break;
-        case 'totalWindows':
+        }
+        case 'totalWindows': {
           aValue = a.totalWindows || a._count?.windows || 0;
           bValue = b.totalWindows || b._count?.windows || 0;
           break;
-        case 'valuePln':
+        }
+        case 'valuePln': {
           // Wartosci sa przechowywane jako grosze (integer)
           aValue = typeof a.valuePln === 'number' ? a.valuePln : 0;
           bValue = typeof b.valuePln === 'number' ? b.valuePln : 0;
           break;
-        case 'valueEur':
+        }
+        case 'valueEur': {
           // Wartosci sa przechowywane jako centy (integer)
           aValue = typeof a.valueEur === 'number' ? a.valueEur : 0;
           bValue = typeof b.valueEur === 'number' ? b.valueEur : 0;
           break;
-        case 'orderStatus':
+        }
+        case 'orderStatus': {
           aValue = a.orderStatus || '';
           bValue = b.orderStatus || '';
           break;
-        case 'pvcDelivery':
+        }
+        case 'pvcDelivery': {
           aValue = a.pvcDeliveryDate ? new Date(a.pvcDeliveryDate).getTime() : 0;
           bValue = b.pvcDeliveryDate ? new Date(b.pvcDeliveryDate).getTime() : 0;
           break;
-        case 'glassDeliveryDate':
+        }
+        case 'glassDeliveryDate': {
           aValue = a.glassDeliveryDate ? new Date(a.glassDeliveryDate).getTime() : 0;
           bValue = b.glassDeliveryDate ? new Date(b.glassDeliveryDate).getTime() : 0;
           break;
-        case 'deadline':
+        }
+        case 'deadline': {
           // Sortowanie: priorytet data dostawy Akrobud > deadline
           const aDelivery = getAkrobudDeliveryDate(a.deliveryOrders);
           const bDelivery = getAkrobudDeliveryDate(b.deliveryOrders);
           aValue = aDelivery ? new Date(aDelivery).getTime() : (a.deadline ? new Date(a.deadline).getTime() : 0);
           bValue = bDelivery ? new Date(bDelivery).getTime() : (b.deadline ? new Date(b.deadline).getTime() : 0);
           break;
-        case 'archived':
+        }
+        case 'archived': {
           aValue = a.archivedAt ? 1 : 0;
           bValue = b.archivedAt ? 1 : 0;
           break;
+        }
         default:
           return 0;
       }
@@ -616,14 +632,16 @@ export default function ZestawienieZlecenPage() {
     switch (groupBy) {
       case 'deadline-day':
         return formatDate(key);
-      case 'deadline-week':
+      case 'deadline-week': {
         const [year, week] = key.split('-W');
         return `Tydzień ${week}, ${year}`;
-      case 'deadline-month':
+      }
+      case 'deadline-month': {
         const [y, m] = key.split('-');
         const monthNames = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec',
                            'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
         return `${monthNames[parseInt(m) - 1]} ${y}`;
+      }
       default:
         return key;
     }
@@ -647,7 +665,7 @@ export default function ZestawienieZlecenPage() {
     return groups;
   }, [filteredOrders, groupBy]);
 
-  const handleSort = (field: ColumnId) => {
+  const _handleSort = (field: ColumnId) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -757,11 +775,12 @@ export default function ZestawienieZlecenPage() {
       case 'valueEur':
         // Wartosci sa przechowywane jako centy - konwertuj na EUR dla eksportu CSV
         return typeof order.valueEur === 'number' ? formatCenty(order.valueEur as Centy) : '';
-      case 'orderStatus':
+      case 'orderStatus': {
         // Użyj statusu Schuco jeśli są powiązane zamówienia, w przeciwnym razie Order.status (eksport CSV)
         const schucoStatusCsv = aggregateSchucoStatus(order.schucoLinks);
         return schucoStatusCsv || order.status || '';
-      case 'pvcDelivery':
+      }
+      case 'pvcDelivery': {
         // Użyj tygodnia dostawy Schuco jeśli są powiązane zamówienia (eksport CSV)
         const schucoWeekCsv = getEarliestSchucoDelivery(order.schucoLinks);
         if (schucoWeekCsv) return formatDeliveryWeek(schucoWeekCsv);
@@ -770,7 +789,8 @@ export default function ZestawienieZlecenPage() {
           return formatDate(order.deliveryDate);
         }
         return order.pvcDeliveryDate ? formatDate(order.pvcDeliveryDate) : '';
-      case 'glassDeliveryDate':
+      }
+      case 'glassDeliveryDate': {
         const orderedCsv = order.orderedGlassCount ?? 0;
         const deliveredCsv = order.deliveredGlassCount ?? 0;
         if (orderedCsv === 0) return '';
@@ -778,11 +798,13 @@ export default function ZestawienieZlecenPage() {
         if (deliveredCsv > 0) return `Częściowo: ${deliveredCsv}/${orderedCsv}`;
         if (order.glassDeliveryDate) return formatDateShort(order.glassDeliveryDate);
         return 'Brak daty';
-      case 'deadline':
+      }
+      case 'deadline': {
         // Priorytet: data dostawy Akrobud > ręcznie ustawiony deadline (eksport CSV)
         const akrobudDeliveryDateCsv = getAkrobudDeliveryDate(order.deliveryOrders);
         if (akrobudDeliveryDateCsv) return formatDateShort(akrobudDeliveryDateCsv);
         return order.deadline ? formatDate(order.deadline) : '';
+      }
       case 'archived':
         return order.archivedAt ? 'Archiwum' : 'Aktywne';
       default:
@@ -812,7 +834,7 @@ export default function ZestawienieZlecenPage() {
           </td>
         );
 
-      case 'pvcDelivery':
+      case 'pvcDelivery': {
         // Wyświetl datę dostawy Schuco jeśli są powiązane zamówienia
         const schucoDeliveryWeek = getEarliestSchucoDelivery(order.schucoLinks);
         const hasSchucoLinks = order.schucoLinks && order.schucoLinks.length > 0;
@@ -842,8 +864,9 @@ export default function ZestawienieZlecenPage() {
             )}
           </td>
         );
+      }
 
-      case 'glassDeliveryDate':
+      case 'glassDeliveryDate': {
         const ordered = order.orderedGlassCount ?? 0;
         const delivered = order.deliveredGlassCount ?? 0;
 
@@ -910,8 +933,9 @@ export default function ZestawienieZlecenPage() {
             </span>
           </td>
         );
+      }
 
-      case 'deadline':
+      case 'deadline': {
         // Termin realizacji - priorytet: data dostawy Akrobud > ręcznie ustawiony deadline
         const akrobudDeliveryDate = getAkrobudDeliveryDate(order.deliveryOrders);
         const hasAkrobudDelivery = akrobudDeliveryDate !== null;
@@ -981,8 +1005,9 @@ export default function ZestawienieZlecenPage() {
             </div>
           </td>
         );
+      }
 
-      case 'valuePln':
+      case 'valuePln': {
         // Edytowalne pole PLN - pokazuje wartość PLN lub przeliczoną z EUR
         if (isEditing && editingCell?.field === 'valuePln') {
           return (
@@ -1042,8 +1067,9 @@ export default function ZestawienieZlecenPage() {
             </div>
           </td>
         );
+      }
 
-      case 'valueEur':
+      case 'valueEur': {
         // Edytowalne pole EUR
         if (isEditing && editingCell?.field === 'valueEur') {
           return (
@@ -1093,6 +1119,7 @@ export default function ZestawienieZlecenPage() {
             </div>
           </td>
         );
+      }
 
       case 'totalWindows':
         return (
@@ -1115,7 +1142,7 @@ export default function ZestawienieZlecenPage() {
           </td>
         );
 
-      case 'orderStatus':
+      case 'orderStatus': {
         // Wyświetl status Schuco jeśli są powiązane zamówienia, w przeciwnym razie Order.status
         const schucoStatus = aggregateSchucoStatus(order.schucoLinks);
         const displayStatus = schucoStatus || order.status || '-';
@@ -1146,6 +1173,7 @@ export default function ZestawienieZlecenPage() {
             )}
           </td>
         );
+      }
 
       case 'archived':
         return (
@@ -1160,7 +1188,7 @@ export default function ZestawienieZlecenPage() {
           </td>
         );
 
-      default:
+      default: {
         const cellValue = getCellValue(order, column.id);
         const isProjectColumn = column.id === 'project';
         return (
@@ -1174,6 +1202,7 @@ export default function ZestawienieZlecenPage() {
             </div>
           </td>
         );
+      }
     }
   };
 

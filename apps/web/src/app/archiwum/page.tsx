@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+// Badge import - może być używany w przyszłości
+// import { Badge } from '@/components/ui/badge';
 import { ordersApi } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { formatGrosze, formatCenty, type Grosze, type Centy } from '@/lib/money';

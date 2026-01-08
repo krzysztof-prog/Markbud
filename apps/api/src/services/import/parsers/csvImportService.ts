@@ -354,8 +354,9 @@ export class CsvImportService implements ICsvImportService {
   private buildOrderUpdateData(parsed: ParsedUzyteBele) {
     return {
       client: parsed.client || undefined,
-      project: parsed.project || undefined,
-      system: parsed.system || undefined,
+      // Fix: Empty string should be null, not undefined
+      project: parsed.project?.trim() || null,
+      system: parsed.system?.trim() || null,
       deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
       pvcDeliveryDate: parsed.pvcDeliveryDate ? new Date(parsed.pvcDeliveryDate) : undefined,
       totalWindows: parsed.totals.windows || undefined,
@@ -385,8 +386,9 @@ export class CsvImportService implements ICsvImportService {
 
     return {
       client: parsed.client || undefined,
-      project: parsed.project || undefined,
-      system: parsed.system || undefined,
+      // Fix: Empty string should be null, not undefined
+      project: parsed.project?.trim() || null,
+      system: parsed.system?.trim() || null,
       deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
       pvcDeliveryDate: parsed.pvcDeliveryDate ? new Date(parsed.pvcDeliveryDate) : undefined,
       totalWindows: parsed.totals.windows || undefined,
