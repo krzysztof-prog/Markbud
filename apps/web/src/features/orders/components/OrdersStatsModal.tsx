@@ -11,10 +11,11 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/utils';
 import { groszeToPln, type Grosze } from '@/lib/money';
-import { FileText, TrendingUp, DollarSign, Layers } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { FileText, TrendingUp, DollarSign } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-interface OrdersStatsModalProps {
+// Type definition used by parent components
+export interface OrdersStatsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   stats: {
@@ -25,17 +26,17 @@ interface OrdersStatsModalProps {
     totalSashes: number;
     totalGlasses: number;
   };
-  allOrders: any[];
+  allOrders: Array<{ status?: string; valuePln?: number | string | null; [key: string]: unknown }>;
   eurRate: number;
 }
 
-export const OrdersStatsModal: React.FC<OrdersStatsModalProps> = ({
+export const OrdersStatsModal = ({
   open,
   onOpenChange,
   stats,
   allOrders,
   eurRate,
-}) => {
+}: OrdersStatsModalProps) => {
   // Obliczanie dodatkowych statystyk
   const ordersByStatus = React.useMemo(() => {
     const grouped: Record<string, { count: number; value: number }> = {};

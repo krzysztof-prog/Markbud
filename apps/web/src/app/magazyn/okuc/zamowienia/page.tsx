@@ -36,7 +36,7 @@ import {
   useUpdateOkucOrder,
   useSendOkucOrder,
 } from '@/features/okuc/hooks';
-import type { OkucOrder, OkucOrderStatus, BasketType } from '@/types/okuc';
+import type { OkucOrder, OkucOrderStatus, BasketType, CreateOkucOrderInput, UpdateOkucOrderInput } from '@/types/okuc';
 
 export default function OkucOrdersPage() {
   // === DATA FETCHING ===
@@ -112,9 +112,9 @@ export default function OkucOrdersPage() {
     sendMutation.mutate(orderId);
   };
 
-  const handleFormSubmit = (data: Partial<OkucOrder>) => {
+  const handleFormSubmit = (data: CreateOkucOrderInput) => {
     if (formMode === 'edit' && selectedOrder) {
-      updateMutation.mutate({ id: selectedOrder.id, data });
+      updateMutation.mutate({ id: selectedOrder.id, data: data as unknown as UpdateOkucOrderInput });
     } else if (formMode === 'create') {
       createMutation.mutate(data);
     }

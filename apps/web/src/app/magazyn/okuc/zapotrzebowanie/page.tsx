@@ -42,7 +42,7 @@ import {
   useUpdateOkucDemand,
   useDeleteOkucDemand,
 } from '@/features/okuc/hooks';
-import type { OkucDemand, DemandStatus, DemandSource } from '@/types/okuc';
+import type { OkucDemand, DemandStatus, DemandSource, CreateDemandInput, UpdateDemandInput } from '@/types/okuc';
 
 export default function OkucDemandPage() {
   // === DATA FETCHING ===
@@ -136,11 +136,11 @@ export default function OkucDemandPage() {
     }
   };
 
-  const handleFormSubmit = (data: Partial<OkucDemand>) => {
+  const handleFormSubmit = (data: CreateDemandInput | UpdateDemandInput) => {
     if (selectedDemand) {
-      updateMutation.mutate({ id: selectedDemand.id, data });
+      updateMutation.mutate({ id: selectedDemand.id, data: data as UpdateDemandInput });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(data as CreateDemandInput);
     }
   };
 

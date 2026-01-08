@@ -41,7 +41,7 @@ import {
   useUpdateOkucArticle,
   useDeleteOkucArticle,
 } from '@/features/okuc/hooks/useOkucArticles';
-import type { OkucArticle, OrderClass, SizeClass } from '@/types/okuc';
+import type { OkucArticle, OrderClass, SizeClass, CreateArticleInput, UpdateArticleInput } from '@/types/okuc';
 
 export default function OkucArticlesPage() {
   // === DATA FETCHING ===
@@ -145,11 +145,11 @@ export default function OkucArticlesPage() {
     }
   };
 
-  const handleFormSubmit = (data: Partial<OkucArticle>) => {
+  const handleFormSubmit = (data: CreateArticleInput | UpdateArticleInput) => {
     if (selectedArticle) {
-      updateMutation.mutate({ id: selectedArticle.id, data });
+      updateMutation.mutate({ id: selectedArticle.id, data: data as UpdateArticleInput });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(data as CreateArticleInput);
     }
   };
 

@@ -168,9 +168,9 @@ export function ImportPreviewCard({
             )}
 
             {/* TASK 7: Bledy walidacji CSV */}
-            {hasErrors && (
+            {hasErrors && preview.errors && (
               <ErrorsSection
-                errors={preview.errors!}
+                errors={preview.errors}
                 summary={preview.summary}
                 onDownload={handleDownloadErrors}
               />
@@ -414,7 +414,7 @@ function ErrorsSection({
   summary,
   onDownload,
 }: {
-  errors: Array<{ row: number; field?: string; reason: string; rawData: any }>;
+  errors: Array<{ row: number; field?: string; reason: string; rawData: unknown }>;
   summary: { totalRecords: number; validRecords: number; invalidRecords: number };
   onDownload: () => void;
 }) {
@@ -474,7 +474,7 @@ function ErrorsSection({
                   )}
                 </div>
                 <p className="mt-2 text-red-900">{error.reason}</p>
-                {error.rawData && (
+                {error.rawData !== undefined && error.rawData !== null && (
                   <details className="mt-2">
                     <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
                       Pokaż surowe dane

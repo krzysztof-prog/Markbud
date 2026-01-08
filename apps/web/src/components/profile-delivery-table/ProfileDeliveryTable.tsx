@@ -300,9 +300,11 @@ export function ProfileDeliveryTable() {
           }
 
           // Sprawdź czy profil już nie został dodany do tej grupy
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- groupMap.has check guarantees the key exists
           const profileRow = groupMap.get(colorCode)!.profiles.find((p) => p.id === profile.id.toString());
           if (!profileRow) {
             const reqKey = `${profile.id}-${colorCode}`;
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- groupMap.has check guarantees the key exists
             groupMap.get(colorCode)!.profiles.push({
               id: profile.id.toString(),
               name: profile.number || profile.name,
@@ -338,8 +340,10 @@ export function ProfileDeliveryTable() {
         }
 
         // Sprawdź czy profil już został dodany
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- groupMap.has check guarantees the key exists
         const profileRow = groupMap.get(colorCode)!.profiles.find((p) => p.id === profile.id.toString());
         if (!profileRow) {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- groupMap.has check guarantees the key exists
           groupMap.get(colorCode)!.profiles.push({
             id: profile.id.toString(),
             name: profile.number || profile.name,
