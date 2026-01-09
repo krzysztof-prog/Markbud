@@ -21,9 +21,13 @@ interface RateLimitInfo {
 }
 
 const MAX_CONNECTIONS = 100;
+const MAX_CONNECTIONS_PER_USER = 5; // Limit połączeń per użytkownik
 const MAX_MESSAGES_PER_MINUTE = 100;
 const RATE_LIMIT_WINDOW = 60000; // 1 minute in milliseconds
 const MAX_STRING_LENGTH = 10000;
+const PONG_TIMEOUT_MS = 35000; // 35 sekund - jeśli klient nie odpowie na ping, zamknij połączenie
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minut - interwał czyszczenia
+const RATE_LIMIT_EXPIRY_MS = 10 * 60 * 1000; // 10 minut - czas wygaśnięcia rate limit entry
 
 // Set do śledzenia aktywnych WebSocket połączeń (przechowujemy SocketStream)
 const activeConnections = new Set<AuthenticatedConnection>();
@@ -31,27 +35,46 @@ const activeConnections = new Set<AuthenticatedConnection>();
 // Map do śledzenia rate limiting per connection
 const connectionRateLimits = new Map<string, RateLimitInfo>();
 
-// FIXED: Periodic cleanup of expired rate limit entries to prevent memory leak
-// Runs every 5 minutes and removes entries older than 1 hour
+// Map do śledzenia ostatniego pong per connection (connectionId -> timestamp)
+const lastPongReceived = new Map<string, number>();
+
+// Map do śledzenia liczby połączeń per user (userId -> count)
+const userConnectionCount = new Map<string | number, number>();
+
+// Periodic cleanup of expired rate limit entries and pong tracking
+// Uruchamiane co 5 minut, usuwa wpisy starsze niż 10 minut
 setInterval(() => {
   const now = Date.now();
-  let cleaned = 0;
+  let cleanedRateLimits = 0;
+  let cleanedPongEntries = 0;
 
+  // Czyszczenie rate limits - usuwamy wpisy starsze niż 10 minut
   for (const [connectionId, limit] of connectionRateLimits.entries()) {
-    // Remove entries that haven't been used in 1 hour (60 min)
-    if (now > limit.resetAt + 3600000) {
+    if (now > limit.resetAt + RATE_LIMIT_EXPIRY_MS) {
       connectionRateLimits.delete(connectionId);
-      cleaned++;
+      cleanedRateLimits++;
     }
   }
 
-  if (cleaned > 0) {
-    logger.info(`WebSocket rate limit cleanup: removed ${cleaned} expired entries`, {
-      remainingEntries: connectionRateLimits.size,
+  // Czyszczenie lastPongReceived - usuwamy wpisy starsze niż 10 minut
+  // (stale entries od zamkniętych połączeń które nie zostały poprawnie wyczyszczone)
+  for (const [connectionId, lastPong] of lastPongReceived.entries()) {
+    if (now - lastPong > RATE_LIMIT_EXPIRY_MS) {
+      lastPongReceived.delete(connectionId);
+      cleanedPongEntries++;
+    }
+  }
+
+  if (cleanedRateLimits > 0 || cleanedPongEntries > 0) {
+    logger.info('WebSocket cleanup completed', {
+      cleanedRateLimits,
+      cleanedPongEntries,
+      remainingRateLimits: connectionRateLimits.size,
+      remainingPongEntries: lastPongReceived.size,
       activeConnections: activeConnections.size,
     });
   }
-}, 5 * 60 * 1000); // Every 5 minutes
+}, CLEANUP_INTERVAL_MS);
 
 /**
  * Extract JWT token from WebSocket upgrade request
@@ -155,6 +178,59 @@ function generateConnectionId(connection: SocketStream): string {
   return `${connection.socket.remoteAddress}:${connection.socket.remotePort}:${Date.now()}`;
 }
 
+/**
+ * Zwiększ licznik połączeń dla użytkownika
+ */
+function incrementUserConnectionCount(userId: string | number): void {
+  const current = userConnectionCount.get(userId) || 0;
+  userConnectionCount.set(userId, current + 1);
+}
+
+/**
+ * Zmniejsz licznik połączeń dla użytkownika
+ */
+function decrementUserConnectionCount(userId: string | number): void {
+  const current = userConnectionCount.get(userId) || 0;
+  if (current <= 1) {
+    userConnectionCount.delete(userId);
+  } else {
+    userConnectionCount.set(userId, current - 1);
+  }
+}
+
+/**
+ * Sprawdź czy użytkownik przekroczył limit połączeń
+ */
+function hasExceededUserConnectionLimit(userId: string | number): boolean {
+  const current = userConnectionCount.get(userId) || 0;
+  return current >= MAX_CONNECTIONS_PER_USER;
+}
+
+/**
+ * Wyczyść wszystkie zasoby związane z połączeniem
+ */
+function cleanupConnection(
+  connection: AuthenticatedConnection,
+  connectionId: string,
+  heartbeat: ReturnType<typeof setInterval>,
+  pongCheck: ReturnType<typeof setInterval> | null,
+  unsubscribe: () => void
+): void {
+  activeConnections.delete(connection);
+  connectionRateLimits.delete(connectionId);
+  lastPongReceived.delete(connectionId);
+
+  if (connection.userId) {
+    decrementUserConnectionCount(connection.userId);
+  }
+
+  clearInterval(heartbeat);
+  if (pongCheck) {
+    clearInterval(pongCheck);
+  }
+  unsubscribe();
+}
+
 export async function setupWebSocket(fastify: FastifyInstance) {
   // Zarejestruj WebSocket plugin
   await fastify.register(fastifyWebsocket, {
@@ -211,13 +287,32 @@ export async function setupWebSocket(fastify: FastifyInstance) {
     authConnection.userId = payload.userId;
     authConnection.email = payload.email;
 
-    // Sprawdź limit połączeń
+    // Sprawdź globalny limit połączeń
     if (activeConnections.size >= MAX_CONNECTIONS) {
-      logger.warn('WebSocket connection rejected: Max connections reached', {
+      logger.warn('WebSocket connection rejected: Max global connections reached', {
         userId: authConnection.userId,
         ip: connection.socket.remoteAddress,
+        currentConnections: activeConnections.size,
       });
-      connection.write(JSON.stringify({ type: 'error', message: 'Przekroczono limit połączeń' }));
+      connection.write(JSON.stringify({ type: 'error', code: 'MAX_CONNECTIONS', message: 'Przekroczono globalny limit połączeń' }));
+      connection.end();
+      return;
+    }
+
+    // Sprawdź per-user limit połączeń
+    if (authConnection.userId && hasExceededUserConnectionLimit(authConnection.userId)) {
+      const currentUserConnections = userConnectionCount.get(authConnection.userId) || 0;
+      logger.warn('WebSocket connection rejected: Max per-user connections reached', {
+        userId: authConnection.userId,
+        ip: connection.socket.remoteAddress,
+        userConnections: currentUserConnections,
+        maxPerUser: MAX_CONNECTIONS_PER_USER,
+      });
+      connection.write(JSON.stringify({
+        type: 'error',
+        code: 'MAX_USER_CONNECTIONS',
+        message: `Przekroczono limit ${MAX_CONNECTIONS_PER_USER} połączeń na użytkownika`,
+      }));
       connection.end();
       return;
     }
@@ -227,11 +322,20 @@ export async function setupWebSocket(fastify: FastifyInstance) {
       email: authConnection.email,
       ip: connection.socket.remoteAddress,
       connectionId,
+      userConnectionsBefore: userConnectionCount.get(authConnection.userId!) || 0,
     });
 
     activeConnections.add(authConnection);
 
-    // Wysyłanie heartbeat co 30 sekund, aby uniknąć timeout'ów
+    // Zwiększ licznik połączeń dla użytkownika
+    if (authConnection.userId) {
+      incrementUserConnectionCount(authConnection.userId);
+    }
+
+    // Inicjalizuj lastPongReceived - zakładamy że nowe połączenie jest aktywne
+    lastPongReceived.set(connectionId, Date.now());
+
+    // Wysyłanie heartbeat (ping) co 30 sekund, aby uniknąć timeout'ów
     const heartbeat = setInterval(() => {
       if (!connection.destroyed && connection.socket.readyState === 1) {
         try {
@@ -242,6 +346,40 @@ export async function setupWebSocket(fastify: FastifyInstance) {
         }
       }
     }, 30000);
+
+    // Pong timeout check - sprawdza co 35 sekund czy klient odpowiedział na ping
+    // Jeśli nie odpowiedział przez PONG_TIMEOUT_MS, zamykamy połączenie jako martwe
+    const pongCheck = setInterval(() => {
+      const lastPong = lastPongReceived.get(connectionId);
+      const now = Date.now();
+
+      if (!lastPong || now - lastPong > PONG_TIMEOUT_MS) {
+        logger.warn('WebSocket connection closed due to pong timeout', {
+          userId: authConnection.userId,
+          connectionId,
+          lastPongAge: lastPong ? now - lastPong : 'never received',
+          timeoutMs: PONG_TIMEOUT_MS,
+        });
+
+        // Wyślij informację do klienta przed zamknięciem (może ją odebrać, może nie)
+        try {
+          connection.write(JSON.stringify({
+            type: 'error',
+            code: 'PONG_TIMEOUT',
+            message: 'Połączenie zamknięte z powodu braku odpowiedzi',
+          }));
+        } catch {
+          // Ignoruj błąd wysyłania - i tak zamykamy połączenie
+        }
+
+        // Zamknij połączenie - event 'close' wyczyści zasoby
+        try {
+          connection.end();
+        } catch {
+          // Połączenie mogło już być zamknięte
+        }
+      }
+    }, PONG_TIMEOUT_MS);
 
     // Słuchaj zmian danych i wyślij do klienta
     const unsubscribe = eventEmitter.onAnyChange((event: DataChangeEvent) => {
@@ -284,7 +422,8 @@ export async function setupWebSocket(fastify: FastifyInstance) {
       try {
         const message = JSON.parse(data.toString());
         if (message.type === 'pong') {
-          // Klient odpowiedział na ping, wszystko OK
+          // Klient odpowiedział na ping - aktualizujemy timestamp
+          lastPongReceived.set(connectionId, Date.now());
         }
       } catch (error) {
         logger.error('Failed to parse WebSocket message:', error);
@@ -301,11 +440,11 @@ export async function setupWebSocket(fastify: FastifyInstance) {
       logger.info('WebSocket connection closed', {
         userId: authConnection.userId,
         connectionId,
+        userConnectionsAfter: authConnection.userId
+          ? (userConnectionCount.get(authConnection.userId) || 1) - 1
+          : 0,
       });
-      activeConnections.delete(authConnection);
-      connectionRateLimits.delete(connectionId);
-      clearInterval(heartbeat);
-      unsubscribe();
+      cleanupConnection(authConnection, connectionId, heartbeat, pongCheck, unsubscribe);
     });
 
     connection.on('error', (error: Error) => {
@@ -314,10 +453,7 @@ export async function setupWebSocket(fastify: FastifyInstance) {
         userId: authConnection.userId,
         connectionId,
       });
-      activeConnections.delete(authConnection);
-      connectionRateLimits.delete(connectionId);
-      clearInterval(heartbeat);
-      unsubscribe();
+      cleanupConnection(authConnection, connectionId, heartbeat, pongCheck, unsubscribe);
     });
   });
 
