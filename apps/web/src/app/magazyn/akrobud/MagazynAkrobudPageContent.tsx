@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -16,10 +16,10 @@ import { showSuccessToast, showErrorToast, getErrorMessage } from '@/lib/toast-h
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Package, AlertTriangle, Pencil, Check, X, ChevronDown, ChevronRight, Plus, Trash2, ArrowLeft, Warehouse, FileText, ClipboardCheck, History } from 'lucide-react';
+import { Package, AlertTriangle, Check, X, ChevronDown, ChevronRight, Plus, Trash2, ArrowLeft, Warehouse, FileText, ClipboardCheck, History } from 'lucide-react';
 import { OrderDetailModal } from '@/components/orders/order-detail-modal';
 import Link from 'next/link';
-import type { Color, OrderTableData, WarehouseStock, WarehouseOrder, CreateWarehouseOrderData, WarehouseTableRow } from '@/types';
+import type { Color, OrderTableData, WarehouseOrder, CreateWarehouseOrderData, WarehouseTableRow } from '@/types';
 import { useAverageMonthly } from '@/features/warehouse/remanent/hooks/useRemanent';
 import { useDebounce } from '@/hooks/useDebounce';
 import { WarehouseHistory } from '@/features/warehouse/components/WarehouseHistory';
@@ -40,7 +40,7 @@ export default function MagazynAkrobudPageContent() {
   }, [tabParam]);
 
   // Pobierz wszystkie kolory
-  const { data: colors, isLoading: colorsLoading } = useQuery({
+  const { data: colors } = useQuery({
     queryKey: ['colors'],
     queryFn: () => colorsApi.getAll(),
   });
@@ -48,6 +48,7 @@ export default function MagazynAkrobudPageContent() {
   // Pobierz tabel zleceD dla wybranego koloru
   const { data: ordersTable, isLoading: ordersLoading } = useQuery({
     queryKey: ['orders-table', selectedColorId],
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- selectedColorId is guaranteed to be non-null by enabled condition
     queryFn: () => ordersApi.getTable(selectedColorId!),
     enabled: !!selectedColorId,
   });
@@ -55,6 +56,7 @@ export default function MagazynAkrobudPageContent() {
   // Pobierz stan magazynowy dla wybranego koloru
   const { data: warehouseData, isLoading: warehouseLoading } = useQuery({
     queryKey: ['warehouse', selectedColorId],
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- selectedColorId is guaranteed to be non-null by enabled condition
     queryFn: () => warehouseApi.getByColor(selectedColorId!),
     enabled: !!selectedColorId,
   });
@@ -72,7 +74,7 @@ export default function MagazynAkrobudPageContent() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="AKROBUD - Szczegóły">
+      <Header title="Magazyn AKROBUD">
         <div className="flex gap-2">
           <Link href="/magazyn/akrobud/remanent">
             <Button variant="outline" size="sm">
@@ -80,7 +82,7 @@ export default function MagazynAkrobudPageContent() {
               Wykonaj remanent
             </Button>
           </Link>
-          <Link href="/magazyn/akrobud">
+          <Link href="/">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Powrót
@@ -92,8 +94,7 @@ export default function MagazynAkrobudPageContent() {
       <div className="px-6 pt-4">
         <Breadcrumb
           items={[
-            { label: 'AKROBUD', href: '/magazyn/akrobud', icon: <Warehouse className="h-4 w-4" /> },
-            { label: 'Szczegóły' },
+            { label: 'AKROBUD', icon: <Warehouse className="h-4 w-4" /> },
           ]}
         />
       </div>
@@ -206,6 +207,7 @@ export default function MagazynAkrobudPageContent() {
                 </TabsContent>
 
                 <TabsContent value="magazyn" className="mt-3 md:mt-4">
+                  {/* eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- selectedColorId is guaranteed to be non-null when this tab content is rendered (component only renders when selectedColor exists) */}
                   <WarehouseTable data={warehouseData?.data || []} isLoading={warehouseLoading} colorId={selectedColorId!} />
                 </TabsContent>
 
@@ -550,7 +552,7 @@ function WarehouseTable({ data, isLoading, colorId }: { data: WarehouseTableRow[
               </tr>
             </thead>
           <tbody>
-            {data.map((row: any, index: number) => {
+            {data.map((row: WarehouseTableRow, index: number) => {
               const isExpanded = expandedRows.has(row.profileId);
               const isHistoryExpanded = expandedHistory.has(row.profileId);
               const pendingOrders = row.pendingOrders || [];

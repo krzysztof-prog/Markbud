@@ -33,6 +33,9 @@ import {
   PenLine,
   Timer,
   AlertTriangle,
+  Calendar,
+  CalendarClock,
+  Trash2,
 } from 'lucide-react';
 import type { SchucoDelivery, SchucoFetchLog, SchucoDeliveriesResponse } from '@/types';
 import Link from 'next/link';
@@ -104,6 +107,27 @@ export default function DostawySchucoPageContent() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
+  // Fetch deliveries by week
+  const { data: byWeekData, isLoading: isLoadingByWeek } = useQuery({
+    queryKey: ['schuco-by-week'],
+    queryFn: () => schucoApi.getByWeek(),
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+
+  // Cleanup pending mutation
+  const cleanupPendingMutation = useMutation({
+    mutationFn: () => schucoApi.cleanupPending(),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['schuco-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['schuco-status'] });
+      showSuccessToast('Wyczyszczono', data.message);
+    },
+    onError: (error) => {
+      showErrorToast('Błąd czyszczenia', getErrorMessage(error));
+    },
+  });
+
   // Refresh mutation
   const refreshMutation = useMutation({
     mutationFn: () => schucoApi.refresh(!showBrowser), // Invert: showBrowser=false means headless=true
@@ -112,6 +136,7 @@ export default function DostawySchucoPageContent() {
       queryClient.invalidateQueries({ queryKey: ['schuco-status'] });
       queryClient.invalidateQueries({ queryKey: ['schuco-statistics'] });
       queryClient.invalidateQueries({ queryKey: ['schuco-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['schuco-by-week'] });
       setCurrentPage(1); // Reset to first page
       const changesInfo = data.newRecords || data.updatedRecords
         ? ` (Nowe: ${data.newRecords || 0}, Zmienione: ${data.updatedRecords || 0})`
@@ -191,14 +216,30 @@ export default function DostawySchucoPageContent() {
     }
   };
 
+  // Sprawdź czy tydzień dostawy się zmienił
+  const hasDeliveryWeekChanged = (delivery: SchucoDelivery): boolean => {
+    if (!delivery.changedFields || delivery.changeType !== 'updated') return false;
+    try {
+      const fields = JSON.parse(delivery.changedFields) as string[];
+      return fields.includes('deliveryWeek');
+    } catch {
+      return false;
+    }
+  };
+
+  // Policz pending logi
+  const pendingLogsCount = useMemo(() => {
+    return logs.filter((log) => log.status === 'pending').length;
+  }, [logs]);
+
   return (
     <TooltipProvider>
       <div className="flex flex-col h-full">
         <Header title="Dostawy Schuco">
           <Button variant="ghost" size="sm" asChild>
-            <Link href="/magazyn">
+            <Link href="/">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Powrót do menu
+              Powrót do dashboardu
             </Link>
           </Button>
         </Header>
@@ -206,8 +247,7 @@ export default function DostawySchucoPageContent() {
         <div className="px-6 pt-4">
           <Breadcrumb
             items={[
-              { label: 'Magazyn', href: '/magazyn', icon: <Warehouse className="h-4 w-4" /> },
-              { label: 'Dostawy Schuco' },
+              { label: 'Dostawy Schuco', icon: <Truck className="h-4 w-4" /> },
             ]}
           />
         </div>
@@ -359,11 +399,25 @@ export default function DostawySchucoPageContent() {
                   </Badge>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="by-week">
+                <Calendar className="h-4 w-4 mr-1" />
+                Tygodniowy plan
+                {byWeekData?.weeks && byWeekData.weeks.length > 0 && (
+                  <Badge variant="secondary" className="ml-2 text-xs">
+                    {byWeekData.weeks.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="logs">
                 Historia pobrań
                 {logs.length > 0 && (
                   <Badge variant="secondary" className="ml-2 text-xs">
                     {logs.length}
+                  </Badge>
+                )}
+                {pendingLogsCount > 0 && (
+                  <Badge variant="destructive" className="ml-1 text-xs">
+                    {pendingLogsCount} pending
                   </Badge>
                 )}
               </TabsTrigger>
@@ -473,7 +527,33 @@ export default function DostawySchucoPageContent() {
                                 )}
                               </td>
                               <td className="px-4 py-3 font-mono">{delivery.orderNumber}</td>
-                              <td className="px-4 py-3">{delivery.deliveryWeek || '-'}</td>
+                              <td className="px-4 py-3">
+                                <span className="flex items-center gap-1">
+                                  {delivery.deliveryWeek || '-'}
+                                  {hasDeliveryWeekChanged(delivery) && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-full cursor-help">
+                                          <CalendarClock className="h-3 w-3" />
+                                          nowa data!
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Tydzień dostawy został zmieniony</p>
+                                        {(() => {
+                                          const info = getChangedFieldsInfo(delivery);
+                                          const weekChange = info.find(i => i.field === 'Tydzień dostawy');
+                                          return weekChange ? (
+                                            <p className="text-slate-400">
+                                              Poprzednio: <span className="line-through">{weekChange.oldValue || '(brak)'}</span>
+                                            </p>
+                                          ) : null;
+                                        })()}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                </span>
+                              </td>
                               <td className="px-4 py-3">{delivery.orderName}</td>
                               <td className="px-4 py-3">
                                 <Badge className={getShippingStatusBadge(delivery.shippingStatus)}>{delivery.shippingStatus}</Badge>
@@ -599,11 +679,218 @@ export default function DostawySchucoPageContent() {
           </Card>
         </TabsContent>
 
+        {/* By Week Tab - Tygodniowy plan dostaw */}
+        <TabsContent value="by-week" className="space-y-4">
+          {isLoadingByWeek ? (
+            <Card>
+              <CardContent className="pt-6">
+                <TableSkeleton rows={5} columns={4} />
+              </CardContent>
+            </Card>
+          ) : !byWeekData?.weeks || byWeekData.weeks.length === 0 ? (
+            <Card>
+              <CardContent className="pt-6">
+                <EmptyState
+                  icon={<Calendar className="h-12 w-12" />}
+                  title="Brak danych"
+                  description="Nie znaleziono zamówień z przypisanym tygodniem dostawy."
+                />
+              </CardContent>
+            </Card>
+          ) : (() => {
+            // Podziel tygodnie na nadchodzące i przeszłe
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const upcomingWeeks: typeof byWeekData.weeks = [];
+            const pastWeeks: typeof byWeekData.weeks = [];
+
+            for (const weekData of byWeekData.weeks) {
+              const weekStart = weekData.weekStart ? new Date(weekData.weekStart) : null;
+              if (!weekStart) {
+                upcomingWeeks.push(weekData); // brak daty = traktuj jako nadchodzące
+                continue;
+              }
+
+              // Tydzień kończy się 7 dni po rozpoczęciu
+              const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+              if (weekEnd >= today) {
+                // Tydzień jeszcze trwa lub jest w przyszłości
+                upcomingWeeks.push(weekData);
+              } else {
+                // Tydzień już minął
+                pastWeeks.push(weekData);
+              }
+            }
+
+            // Sortuj nadchodzące od najbliższego (rosnąco)
+            upcomingWeeks.sort((a, b) => {
+              if (!a.weekStart && !b.weekStart) return 0;
+              if (!a.weekStart) return 1;
+              if (!b.weekStart) return -1;
+              return new Date(a.weekStart).getTime() - new Date(b.weekStart).getTime();
+            });
+
+            // Sortuj przeszłe od najnowszego (malejąco)
+            pastWeeks.sort((a, b) => {
+              if (!a.weekStart && !b.weekStart) return 0;
+              if (!a.weekStart) return 1;
+              if (!b.weekStart) return -1;
+              return new Date(b.weekStart).getTime() - new Date(a.weekStart).getTime();
+            });
+
+            // Ogranicz do 5 najbliższych
+            const displayUpcoming = upcomingWeeks.slice(0, 5);
+
+            // Renderer dla pojedynczego tygodnia
+            const renderWeek = (weekData: typeof byWeekData.weeks[0], isPast: boolean = false) => {
+              const weekStart = weekData.weekStart ? new Date(weekData.weekStart) : null;
+              const isCurrentWeek = weekStart &&
+                weekStart <= today &&
+                new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000) > today;
+
+              return (
+                <div
+                  key={weekData.week}
+                  className={cn(
+                    'border rounded-lg overflow-hidden',
+                    isCurrentWeek && 'border-blue-500 border-2 shadow-md',
+                    isPast && 'opacity-70'
+                  )}
+                >
+                  {/* Nagłówek tygodnia */}
+                  <div className={cn(
+                    'px-4 py-3 flex items-center justify-between',
+                    isCurrentWeek ? 'bg-blue-100' : isPast ? 'bg-slate-200' : 'bg-slate-100'
+                  )}>
+                    <div className="flex items-center gap-3">
+                      <h3 className="font-semibold text-lg">{weekData.week}</h3>
+                      {isCurrentWeek && (
+                        <Badge className="bg-blue-600">Bieżący tydzień</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">
+                        {weekData.count} {weekData.count === 1 ? 'zamówienie' :
+                          weekData.count < 5 ? 'zamówienia' : 'zamówień'}
+                      </Badge>
+                      {weekStart && (
+                        <span className="text-sm text-slate-500">
+                          od {weekStart.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Lista zamówień */}
+                  <div className="divide-y">
+                    {weekData.deliveries.map((delivery) => (
+                      <div
+                        key={delivery.id}
+                        className={cn(
+                          'px-4 py-2 flex items-center justify-between hover:bg-slate-50',
+                          delivery.changeType === 'new' && 'bg-green-50',
+                          delivery.changeType === 'updated' && 'bg-orange-50'
+                        )}
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className="font-mono text-sm">{delivery.orderNumber}</span>
+                          <span className="text-slate-600">{delivery.orderName}</span>
+                          {delivery.changeType === 'new' && (
+                            <Badge className="bg-green-600 text-xs">NOWE</Badge>
+                          )}
+                          {delivery.changeType === 'updated' && (
+                            <Badge className="bg-orange-500 text-xs">ZMIENIONE</Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Badge className={getShippingStatusBadge(delivery.shippingStatus)}>
+                            {delivery.shippingStatus}
+                          </Badge>
+                          {delivery.totalAmount && (
+                            <span className="font-semibold text-sm">{delivery.totalAmount}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            };
+
+            return (
+              <>
+                {/* Nadchodzące dostawy - max 5 */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-5 w-5 text-blue-600" />
+                        <CardTitle>Nadchodzące dostawy</CardTitle>
+                      </div>
+                      {upcomingWeeks.length > 5 && (
+                        <Badge variant="outline" className="text-slate-500">
+                          +{upcomingWeeks.length - 5} więcej tygodni
+                        </Badge>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {displayUpcoming.length === 0 ? (
+                      <div className="text-center py-8 text-slate-500">
+                        <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p>Brak nadchodzących dostaw</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {displayUpcoming.map((weekData) => renderWeek(weekData, false))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Historia - przeszłe tygodnie */}
+                {pastWeeks.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-5 w-5 text-slate-500" />
+                        <CardTitle className="text-slate-600">Historia dostaw</CardTitle>
+                        <Badge variant="secondary">{pastWeeks.length} {pastWeeks.length === 1 ? 'tydzień' : 'tygodni'}</Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {pastWeeks.map((weekData) => renderWeek(weekData, true))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            );
+          })()}
+        </TabsContent>
+
         {/* Logs Tab */}
         <TabsContent value="logs" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Historia pobrań</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Historia pobrań</CardTitle>
+                {pendingLogsCount > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => cleanupPendingMutation.mutate()}
+                    disabled={cleanupPendingMutation.isPending}
+                    className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                  >
+                    <Trash2 className={cn('h-4 w-4 mr-2', cleanupPendingMutation.isPending && 'animate-spin')} />
+                    Wyczyść {pendingLogsCount} pending
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {isLoadingLogs ? (

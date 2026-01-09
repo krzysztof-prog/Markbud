@@ -15,6 +15,7 @@
 import fs from 'fs';
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../../../utils/logger.js';
+import { stripBOM } from '../../../utils/string-utils.js';
 import type {
   ICsvImportService,
   ParsedUzyteBele,
@@ -124,14 +125,18 @@ export class CsvImportService implements ICsvImportService {
   /**
    * Parse article number into profile number and color code
    * Format: X-profil-kolor, e.g., 19016050 -> 9016 = profile, 050 = color
+   * Supports optional "p" suffix (e.g., 19016000p)
    */
   parseArticleNumber(articleNumber: string): { profileNumber: string; colorCode: string } {
     if (!articleNumber || articleNumber.length < 4) {
       throw new Error(`Nieprawidlowy numer artykulu: "${articleNumber}"`);
     }
 
+    // Remove "p" suffix if present (e.g., "19016000p" -> "19016000")
+    const cleanedNumber = articleNumber.replace(/p$/i, '');
+
     // Remove first character (doesn't have meaning)
-    const withoutPrefix = articleNumber.substring(1);
+    const withoutPrefix = cleanedNumber.substring(1);
 
     // Last 3 characters are color code
     const colorCode = withoutPrefix.slice(-3);
@@ -826,8 +831,10 @@ export class CsvImportService implements ICsvImportService {
           const nowychBel = parseInt(parts[2]) || 0;
           const reszta = parseInt(parts[3]) || 0;
 
-          // Check if it looks like a valid article number (only digits)
-          if (!numArt.match(/^\d+$/)) {
+          // Check if it looks like a valid Schüco article number
+          // Format: 8 digits + optional "p" suffix (e.g., 19016000, 19016000p)
+          // Skip non-Schüco articles (e.g., steel articles like 202620)
+          if (!numArt.match(/^\d{8}p?$/i)) {
             continue;
           }
 

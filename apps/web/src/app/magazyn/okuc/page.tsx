@@ -75,10 +75,10 @@ export default function OkucLandingPage() {
   return (
     <div className="flex flex-col h-full">
       <Header title="Okucia (DualStock)">
-        <Link href="/magazyn">
+        <Link href="/">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Powrót do magazynu
+            Powrót do dashboardu
           </Button>
         </Link>
       </Header>

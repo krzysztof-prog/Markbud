@@ -4,7 +4,7 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
-import { Box, Warehouse, Plus } from 'lucide-react';
+import { Box, Warehouse } from 'lucide-react';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
@@ -12,10 +12,10 @@ export default function MagazynPVCPage() {
   return (
     <div className="flex flex-col h-full">
       <Header title="Magazyn PVC">
-        <Link href="/magazyn">
+        <Link href="/">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Powrót do menu
+            Powrót do dashboardu
           </Button>
         </Link>
       </Header>
@@ -23,8 +23,7 @@ export default function MagazynPVCPage() {
       <div className="px-6 pt-4">
         <Breadcrumb
           items={[
-            { label: 'Magazyn', href: '/magazyn', icon: <Warehouse className="h-4 w-4" /> },
-            { label: 'PVC' },
+            { label: 'Magazyn PVC', icon: <Box className="h-4 w-4" /> },
           ]}
         />
       </div>

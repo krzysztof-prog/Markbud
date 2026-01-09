@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
-  Package,
   Truck,
   FileText,
   Settings,
@@ -22,6 +21,7 @@ import {
   Wrench,
   BarChart3,
   Calendar,
+  Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -46,7 +46,15 @@ const navigation: NavigationItem[] = [
       { name: 'Raport miesięczny', href: '/zestawienia/miesieczne', icon: Calendar },
     ]
   },
-  { name: 'AKROBUD', href: '/magazyn/akrobud', icon: Warehouse },
+  {
+    name: 'AKROBUD',
+    href: '/magazyn/akrobud',
+    icon: Warehouse,
+    subItems: [
+      { name: 'Kalendarz dostaw', href: '/dostawy', icon: Calendar },
+      { name: 'Profile na dostawy', href: '/magazyn/akrobud/profile-na-dostawy', icon: Box },
+    ]
+  },
   { name: 'Magazyn PVC', href: '/magazyn/pvc', icon: Box },
   { name: 'Okucia', href: '/magazyn/okuc', icon: Wrench },
   { name: 'Dostawy Schuco', href: '/magazyn/dostawy-schuco', icon: Truck },
@@ -57,6 +65,8 @@ const navigation: NavigationItem[] = [
     subItems: [
       { name: 'Zamówienia szyb', href: '/zamowienia-szyb', icon: FileText },
       { name: 'Dostawy szyb', href: '/dostawy-szyb', icon: Truck },
+      { name: 'Dostarczone', href: '/szyby/kategorie', icon: Layers },
+      { name: 'Statystyki', href: '/szyby/statystyki', icon: BarChart3 },
     ]
   },
   { name: 'Importy', href: '/importy', icon: FolderInput },
@@ -91,29 +101,33 @@ export function Sidebar() {
     const currentIndex = focusedIndex >= 0 ? focusedIndex : 0;
 
     switch (event.key) {
-      case 'ArrowDown':
+      case 'ArrowDown': {
         event.preventDefault();
         const nextIndex = (currentIndex + 1) % itemsArray.length;
         setFocusedIndex(nextIndex);
         itemsArray[nextIndex]?.focus();
         break;
-      case 'ArrowUp':
+      }
+      case 'ArrowUp': {
         event.preventDefault();
         const prevIndex = currentIndex > 0 ? currentIndex - 1 : itemsArray.length - 1;
         setFocusedIndex(prevIndex);
         itemsArray[prevIndex]?.focus();
         break;
-      case 'Home':
+      }
+      case 'Home': {
         event.preventDefault();
         setFocusedIndex(0);
         itemsArray[0]?.focus();
         break;
-      case 'End':
+      }
+      case 'End': {
         event.preventDefault();
         const lastIndex = itemsArray.length - 1;
         setFocusedIndex(lastIndex);
         itemsArray[lastIndex]?.focus();
         break;
+      }
     }
   }, [focusedIndex]);
 
@@ -263,6 +277,7 @@ export function Sidebar() {
               {/* Podstrony */}
               {hasSubItems && isExpanded && !desktopCollapsed && (
                 <div className="ml-4 mt-1 space-y-1 md:block">
+                  {/* eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- hasSubItems check guarantees subItems exists */}
                   {item.subItems!.map((subItem) => {
                     const isSubActive = pathname === subItem.href;
                     return (
