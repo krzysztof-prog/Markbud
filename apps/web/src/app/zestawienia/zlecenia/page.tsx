@@ -6,6 +6,8 @@ import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { ordersApi, settingsApi } from '@/lib/api';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { groszeToPln, centyToEur, formatGrosze, formatCenty, type Grosze, type Centy } from '@/lib/money';
@@ -83,6 +85,8 @@ interface ExtendedOrder extends Order {
   _count?: OrderCount;
   schucoLinks?: SchucoDeliveryLink[];
   deliveryOrders?: DeliveryOrderInfo[];
+  // Status okuć: 'none' | 'imported' | 'has_atypical' | 'pending'
+  okucDemandStatus?: string;
 }
 
 // Funkcja pomocnicza do agregacji statusu Schuco (zwraca "najgorszy" status)
@@ -168,6 +172,7 @@ type ColumnId =
   | 'totalSashes'
   | 'glasses'
   | 'glassDeliveryDate'
+  | 'okucDemandStatus'
   | 'valuePln'
   | 'valueEur'
   | 'orderStatus'
@@ -198,6 +203,7 @@ const DEFAULT_COLUMNS: Column[] = [
   { id: 'totalSashes', label: 'Skrzydeł', sortable: false, align: 'center', visible: true },
   { id: 'glasses', label: 'Szkleń', sortable: false, align: 'center', visible: true },
   { id: 'glassDeliveryDate', label: 'Data szyb', sortable: false, align: 'center', visible: true },
+  { id: 'okucDemandStatus', label: 'Okucia', sortable: false, align: 'center', visible: true },
   { id: 'valuePln', label: 'Wartość PLN', sortable: false, align: 'right', visible: true },
   { id: 'valueEur', label: 'Wartość EUR', sortable: false, align: 'right', visible: true },
   { id: 'orderStatus', label: 'Status Schuco', sortable: false, align: 'center', visible: true },
@@ -208,6 +214,34 @@ const DEFAULT_COLUMNS: Column[] = [
 
 const STORAGE_KEY = 'zestawienie-zlecen-columns-order';
 const STORAGE_KEY_VISIBILITY = 'zestawienie-zlecen-columns-visibility';
+const STORAGE_KEY_FILTERS = 'zestawienie-zlecen-filters';
+
+// Typy filtrów
+type ClientFilter = 'all' | 'akrobud' | 'private';
+
+interface FilterState {
+  clientFilter: ClientFilter;
+  hideProduced: boolean;
+  dateFrom: string; // format YYYY-MM-DD
+}
+
+// Domyślna data "od" = 1 stycznia bieżącego roku
+const getDefaultDateFrom = (): string => {
+  const now = new Date();
+  return `${now.getFullYear()}-01-01`;
+};
+
+const DEFAULT_FILTERS: FilterState = {
+  clientFilter: 'all',
+  hideProduced: true, // domyślnie ukryj wyprodukowane
+  dateFrom: getDefaultDateFrom(),
+};
+
+// Sprawdza czy zlecenie jest od Akrobudu
+const isAkrobudOrder = (client: string | null | undefined): boolean => {
+  if (!client) return false;
+  return client.toUpperCase().includes('AKROBUD');
+};
 
 export default function ZestawienieZlecenPage() {
   const [selectedOrder, setSelectedOrder] = useState<{ id: number; number: string } | null>(null);
@@ -225,6 +259,9 @@ export default function ZestawienieZlecenPage() {
   const [editingCell, setEditingCell] = useState<{ orderId: number; field: 'valuePln' | 'valueEur' | 'deadline' } | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [showStatsModal, setShowStatsModal] = useState(false);
+
+  // Filtry dla checkboxów i daty
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
 
   const queryClient = useQueryClient();
 
@@ -286,6 +323,29 @@ export default function ZestawienieZlecenPage() {
 
     updateOrderMutation.mutate({ orderId, data });
   };
+
+  // Wczytaj filtry z localStorage
+  useEffect(() => {
+    const savedFilters = localStorage.getItem(STORAGE_KEY_FILTERS);
+    if (savedFilters) {
+      try {
+        const parsed = JSON.parse(savedFilters) as FilterState;
+        // Walidacja - upewnij się że dane są poprawne
+        setFilters({
+          clientFilter: parsed.clientFilter || 'all',
+          hideProduced: typeof parsed.hideProduced === 'boolean' ? parsed.hideProduced : true,
+          dateFrom: parsed.dateFrom || getDefaultDateFrom(),
+        });
+      } catch (e) {
+        console.error('Error loading filters:', e);
+      }
+    }
+  }, []);
+
+  // Zapisz filtry do localStorage gdy się zmienią
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_FILTERS, JSON.stringify(filters));
+  }, [filters]);
 
   // Wczytaj kolejność i widoczność kolumn z localStorage
   useEffect(() => {
@@ -358,23 +418,18 @@ export default function ZestawienieZlecenPage() {
   };
 
   // Pobierz wszystkie zlecenia (w tym zarchiwizowane)
-  const { data: activeOrders, isLoading: isLoadingActive } = useQuery({
+  // API zwraca PaginatedResponse { data: Order[], total, skip, take }
+  const { data: activeResponse, isLoading: isLoadingActive } = useQuery({
     queryKey: ['orders', 'all-active'],
-    queryFn: async () => {
-      const response = await ordersApi.getAll({ archived: 'false' });
-      // API zwraca {data: [...]} zamiast samej tablicy
-      return (response as { data?: unknown[] })?.data || response;
-    },
+    queryFn: () => ordersApi.getAll({ archived: 'false' }),
   });
+  const activeOrders = (activeResponse?.data ?? []) as ExtendedOrder[];
 
-  const { data: archivedOrders, isLoading: isLoadingArchived } = useQuery({
+  const { data: archivedResponse, isLoading: isLoadingArchived } = useQuery({
     queryKey: ['orders', 'all-archived'],
-    queryFn: async () => {
-      const response = await ordersApi.getAll({ archived: 'true' });
-      // API zwraca {data: [...]} zamiast samej tablicy
-      return (response as { data?: unknown[] })?.data || response;
-    },
+    queryFn: () => ordersApi.getAll({ archived: 'true' }),
   });
+  const archivedOrders = (archivedResponse?.data ?? []) as ExtendedOrder[];
 
   // Pobierz kurs EUR
   const { data: settings } = useQuery({
@@ -387,12 +442,8 @@ export default function ZestawienieZlecenPage() {
   const isLoading = isLoadingActive || isLoadingArchived;
 
   // Połącz wszystkie zlecenia
-  const allOrders = useMemo(() => {
-    if (!activeOrders || !archivedOrders) return [];
-
-    const active = Array.isArray(activeOrders) ? activeOrders : [];
-    const archived = Array.isArray(archivedOrders) ? archivedOrders : [];
-    return [...active, ...archived];
+  const allOrders = useMemo<ExtendedOrder[]>(() => {
+    return [...activeOrders, ...archivedOrders];
   }, [activeOrders, archivedOrders]);
 
   // Funkcja pomocnicza do pobrania wartości kolumny
@@ -420,6 +471,16 @@ export default function ZestawienieZlecenPage() {
         if (delivered > 0) return `Częściowo: ${delivered}/${ordered}`;
         if (order.glassDeliveryDate) return formatDateShort(order.glassDeliveryDate);
         return 'Brak daty';
+      }
+      case 'okucDemandStatus': {
+        const status = order.okucDemandStatus || 'none';
+        switch (status) {
+          case 'none': return '';
+          case 'imported': return 'OK';
+          case 'has_atypical': return 'Nietypowe!';
+          case 'pending': return 'Oczekuje';
+          default: return status;
+        }
       }
       case 'valuePln':
         return order.valuePln != null ? String(order.valuePln) : '';
@@ -456,6 +517,30 @@ export default function ZestawienieZlecenPage() {
   // Filtruj i sortuj zlecenia
   const filteredOrders = useMemo(() => {
     let result = allOrders;
+
+    // Filtrowanie po checkboxach (Akrobud/Prywatne)
+    if (filters.clientFilter === 'akrobud') {
+      result = result.filter((order: ExtendedOrder) => isAkrobudOrder(order.client));
+    } else if (filters.clientFilter === 'private') {
+      result = result.filter((order: ExtendedOrder) => !isAkrobudOrder(order.client));
+    }
+
+    // Filtrowanie - ukryj wyprodukowane (archiwalne)
+    if (filters.hideProduced) {
+      result = result.filter((order: ExtendedOrder) => !order.archivedAt);
+    }
+
+    // Filtrowanie po dacie "od" (deadline >= dateFrom)
+    if (filters.dateFrom) {
+      const dateFromTimestamp = new Date(filters.dateFrom).getTime();
+      result = result.filter((order: ExtendedOrder) => {
+        // Priorytet: data dostawy Akrobud > deadline
+        const akrobudDeliveryDate = getAkrobudDeliveryDate(order.deliveryOrders);
+        const orderDate = akrobudDeliveryDate || order.deadline;
+        if (!orderDate) return false; // Bez daty - nie pokazuj
+        return new Date(orderDate).getTime() >= dateFromTimestamp;
+      });
+    }
 
     // Filtrowanie globalne (debounced)
     if (debouncedSearchQuery) {
@@ -561,7 +646,23 @@ export default function ZestawienieZlecenPage() {
     });
 
     return result;
-  }, [allOrders, debouncedSearchQuery, sortField, sortDirection, debouncedColumnFilters]);
+  }, [allOrders, debouncedSearchQuery, sortField, sortDirection, debouncedColumnFilters, filters]);
+
+  // Oblicz sumę dla przefiltrowanych zleceń (okna, skrzydła, szklenia)
+  const filteredSummary = useMemo(() => {
+    return filteredOrders.reduce(
+      (acc, order: ExtendedOrder) => {
+        acc.totalWindows += order.totalWindows || order._count?.windows || 0;
+        acc.totalSashes += order.totalSashes || 0;
+        acc.totalGlasses += order.totalGlasses || 0;
+        return acc;
+      },
+      { totalWindows: 0, totalSashes: 0, totalGlasses: 0 }
+    );
+  }, [filteredOrders]);
+
+  // Sprawdź czy jakikolwiek filtr jest aktywny (dla wyświetlenia sumy)
+  const hasActiveFilter = filters.clientFilter !== 'all' || filters.hideProduced || filters.dateFrom !== '';
 
   // Oblicz statystyki dla wszystkich zleceń
   const stats = useMemo(() => {
@@ -798,6 +899,16 @@ export default function ZestawienieZlecenPage() {
         if (deliveredCsv > 0) return `Częściowo: ${deliveredCsv}/${orderedCsv}`;
         if (order.glassDeliveryDate) return formatDateShort(order.glassDeliveryDate);
         return 'Brak daty';
+      }
+      case 'okucDemandStatus': {
+        const statusCsv = order.okucDemandStatus || 'none';
+        switch (statusCsv) {
+          case 'none': return '';
+          case 'imported': return 'OK';
+          case 'has_atypical': return 'Nietypowe';
+          case 'pending': return 'Oczekuje';
+          default: return statusCsv;
+        }
       }
       case 'deadline': {
         // Priorytet: data dostawy Akrobud > ręcznie ustawiony deadline (eksport CSV)
@@ -1175,6 +1286,46 @@ export default function ZestawienieZlecenPage() {
         );
       }
 
+      case 'okucDemandStatus': {
+        const okucStatus = order.okucDemandStatus || 'none';
+        let okucLabel = '';
+        let okucColorClass = '';
+
+        switch (okucStatus) {
+          case 'none':
+            okucLabel = '-';
+            okucColorClass = 'text-slate-400';
+            break;
+          case 'imported':
+            okucLabel = 'OK';
+            okucColorClass = 'bg-green-100 text-green-700';
+            break;
+          case 'has_atypical':
+            okucLabel = 'Nietypowe!';
+            okucColorClass = 'bg-yellow-100 text-yellow-700';
+            break;
+          case 'pending':
+            okucLabel = 'Oczekuje';
+            okucColorClass = 'bg-blue-100 text-blue-600';
+            break;
+          default:
+            okucLabel = okucStatus;
+            okucColorClass = 'bg-slate-100 text-slate-600';
+        }
+
+        return (
+          <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
+            {okucStatus === 'none' ? (
+              <span className={okucColorClass}>{okucLabel}</span>
+            ) : (
+              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${okucColorClass}`}>
+                {okucLabel}
+              </span>
+            )}
+          </td>
+        );
+      }
+
       case 'archived':
         return (
           <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
@@ -1211,20 +1362,86 @@ export default function ZestawienieZlecenPage() {
       <Header title="Zestawienie zleceń" />
 
       <div className="flex-1 p-6 space-y-6">
-        {/* Nagłówek z wyszukiwaniem */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="relative w-80">
+        {/* Nagłówek z wyszukiwaniem i filtrami */}
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Wyszukiwanie */}
+          <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-              placeholder="Szukaj po numerze, kliencie, projekcie..."
+              placeholder="Szukaj po numerze, kliencie..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
             />
           </div>
 
+          {/* Checkboxy filtrów */}
+          <div className="flex items-center gap-4 border-l pl-4">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="filter-akrobud"
+                checked={filters.clientFilter === 'akrobud'}
+                onCheckedChange={(checked) => {
+                  setFilters(prev => ({
+                    ...prev,
+                    clientFilter: checked ? 'akrobud' : 'all'
+                  }));
+                }}
+              />
+              <Label htmlFor="filter-akrobud" className="text-sm cursor-pointer">
+                Tylko Akrobud
+              </Label>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="filter-private"
+                checked={filters.clientFilter === 'private'}
+                onCheckedChange={(checked) => {
+                  setFilters(prev => ({
+                    ...prev,
+                    clientFilter: checked ? 'private' : 'all'
+                  }));
+                }}
+              />
+              <Label htmlFor="filter-private" className="text-sm cursor-pointer">
+                Tylko prywatne
+              </Label>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="filter-hide-produced"
+                checked={filters.hideProduced}
+                onCheckedChange={(checked) => {
+                  setFilters(prev => ({
+                    ...prev,
+                    hideProduced: !!checked
+                  }));
+                }}
+              />
+              <Label htmlFor="filter-hide-produced" className="text-sm cursor-pointer">
+                Ukryj wyprodukowane
+              </Label>
+            </div>
+          </div>
+
+          {/* Data od */}
+          <div className="flex items-center gap-2 border-l pl-4">
+            <Label htmlFor="date-from" className="text-sm text-muted-foreground whitespace-nowrap">
+              Od daty:
+            </Label>
+            <Input
+              id="date-from"
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+              className="w-36"
+            />
+          </div>
+
           {/* Grupowanie */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 border-l pl-4">
             <span className="text-sm text-muted-foreground">Grupuj:</span>
             <select
               value={groupBy}
@@ -1240,7 +1457,7 @@ export default function ZestawienieZlecenPage() {
             </select>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 ml-auto">
             <Button
               variant="outline"
               onClick={() => setShowColumnSettings(!showColumnSettings)}
@@ -1313,6 +1530,26 @@ export default function ZestawienieZlecenPage() {
           </Card>
         )}
 
+        {/* Podsumowanie filtrowanych zleceń */}
+        {hasActiveFilter && !isLoading && filteredOrders.length > 0 && (
+          <div className="flex items-center gap-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <span className="text-sm font-medium text-blue-800">
+              Suma ({filteredOrders.length} zleceń):
+            </span>
+            <div className="flex items-center gap-1">
+              <span className="text-sm text-blue-600">Okna:</span>
+              <span className="text-sm font-semibold text-blue-800">{filteredSummary.totalWindows}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-sm text-blue-600">Skrzydła:</span>
+              <span className="text-sm font-semibold text-blue-800">{filteredSummary.totalSashes}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-sm text-blue-600">Szklenia:</span>
+              <span className="text-sm font-semibold text-blue-800">{filteredSummary.totalGlasses}</span>
+            </div>
+          </div>
+        )}
 
         {/* Tabela zleceń */}
         {isLoading ? (
@@ -1424,7 +1661,7 @@ export default function ZestawienieZlecenPage() {
         open={showStatsModal}
         onOpenChange={setShowStatsModal}
         stats={stats}
-        allOrders={allOrders}
+        allOrders={allOrders as any} // eslint-disable-line @typescript-eslint/no-explicit-any
         eurRate={eurRate}
       />
 
