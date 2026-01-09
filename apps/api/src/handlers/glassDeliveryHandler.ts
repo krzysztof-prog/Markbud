@@ -51,4 +51,26 @@ export class GlassDeliveryHandler {
     // Return null instead of 404 when no data - let frontend handle empty state
     return reply.send(summary);
   }
+
+  // ========== Categorized Glass Endpoints ==========
+
+  async getLooseGlasses(request: FastifyRequest, reply: FastifyReply) {
+    const glasses = await this.service.getLooseGlasses();
+    return reply.send(glasses);
+  }
+
+  async getAluminumGlasses(request: FastifyRequest, reply: FastifyReply) {
+    const glasses = await this.service.getAluminumGlasses();
+    return reply.send(glasses);
+  }
+
+  async getAluminumGlassesSummary(request: FastifyRequest, reply: FastifyReply) {
+    const summary = await this.service.getAluminumGlassesSummary();
+    return reply.send(summary);
+  }
+
+  async getReclamationGlasses(request: FastifyRequest, reply: FastifyReply) {
+    const glasses = await this.service.getReclamationGlasses();
+    return reply.send(glasses);
+  }
 }

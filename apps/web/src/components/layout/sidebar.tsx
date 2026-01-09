@@ -22,6 +22,7 @@ import {
   BarChart3,
   Calendar,
   Layers,
+  ListChecks,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef, useCallback } from 'react';

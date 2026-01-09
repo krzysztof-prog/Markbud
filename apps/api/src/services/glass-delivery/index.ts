@@ -94,4 +94,91 @@ export class GlassDeliveryService {
   async getLatestImportSummary(): Promise<ImportSummary | null> {
     return this.queryService.getLatestImportSummary();
   }
+
+  // ========== Categorized Glass Operations ==========
+
+  /**
+   * Get all loose glasses (szyby luzem)
+   */
+  async getLooseGlasses() {
+    return this.prisma.looseGlass.findMany({
+      include: {
+        glassDelivery: {
+          select: {
+            deliveryDate: true,
+            rackNumber: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  /**
+   * Get all aluminum glasses (szyby aluminiowe)
+   */
+  async getAluminumGlasses() {
+    return this.prisma.aluminumGlass.findMany({
+      include: {
+        glassDelivery: {
+          select: {
+            deliveryDate: true,
+            rackNumber: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  /**
+   * Get aluminum glasses grouped by order (summary)
+   */
+  async getAluminumGlassesSummary() {
+    const glasses = await this.prisma.aluminumGlass.findMany({
+      select: {
+        customerOrderNumber: true,
+        clientName: true,
+        quantity: true
+      }
+    });
+
+    // Grupuj po customerOrderNumber
+    const summaryMap = new Map<string, { customerOrderNumber: string; clientName: string | null; totalQuantity: number }>();
+
+    for (const glass of glasses) {
+      const key = glass.customerOrderNumber;
+      const existing = summaryMap.get(key);
+      if (existing) {
+        existing.totalQuantity += glass.quantity;
+      } else {
+        summaryMap.set(key, {
+          customerOrderNumber: glass.customerOrderNumber,
+          clientName: glass.clientName,
+          totalQuantity: glass.quantity
+        });
+      }
+    }
+
+    return Array.from(summaryMap.values()).sort((a, b) =>
+      a.customerOrderNumber.localeCompare(b.customerOrderNumber)
+    );
+  }
+
+  /**
+   * Get all reclamation glasses (szyby reklamacyjne)
+   */
+  async getReclamationGlasses() {
+    return this.prisma.reclamationGlass.findMany({
+      include: {
+        glassDelivery: {
+          select: {
+            deliveryDate: true,
+            rackNumber: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
 }

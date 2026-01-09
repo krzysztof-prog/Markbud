@@ -114,6 +114,7 @@ model Order {
   windows             OrderWindow[]
   schucoLinks         OrderSchucoLink[]
   okucDemands         OkucDemand[]
+  verificationItems   AkrobudVerificationItem[]
 
   @@index([status])
   @@index([archivedAt])
@@ -235,9 +236,10 @@ model Delivery {
   createdAt      DateTime            @default(now()) @map("created_at")
   updatedAt      DateTime            @updatedAt @map("updated_at")
   deletedAt      DateTime?           @map("deleted_at")
-  deliveryItems  DeliveryItem[]
-  deliveryOrders DeliveryOrder[]
-  optimization   PalletOptimization?
+  deliveryItems      DeliveryItem[]
+  deliveryOrders     DeliveryOrder[]
+  optimization       PalletOptimization?
+  verificationLists  AkrobudVerificationList[]
 
   @@index([status])
   @@index([deliveryDate])
@@ -1001,4 +1003,48 @@ model ReclamationGlass {
   @@index([orderNumber])
   @@index([glassDeliveryId])
   @@map("reclamation_glasses")
+}
+
+// ============================================
+// Weryfikacja list dostaw Akrobud
+// ============================================
+
+model AkrobudVerificationList {
+  id           Int       @id @default(autoincrement())
+  deliveryDate DateTime  @map("delivery_date")
+  deliveryId   Int?      @map("delivery_id")
+  title        String?
+  notes        String?
+  status       String    @default("draft") // draft | verified | applied
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  delivery Delivery?                 @relation(fields: [deliveryId], references: [id])
+  items    AkrobudVerificationItem[]
+
+  @@index([deliveryDate])
+  @@index([deletedAt])
+  @@index([status])
+  @@map("akrobud_verification_lists")
+}
+
+model AkrobudVerificationItem {
+  id                Int      @id @default(autoincrement())
+  listId            Int      @map("list_id")
+  orderNumberInput  String   @map("order_number_input")
+  orderNumberBase   String?  @map("order_number_base")
+  orderNumberSuffix String?  @map("order_number_suffix")
+  matchedOrderId    Int?     @map("matched_order_id")
+  matchStatus       String   @default("pending") @map("match_status") // pending | found | not_found | variant_match
+  position          Int
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  list         AkrobudVerificationList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  matchedOrder Order?                  @relation(fields: [matchedOrderId], references: [id])
+
+  @@unique([listId, orderNumberInput])
+  @@index([listId])
+  @@index([matchStatus])
+  @@map("akrobud_verification_items")
 }

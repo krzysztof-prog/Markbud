@@ -17,6 +17,15 @@ export const validationKeys = {
   byOrder: (orderNumber: string) => [...validationKeys.all, 'order', orderNumber] as const,
 };
 
+// ========== Kategoryzowane Szyby ==========
+
+export const categorizedGlassKeys = {
+  loose: ['glass-deliveries', 'categorized', 'loose'] as const,
+  aluminum: ['glass-deliveries', 'categorized', 'aluminum'] as const,
+  aluminumSummary: ['glass-deliveries', 'categorized', 'aluminum', 'summary'] as const,
+  reclamation: ['glass-deliveries', 'categorized', 'reclamation'] as const,
+};
+
 export function useGlassDeliveries(filters?: GlassDeliveryFilters) {
   return useQuery({
     queryKey: glassDeliveryKeys.list(filters),
@@ -55,6 +64,11 @@ export function useImportGlassDelivery() {
       queryClient.invalidateQueries({ queryKey: glassDeliveryKeys.lists() });
       queryClient.invalidateQueries({ queryKey: validationKeys.dashboard() });
       queryClient.invalidateQueries({ queryKey: ['glass-deliveries', 'latest-import'] });
+      // Invaliduj też kategorie szyb
+      queryClient.invalidateQueries({ queryKey: categorizedGlassKeys.loose });
+      queryClient.invalidateQueries({ queryKey: categorizedGlassKeys.aluminum });
+      queryClient.invalidateQueries({ queryKey: categorizedGlassKeys.aluminumSummary });
+      queryClient.invalidateQueries({ queryKey: categorizedGlassKeys.reclamation });
       showSuccessToast('Import udany', `Dostawa ${data.rackNumber} zaimportowana`);
     },
     onError: (error: unknown) => {
@@ -90,5 +104,33 @@ export function useLatestImportSummary() {
     queryKey: ['glass-deliveries', 'latest-import'],
     queryFn: () => glassDeliveriesApi_extended.getLatestImportSummary(),
     refetchInterval: 30000, // Refresh every 30 seconds
+  });
+}
+
+export function useLooseGlasses() {
+  return useQuery({
+    queryKey: categorizedGlassKeys.loose,
+    queryFn: () => glassDeliveriesApi.getLooseGlasses(),
+  });
+}
+
+export function useAluminumGlasses() {
+  return useQuery({
+    queryKey: categorizedGlassKeys.aluminum,
+    queryFn: () => glassDeliveriesApi.getAluminumGlasses(),
+  });
+}
+
+export function useAluminumGlassesSummary() {
+  return useQuery({
+    queryKey: categorizedGlassKeys.aluminumSummary,
+    queryFn: () => glassDeliveriesApi.getAluminumGlassesSummary(),
+  });
+}
+
+export function useReclamationGlasses() {
+  return useQuery({
+    queryKey: categorizedGlassKeys.reclamation,
+    queryFn: () => glassDeliveriesApi.getReclamationGlasses(),
   });
 }

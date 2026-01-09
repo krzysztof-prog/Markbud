@@ -1,3 +1,18 @@
+import { stripBOM } from '../../utils/string-utils.js';
+
+// Typ kategorii szyb
+export type GlassCategory = 'standard' | 'loose' | 'aluminum' | 'reclamation';
+
+export interface CategorizedGlassItem {
+  customerOrderNumber: string;
+  clientName: string | null;
+  widthMm: number;
+  heightMm: number;
+  quantity: number;
+  orderNumber: string;
+  glassComposition: string;
+}
+
 export interface ParsedGlassDeliveryCsv {
   metadata: {
     rackNumber: string;
@@ -16,12 +31,109 @@ export interface ParsedGlassDeliveryCsv {
     glassComposition: string;
     serialNumber: string;
     clientCode: string;
+    // Nowe pola dla kategoryzacji
+    category: GlassCategory;
+    categoryClientName?: string;
   }>;
   summary: {
     totalItems: number;
     totalQuantity: number;
     orderBreakdown: Record<string, { count: number; quantity: number }>;
   };
+  // Skategoryzowane szyby
+  categorized: {
+    loose: CategorizedGlassItem[];
+    aluminum: CategorizedGlassItem[];
+    reclamation: CategorizedGlassItem[];
+  };
+}
+
+/**
+ * Wykrywa kategorię szyby na podstawie numeru zamówienia klienta
+ *
+ * Priorytet (zgodnie z ustaleniami):
+ * 1. reclamation - zawiera "R/"
+ * 2. aluminum - zawiera "AL."
+ * 3. loose - 9-11 cyfr (np. 20251205431) lub nie zawiera długiego numeru
+ * 4. standard - wszystko inne (normalne szyby produkcyjne)
+ */
+function detectGlassCategory(customerOrderNumber: string): {
+  category: GlassCategory;
+  clientName: string | null;
+} {
+  const trimmed = customerOrderNumber.trim().toUpperCase();
+
+  // 1. Reklamacyjne - zawiera "R/"
+  if (trimmed.includes('R/')) {
+    return {
+      category: 'reclamation',
+      clientName: extractClientName(customerOrderNumber)
+    };
+  }
+
+  // 2. Aluminiowe - zawiera "AL."
+  if (trimmed.includes('AL.')) {
+    return {
+      category: 'aluminum',
+      clientName: extractClientName(customerOrderNumber)
+    };
+  }
+
+  // 3. Szyby luzem - 9-11 cyfr (np. 20251205431HALEX) lub bez długiego numeru (np. "WOHL AKR 16 GRUDZIEŃ")
+  // Sprawdź czy zaczyna się od 9-11 cyfr
+  const longNumberMatch = trimmed.match(/^(\d{9,11})/);
+  if (longNumberMatch) {
+    // Wyciągnij nazwę klienta - wszystko po cyfrach
+    const afterNumber = customerOrderNumber.substring(longNumberMatch[1].length).trim();
+    // Usuń średnik jeśli występuje na początku
+    const clientName = afterNumber.replace(/^[;:\s]+/, '').trim() || null;
+    return {
+      category: 'loose',
+      clientName
+    };
+  }
+
+  // Sprawdź czy to jest format bez długiego numeru (np. "WOHL AKR 16 GRUDZIEŃ")
+  // Jeśli nie zaczyna się od 5-cyfrowego numeru zlecenia typowego, to jest luzem
+  const standardOrderMatch = trimmed.match(/^\d{4,6}(?:\s|$|-)/);
+  if (!standardOrderMatch) {
+    // Nie wygląda jak standardowe zamówienie - to szyby luzem
+    return {
+      category: 'loose',
+      clientName: customerOrderNumber.trim() || null
+    };
+  }
+
+  // 4. Standardowe szyby produkcyjne
+  return { category: 'standard', clientName: null };
+}
+
+/**
+ * Wyciąga nazwę klienta z numeru zamówienia
+ * Obsługuje różne formaty:
+ * - "R/12345;KLIENT" -> "KLIENT"
+ * - "AL.12345 FIRMA" -> "FIRMA"
+ */
+function extractClientName(customerOrderNumber: string): string | null {
+  // Szukaj średnika
+  const semicolonIndex = customerOrderNumber.indexOf(';');
+  if (semicolonIndex !== -1) {
+    const after = customerOrderNumber.substring(semicolonIndex + 1).trim();
+    if (after) return after;
+  }
+
+  // Szukaj po spacji (po numerach)
+  const parts = customerOrderNumber.split(/\s+/);
+  if (parts.length > 1) {
+    // Zwróć ostatnią część która nie wygląda jak numer
+    for (let i = parts.length - 1; i >= 0; i--) {
+      if (!/^\d+$/.test(parts[i]) && parts[i].length > 2) {
+        return parts[i];
+      }
+    }
+  }
+
+  return null;
 }
 
 function parseOrderReference(reference: string): {
@@ -57,7 +169,9 @@ function parseOrderReference(reference: string): {
 }
 
 export function parseGlassDeliveryCsv(fileContent: string): ParsedGlassDeliveryCsv {
-  const lines = fileContent.split(/\r?\n/).filter((line) => line.trim());
+  // Usuń BOM jeśli istnieje (pliki eksportowane z Excela często mają BOM)
+  const cleanContent = stripBOM(fileContent);
+  const lines = cleanContent.split(/\r?\n/).filter((line) => line.trim());
 
   if (lines.length < 2) {
     throw new Error('Plik CSV jest pusty lub nieprawidłowy');
@@ -100,6 +214,13 @@ export function parseGlassDeliveryCsv(fileContent: string): ParsedGlassDeliveryC
   const items: ParsedGlassDeliveryCsv['items'] = [];
   const orderBreakdown: Record<string, { count: number; quantity: number }> = {};
 
+  // Kolekcje dla skategoryzowanych szyb
+  const categorized: ParsedGlassDeliveryCsv['categorized'] = {
+    loose: [],
+    aluminum: [],
+    reclamation: []
+  };
+
   let rackNumber = '';
   let customerOrderNumber = '';
   let supplierOrderNumber = '';
@@ -128,20 +249,56 @@ export function parseGlassDeliveryCsv(fileContent: string): ParsedGlassDeliveryC
 
       const { orderNumber, orderSuffix, fullReference } = parseOrderReference(orderRef);
 
+      // Pobierz numer zamówienia klienta dla tego wiersza
+      const rowCustomerOrderNumber = indices.customerOrderNumber >= 0
+        ? values[indices.customerOrderNumber] || customerOrderNumber
+        : customerOrderNumber;
+
+      // Wykryj kategorię szyby
+      const { category, clientName } = detectGlassCategory(rowCustomerOrderNumber);
+
+      const widthMm = indices.width >= 0 ? parseInt(values[indices.width]) || 0 : 0;
+      const heightMm = indices.height >= 0 ? parseInt(values[indices.height]) || 0 : 0;
+      const quantity = indices.quantity >= 0 ? parseInt(values[indices.quantity]) || 1 : 1;
+      const glassComposition = indices.composition >= 0 ? values[indices.composition] || '' : '';
+
       const item = {
         position: indices.position >= 0 ? parseInt(values[indices.position]) || i : i,
-        widthMm: indices.width >= 0 ? parseInt(values[indices.width]) || 0 : 0,
-        heightMm: indices.height >= 0 ? parseInt(values[indices.height]) || 0 : 0,
-        quantity: indices.quantity >= 0 ? parseInt(values[indices.quantity]) || 1 : 1,
+        widthMm,
+        heightMm,
+        quantity,
         orderNumber,
         orderSuffix: orderSuffix || undefined,
         fullReference,
-        glassComposition: indices.composition >= 0 ? values[indices.composition] || '' : '',
+        glassComposition,
         serialNumber: indices.serialNumber >= 0 ? values[indices.serialNumber] || '' : '',
         clientCode: indices.clientCode >= 0 ? values[indices.clientCode] || '' : '',
+        category,
+        categoryClientName: clientName || undefined
       };
 
       items.push(item);
+
+      // Dodaj do odpowiedniej kolekcji kategoryzowanej
+      if (category !== 'standard') {
+        const categorizedItem: CategorizedGlassItem = {
+          customerOrderNumber: rowCustomerOrderNumber,
+          clientName,
+          widthMm,
+          heightMm,
+          quantity,
+          orderNumber,
+          glassComposition
+        };
+
+        if (category === 'loose') {
+          categorized.loose.push(categorizedItem);
+        } else if (category === 'aluminum') {
+          categorized.aluminum.push(categorizedItem);
+        } else if (category === 'reclamation') {
+          categorized.reclamation.push(categorizedItem);
+        }
+      }
 
       const key = orderSuffix ? `${orderNumber}-${orderSuffix}` : orderNumber;
       if (!orderBreakdown[key]) {
@@ -167,5 +324,6 @@ export function parseGlassDeliveryCsv(fileContent: string): ParsedGlassDeliveryC
       totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0),
       orderBreakdown,
     },
+    categorized
   };
 }

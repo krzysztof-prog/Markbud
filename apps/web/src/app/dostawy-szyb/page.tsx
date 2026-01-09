@@ -5,7 +5,6 @@ import { useDropzone } from 'react-dropzone';
 import { Upload, FileText, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { GlassDeliveriesTable } from '@/features/glass/components/GlassDeliveriesTable';
 import { GlassValidationPanel } from '@/features/glass/components/GlassValidationPanel';
 import { LatestImportSummary } from '@/features/glass/components/LatestImportSummary';
 import { useImportGlassDelivery } from '@/features/glass/hooks/useGlassDeliveries';
@@ -120,8 +119,6 @@ export default function GlassDeliveriesPage() {
           <GlassValidationPanel />
         </div>
       </div>
-
-      <GlassDeliveriesTable />
     </div>
   );
 }

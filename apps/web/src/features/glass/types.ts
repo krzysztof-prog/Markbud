@@ -143,3 +143,34 @@ export interface LatestImportSummary {
     };
   }>;
 }
+
+// ========== Kategoryzowane Szyby ==========
+
+export interface CategorizedGlassBase {
+  id: number;
+  glassDeliveryId: number;
+  customerOrderNumber: string;
+  clientName: string | null;
+  widthMm: number;
+  heightMm: number;
+  quantity: number;
+  orderNumber: string;
+  glassComposition: string | null;
+  createdAt: string;
+  glassDelivery?: {
+    deliveryDate: string;
+    rackNumber: string;
+  };
+}
+
+export interface LooseGlass extends CategorizedGlassBase {}
+
+export interface AluminumGlass extends CategorizedGlassBase {}
+
+export interface ReclamationGlass extends CategorizedGlassBase {}
+
+export interface AluminumGlassSummary {
+  customerOrderNumber: string;
+  clientName: string | null;
+  totalQuantity: number;
+}

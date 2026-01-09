@@ -1,5 +1,15 @@
 import { fetchApi, uploadFile } from '@/lib/api-client';
-import type { GlassDelivery, GlassDeliveryFilters, ValidationDashboard, GlassOrderValidation, LatestImportSummary } from '../types';
+import type {
+  GlassDelivery,
+  GlassDeliveryFilters,
+  ValidationDashboard,
+  GlassOrderValidation,
+  LatestImportSummary,
+  LooseGlass,
+  AluminumGlass,
+  ReclamationGlass,
+  AluminumGlassSummary
+} from '../types';
 
 export const glassDeliveriesApi = {
   getAll: (filters?: GlassDeliveryFilters): Promise<GlassDelivery[]> => {
@@ -21,6 +31,23 @@ export const glassDeliveriesApi = {
 
   delete: (id: number): Promise<void> => {
     return fetchApi(`/api/glass-deliveries/${id}`, { method: 'DELETE' });
+  },
+
+  // Kategoryzowane szyby
+  getLooseGlasses: (): Promise<LooseGlass[]> => {
+    return fetchApi('/api/glass-deliveries/categorized/loose');
+  },
+
+  getAluminumGlasses: (): Promise<AluminumGlass[]> => {
+    return fetchApi('/api/glass-deliveries/categorized/aluminum');
+  },
+
+  getAluminumGlassesSummary: (): Promise<AluminumGlassSummary[]> => {
+    return fetchApi('/api/glass-deliveries/categorized/aluminum/summary');
+  },
+
+  getReclamationGlasses: (): Promise<ReclamationGlass[]> => {
+    return fetchApi('/api/glass-deliveries/categorized/reclamation');
   },
 };
 
