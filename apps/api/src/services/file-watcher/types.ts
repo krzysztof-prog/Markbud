@@ -24,9 +24,11 @@ export const DEFAULT_WATCHER_CONFIG: WatcherConfig = {
  */
 export interface WatcherPaths {
   watchFolderUzyteBele: string;
+  watchFolderUzyteBelePrywatne: string;
   watchFolderCeny: string;
   watchFolderGlassOrders: string;
   watchFolderGlassDeliveries: string;
+  watchFolderOkucZapotrzebowanie: string;
   importsBasePath: string;
   importsCenyPath: string;
 }

@@ -50,13 +50,19 @@ export class UzyteBeleWatcher implements IFileWatcher {
       return;
     }
 
-    // Najpierw zeskanuj istniejące foldery
+    // Najpierw zeskanuj istniejące foldery (dostawy)
     await this.scanExistingFolders(absolutePath);
+
+    // Skanuj pojedyncze pliki CSV (zlecenia bez dostawy)
+    await this.scanExistingSingleFiles(absolutePath);
 
     // Uruchom nasłuchiwanie nowych podfolderów
     this.watchForNewFolders(absolutePath);
 
-    console.log(`   🔍 Nasłuchuję nowych podfolderów w: ${absolutePath}`);
+    // Uruchom nasłuchiwanie nowych pojedynczych plików CSV
+    this.watchForNewSingleFiles(absolutePath);
+
+    console.log(`   🔍 Nasłuchuję nowych podfolderów i plików w: ${absolutePath}`);
   }
 
   /**
@@ -74,6 +80,253 @@ export class UzyteBeleWatcher implements IFileWatcher {
    */
   getWatchers(): FSWatcher[] {
     return this.watchers;
+  }
+
+  /**
+   * Skanuje istniejące pojedyncze pliki CSV (bez podfolderów z datą)
+   * Importuje jako zlecenia BEZ przypisania do dostawy
+   */
+  private async scanExistingSingleFiles(basePath: string): Promise<void> {
+    console.log(`   🔍 Skanuję pojedyncze pliki CSV w: ${basePath}`);
+
+    try {
+      const entries = await readdir(basePath, { withFileTypes: true });
+
+      // Filtruj tylko pliki CSV (nie foldery)
+      const csvFiles = entries.filter((entry) => {
+        if (!entry.isFile()) return false;
+        const lowerName = entry.name.toLowerCase();
+        return lowerName.endsWith('.csv') && (lowerName.includes('uzyte') || lowerName.includes('bele'));
+      });
+
+      if (csvFiles.length === 0) {
+        console.log(`   ℹ️ Brak pojedynczych plików CSV do zaimportowania`);
+        return;
+      }
+
+      console.log(`   📄 Znaleziono ${csvFiles.length} pojedynczych plików CSV`);
+
+      const uploadsDir = path.join(process.cwd(), 'uploads');
+      await ensureDirectoryExists(uploadsDir);
+      const parser = new CsvParser();
+
+      for (const file of csvFiles) {
+        const filePath = path.join(basePath, file.name);
+        await this.processSingleFile(filePath, uploadsDir, parser);
+      }
+    } catch (error) {
+      logger.error(
+        `Błąd skanowania pojedynczych plików ${basePath}: ${error instanceof Error ? error.message : 'Nieznany błąd'}`
+      );
+    }
+  }
+
+  /**
+   * Nasłuchuje nowych pojedynczych plików CSV i importuje je bez przypisania do dostawy
+   */
+  private watchForNewSingleFiles(basePath: string): void {
+    const watcher = chokidar.watch(basePath, {
+      persistent: true,
+      ignoreInitial: true,
+      depth: 0, // Tylko pliki w głównym folderze (nie podfoldery)
+      awaitWriteFinish: {
+        stabilityThreshold: this.config.stabilityThreshold,
+        pollInterval: this.config.pollInterval,
+      },
+    });
+
+    watcher
+      .on('add', async (filePath) => {
+        const lowerName = path.basename(filePath).toLowerCase();
+
+        // Sprawdź czy to plik CSV z "uzyte" lub "bele" w nazwie
+        if (!lowerName.endsWith('.csv') || (!lowerName.includes('uzyte') && !lowerName.includes('bele'))) {
+          return;
+        }
+
+        console.log(`📄 Wykryto nowy plik CSV: ${filePath}`);
+
+        const uploadsDir = path.join(process.cwd(), 'uploads');
+        await ensureDirectoryExists(uploadsDir);
+        const parser = new CsvParser();
+
+        await this.processSingleFile(filePath, uploadsDir, parser);
+      })
+      .on('error', (error) => {
+        logger.error(`❌ Błąd File Watcher dla plików CSV ${basePath}: ${error}`);
+      });
+
+    this.watchers.push(watcher);
+  }
+
+  /**
+   * Przetwarza pojedynczy plik CSV BEZ przypisania do dostawy
+   */
+  private async processSingleFile(
+    csvFile: string,
+    uploadsDir: string,
+    parser: CsvParser
+  ): Promise<'success' | 'failed' | 'skipped'> {
+    try {
+      const originalFilename = path.basename(csvFile);
+
+      // Sprawdź czy ten plik (po nazwie oryginalnej) był już importowany
+      const alreadyImported = await this.prisma.fileImport.findFirst({
+        where: {
+          filename: { contains: originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_') },
+          status: { in: ['completed', 'processing'] },
+        },
+      });
+
+      if (alreadyImported) {
+        logger.info(`   ⏭️ Plik ${originalFilename} już był zaimportowany, pomijam`);
+        await this.moveToSkipped(csvFile);
+        return 'skipped';
+      }
+
+      const safeFilename = generateSafeFilename(originalFilename);
+      const destPath = path.join(uploadsDir, safeFilename);
+
+      await copyFile(csvFile, destPath);
+
+      // Sprawdź czy plik ma konflikt
+      const preview = await parser.previewUzyteBele(destPath);
+      const hasRealConflict = preview.conflict?.baseOrderExists === true;
+
+      if (hasRealConflict) {
+        // Konflikt - zostaw jako PENDING
+        await this.prisma.fileImport.create({
+          data: {
+            filename: safeFilename,
+            filepath: destPath,
+            fileType: 'uzyte_bele',
+            status: 'pending',
+            metadata: JSON.stringify({
+              preview,
+              autoDetectedConflict: true,
+              singleFileImport: true,
+            }),
+          },
+        });
+
+        logger.warn(
+          `   ⚠️ Konflikt: ${originalFilename} → zlecenie ${preview.orderNumber} (bazowe ${preview.conflict?.baseOrderNumber} ISTNIEJE)`
+        );
+        logger.info(`   ⏸️ Plik oczekuje na decyzję użytkownika`);
+        return 'skipped';
+      }
+
+      // Brak konfliktu - przetwórz automatycznie
+      const fileImport = await this.prisma.fileImport.create({
+        data: {
+          filename: safeFilename,
+          filepath: destPath,
+          fileType: 'uzyte_bele',
+          status: 'processing',
+        },
+      });
+
+      // Przetwórz plik
+      const result = await parser.processUzyteBele(destPath, 'add_new');
+
+      // Zaktualizuj jako completed
+      await this.prisma.fileImport.update({
+        where: { id: fileImport.id },
+        data: {
+          status: 'completed',
+          processedAt: new Date(),
+          metadata: JSON.stringify({ ...result, singleFileImport: true }),
+        },
+      });
+
+      // Pobierz numer zlecenia
+      const order = await this.prisma.order.findUnique({
+        where: { id: result.orderId },
+        select: { orderNumber: true },
+      });
+
+      logger.info(`   ✅ Zaimportowano pojedynczy plik: ${originalFilename} → zlecenie ${order?.orderNumber}`);
+      emitOrderUpdated({ id: result.orderId });
+
+      // Archiwizuj plik do podfolderu "archiwum"
+      await this.archiveSingleFile(csvFile);
+
+      return 'success';
+    } catch (error) {
+      logger.error(
+        `   ❌ Błąd importu pojedynczego pliku ${csvFile}: ${error instanceof Error ? error.message : 'Nieznany błąd'}`
+      );
+      return 'failed';
+    }
+  }
+
+  /**
+   * Przenosi pominięty plik do podfolderu "pominiete"
+   */
+  private async moveToSkipped(filePath: string): Promise<void> {
+    try {
+      const basePath = path.dirname(filePath);
+      const skippedDir = path.join(basePath, 'pominiete');
+      await ensureDirectoryExists(skippedDir);
+
+      const filename = path.basename(filePath);
+      const skippedPath = path.join(skippedDir, filename);
+
+      const { rename, stat } = await import('fs/promises');
+      try {
+        await stat(skippedPath);
+        // Plik istnieje - dodaj timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const ext = path.extname(filename);
+        const nameWithoutExt = path.basename(filename, ext);
+        const newSkippedPath = path.join(skippedDir, `${nameWithoutExt}_${timestamp}${ext}`);
+        await rename(filePath, newSkippedPath);
+        logger.info(`   📁 Przeniesiono do pominiętych: ${filename} → pominiete/${path.basename(newSkippedPath)}`);
+      } catch {
+        // Plik nie istnieje - przenieś normalnie
+        await rename(filePath, skippedPath);
+        logger.info(`   📁 Przeniesiono do pominiętych: ${filename} → pominiete/`);
+      }
+    } catch (error) {
+      logger.error(
+        `   ⚠️ Nie udało się przenieść pliku ${filePath} do pominiętych: ${error instanceof Error ? error.message : 'Nieznany błąd'}`
+      );
+    }
+  }
+
+  /**
+   * Archiwizuje pojedynczy plik do podfolderu "archiwum"
+   */
+  private async archiveSingleFile(filePath: string): Promise<void> {
+    try {
+      const basePath = path.dirname(filePath);
+      const archiveDir = path.join(basePath, 'archiwum');
+      await ensureDirectoryExists(archiveDir);
+
+      const filename = path.basename(filePath);
+      const archivePath = path.join(archiveDir, filename);
+
+      // Jeśli plik o tej nazwie już istnieje w archiwum, dodaj timestamp
+      const { rename, stat } = await import('fs/promises');
+      try {
+        await stat(archivePath);
+        // Plik istnieje - dodaj timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const ext = path.extname(filename);
+        const nameWithoutExt = path.basename(filename, ext);
+        const newArchivePath = path.join(archiveDir, `${nameWithoutExt}_${timestamp}${ext}`);
+        await rename(filePath, newArchivePath);
+        logger.info(`   📦 Zarchiwizowano: ${filename} → archiwum/${path.basename(newArchivePath)}`);
+      } catch {
+        // Plik nie istnieje - przenieś normalnie
+        await rename(filePath, archivePath);
+        logger.info(`   📦 Zarchiwizowano: ${filename} → archiwum/`);
+      }
+    } catch (error) {
+      logger.error(
+        `   ⚠️ Nie udało się zarchiwizować pliku ${filePath}: ${error instanceof Error ? error.message : 'Nieznany błąd'}`
+      );
+    }
   }
 
   /**

@@ -1,12 +1,14 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import chokidar from 'chokidar';
 import type { PrismaClient } from '@prisma/client';
 import type { FSWatcher } from 'chokidar';
 import type { IFileWatcher, WatcherPaths } from './types.js';
 import { getSetting } from './utils.js';
 import { GlassWatcher } from './GlassWatcher.js';
 import { UzyteBeleWatcher } from './UzyteBeleWatcher.js';
+import { UzyteBelePrywatneWatcher } from './UzyteBelePrywatneWatcher.js';
+import { CenyWatcher } from './CenyWatcher.js';
+import { OkucZapotrzebowaWatcher } from './OkucZapotrzebowaWatcher.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +22,9 @@ export class FileWatcherFactory implements IFileWatcher {
   private watchers: FSWatcher[] = [];
   private glassWatcher: GlassWatcher;
   private uzyteBeleWatcher: UzyteBeleWatcher;
+  private uzyteBelePrywatneWatcher: UzyteBelePrywatneWatcher;
+  private cenyWatcher: CenyWatcher;
+  private okucZapotrzebowaWatcher: OkucZapotrzebowaWatcher;
   private projectRoot: string;
 
   constructor(prisma: PrismaClient) {
@@ -27,6 +32,9 @@ export class FileWatcherFactory implements IFileWatcher {
     this.projectRoot = path.resolve(__dirname, '../../../../../');
     this.glassWatcher = new GlassWatcher(prisma);
     this.uzyteBeleWatcher = new UzyteBeleWatcher(prisma);
+    this.uzyteBelePrywatneWatcher = new UzyteBelePrywatneWatcher(prisma);
+    this.cenyWatcher = new CenyWatcher(prisma);
+    this.okucZapotrzebowaWatcher = new OkucZapotrzebowaWatcher(prisma);
   }
 
   async start(): Promise<void> {
@@ -34,30 +42,38 @@ export class FileWatcherFactory implements IFileWatcher {
 
     console.log('👀 Uruchamiam File Watcher...');
     console.log(`   📁 Folder "użyte bele": ${paths.watchFolderUzyteBele}`);
+    console.log(`   📁 Folder "użyte bele prywatne": ${paths.watchFolderUzyteBelePrywatne}`);
     console.log(`   📁 Folder "ceny": ${paths.watchFolderCeny}`);
     console.log(`   📁 Folder "zamówienia szyb": ${paths.watchFolderGlassOrders}`);
     console.log(`   📁 Folder "dostawy szyb": ${paths.watchFolderGlassDeliveries}`);
+    console.log(`   📁 Folder "okuc zapotrzebowanie": ${paths.watchFolderOkucZapotrzebowanie}`);
 
     // Najpierw zeskanuj istniejące foldery użyte bele
     await this.uzyteBeleWatcher.scanExistingFolders(paths.watchFolderUzyteBele);
 
     // Uruchom poszczególne watchery
     await this.uzyteBeleWatcher.start(paths.watchFolderUzyteBele);
+    await this.uzyteBelePrywatneWatcher.start(paths.watchFolderUzyteBelePrywatne);
     await this.glassWatcher.start(paths.watchFolderGlassOrders, paths.watchFolderGlassDeliveries);
-
-    // Watcher dla folderu "ceny" (PDF) - stary system, zostawiamy tutaj
-    this.watchCenyFolder(paths.watchFolderCeny);
+    await this.cenyWatcher.start(paths.watchFolderCeny);
+    await this.okucZapotrzebowaWatcher.start(paths.watchFolderOkucZapotrzebowanie);
 
     // Zbierz wszystkie watchery
     this.watchers = [
       ...this.glassWatcher.getWatchers(),
       ...this.uzyteBeleWatcher.getWatchers(),
+      ...this.uzyteBelePrywatneWatcher.getWatchers(),
+      ...this.cenyWatcher.getWatchers(),
+      ...this.okucZapotrzebowaWatcher.getWatchers(),
     ];
   }
 
   async stop(): Promise<void> {
     await this.glassWatcher.stop();
     await this.uzyteBeleWatcher.stop();
+    await this.uzyteBelePrywatneWatcher.stop();
+    await this.cenyWatcher.stop();
+    await this.okucZapotrzebowaWatcher.stop();
 
     for (const watcher of this.watchers) {
       await watcher.close();
@@ -105,6 +121,10 @@ export class FileWatcherFactory implements IFileWatcher {
       || await getSetting(this.prisma, 'watchFolderUzyteBele')
       || path.join(this.projectRoot, 'uzyte bele');
 
+    const watchFolderUzyteBelePrywatne = process.env.WATCH_FOLDER_UZYTE_BELE_PRYWATNE
+      || await getSetting(this.prisma, 'watchFolderUzyteBelePrywatne')
+      || path.join(this.projectRoot, 'uzyte_bele_prywatne');
+
     const watchFolderCeny = process.env.WATCH_FOLDER_CENY
       || await getSetting(this.prisma, 'watchFolderCeny')
       || path.join(this.projectRoot, 'ceny');
@@ -117,73 +137,20 @@ export class FileWatcherFactory implements IFileWatcher {
       || await getSetting(this.prisma, 'watchFolderGlassDeliveries')
       || path.join(this.projectRoot, 'dostawy_szyb');
 
+    const watchFolderOkucZapotrzebowanie = process.env.WATCH_FOLDER_OKUC_ZAPOTRZEBOWANIE
+      || await getSetting(this.prisma, 'watchFolderOkucZapotrzebowanie')
+      || path.join(this.projectRoot, 'okuc_zapotrzebowanie');
+
     return {
       watchFolderUzyteBele,
+      watchFolderUzyteBelePrywatne,
       watchFolderCeny,
       watchFolderGlassOrders,
       watchFolderGlassDeliveries,
+      watchFolderOkucZapotrzebowanie,
       importsBasePath: '',
       importsCenyPath: '',
     };
   }
 
-  /**
-   * Watcher dla folderu "ceny" (PDF) - legacy, zostawiamy tutaj
-   */
-  private watchCenyFolder(folderPath: string): void {
-    const absolutePath = path.resolve(folderPath);
-    const globPatterns = [path.join(absolutePath, '*.pdf'), path.join(absolutePath, '*.PDF')];
-
-    const watcher = chokidar.watch(globPatterns, {
-      persistent: true,
-      ignoreInitial: false,
-      awaitWriteFinish: {
-        stabilityThreshold: 2000,
-        pollInterval: 100,
-      },
-    });
-
-    watcher
-      .on('add', async (filePath) => {
-        console.log(`📄 Wykryto nowy plik PDF: ${filePath}`);
-        await this.handleNewCenyFile(filePath);
-      })
-      .on('error', (error) => {
-        console.error(`❌ Błąd File Watcher dla ${folderPath}:`, error);
-      });
-
-    this.watchers.push(watcher);
-  }
-
-  /**
-   * Obsługa nowego pliku PDF w folderze ceny
-   */
-  private async handleNewCenyFile(filePath: string): Promise<void> {
-    const filename = path.basename(filePath);
-
-    // Sprawdź czy plik już był importowany
-    const existing = await this.prisma.fileImport.findFirst({
-      where: {
-        filepath: filePath,
-        status: { in: ['pending', 'completed'] },
-      },
-    });
-
-    if (existing) {
-      console.log(`   ⏭️ Plik już zarejestrowany: ${filename}`);
-      return;
-    }
-
-    // Zarejestruj nowy plik do importu
-    const fileImport = await this.prisma.fileImport.create({
-      data: {
-        filename,
-        filepath: filePath,
-        fileType: 'ceny_pdf',
-        status: 'pending',
-      },
-    });
-
-    console.log(`   ✅ Zarejestrowano do importu: ${filename} (ID: ${fileImport.id})`);
-  }
 }

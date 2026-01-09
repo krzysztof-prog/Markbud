@@ -4,6 +4,7 @@
  * Modułowy system monitorowania plików podzielony na domeny:
  * - GlassWatcher - zamówienia i dostawy szyb (.txt, .csv)
  * - UzyteBeleWatcher - import użytych beli CSV (foldery z datą)
+ * - CenyWatcher - import plików PDF z cenami zleceń
  * - FileWatcherFactory - orkiestrator wszystkich watcherów
  *
  * @module file-watcher
@@ -36,6 +37,9 @@ export {
 // Klasy watcherów
 export { GlassWatcher } from './GlassWatcher.js';
 export { UzyteBeleWatcher } from './UzyteBeleWatcher.js';
+export { UzyteBelePrywatneWatcher } from './UzyteBelePrywatneWatcher.js';
+export { CenyWatcher } from './CenyWatcher.js';
+export { OkucZapotrzebowaWatcher } from './OkucZapotrzebowaWatcher.js';
 export { FileWatcherFactory } from './FileWatcherFactory.js';
 
 // Backward compatibility - alias dla starego FileWatcherService
@@ -45,10 +49,12 @@ import { FileWatcherFactory } from './FileWatcherFactory.js';
 /**
  * @deprecated Użyj FileWatcherFactory zamiast FileWatcherService
  */
+// eslint-disable-next-line @typescript-eslint/no-redeclare
 export const FileWatcherService = FileWatcherFactory;
 
 /**
  * Typ dla backward compatibility
  * @deprecated Użyj FileWatcherFactory zamiast FileWatcherService
  */
+// eslint-disable-next-line no-redeclare
 export type FileWatcherService = FileWatcherFactory;
