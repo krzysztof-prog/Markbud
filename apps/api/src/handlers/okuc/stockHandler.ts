@@ -6,10 +6,13 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../utils/prisma.js';
 import { logger } from '../../utils/logger.js';
 import { OkucStockRepository } from '../../repositories/okuc/OkucStockRepository.js';
-import {
-  updateStockSchema,
-  type UpdateStockInput,
-} from '../../validators/okuc.js';
+import { updateStockSchema } from '../../validators/okuc.js';
+
+interface AuthenticatedRequest extends FastifyRequest {
+  user?: {
+    id: number;
+  };
+}
 
 const repository = new OkucStockRepository(prisma);
 
@@ -20,7 +23,12 @@ export const okucStockHandler = {
    */
   async list(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const { articleId, warehouseType, subWarehouse, belowMin } = request.query as any;
+      const { articleId, warehouseType, subWarehouse, belowMin } = request.query as {
+        articleId?: string;
+        warehouseType?: string;
+        subWarehouse?: string;
+        belowMin?: string;
+      };
 
       const filters = {
         articleId: articleId ? parseInt(articleId, 10) : undefined,
@@ -73,7 +81,10 @@ export const okucStockHandler = {
         return reply.status(400).send({ error: 'Invalid article ID' });
       }
 
-      const { warehouseType, subWarehouse } = request.query as any;
+      const { warehouseType, subWarehouse } = request.query as {
+        warehouseType?: string;
+        subWarehouse?: string;
+      };
       if (!warehouseType) {
         return reply.status(400).send({ error: 'warehouseType is required' });
       }
@@ -104,7 +115,7 @@ export const okucStockHandler = {
       const validated = updateStockSchema.parse(request.body);
 
       // Extract userId from auth (assuming it's in request.user)
-      const userId = (request as any).user?.id;
+      const userId = (request as AuthenticatedRequest).user?.id;
       if (!userId) {
         return reply.status(401).send({ error: 'User not authenticated' });
       }
@@ -143,7 +154,7 @@ export const okucStockHandler = {
       }
 
       // Extract userId from auth
-      const userId = (request as any).user?.id;
+      const userId = (request as AuthenticatedRequest).user?.id;
       if (!userId) {
         return reply.status(401).send({ error: 'User not authenticated' });
       }
@@ -166,7 +177,9 @@ export const okucStockHandler = {
    */
   async summary(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const { warehouseType } = request.query as any;
+      const { warehouseType } = request.query as {
+        warehouseType?: string;
+      };
 
       const summary = await repository.getSummary(warehouseType);
 
@@ -183,7 +196,9 @@ export const okucStockHandler = {
    */
   async belowMinimum(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const { warehouseType } = request.query as any;
+      const { warehouseType } = request.query as {
+        warehouseType?: string;
+      };
 
       const stocks = await repository.findBelowMinimum(warehouseType);
 

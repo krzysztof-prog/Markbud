@@ -24,7 +24,12 @@ export const okucOrderHandler = {
    */
   async list(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const { status, basketType, fromDate, toDate } = request.query as any;
+      const { status, basketType, fromDate, toDate } = request.query as {
+        status?: string;
+        basketType?: string;
+        fromDate?: string;
+        toDate?: string;
+      };
 
       const filters = {
         status,

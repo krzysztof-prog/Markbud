@@ -22,7 +22,16 @@ export const okucDemandHandler = {
    */
   async list(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const { articleId, orderId, status, source, expectedWeek, fromWeek, toWeek, isManualEdit } = request.query as any;
+      const { articleId, orderId, status, source, expectedWeek, fromWeek, toWeek, isManualEdit } = request.query as {
+        articleId?: string;
+        orderId?: string;
+        status?: string;
+        source?: string;
+        expectedWeek?: string;
+        fromWeek?: string;
+        toWeek?: string;
+        isManualEdit?: string;
+      };
 
       const filters = {
         articleId: articleId ? parseInt(articleId, 10) : undefined,
@@ -75,7 +84,10 @@ export const okucDemandHandler = {
    */
   async getSummary(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const { fromWeek, toWeek } = request.query as any;
+      const { fromWeek, toWeek } = request.query as {
+        fromWeek?: string;
+        toWeek?: string;
+      };
 
       const summary = await repository.getSummaryByWeek({
         fromWeek,

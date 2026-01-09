@@ -22,7 +22,13 @@ export const okucArticleHandler = {
    */
   async list(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const { usedInPvc, usedInAlu, orderClass, sizeClass, isActive } = request.query as any;
+      const { usedInPvc, usedInAlu, orderClass, sizeClass, isActive } = request.query as {
+        usedInPvc?: string;
+        usedInAlu?: string;
+        orderClass?: string;
+        sizeClass?: string;
+        isActive?: string;
+      };
 
       const filters = {
         usedInPvc: usedInPvc !== undefined ? usedInPvc === 'true' : undefined,
@@ -277,6 +283,84 @@ export const okucArticleHandler = {
     } catch (error) {
       logger.error('Failed to import articles CSV', { error });
       return reply.status(500).send({ error: 'Failed to import articles' });
+    }
+  },
+
+  /**
+   * GET /api/okuc/articles/pending-review
+   * List all articles awaiting orderClass verification
+   */
+  async listPendingReview(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const articles = await prisma.okucArticle.findMany({
+        where: {
+          orderClass: 'pending_review',
+          deletedAt: null,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return reply.status(200).send(articles);
+    } catch (error) {
+      logger.error('Failed to list pending review articles', { error });
+      return reply.status(500).send({ error: 'Failed to list pending review articles' });
+    }
+  },
+
+  /**
+   * POST /api/okuc/articles/batch-update-order-class
+   * Update orderClass for multiple articles at once
+   * Body: { articles: [{ id: number, orderClass: 'typical' | 'atypical' }] }
+   */
+  async batchUpdateOrderClass(
+    request: FastifyRequest<{
+      Body: { articles: Array<{ id: number; orderClass: 'typical' | 'atypical' }> };
+    }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const { articles } = request.body;
+
+      if (!articles || !Array.isArray(articles) || articles.length === 0) {
+        return reply.status(400).send({ error: 'Brak artykulow do aktualizacji' });
+      }
+
+      const results = {
+        updated: 0,
+        failed: 0,
+        errors: [] as Array<{ id: number; error: string }>,
+      };
+
+      // Aktualizuj kazdy artykul
+      for (const item of articles) {
+        try {
+          if (!item.id || !['typical', 'atypical'].includes(item.orderClass)) {
+            results.failed++;
+            results.errors.push({ id: item.id, error: 'Nieprawidlowe dane' });
+            continue;
+          }
+
+          await prisma.okucArticle.update({
+            where: { id: item.id },
+            data: { orderClass: item.orderClass },
+          });
+
+          results.updated++;
+        } catch (error) {
+          results.failed++;
+          results.errors.push({
+            id: item.id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+
+      logger.info(`Batch update orderClass: ${results.updated} updated, ${results.failed} failed`);
+
+      return reply.status(200).send(results);
+    } catch (error) {
+      logger.error('Failed to batch update orderClass', { error });
+      return reply.status(500).send({ error: 'Failed to batch update orderClass' });
     }
   },
 

@@ -22,7 +22,9 @@ export const okucProportionHandler = {
    */
   async list(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const { isActive } = request.query as any;
+      const { isActive } = request.query as {
+        isActive?: string;
+      };
 
       const filters = {
         isActive: isActive !== undefined ? isActive === 'true' : undefined,

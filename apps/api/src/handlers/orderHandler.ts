@@ -128,4 +128,19 @@ export class OrderHandler {
     const orders = await this.service.getMonthlyProduction(year, month);
     return reply.status(200).send(orders);
   }
+
+  /**
+   * Wyszukiwanie zleceń - zoptymalizowane dla GlobalSearch
+   * GET /api/orders/search?q=query&includeArchived=true
+   */
+  async search(
+    request: FastifyRequest<{ Querystring: { q: string; includeArchived?: string } }>,
+    reply: FastifyReply
+  ) {
+    const { q, includeArchived } = request.query;
+    const includeArchivedBool = includeArchived !== 'false';
+
+    const orders = await this.service.searchOrders(q, includeArchivedBool);
+    return reply.status(200).send(orders);
+  }
 }

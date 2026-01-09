@@ -103,6 +103,9 @@ model Order {
   orderedGlassCount   Int?                @default(0) @map("ordered_glass_count")
   deliveredGlassCount Int?                @default(0) @map("delivered_glass_count")
   glassOrderStatus    String?             @default("not_ordered") @map("glass_order_status")
+  // Status okuć dla zlecenia: 'none' | 'imported' | 'has_atypical' | 'pending'
+  // none - brak zapotrzebowania, imported - zaimportowano, has_atypical - są nietypowe, pending - czeka na zlecenie
+  okucDemandStatus    String?             @default("none") @map("okuc_demand_status")
   deliveryOrders      DeliveryOrder[]
   // Removed glassOrderItems relation - no FK constraint (glass orders can exist without production order)
   monthlyReportItems  MonthlyReportItem[]
@@ -121,6 +124,7 @@ model Order {
   @@index([glassOrderStatus])
   @@index([glassOrderStatus, archivedAt])
   @@index([deliveryDate, status])
+  @@index([okucDemandStatus])
   @@map("orders")
 }
 
@@ -506,6 +510,9 @@ model GlassDelivery {
   createdAt             DateTime            @default(now()) @map("created_at")
   fileImport            FileImport?         @relation(fields: [fileImportId], references: [id])
   items                 GlassDeliveryItem[]
+  looseGlasses          LooseGlass[]
+  aluminumGlasses       AluminumGlass[]
+  reclamationGlasses    ReclamationGlass[]
 
   @@index([deliveryDate])
   @@index([customerOrderNumber])
@@ -922,4 +929,76 @@ model OkucHistory {
   @@index([warehouseType, subWarehouse])
   @@index([isManualEdit])
   @@map("okuc_history")
+}
+
+// =============================================================================
+// KATEGORYZOWANE SZYBY - Luzem, Aluminium, Reklamacyjne
+// =============================================================================
+
+// Typ kategorii szyb
+// loose - szyby luzem (nr zam. klienta 9-11 cyfr lub bez długiego numeru)
+// aluminum - szyby aluminiowe (zawiera "AL.")
+// reclamation - szyby reklamacyjne (zawiera "R/")
+
+model LooseGlass {
+  id                  Int       @id @default(autoincrement())
+  glassDeliveryId     Int       @map("glass_delivery_id")
+  customerOrderNumber String    @map("customer_order_number")
+  clientName          String?   @map("client_name")
+  widthMm             Int       @map("width_mm")
+  heightMm            Int       @map("height_mm")
+  quantity            Int
+  orderNumber         String    @map("order_number")
+  glassComposition    String?   @map("glass_composition")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  glassDelivery       GlassDelivery @relation(fields: [glassDeliveryId], references: [id], onDelete: Cascade)
+
+  @@index([customerOrderNumber])
+  @@index([clientName])
+  @@index([orderNumber])
+  @@index([glassDeliveryId])
+  @@map("loose_glasses")
+}
+
+model AluminumGlass {
+  id                  Int       @id @default(autoincrement())
+  glassDeliveryId     Int       @map("glass_delivery_id")
+  customerOrderNumber String    @map("customer_order_number")
+  clientName          String?   @map("client_name")
+  widthMm             Int       @map("width_mm")
+  heightMm            Int       @map("height_mm")
+  quantity            Int
+  orderNumber         String    @map("order_number")
+  glassComposition    String?   @map("glass_composition")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  glassDelivery       GlassDelivery @relation(fields: [glassDeliveryId], references: [id], onDelete: Cascade)
+
+  @@index([customerOrderNumber])
+  @@index([clientName])
+  @@index([orderNumber])
+  @@index([glassDeliveryId])
+  @@map("aluminum_glasses")
+}
+
+model ReclamationGlass {
+  id                  Int       @id @default(autoincrement())
+  glassDeliveryId     Int       @map("glass_delivery_id")
+  customerOrderNumber String    @map("customer_order_number")
+  clientName          String?   @map("client_name")
+  widthMm             Int       @map("width_mm")
+  heightMm            Int       @map("height_mm")
+  quantity            Int
+  orderNumber         String    @map("order_number")
+  glassComposition    String?   @map("glass_composition")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  glassDelivery       GlassDelivery @relation(fields: [glassDeliveryId], references: [id], onDelete: Cascade)
+
+  @@index([customerOrderNumber])
+  @@index([clientName])
+  @@index([orderNumber])
+  @@index([glassDeliveryId])
+  @@map("reclamation_glasses")
 }

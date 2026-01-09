@@ -6,6 +6,7 @@
  */
 
 import { vi } from 'vitest';
+import type { PrismaClient } from '@prisma/client';
 
 export const createMockPrisma = () => {
   return {
@@ -197,9 +198,9 @@ export const createMockPrisma = () => {
       deleteMany: vi.fn(),
       count: vi.fn(),
     },
-    $transaction: vi.fn(),
+    $transaction: vi.fn() as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     $queryRaw: vi.fn(),
-  } as any;
+  } as unknown as PrismaClient;
 };
 
 /**
@@ -211,11 +212,17 @@ export const prismaMock = createMockPrisma();
  * Setup transaction mock to pass the prisma mock as tx argument
  */
 export const setupTransactionMock = (mockPrisma: ReturnType<typeof createMockPrisma>) => {
-  mockPrisma.$transaction.mockImplementation(async (arg: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (mockPrisma.$transaction as any).mockImplementation(async (arg: unknown) => {
     // Handle both function and array forms of $transaction
     if (typeof arg === 'function') {
       return arg(mockPrisma);
     }
-    return Promise.all(arg);
+    // arg is an array of promises
+    if (Array.isArray(arg)) {
+      return Promise.all(arg);
+    }
+    // Fallback for unknown transaction types
+    return arg;
   });
 };
