@@ -80,14 +80,19 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
 
   /**
    * Obserwuj folder zapotrzebowania okuc (.csv)
+   * UWAGA: Na udziałach sieciowych Windows (UNC paths) glob patterns nie działają
+   * Dlatego obserwujemy cały folder i filtrujemy pliki po rozszerzeniu
    */
   private watchOkucZapFolder(basePath: string): void {
     const absolutePath = path.resolve(basePath);
-    const globPatterns = [path.join(absolutePath, '*.csv'), path.join(absolutePath, '*.CSV')];
 
-    const watcher = chokidar.watch(globPatterns, {
+    // Obserwuj folder bezpośrednio (nie glob patterns - nie działają na UNC paths)
+    const watcher = chokidar.watch(absolutePath, {
       persistent: true,
       ignoreInitial: false,
+      depth: 0, // Tylko pliki w głównym folderze
+      usePolling: true, // Polling działa lepiej na udziałach sieciowych
+      interval: 1000, // Sprawdzaj co 1s
       awaitWriteFinish: {
         stabilityThreshold: this.config.stabilityThreshold,
         pollInterval: this.config.pollInterval,
@@ -96,6 +101,11 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
 
     watcher
       .on('add', async (filePath) => {
+        // Filtruj tylko pliki CSV
+        const lowerName = path.basename(filePath).toLowerCase();
+        if (!lowerName.endsWith('.csv')) {
+          return;
+        }
         await this.handleNewOkucZapCsv(filePath);
       })
       .on('error', (error) => {
