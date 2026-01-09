@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,10 +46,18 @@ export function GlassOrdersTable() {
   const { data: orders, isLoading, error } = useGlassOrders();
   const deleteMutation = useDeleteGlassOrder();
   const [selectedOrder, setSelectedOrder] = useState<GlassOrder | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<{ id: number; orderNumber: string } | null>(null);
 
-  const handleDelete = (id: number) => {
-    if (confirm('Czy na pewno chcesz usunac to zamowienie?')) {
-      deleteMutation.mutate(id);
+  const handleDelete = (id: number, orderNumber: string) => {
+    setOrderToDelete({ id, orderNumber });
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (orderToDelete) {
+      deleteMutation.mutate(orderToDelete.id);
+      setOrderToDelete(null);
     }
   };
 
@@ -156,11 +165,11 @@ export function GlassOrdersTable() {
                           Szczegoly
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => handleDelete(order.id)}
+                          onClick={() => handleDelete(order.id, order.glassOrderNumber)}
                           className="text-red-600"
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
-                          Usun
+                          Usuń
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -178,6 +187,18 @@ export function GlassOrdersTable() {
           onClose={() => setSelectedOrder(null)}
         />
       )}
+
+      {/* Dialog potwierdzenia usunięcia */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Usuń zamówienie szyb"
+        description={`Czy na pewno chcesz usunąć zamówienie ${orderToDelete?.orderNumber || ''}? Wszystkie powiązane pozycje zostaną również usunięte.`}
+        confirmText="Usuń"
+        onConfirm={confirmDelete}
+        isLoading={deleteMutation.isPending}
+        variant="destructive"
+      />
     </>
   );
 }

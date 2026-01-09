@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { Trash2, MoreHorizontal, Package, AlertCircle } from 'lucide-react';
@@ -14,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,10 +27,18 @@ import { useGlassDeliveries, useDeleteGlassDelivery } from '../hooks/useGlassDel
 export function GlassDeliveriesTable() {
   const { data: deliveries, isLoading, error } = useGlassDeliveries();
   const deleteMutation = useDeleteGlassDelivery();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deliveryToDelete, setDeliveryToDelete] = useState<{ id: number; rackNumber: string } | null>(null);
 
-  const handleDelete = (id: number) => {
-    if (confirm('Czy na pewno chcesz usunac te dostawe?')) {
-      deleteMutation.mutate(id);
+  const handleDelete = (id: number, rackNumber: string) => {
+    setDeliveryToDelete({ id, rackNumber });
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (deliveryToDelete) {
+      deleteMutation.mutate(deliveryToDelete.id);
+      setDeliveryToDelete(null);
     }
   };
 
@@ -97,11 +107,11 @@ export function GlassDeliveriesTable() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem
-                      onClick={() => handleDelete(delivery.id)}
+                      onClick={() => handleDelete(delivery.id, delivery.rackNumber)}
                       className="text-red-600"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Usun
+                      Usuń
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -110,6 +120,18 @@ export function GlassDeliveriesTable() {
           ))}
         </TableBody>
       </Table>
+
+      {/* Dialog potwierdzenia usunięcia */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Usuń dostawę szyb"
+        description={`Czy na pewno chcesz usunąć dostawę ${deliveryToDelete?.rackNumber || ''}? Wszystkie powiązane pozycje zostaną również usunięte.`}
+        confirmText="Usuń"
+        onConfirm={confirmDelete}
+        isLoading={deleteMutation.isPending}
+        variant="destructive"
+      />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/empty-state';
 import { MobileScrollHint } from '@/components/ui/mobile-scroll-hint';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { colorsApi, ordersApi, warehouseApi, warehouseOrdersApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { showSuccessToast, showErrorToast, getErrorMessage } from '@/lib/toast-helpers';
@@ -392,6 +393,8 @@ function WarehouseTable({ data, isLoading, colorId }: { data: WarehouseTableRow[
     expectedDeliveryDate: string;
     notes: string;
   }>({ orderedBeams: '', expectedDeliveryDate: '', notes: '' });
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<{ id: number; beams: number } | null>(null);
 
   // Debounce months to avoid too many API calls
   const debouncedMonths = useDebounce(months, 500);
@@ -420,6 +423,18 @@ function WarehouseTable({ data, isLoading, colorId }: { data: WarehouseTableRow[
       showErrorToast('Błąd usuwania zamówienia', getErrorMessage(error));
     },
   });
+
+  const handleDeleteOrder = (orderId: number, beams: number) => {
+    setOrderToDelete({ id: orderId, beams });
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (orderToDelete) {
+      deleteOrderMutation.mutate(orderToDelete.id);
+      setOrderToDelete(null);
+    }
+  };
 
   const updateOrderMutation = useMutation({
     mutationFn: ({ orderId, status }: { orderId: number; status: 'pending' | 'received' | 'cancelled' }) =>
@@ -699,7 +714,7 @@ function WarehouseTable({ data, isLoading, colorId }: { data: WarehouseTableRow[
                                       size="sm"
                                       variant="ghost"
                                       className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
-                                      onClick={() => deleteOrderMutation.mutate(order.id)}
+                                      onClick={() => handleDeleteOrder(order.id, order.orderedBeams)}
                                       disabled={deleteOrderMutation.isPending}
                                       aria-label={`Usuń zamówienie ${order.orderedBeams} bel`}
                                     >
@@ -822,6 +837,18 @@ function WarehouseTable({ data, isLoading, colorId }: { data: WarehouseTableRow[
           </div>
         </CardContent>
       </Card>
+
+      {/* Dialog potwierdzenia usunięcia zamówienia */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Usuń zamówienie"
+        description={`Czy na pewno chcesz usunąć zamówienie na ${orderToDelete?.beams || 0} bel?`}
+        confirmText="Usuń"
+        onConfirm={confirmDelete}
+        isLoading={deleteOrderMutation.isPending}
+        variant="destructive"
+      />
     </>
   );
 }

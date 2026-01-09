@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 // Badge import - może być używany w przyszłości
 // import { Badge } from '@/components/ui/badge';
 import { ordersApi } from '@/lib/api';
@@ -18,11 +19,16 @@ export default function ArchiwumPage() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm, 300); // 300ms debounce
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<{ id: number; number: string } | null>(null);
 
-  const { data: orders, isLoading } = useQuery({
+  // API zwraca PaginatedResponse { data: Order[], total, skip, take }
+  const { data: response, isLoading } = useQuery({
     queryKey: ['orders', 'archived'],
     queryFn: () => ordersApi.getAll({ archived: 'true' }),
   });
+
+  const orders = response?.data ?? [];
 
   const unarchiveMutation = useMutation({
     mutationFn: ordersApi.unarchive,
@@ -38,9 +44,9 @@ export default function ArchiwumPage() {
     },
   });
 
-  const filteredOrders = orders?.filter((order: Order) =>
+  const filteredOrders = orders.filter((order: Order) =>
     order.orderNumber.toLowerCase().includes(debouncedSearch.toLowerCase())
-  ) || [];
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -117,9 +123,8 @@ export default function ArchiwumPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => {
-                                if (confirm('Czy na pewno chcesz usunąć to zlecenie? Tej operacji nie można cofnąć.')) {
-                                  deleteMutation.mutate(order.id);
-                                }
+                                setOrderToDelete({ id: order.id, number: order.orderNumber });
+                                setDeleteDialogOpen(true);
                               }}
                               disabled={deleteMutation.isPending}
                               title="Usuń permanentnie"
@@ -144,6 +149,23 @@ export default function ArchiwumPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Dialog potwierdzenia usunięcia */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Usuń zlecenie"
+        description={`Czy na pewno chcesz usunąć zlecenie ${orderToDelete?.number || ''}? Tej operacji nie można cofnąć.`}
+        confirmText="Usuń"
+        onConfirm={() => {
+          if (orderToDelete) {
+            deleteMutation.mutate(orderToDelete.id);
+            setOrderToDelete(null);
+          }
+        }}
+        isLoading={deleteMutation.isPending}
+        variant="destructive"
+      />
     </div>
   );
 }
