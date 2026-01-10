@@ -10,6 +10,10 @@ out/
 .turbo/cache/
 
 # Environment files
+.env
+.env.local
+.env.production.local
+# Wyjątek: .env.production jest w repo jako template (wymaga edycji przed użyciem)
 
 
 # IDE
@@ -37,6 +41,7 @@ prisma/*.db-journal
 # Database backups
 *.backup-*
 apps/api/prisma/*.backup-*
+backups/
 
 # Temporary files
 tmp/

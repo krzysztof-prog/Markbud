@@ -466,6 +466,161 @@ User: "Dodaj przycisk do usuwania dostawy"
 
 ---
 
+## 🚀 DEPLOYMENT - DEV vs PROD (KRYTYCZNE!)
+
+⚠️ **UWAGA:** Projekt ma DWIE konfiguracje środowiskowe - NIE MIESZAJ ICH!
+
+### 📍 Różnice DEV vs PROD
+
+| Aspekt | DEV (Development) | PROD (Production) |
+|--------|-------------------|-------------------|
+| **Lokalizacja** | Twój komputer deweloperski | Serwer Windows w biurze |
+| **Porty API** | `4000` | `5000` |
+| **Porty Web** | `3000` | `5001` |
+| **Baza danych** | `dev.db` | `prod.db` |
+| **PM2 Process** | `pnpm dev` (bez PM2) | PM2 jako Windows Service |
+| **Watched Folders** | **Lokalne testowe** (`C:\DEV_DATA\*`) | **Sieciowe** (`//192.168.1.6/Public/Markbud_import/*`) |
+| **Plik .env** | `apps/api/.env` (lokalny, **NIE w Git**) | `apps/api/.env.production` (template w Git) |
+
+### ⛔ KRYTYCZNE ZASADY DEPLOYMENT
+
+#### 1. NIE MIESZAJ FOLDERÓW DEV I PROD!
+
+```powershell
+# ❌ BŁĄD - Foldery lokalne w PROD
+WATCH_FOLDER_UZYTE_BELE=C:/DEV_DATA/uzyte_bele
+
+# ✅ DEV używa lokalnych folderów testowych:
+WATCH_FOLDER_UZYTE_BELE=C:/DEV_DATA/uzyte_bele
+WATCH_FOLDER_CENY=C:/DEV_DATA/ceny
+# ... (wszystkie lokalne dla testów)
+
+# ✅ PROD używa folderów sieciowych:
+WATCH_FOLDER_UZYTE_BELE=//192.168.1.6/Public/Markbud_import/uzyte_bele
+WATCH_FOLDER_CENY=//192.168.1.6/Public/Markbud_import/ceny
+# ... (wszystkie sieciowe, prawdziwe dane)
+```
+
+**Dlaczego?**
+- DEV używa lokalnych folderów aby **NIE MIESZAĆ** danych testowych z produkcyjnymi
+- PROD używa folderów sieciowych bo tam są **prawdziwe pliki** od użytkowników
+- Lokalne foldery DEV są **szybsze** (nie przez sieć) i **bezpieczniejsze** (nie zepsujesz produkcji)
+
+#### 2. Różne porty dla DEV i PROD
+
+```
+DEV:  http://localhost:4000 (API) + http://localhost:3000 (Web)
+PROD: http://192.168.1.XXX:5000 (API) + http://192.168.1.XXX:5001 (Web)
+```
+
+**Dlaczego?** Możesz testować DEV i PROD równolegle bez konfliktów portów.
+
+#### 3. Różne bazy danych
+
+```
+DEV:  apps/api/prisma/dev.db
+PROD: apps/api/prisma/prod.db
+```
+
+**NIGDY** nie używaj `dev.db` w produkcji!
+
+#### 4. PM2 TYLKO w PROD
+
+```powershell
+# ❌ DEV - NIE używaj PM2
+pnpm dev              # Uruchom normalnie
+
+# ✅ PROD - ZAWSZE PM2
+pm2 start ecosystem.config.js
+pm2 save
+```
+
+**Dlaczego?** PM2 w PROD zapewnia automatyczne restarty, logi i Windows Service.
+
+### 📄 Pliki konfiguracyjne - JAK UŻYWAĆ
+
+#### DEV (.env - lokalny, NIE w Git)
+
+```powershell
+# 1. Skopiuj template:
+cd apps/api
+copy .env.example .env
+
+# 2. Edytuj .env i dodaj swoje credentials (Schuco itp.)
+# 3. Ustaw lokalne foldery testowe (C:\DEV_DATA\*)
+# 4. Port 4000 dla API
+
+# ⚠️ NIGDY NIE COMMITUJ .env do Git!
+```
+
+#### PROD (.env.production - template w Git)
+
+```powershell
+# 1. NA SERWERZE PRODUKCYJNYM:
+cd C:\inetpub\akrobud\apps\api
+
+# 2. Skopiuj .env.production jako .env:
+copy .env.production .env
+
+# 3. Edytuj .env i ustaw:
+#    - JWT_SECRET (losowy ciąg min. 32 znaki)
+#    - CORS_ORIGIN (IP serwera:5001)
+#    - Sprawdź czy foldery sieciowe są poprawne
+
+# 4. Port 5000 dla API
+
+# ⚠️ NIE EDYTUJ .env.production - to jest template!
+```
+
+### 🛡️ Guard Rails - Co Claude MUSI sprawdzić
+
+Gdy Claude pracuje z konfiguracją środowiskową:
+
+**Przed zapisem do .env lub ecosystem.config.js:**
+
+1. ✅ **Sprawdź PORT** - DEV (4000/3000) vs PROD (5000/5001)
+2. ✅ **Sprawdź DATABASE_URL** - dev.db vs prod.db
+3. ✅ **Sprawdź WATCH_FOLDER_*** - lokalne vs sieciowe
+4. ✅ **Sprawdź czy to DEV czy PROD** - nie mieszaj!
+
+**Gdy Claude widzi:**
+```env
+PORT=4000
+WATCH_FOLDER_UZYTE_BELE=//192.168.1.6/...
+```
+
+**Claude MUSI:**
+- 🛑 ZATRZYMAĆ SIĘ
+- ❓ ZAPYTAĆ: "To jest błąd! DEV używa portów 4000/3000 + lokalnych folderów (C:\DEV_DATA\*). PROD używa portów 5000/5001 + folderów sieciowych. Którą konfigurację chcesz?"
+
+### 📚 Dokumentacja deployment
+
+**Dla Claude na serwerze PROD:**
+- 📄 [CLAUDE_START.md](CLAUDE_START.md) - **Instrukcje dla Claude na serwerze produkcyjnym**
+
+**Dla użytkownika (deployment):**
+- 📄 [QUICK_START_PRODUCTION.md](QUICK_START_PRODUCTION.md) - Quick start (2-3h)
+- 📄 [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) - Pełny checklist deployment
+- 📄 [UPDATE_PRODUCTION.md](UPDATE_PRODUCTION.md) - Jak zaktualizować PROD
+- 📄 [docs/deployment/](docs/deployment/) - Szczegółowa dokumentacja
+
+**Dla użytkownika (DEV setup):**
+- 📄 [DEV_SETUP_LOCAL_FOLDERS.md](DEV_SETUP_LOCAL_FOLDERS.md) - Jak przełączyć DEV na lokalne foldery
+
+### 🎯 Checklist przed deployment (dla Claude)
+
+Gdy użytkownik poprosi o deployment lub zmiany w config:
+
+- [ ] Czy wiem czy to DEV czy PROD?
+- [ ] Czy porty są poprawne (DEV: 4000/3000, PROD: 5000/5001)?
+- [ ] Czy foldery są poprawne (DEV: lokalne, PROD: sieciowe)?
+- [ ] Czy baza jest poprawna (DEV: dev.db, PROD: prod.db)?
+- [ ] Czy PM2 jest tylko w PROD?
+- [ ] Czy przeczytałem [CLAUDE_START.md](CLAUDE_START.md) jeśli deployment na PROD?
+- [ ] Czy użytkownik wie jakie pliki musi edytować na serwerze?
+
+---
+
 ## 📂 Mapa dokumentacji - Gdzie co znajdziesz
 
 ### 🚀 Start szybki
@@ -475,6 +630,14 @@ User: "Dodaj przycisk do usuwania dostawy"
 - [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - **Najważniejsze zasady na 1 stronę** ⭐
 - [COMMON_MISTAKES.md](COMMON_MISTAKES.md) - **DO/DON'T** (MUSISZ PRZECZYTAĆ!)
 - [LESSONS_LEARNED.md](LESSONS_LEARNED.md) - Błędy z historii projektu
+
+### 🚀 Deployment i Production
+- [CLAUDE_START.md](CLAUDE_START.md) - **Instrukcje dla Claude na serwerze produkcyjnym**
+- [QUICK_START_PRODUCTION.md](QUICK_START_PRODUCTION.md) - Quick start deployment (2-3h)
+- [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) - Pełny checklist deployment
+- [UPDATE_PRODUCTION.md](UPDATE_PRODUCTION.md) - Jak zaktualizować produkcję
+- [DEV_SETUP_LOCAL_FOLDERS.md](DEV_SETUP_LOCAL_FOLDERS.md) - Setup DEV z lokalnymi folderami
+- [docs/deployment/](docs/deployment/) - Szczegółowa dokumentacja deployment
 
 ### 🏛️ Architektura
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Ogólna architektura systemu
@@ -824,8 +987,8 @@ Claude:
 
 ---
 
-**Wersja:** 3.0 (rozszerzona o best practices)
-**Ostatnia aktualizacja:** 2026-01-02
+**Wersja:** 3.1 (dodana sekcja DEPLOYMENT - DEV vs PROD)
+**Ostatnia aktualizacja:** 2026-01-10
 **Autor:** Krzysztof (z pomocą Claude Sonnet 4.5)
 
 ---

@@ -360,7 +360,8 @@
       "Bash(cmd /c \"dir \\\\\\\\192.168.1.6\\\\Public\\\\Markbud_import\\\\okucia_zap\")",
       "Bash(cmd.exe /c \"dir \\\\\\\\192.168.1.6\\\\Public\\\\Markbud_import\\\\okucia_zap\")",
       "Bash(cmd.exe /c \"tasklist | findstr node\")",
-      "Bash(pnpm exec vitest:*)"
+      "Bash(pnpm exec vitest:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []
