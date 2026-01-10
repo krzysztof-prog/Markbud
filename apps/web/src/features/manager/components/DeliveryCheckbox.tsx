@@ -33,13 +33,13 @@ interface DeliveryCheckboxProps {
  * - Unchecked (żadne zlecenie nie zaznaczone)
  * - Indeterminate (część zleceń zaznaczona)
  */
-export const DeliveryCheckbox: React.FC<DeliveryCheckboxProps> = ({
+export const DeliveryCheckbox = ({
   delivery,
-  checked,
+  checked: _checked,
   onChange,
   onOrderToggle,
   selectedOrderIds = new Set(),
-}) => {
+}: DeliveryCheckboxProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const checkboxRef = useRef<HTMLInputElement>(null);
 
@@ -64,6 +64,7 @@ export const DeliveryCheckbox: React.FC<DeliveryCheckboxProps> = ({
 
     delivery.deliveryOrders?.forEach((dOrder) => {
       if (dOrder.order) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Order type from delivery includes all necessary fields
         const status = getOrderCompletionStatus(dOrder.order as any);
         counts[status]++;
       }
@@ -172,6 +173,7 @@ export const DeliveryCheckbox: React.FC<DeliveryCheckboxProps> = ({
           {delivery.deliveryOrders.map((dOrder) => (
             <OrderCheckbox
               key={dOrder.order.id}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Order type from delivery includes all necessary fields
               order={dOrder.order as any}
               checked={selectedOrderIds.has(dOrder.order.id)}
               onChange={onOrderToggle}

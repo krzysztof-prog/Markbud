@@ -6,6 +6,7 @@ export { PalletTypesTab } from './PalletTypesTab';
 export { ColorsTab } from './ColorsTab';
 export { ProfilesTab } from './ProfilesTab';
 export { ProfileDepthsTab } from './ProfileDepthsTab';
+export { OkucLocationsTab } from './OkucLocationsTab';
 
 // Settings Dialog Components
 export {

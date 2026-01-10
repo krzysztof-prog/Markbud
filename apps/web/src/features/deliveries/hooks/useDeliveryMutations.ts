@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { deliveriesApi, workingDaysApi } from '@/lib/api';
 import { showSuccessToast, showErrorToast, getErrorMessage } from '@/lib/toast-helpers';
 import { TOAST_MESSAGES } from '@/lib/toast-messages';
-import type { Delivery, DeliveryCalendarData } from '@/types/delivery';
+import type { DeliveryCalendarData } from '@/types/delivery';
 import type { Order } from '@/types/order';
 
 const CALENDAR_QUERY_KEY = 'deliveries-calendar-continuous';

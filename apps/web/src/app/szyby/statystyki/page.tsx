@@ -1,12 +1,12 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { glassOrdersApi } from '@/features/glass/api/glassOrdersApi';
 import { glassDeliveriesApi } from '@/features/glass/api/glassDeliveriesApi';
-import type { GlassOrder, GlassDelivery } from '@/features/glass/types';
+import type { GlassOrder } from '@/features/glass/types';
 import {
   BarChart3,
   Package,
@@ -14,7 +14,9 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 
 // Formatowanie daty
@@ -62,8 +64,13 @@ export default function GlassStatisticsPage() {
     }
 
     const totalOrders = glassOrders.length;
-    const orderedGlasses = glassOrders.reduce((sum, order) => sum + (order._count?.items || 0), 0);
-
+    // Suma quantity ze wszystkich pozycji zamówień
+    const orderedGlasses = glassOrders.reduce((sum, order) => {
+      if (order.items && order.items.length > 0) {
+        return sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0);
+      }
+      return sum;
+    }, 0);
     const pendingOrders = glassOrders.filter(o => o.status === 'ordered').length;
     const partialOrders = glassOrders.filter(o => o.status === 'partially_delivered').length;
     const completedOrders = glassOrders.filter(o => o.status === 'delivered').length;
@@ -102,16 +109,19 @@ export default function GlassStatisticsPage() {
         });
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- dateKey was just set in the map above, guaranteed to exist
       const stats = dateMap.get(dateKey)!;
-      stats.orderedCount += order._count?.items || 0;
+      // Suma quantity z items (nie liczba pozycji)
+      const orderQuantity = order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
+      stats.orderedCount += orderQuantity;
       stats.orders.push(order);
 
       // Jeśli zamówienie jest dostarczone lub częściowo dostarczone
       if (order.status === 'delivered') {
-        stats.deliveredCount += order._count?.items || 0;
+        stats.deliveredCount += orderQuantity;
       } else if (order.status === 'partially_delivered') {
         // Częściowo - zakładamy 50% jako przybliżenie
-        stats.deliveredCount += Math.floor((order._count?.items || 0) / 2);
+        stats.deliveredCount += Math.floor(orderQuantity / 2);
       }
     });
 
@@ -120,6 +130,21 @@ export default function GlassStatisticsPage() {
   }, [glassOrders]);
 
   const isLoading = isLoadingOrders || isLoadingDeliveries;
+
+  // Stan rozwijania sekcji dat (domyślnie wszystkie zwinięte)
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+
+  const toggleDateExpanded = useCallback((date: string) => {
+    setExpandedDates(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(date)) {
+        newSet.delete(date);
+      } else {
+        newSet.add(date);
+      }
+      return newSet;
+    });
+  }, []);
 
   // Funkcja do określenia statusu wizualnego
   const getStatusIcon = (order: GlassOrder) => {
@@ -210,59 +235,78 @@ export default function GlassStatisticsPage() {
               </CardHeader>
               <CardContent>
                 {ordersByDate.length > 0 ? (
-                  <div className="space-y-4">
-                    {ordersByDate.map((dateStats) => (
-                      <div key={dateStats.date} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-medium text-lg">
-                            {formatDate(dateStats.date)}
-                          </h4>
-                          <div className="flex items-center gap-4 text-sm">
-                            <span className="text-blue-600">
-                              Zamówiono: {dateStats.orderedCount}
-                            </span>
-                            <span className="text-green-600">
-                              Dostarczono: {dateStats.deliveredCount}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Pasek postępu */}
-                        <div className="w-full h-2 bg-slate-200 rounded-full mb-3 overflow-hidden">
-                          <div
-                            className="h-full bg-green-500 transition-all"
-                            style={{
-                              width: `${dateStats.orderedCount > 0
-                                ? (dateStats.deliveredCount / dateStats.orderedCount * 100)
-                                : 0}%`
-                            }}
-                          />
-                        </div>
-
-                        {/* Lista zamówień dla tej daty */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                          {dateStats.orders.map((order) => (
-                            <div
-                              key={order.id}
-                              className="flex items-center justify-between p-2 bg-slate-50 rounded text-sm"
-                            >
-                              <div className="flex items-center gap-2">
-                                {getStatusIcon(order)}
-                                <span className="font-mono">{order.glassOrderNumber}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-slate-500">
-                                  {order._count?.items || 0} szt.
-                                </span>
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                                  {getStatusLabel(order.status)}
-                                </span>
-                              </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {ordersByDate.map((dateStats) => {
+                      const isExpanded = expandedDates.has(dateStats.date);
+                      return (
+                        <div key={dateStats.date} className="border rounded-lg overflow-hidden">
+                          {/* Nagłówek - klikalny */}
+                          <button
+                            onClick={() => toggleDateExpanded(dateStats.date)}
+                            className="w-full p-3 bg-slate-50 hover:bg-slate-100 transition-colors flex items-center justify-between text-left"
+                          >
+                            <div className="flex items-center gap-2">
+                              {isExpanded ? (
+                                <ChevronDown className="h-4 w-4 text-slate-500" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-slate-500" />
+                              )}
+                              <span className="font-medium">
+                                {formatDate(dateStats.date)}
+                              </span>
                             </div>
-                          ))}
+                            <div className="flex items-center gap-3 text-xs">
+                              <span className="text-blue-600">
+                                Zamówiono: {dateStats.orderedCount}
+                              </span>
+                              <span className="text-green-600">
+                                Dostarczono: {dateStats.deliveredCount}
+                              </span>
+                            </div>
+                          </button>
+
+                          {/* Pasek postępu - zawsze widoczny */}
+                          <div className="w-full h-1.5 bg-slate-200">
+                            <div
+                              className="h-full bg-green-500 transition-all"
+                              style={{
+                                width: `${dateStats.orderedCount > 0
+                                  ? (dateStats.deliveredCount / dateStats.orderedCount * 100)
+                                  : 0}%`
+                              }}
+                            />
+                          </div>
+
+                          {/* Lista zamówień - tylko gdy rozwinięte */}
+                          {isExpanded && (
+                            <div className="p-3 space-y-1.5">
+                              {dateStats.orders.map((order) => {
+                                const orderQuantity = order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
+                                return (
+                                  <div
+                                    key={order.id}
+                                    className="flex items-center justify-between p-2 bg-slate-50 rounded text-sm"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      {getStatusIcon(order)}
+                                      <span className="font-mono text-xs">{order.glassOrderNumber}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-slate-500 text-xs">
+                                        {orderQuantity} szt.
+                                      </span>
+                                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                                        {getStatusLabel(order.status)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-12 text-slate-500">

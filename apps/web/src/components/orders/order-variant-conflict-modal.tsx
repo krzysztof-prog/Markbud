@@ -10,9 +10,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Calendar, Package, FileText, Trash2 } from 'lucide-react';
-import type { VariantConflict } from '@/types/import';
+import type { VariantConflict, OrderVariant } from '@/types/import';
 
 interface OrderVariantConflictModalProps {
   open: boolean;
@@ -55,14 +54,6 @@ export function OrderVariantConflictModal({
       default:
         return 'Wykryto konflikt między nowym importem a istniejącymi zleceniami.';
     }
-  };
-
-  const formatDate = (date: Date | string) => {
-    return new Date(date).toLocaleDateString('pl-PL', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
   };
 
   return (
@@ -166,7 +157,7 @@ export function OrderVariantConflictModal({
   );
 }
 
-function OrderVariantCard({ variant, isNew = false }: { variant: any; isNew?: boolean }) {
+function OrderVariantCard({ variant, isNew = false }: { variant: OrderVariant; isNew?: boolean }) {
   return (
     <div className={`rounded-lg border p-3 ${isNew ? 'bg-white border-blue-300' : 'bg-white'}`}>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">

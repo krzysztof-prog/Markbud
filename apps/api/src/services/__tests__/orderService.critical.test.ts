@@ -14,7 +14,7 @@
  * 7. Concurrent Status Update (Optimistic Lock) (Integration)
  */
 
-import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // IMPORTANT: Mock the app index to prevent loading Fastify routes during test
 vi.mock('../../index.js', () => ({
@@ -74,12 +74,9 @@ vi.mock('../../utils/warehouse-validation.js', () => ({
 }));
 
 import { OrderService } from '../orderService.js';
-import { OrderRepository } from '../../repositories/OrderRepository.js';
 import { OrderBuilder } from '../../tests/fixtures/orders.fixture.js';
-import { ValidationError, NotFoundError } from '../../utils/errors.js';
-import { OptimisticLockError } from '../../utils/optimistic-locking.js';
+import { ValidationError } from '../../utils/errors.js';
 import { createMockPrisma, setupTransactionMock } from '../../tests/mocks/prisma.mock.js';
-import type { Order, DeliveryOrder, OrderRequirement, OrderWindow } from '@prisma/client';
 
 describe('OrderService - Critical Paths', () => {
   // ============================================================================
@@ -87,7 +84,7 @@ describe('OrderService - Critical Paths', () => {
   // ============================================================================
 
   describe('[UNIT] Status Transitions', () => {
-    let mockRepository: any;
+    let mockRepository: ReturnType<typeof vi.fn>;
     let service: OrderService;
 
     beforeEach(() => {

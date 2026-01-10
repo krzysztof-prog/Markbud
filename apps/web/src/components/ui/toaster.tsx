@@ -10,7 +10,7 @@ import {
   ToastTitle,
   ToastViewport,
 } from "@/components/ui/toast"
-import { useToast, type ToastActionElement } from "@/hooks/useToast"
+import { useToast } from "@/hooks/useToast"
 
 export function Toaster() {
   const { toasts } = useToast()

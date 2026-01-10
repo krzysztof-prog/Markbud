@@ -9,6 +9,7 @@ import type { RemanentHistoryEntry, RemanentHistoryGroup } from '@/types/warehou
 export function useRemanentHistory(colorId: number | null, limit?: number) {
   return useQuery({
     queryKey: ['remanent-history', colorId, limit],
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- enabled check guarantees colorId is not null
     queryFn: () => remanentApi.getHistory(colorId!, limit),
     enabled: !!colorId,
   });
@@ -48,6 +49,7 @@ export function groupRemanentHistory(entries: RemanentHistoryEntry[]): RemanentH
       });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- groups.has check guarantees the key exists
     const group = groups.get(key)!;
     group.entries.push(entry);
     group.totalProfiles++;

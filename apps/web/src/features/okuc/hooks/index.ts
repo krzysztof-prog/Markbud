@@ -1,7 +1,7 @@
 /**
  * OKUC Hooks - Public exports
  *
- * Centralne eksporty React Query hooks dla modułu OKUC (DualStock)
+ * Centralne eksporty React Query hooks dla modulu OKUC (DualStock)
  */
 
 // ============================================================================
@@ -18,7 +18,30 @@ export {
   useUpdateOkucArticle,
   useDeleteOkucArticle,
   useOkucArticleAliases,
+
+  // Pending review hooks (dla nowych artykulow z importu)
+  useOkucArticlesPendingReview,
+  useBatchUpdateOrderClass,
+
+  // Hook do przypisywania lokalizacji do artykulu
+  useUpdateArticleLocation,
 } from './useOkucArticles';
+
+// ============================================================================
+// LOCATIONS (Lokalizacje magazynowe - zarzadzane w Ustawieniach)
+// ============================================================================
+export {
+  // Query keys
+  okucLocationsKeys,
+
+  // Locations hooks
+  useOkucLocations,
+  useCreateOkucLocation,
+  useUpdateOkucLocation,
+  useDeleteOkucLocation,
+  useReorderOkucLocations,
+  useOkucLocationMutations,
+} from './useOkucLocations';
 
 // ============================================================================
 // STOCK

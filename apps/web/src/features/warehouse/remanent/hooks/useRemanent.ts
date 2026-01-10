@@ -44,6 +44,7 @@ export function useRollback() {
 export function useAverageMonthly(colorId: number | null, months: number) {
   return useQuery({
     queryKey: ['warehouse-average', colorId, months],
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- enabled check guarantees colorId is not null
     queryFn: () => remanentApi.getAverage(colorId!, months),
     enabled: !!colorId,
   });

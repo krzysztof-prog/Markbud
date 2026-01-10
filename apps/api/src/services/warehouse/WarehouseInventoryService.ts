@@ -133,7 +133,7 @@ export class WarehouseInventoryService {
    * @throws NotFoundError if no inventory history exists
    * @throws ValidationError if inventory is older than 24 hours
    */
-  async rollbackInventory(colorId: number, userId?: number) {
+  async rollbackInventory(colorId: number, _userId?: number) {
     // Fetch last inventory records for this color
     const lastInventoryRecords = await prisma.warehouseHistory.findMany({
       where: {

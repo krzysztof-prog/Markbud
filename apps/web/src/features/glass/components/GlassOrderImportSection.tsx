@@ -51,13 +51,22 @@ export function GlassOrderImportSection() {
     for (const file of files) {
       try {
         await importMutation.mutateAsync({ file, replace: false });
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const err = error as { status?: number; data?: { details?: unknown } };
+        console.log('🔍 [GlassOrderImportSection] Caught error:', err);
+        console.log('🔍 [GlassOrderImportSection] Error status:', err?.status);
+        console.log('🔍 [GlassOrderImportSection] Error data:', err?.data);
+        console.log('🔍 [GlassOrderImportSection] Error details:', err?.data?.details);
+
         // Check if it's a conflict error (409)
-        if (error?.status === 409 && error?.data?.details) {
+        if (err?.status === 409 && err?.data?.details) {
+          console.log('🔍 [GlassOrderImportSection] Opening conflict modal');
           setConflictFile(file);
-          setConflictDetails(error.data.details);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Error details structure is dynamic
+          setConflictDetails(err.data.details as any);
           return; // Stop processing other files
         }
+        console.log('🔍 [GlassOrderImportSection] Not a conflict error or missing details');
         // Other errors are handled in mutation
       }
     }

@@ -47,6 +47,7 @@ export class OkucArticleRepository {
             isActive: true,
           },
         },
+        location: true,
         proportionsSource: {
           include: {
             targetArticle: {

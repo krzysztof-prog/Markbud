@@ -5,6 +5,7 @@ import { prisma } from '../../index.js';
 import { GlassDeliveryService } from '../glass-delivery/index.js';
 import { SchucoLinkService } from '../schuco/schucoLinkService.js';
 import { logger } from '../../utils/logger.js';
+import { stripBOM } from '../../utils/string-utils.js';
 
 // Stałe z specyfikacji
 const BEAM_LENGTH_MM = 6000;
@@ -626,6 +627,9 @@ export class CsvParser {
       // Fallback do UTF-8
       content = buffer.toString('utf-8');
     }
+
+    // Usuń UTF-8 BOM jeśli istnieje (pliki eksportowane z Excela często mają BOM)
+    content = stripBOM(content);
 
     const lines = content.split('\n').filter((line) => line.trim());
 

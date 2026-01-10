@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync, RouteShorthandOptions } from 'fastify';
+import type { FastifyPluginAsync } from 'fastify';
 import { prisma, fileWatcher } from '../index.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -132,7 +132,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
 
       // Sortuj foldery alfabetycznie
       items.sort((a, b) => a.name.localeCompare(b.name, 'pl'));
-    } catch (error) {
+    } catch {
       return reply.status(403).send({ error: 'Brak dostępu do folderu' });
     }
 

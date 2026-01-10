@@ -2,7 +2,7 @@
  * File Validation Unit Tests
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   validateMimeType,
   validateFileExtension,

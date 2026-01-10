@@ -3,6 +3,14 @@ import type { Prisma } from '@prisma/client';
 import { CsvParser, type ParsedUzyteBele } from './parsers/csv-parser.js';
 import { logger } from '../utils/logger.js';
 
+/**
+ * P1-2: Typ wariantu zlecenia
+ * 'correction' - korekta oryginału (musi być w tej samej dostawie co oryginał)
+ * 'additional_file' - dodatkowy plik do zamówienia (może być w innej dostawie)
+ * null - nie określono (domyślnie, wymagane ustawienie dla wariantów z literką)
+ */
+export type VariantType = 'correction' | 'additional_file' | null;
+
 export interface OrderVariant {
   orderNumber: string;
   baseNumber: string;
@@ -12,6 +20,7 @@ export interface OrderVariant {
   totalSashes?: number;
   totalGlasses?: number;
   createdAt?: Date;
+  variantType?: VariantType;
   deliveryAssignment?: {
     deliveryId: number;
     deliveryNumber: string;
@@ -148,6 +157,8 @@ export class OrderVariantService {
         totalSashes: order.totalSashes || undefined,
         totalGlasses: order.totalGlasses || undefined,
         createdAt: order.createdAt,
+        // P1-2: Include variantType from database
+        variantType: order.variantType as VariantType,
         deliveryAssignment: order.deliveryOrders[0]?.delivery
           ? {
               deliveryId: order.deliveryOrders[0].delivery.id,
@@ -270,24 +281,98 @@ export class OrderVariantService {
   }
 
   /**
-   * Check if any variant of this order is already in a delivery
-   * Used to enforce "one order per delivery" rule
+   * P1-2: Check if any variant of this order is already in a delivery
+   *
+   * Logika walidacji:
+   * - Jeśli nowy wariant to 'correction' → MUSI być w tej samej dostawie co oryginał
+   * - Jeśli nowy wariant to 'additional_file' → MOŻE być w innej dostawie (brak konfliktu)
+   * - Jeśli variantType nie jest ustawiony → zwracamy informację że wymaga wyboru
+   *
+   * @param baseNumber - numer bazowy zlecenia (bez sufixu)
+   * @param newOrderVariantType - typ wariantu nowego zlecenia (null = nie ustawiony)
+   * @returns informacja o konflikcie lub braku konfliktu
    */
-  async checkVariantInDelivery(baseNumber: string): Promise<{
+  async checkVariantInDelivery(
+    baseNumber: string,
+    newOrderVariantType?: VariantType
+  ): Promise<{
     hasConflict: boolean;
+    requiresVariantTypeSelection?: boolean;
     conflictingOrder?: OrderVariant;
+    originalDelivery?: {
+      deliveryId: number;
+      deliveryNumber: string;
+    };
   }> {
     const relatedOrders = await this.findRelatedOrders(baseNumber);
 
+    // Znajdź zlecenie (bazowe lub wariant) które jest już w dostawie
     const orderInDelivery = relatedOrders.find(o => o.deliveryAssignment);
 
-    if (orderInDelivery) {
+    // Brak zlecenia w dostawie = brak konfliktu
+    if (!orderInDelivery) {
+      return { hasConflict: false };
+    }
+
+    // P1-2: Jeśli nowy wariant to 'additional_file' - może być w innej dostawie
+    if (newOrderVariantType === 'additional_file') {
+      logger.info('Order variant is additional_file - allowing different delivery', {
+        baseNumber,
+        existingOrderNumber: orderInDelivery.orderNumber,
+      });
+      return { hasConflict: false };
+    }
+
+    // P1-2: Jeśli nowy wariant to 'correction' - musi być w tej samej dostawie
+    if (newOrderVariantType === 'correction') {
+      logger.info('Order variant is correction - must be in same delivery as original', {
+        baseNumber,
+        existingOrderNumber: orderInDelivery.orderNumber,
+        requiredDeliveryId: orderInDelivery.deliveryAssignment?.deliveryId,
+      });
+
       return {
         hasConflict: true,
         conflictingOrder: orderInDelivery,
+        originalDelivery: orderInDelivery.deliveryAssignment
+          ? {
+              deliveryId: orderInDelivery.deliveryAssignment.deliveryId,
+              deliveryNumber: orderInDelivery.deliveryAssignment.deliveryNumber,
+            }
+          : undefined,
       };
     }
 
-    return { hasConflict: false };
+    // P1-2: Typ wariantu nie jest ustawiony - wymaga wyboru przez użytkownika
+    logger.info('Variant type not specified - requires user selection', {
+      baseNumber,
+      existingOrderNumber: orderInDelivery.orderNumber,
+    });
+
+    return {
+      hasConflict: true,
+      requiresVariantTypeSelection: true,
+      conflictingOrder: orderInDelivery,
+      originalDelivery: orderInDelivery.deliveryAssignment
+        ? {
+            deliveryId: orderInDelivery.deliveryAssignment.deliveryId,
+            deliveryNumber: orderInDelivery.deliveryAssignment.deliveryNumber,
+          }
+        : undefined,
+    };
+  }
+
+  /**
+   * P1-2: Set variant type for an order
+   * @param orderId - ID zlecenia
+   * @param variantType - typ wariantu ('correction' | 'additional_file')
+   */
+  async setVariantType(orderId: number, variantType: VariantType): Promise<void> {
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: { variantType },
+    });
+
+    logger.info('Order variant type updated', { orderId, variantType });
   }
 }

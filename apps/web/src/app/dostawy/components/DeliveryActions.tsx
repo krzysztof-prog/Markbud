@@ -1,16 +1,18 @@
 'use client';
 
-import { CheckCircle2, Package, FileText, Loader2 } from 'lucide-react';
+import { CheckCircle2, Package, FileText, Loader2, ListChecks } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface DeliveryActionsProps {
   delivery: {
     id: number;
+    deliveryDate: string;
     deliveryOrders?: Array<{ order: { id: number } }>;
   };
   onComplete: () => void;
   onOptimize: () => void;
   onProtocol: () => void;
+  onVerify: () => void;
   isProtocolLoading?: boolean;
 }
 
@@ -19,6 +21,7 @@ export default function DeliveryActions({
   onComplete,
   onOptimize,
   onProtocol,
+  onVerify,
   isProtocolLoading = false,
 }: DeliveryActionsProps) {
   const hasOrders = delivery.deliveryOrders && delivery.deliveryOrders.length > 0;
@@ -26,6 +29,16 @@ export default function DeliveryActions({
 
   return (
     <div className="flex gap-1">
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={onVerify}
+        title="Weryfikuj listę Akrobud"
+        aria-label="Verify Akrobud list"
+      >
+        <ListChecks className="h-4 w-4" />
+      </Button>
+
       <Button
         size="sm"
         variant="ghost"

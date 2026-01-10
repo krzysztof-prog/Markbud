@@ -3,7 +3,6 @@
  */
 
 import { PrismaClient, Prisma } from '@prisma/client';
-import type { Delivery } from '@prisma/client';
 import { PaginationParams, PaginatedResponse } from '../validators/common';
 
 export interface DeliveryFilters {
@@ -183,10 +182,19 @@ export class DeliveryRepository {
   }
 
   async delete(id: number): Promise<void> {
-    // Soft delete: set deletedAt instead of hard delete
-    await this.prisma.delivery.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    // P1-1: Soft delete with cascade - unlink orders before soft deleting delivery
+    // This prevents "orphaned" orders that are still linked to a deleted delivery
+    await this.prisma.$transaction(async (tx) => {
+      // First, delete all DeliveryOrder links (unlink orders from delivery)
+      await tx.deliveryOrder.deleteMany({
+        where: { deliveryId: id },
+      });
+
+      // Then soft delete the delivery
+      await tx.delivery.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
     });
   }
 

@@ -35,6 +35,7 @@ vi.mock('../index.js', () => ({
     palletOptimization: {
       create: vi.fn(),
       delete: vi.fn(),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     $transaction: vi.fn(),
   }
@@ -103,6 +104,8 @@ describe('DeliveryService', () => {
   beforeEach(() => {
     mockPrisma = createMockPrisma();
     setupTransactionMock(mockPrisma);
+    // P1-4: Mock palletOptimization.deleteMany dla invalidacji optymalizacji
+    mockPrisma.palletOptimization.deleteMany.mockResolvedValue({ count: 0 });
     repository = new DeliveryRepository(mockPrisma);
     service = new DeliveryService(repository);
   });
@@ -261,16 +264,19 @@ describe('DeliveryService', () => {
   });
 
   describe('updateDelivery', () => {
-    it('should update delivery when exists', async () => {
+    it('should update delivery when exists (P0-2 valid status transition)', async () => {
+      // P0-2: Use valid statuses from delivery-status-machine
       const mockDelivery = {
         id: 1,
         deliveryDate: new Date('2024-01-15'),
         deliveryNumber: 'D001',
-        status: 'pending',
+        status: 'in_progress', // P0-2: Valid status that can transition to completed
         notes: 'Old notes',
         createdAt: new Date(),
         updatedAt: new Date(),
-        deliveryOrders: [],
+        deliveryOrders: [
+          { order: { status: 'in_production' } }, // P0-2: Orders in progress for completed transition
+        ],
         deliveryItems: [],
       };
       const updatedDelivery = {
@@ -299,7 +305,7 @@ describe('DeliveryService', () => {
   });
 
   describe('deleteDelivery', () => {
-    it('should delete delivery when exists', async () => {
+    it('should delete delivery when exists and unlink orders (P1-1 cascade)', async () => {
       const mockDelivery = {
         id: 1,
         deliveryDate: new Date(),
@@ -314,10 +320,18 @@ describe('DeliveryService', () => {
       };
 
       mockPrisma.delivery.findUnique.mockResolvedValue(mockDelivery);
-      // Soft delete uses update instead of delete
+      // P1-1: Now uses transaction with deleteMany + update
+      mockPrisma.deliveryOrder.deleteMany.mockResolvedValue({ count: 3 });
       mockPrisma.delivery.update.mockResolvedValue({ ...mockDelivery, deletedAt: new Date() });
 
       await service.deleteDelivery(1);
+
+      // P1-1: Verify orders were unlinked (deleteMany on DeliveryOrder)
+      expect(mockPrisma.deliveryOrder.deleteMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { deliveryId: 1 },
+        })
+      );
 
       // Verify soft delete was performed (update with deletedAt)
       expect(mockPrisma.delivery.update).toHaveBeenCalledWith(

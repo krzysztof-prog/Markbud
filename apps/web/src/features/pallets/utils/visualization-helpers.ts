@@ -202,7 +202,7 @@ export function calculateOverhangLine(
 /**
  * Generuje unikalne kolory dla okien z tego samego zlecenia
  */
-export function getOrderColor(orderNumber: string, index: number): string {
+export function getOrderColor(orderNumber: string, _index: number): string {
   // Prosty hash do generowania koloru
   let hash = 0;
   for (let i = 0; i < orderNumber.length; i++) {

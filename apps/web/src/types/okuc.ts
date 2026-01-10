@@ -69,6 +69,32 @@ export type HistoryEventType =
 export type ProportionType = 'multiplier' | 'split';
 
 // ============================================================================
+// LOCATION (Lokalizacja magazynowa okuć)
+// ============================================================================
+
+/** Lokalizacja magazynowa okuc */
+export interface OkucLocation {
+  id: ID;
+  name: string;                   // Nazwa lokalizacji (np. "Schuco", "Namiot")
+  sortOrder: number;              // Kolejnosc wyswietlania
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  articlesCount?: number;         // Liczba artykulow przypisanych do lokalizacji
+}
+
+/** Dane do tworzenia lokalizacji */
+export interface CreateOkucLocationInput {
+  name: string;
+  sortOrder?: number;
+}
+
+/** Dane do aktualizacji lokalizacji */
+export interface UpdateOkucLocationInput {
+  name?: string;
+  sortOrder?: number;
+}
+
+// ============================================================================
 // ARTICLE (Artykuł okuciowy)
 // ============================================================================
 
@@ -94,6 +120,10 @@ export interface OkucArticle {
   supplierCode?: string;          // Kod u dostawcy
   leadTimeDays: number;           // Czas realizacji (dni)
   safetyDays: number;             // Dni bezpieczeństwa
+
+  // Lokalizacja magazynowa
+  locationId?: ID | null;         // ID lokalizacji magazynowej
+  location?: OkucLocation | null; // Powiązana lokalizacja
 
   // Audit
   createdAt: Timestamp;
@@ -291,6 +321,7 @@ export interface CreateArticleInput {
   supplierCode?: string;
   leadTimeDays?: number;
   safetyDays?: number;
+  locationId?: number | null;     // ID lokalizacji magazynowej
 }
 
 /** Dane do aktualizacji artykułu */
@@ -307,6 +338,7 @@ export interface UpdateArticleInput {
   supplierCode?: string;
   leadTimeDays?: number;
   safetyDays?: number;
+  locationId?: number | null;     // ID lokalizacji magazynowej
 }
 
 /** Dane do dodania aliasu */
@@ -451,6 +483,7 @@ export interface ArticleFilters {
   orderClass?: OrderClass;
   sizeClass?: SizeClass;
   search?: string;                // Wyszukiwanie po nazwie lub articleId
+  locationId?: number | 'unassigned'; // Filtr po lokalizacji ('unassigned' = nieprzypisane)
 }
 
 /** Filtry dla stanów magazynowych */
@@ -499,6 +532,130 @@ export interface ImportArticlesResponse {
   skipped: number;                // Liczba pominiętych
   errors: Array<{
     row: number;
+    articleId: string;
+    error: string;
+  }>;
+}
+
+/** Dane artykułu do podglądu importu */
+export interface ImportArticlePreviewItem {
+  articleId: string;
+  name: string;
+  usedInPvc: boolean;
+  usedInAlu: boolean;
+  orderClass: 'typical' | 'atypical';
+  sizeClass: 'standard' | 'gabarat';
+  warehouseType: string;
+}
+
+/** Konflikt przy imporcie artykułów */
+export interface ImportArticleConflict {
+  articleId: string;
+  existingData: {
+    name: string;
+    usedInPvc: boolean;
+    usedInAlu: boolean;
+    orderClass: string;
+    sizeClass: string;
+  };
+  newData: {
+    name: string;
+    usedInPvc: boolean;
+    usedInAlu: boolean;
+    orderClass: string;
+    sizeClass: string;
+    warehouseType: string;
+  };
+}
+
+/** Błąd przy imporcie artykułów */
+export interface ImportArticleError {
+  row: number;
+  error: string;
+  articleId?: string;
+}
+
+/** Odpowiedź z podglądu importu artykułów */
+export interface ImportArticlesPreviewResponse {
+  new: ImportArticlePreviewItem[];
+  conflicts: ImportArticleConflict[];
+  errors: ImportArticleError[];
+}
+
+/** Dane wejściowe do importu artykułów */
+export interface ImportArticlesInput {
+  items: ImportArticlePreviewItem[];
+  conflictResolution: 'skip' | 'overwrite' | 'selective';
+  selectedConflicts?: string[];
+}
+
+/** Odpowiedź z wykonanego importu artykułów */
+export interface ImportArticlesResult {
+  imported: number;
+  skipped: number;
+  errors: Array<{
+    articleId: string;
+    error: string;
+  }>;
+}
+
+/** Dane stanu magazynowego do podglądu importu */
+export interface ImportStockPreviewItem {
+  articleId: string;
+  warehouseType: string;
+  subWarehouse?: string;
+  currentQuantity: number;
+  minStock?: number;
+  maxStock?: number;
+}
+
+/** Konflikt przy imporcie stanu magazynowego */
+export interface ImportStockConflict {
+  articleId: string;
+  warehouseType: string;
+  subWarehouse?: string;
+  existingData: {
+    currentQuantity: number;
+    minStock: number | null;
+    maxStock: number | null;
+  };
+  newData: {
+    currentQuantity: number;
+    minStock?: number;
+    maxStock?: number;
+  };
+}
+
+/** Błąd przy imporcie stanu magazynowego */
+export interface ImportStockError {
+  row: number;
+  error: string;
+  articleId?: string;
+}
+
+/** Odpowiedź z podglądu importu stanu magazynowego */
+export interface ImportStockPreviewResponse {
+  new: ImportStockPreviewItem[];
+  conflicts: ImportStockConflict[];
+  errors: ImportStockError[];
+}
+
+/** Dane wejściowe do importu stanu magazynowego */
+export interface ImportStockInput {
+  items: ImportStockPreviewItem[];
+  conflictResolution: 'skip' | 'overwrite' | 'selective';
+  selectedConflicts?: Array<{
+    articleId: string;
+    warehouseType: string;
+    subWarehouse?: string;
+  }>;
+}
+
+/** Odpowiedź z wykonanego importu stanu magazynowego */
+export interface ImportStockResult {
+  imported: number;
+  skipped: number;
+  errors: Array<{
     articleId: string;
     error: string;
   }>;

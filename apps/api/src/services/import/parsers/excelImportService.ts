@@ -17,6 +17,7 @@
 import fs from 'fs';
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../../../utils/logger.js';
+import { AppError } from '../../../utils/errors.js';
 import type {
   IExcelImportService,
   ParserServiceConfig,
@@ -103,38 +104,28 @@ export class ExcelImportService implements IExcelImportService {
   /**
    * Parse an Excel file
    *
-   * NOTE: This is a placeholder. Full implementation requires xlsx/exceljs dependency.
-   * When implementing, this should:
-   * 1. Read the Excel file
-   * 2. Parse each worksheet
-   * 3. Extract headers and data rows
-   * 4. Validate data types
-   * 5. Return structured data
+   * WAŻNE: Import plików Excel nie jest obecnie wspierany.
+   * Proszę użyć formatu CSV.
    */
   async parseExcelFile(filepath: string): Promise<ExcelParseResult> {
     // Check if file exists
     if (!fs.existsSync(filepath)) {
-      throw new Error(`Plik nie istnieje: ${filepath}`);
+      throw new AppError(`Plik nie istnieje: ${filepath}`, 404);
     }
 
     // Check file extension
     const ext = filepath.toLowerCase().split('.').pop();
     if (ext !== 'xlsx' && ext !== 'xls') {
-      throw new Error(`Nieprawidlowy format pliku: ${ext}. Oczekiwano: xlsx lub xls`);
+      throw new AppError(`Nieprawidłowy format pliku: ${ext}. Oczekiwano: xlsx lub xls`, 400);
     }
 
-    // Placeholder implementation
-    logger.warn('Excel parsing is not fully implemented. Install xlsx or exceljs package.');
+    // Import Excel nie jest wspierany - rzuć jasny błąd zamiast zwracać puste dane
+    logger.warn('Próba importu pliku Excel - format nie jest wspierany', { filepath });
 
-    return {
-      headers: [],
-      rows: [],
-      sheetName: 'Sheet1',
-      totalRows: 0,
-      validRows: 0,
-      invalidRows: 0,
-      errors: ['Excel parsing requires xlsx or exceljs package'],
-    };
+    throw new AppError(
+      'Import plików Excel (.xlsx, .xls) nie jest obecnie wspierany. Proszę wyeksportować dane do formatu CSV i użyć importu CSV.',
+      400
+    );
   }
 
   /**

@@ -14,6 +14,7 @@ import { PrismaClient } from '@prisma/client';
 // import { OkucArticleRepository } from '../../repositories/okuc/OkucArticleRepository.js';
 import { logger } from '../../utils/logger.js';
 import { importRwSchema, importDemandSchema } from '../../validators/okuc.js';
+import { stripBOM } from '../../utils/string-utils.js';
 
 // ============ TYPES ============
 
@@ -88,6 +89,7 @@ const HEADER_ALIASES: Record<string, string[]> = {
 
 /**
  * Dekoduje buffer do stringa obsługując różne kodowania (UTF-8 i CP1250)
+ * Usuwa również UTF-8 BOM jeśli istnieje (pliki eksportowane z Excela często mają BOM)
  */
 function decodeBuffer(buffer: Buffer): string {
   // Próbuj UTF-8 najpierw
@@ -107,7 +109,8 @@ function decodeBuffer(buffer: Buffer): string {
     }
   }
 
-  return content;
+  // Usuń UTF-8 BOM jeśli istnieje
+  return stripBOM(content);
 }
 
 /**
@@ -517,7 +520,9 @@ export interface SimpleOkucDemandItem {
  * @returns Tablica prostych obiektów RW
  */
 export function parseOkucRwCsvSync(content: string): SimpleOkucRwItem[] {
-  const lines = content.split(/\r?\n/).filter((line) => line.trim());
+  // Usuń UTF-8 BOM jeśli istnieje (pliki eksportowane z Excela często mają BOM)
+  const cleanContent = stripBOM(content);
+  const lines = cleanContent.split(/\r?\n/).filter((line) => line.trim());
 
   if (lines.length < 2) {
     throw new Error('Plik CSV jest pusty lub nieprawidłowy');
@@ -582,7 +587,9 @@ export function parseOkucRwCsvSync(content: string): SimpleOkucRwItem[] {
  * @returns Tablica prostych obiektów zapotrzebowania
  */
 export function parseOkucDemandCsvSync(content: string): SimpleOkucDemandItem[] {
-  const lines = content.split(/\r?\n/).filter((line) => line.trim());
+  // Usuń UTF-8 BOM jeśli istnieje (pliki eksportowane z Excela często mają BOM)
+  const cleanContent = stripBOM(content);
+  const lines = cleanContent.split(/\r?\n/).filter((line) => line.trim());
 
   if (lines.length < 2) {
     throw new Error('Plik CSV jest pusty lub nieprawidłowy');

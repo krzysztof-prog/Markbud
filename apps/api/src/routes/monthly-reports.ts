@@ -272,7 +272,7 @@ export const monthlyReportsRoutes: FastifyPluginAsync = async (fastify) => {
 
     if (!report) {
       // Generate report automatically
-      const result = await monthlyReportService.generateAndSaveReport(year, month);
+      const _result = await monthlyReportService.generateAndSaveReport(year, month);
       report = await monthlyReportService.getReport(year, month);
     }
 

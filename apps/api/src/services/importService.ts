@@ -54,6 +54,18 @@ interface FolderImportResult {
   error?: string;
   skipped?: boolean;
   skipReason?: string;
+  /** Validation errors for rows that failed validation (P0-3: partial success reporting) */
+  validationErrors?: Array<{
+    row: number;
+    field?: string;
+    reason: string;
+  }>;
+  /** Summary of validation: how many rows succeeded/failed */
+  validationSummary?: {
+    totalRows: number;
+    successRows: number;
+    failedRows: number;
+  };
 }
 
 export class ImportService {
@@ -650,9 +662,12 @@ export class ImportService {
 
     for (const csvFileData of csvFilesData) {
       try {
-        // First, preview the file to get order number for duplicate check
-        const preview = await parser.previewUzyteBele(csvFileData.filepath);
+        // P0-3: Use previewUzyteBeleWithErrors to collect validation errors
+        const previewResult = await parser.previewUzyteBeleWithErrors(csvFileData.filepath);
+        const preview = previewResult.data;
         const orderNumber = preview.orderNumber;
+        const validationErrors = previewResult.errors;
+        const validationSummary = previewResult.summary;
 
         // Check if this order is already assigned to a DIFFERENT delivery
         const existingOrder = await this.repository.findOrderByOrderNumber(orderNumber);
@@ -716,15 +731,37 @@ export class ImportService {
           emitOrderUpdated({ id: result.orderId });
         }
 
-        results.push({
+        // P0-3: Include validation errors in result even for successful imports
+        const resultItem: FolderImportResult = {
           filename: csvFileData.filename,
           relativePath: csvFileData.relativePath,
           success: true,
           orderId: result.orderId,
           orderNumber: order?.orderNumber,
-        });
+        };
 
-        logger.info(`Zaimportowano ${csvFileData.relativePath} -> zlecenie ${order?.orderNumber}`);
+        // Add validation info if there were any failed rows
+        if (validationErrors.length > 0) {
+          resultItem.validationErrors = validationErrors.map((e) => ({
+            row: e.row,
+            field: e.field,
+            reason: e.reason,
+          }));
+          resultItem.validationSummary = {
+            totalRows: validationSummary.totalRows,
+            successRows: validationSummary.successRows,
+            failedRows: validationSummary.failedRows,
+          };
+        }
+
+        results.push(resultItem);
+
+        // Log with validation info
+        if (validationErrors.length > 0) {
+          logger.warn(`Zaimportowano ${csvFileData.relativePath} -> zlecenie ${order?.orderNumber} (${validationSummary.failedRows} wierszy pominiętych z powodu błędów walidacji)`);
+        } else {
+          logger.info(`Zaimportowano ${csvFileData.relativePath} -> zlecenie ${order?.orderNumber}`);
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Nieznany blad';
         results.push({
@@ -740,6 +777,10 @@ export class ImportService {
     const successCount = results.filter((r) => r.success).length;
     const skippedCount = results.filter((r) => r.skipped).length;
     const failCount = results.filter((r) => !r.success && !r.skipped).length;
+
+    // P0-3: Count files with validation errors and total validation errors
+    const filesWithValidationErrors = results.filter((r) => r.validationErrors && r.validationErrors.length > 0).length;
+    const totalValidationErrors = results.reduce((sum, r) => sum + (r.validationErrors?.length || 0), 0);
 
     // Move folder to archive after successful import using file system service
     let archivedPath: string | null = null;
@@ -764,6 +805,9 @@ export class ImportService {
         successCount,
         skippedCount,
         failCount,
+        // P0-3: Validation error counts for partial success reporting
+        filesWithValidationErrors,
+        totalValidationErrors,
       },
       results,
       archivedPath,

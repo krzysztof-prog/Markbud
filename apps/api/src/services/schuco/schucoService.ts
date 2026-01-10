@@ -647,4 +647,138 @@ export class SchucoService {
   async getUnlinkedDeliveries(limit = 100) {
     return this.orderMatcher.getUnlinkedDeliveries(limit);
   }
+
+  /**
+   * Get deliveries grouped by delivery week
+   * Returns upcoming and recent weeks with their deliveries
+   */
+  async getDeliveriesByWeek(): Promise<{
+    weeks: Array<{
+      week: string;
+      weekStart: Date | null;
+      count: number;
+      deliveries: Array<{
+        id: number;
+        orderNumber: string;
+        orderName: string;
+        shippingStatus: string;
+        totalAmount: string | null;
+        extractedOrderNums: string | null;
+        changeType: string | null;
+        changedFields: string | null;
+      }>;
+    }>;
+  }> {
+    logger.info('[SchucoService] Getting deliveries by week...');
+
+    // Pobierz wszystkie dostawy z deliveryWeek
+    const deliveries = await this.prisma.schucoDelivery.findMany({
+      where: {
+        deliveryWeek: {
+          not: null,
+        },
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        orderName: true,
+        shippingStatus: true,
+        deliveryWeek: true,
+        totalAmount: true,
+        extractedOrderNums: true,
+        changeType: true,
+        changedFields: true,
+      },
+      orderBy: [
+        { deliveryWeek: 'asc' },
+        { orderNumber: 'asc' },
+      ],
+    });
+
+    // Grupuj po tygodniu dostawy
+    const weekMap = new Map<string, typeof deliveries>();
+
+    for (const delivery of deliveries) {
+      const week = delivery.deliveryWeek!;
+      if (!weekMap.has(week)) {
+        weekMap.set(week, []);
+      }
+      weekMap.get(week)!.push(delivery);
+    }
+
+    // Parsuj tydzień na datę dla sortowania
+    const parseWeekToDate = (week: string): Date | null => {
+      // Format: "2026/3" lub "2025/50" (rok/tydzień)
+      const match = week.match(/(\d{4})\/(\d{1,2})/);
+      if (!match) return null;
+
+      const year = parseInt(match[1], 10);
+      const weekNum = parseInt(match[2], 10);
+
+      // Oblicz datę poniedziałku tygodnia ISO
+      // ISO tydzień 1 to tydzień zawierający 4 stycznia
+      const jan4 = new Date(year, 0, 4);
+      const dayOfWeek = jan4.getDay() || 7; // Niedziela = 7
+      const monday = new Date(jan4);
+      monday.setDate(jan4.getDate() - dayOfWeek + 1 + (weekNum - 1) * 7);
+
+      return monday;
+    };
+
+    // Konwertuj na tablicę i posortuj
+    const weeks = Array.from(weekMap.entries()).map(([week, weekDeliveries]) => ({
+      week,
+      weekStart: parseWeekToDate(week),
+      count: weekDeliveries.length,
+      deliveries: weekDeliveries.map(d => ({
+        id: d.id,
+        orderNumber: d.orderNumber,
+        orderName: d.orderName,
+        shippingStatus: d.shippingStatus,
+        totalAmount: d.totalAmount,
+        extractedOrderNums: d.extractedOrderNums,
+        changeType: d.changeType,
+        changedFields: d.changedFields,
+      })),
+    }));
+
+    // Sortuj po dacie tygodnia (od najwcześniejszego)
+    weeks.sort((a, b) => {
+      if (!a.weekStart && !b.weekStart) return 0;
+      if (!a.weekStart) return 1;
+      if (!b.weekStart) return -1;
+      return a.weekStart.getTime() - b.weekStart.getTime();
+    });
+
+    return { weeks };
+  }
+
+  /**
+   * Clean up stale pending logs (older than 10 minutes)
+   * Marks them as 'error' with timeout message
+   */
+  async cleanupStalePendingLogs(): Promise<number> {
+    const tenMinutesAgo = new Date();
+    tenMinutesAgo.setMinutes(tenMinutesAgo.getMinutes() - 10);
+
+    const result = await this.prisma.schucoFetchLog.updateMany({
+      where: {
+        status: 'pending',
+        startedAt: {
+          lt: tenMinutesAgo,
+        },
+      },
+      data: {
+        status: 'error',
+        errorMessage: 'Timeout - operacja nie zakończyła się w ciągu 10 minut',
+        completedAt: new Date(),
+      },
+    });
+
+    if (result.count > 0) {
+      logger.info(`[SchucoService] Cleaned up ${result.count} stale pending logs`);
+    }
+
+    return result.count;
+  }
 }

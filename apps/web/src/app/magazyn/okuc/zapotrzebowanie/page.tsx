@@ -32,26 +32,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Filter, Calendar } from 'lucide-react';
+import { Plus, Filter, Calendar, AlertTriangle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { DemandTable } from '@/features/okuc/components/DemandTable';
 import { DemandForm } from '@/features/okuc/components/DemandForm';
 import { DeleteDemandDialog } from '@/features/okuc/components/DeleteDemandDialog';
+import { NewArticlesReviewModal } from '@/features/okuc/components/NewArticlesReviewModal';
 import {
   useOkucDemands,
   useCreateOkucDemand,
   useUpdateOkucDemand,
   useDeleteOkucDemand,
+  useOkucArticlesPendingReview,
 } from '@/features/okuc/hooks';
 import type { OkucDemand, DemandStatus, DemandSource, CreateDemandInput, UpdateDemandInput } from '@/types/okuc';
 
 export default function OkucDemandPage() {
   // === DATA FETCHING ===
   const { data: demands = [], isLoading, error } = useOkucDemands();
+  const { data: pendingReviewArticles = [] } = useOkucArticlesPendingReview();
 
   // === STATE ===
   const [selectedDemand, setSelectedDemand] = useState<OkucDemand | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isNewArticlesModalOpen, setIsNewArticlesModalOpen] = useState(false);
 
   // Filtry
   const [filterStatus, setFilterStatus] = useState<DemandStatus | 'all'>('all');
@@ -183,6 +188,27 @@ export default function OkucDemandPage() {
             Dodaj zapotrzebowanie
           </Button>
         </div>
+
+        {/* Alert - nowe artykuły do weryfikacji */}
+        {pendingReviewArticles.length > 0 && (
+          <Alert variant="default" className="mb-4 border-amber-500 bg-amber-50 dark:bg-amber-950">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-amber-800 dark:text-amber-200">
+              Nowe artykuły wymagają weryfikacji
+            </AlertTitle>
+            <AlertDescription className="text-amber-700 dark:text-amber-300">
+              Podczas importu utworzono <strong>{pendingReviewArticles.length}</strong> nowych artykułów.
+              Musisz określić czy są typowe czy atypowe.
+              <Button
+                variant="link"
+                className="p-0 h-auto ml-2 text-amber-800 dark:text-amber-200 underline"
+                onClick={() => setIsNewArticlesModalOpen(true)}
+              >
+                Przejdź do weryfikacji
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Filtry */}
         <div className="bg-card border rounded-lg p-4 mb-4 space-y-4">
@@ -367,6 +393,12 @@ export default function OkucDemandPage() {
         }}
         onConfirm={handleDeleteConfirm}
         isPending={deleteMutation.isPending}
+      />
+
+      {/* Modal weryfikacji nowych artykułów */}
+      <NewArticlesReviewModal
+        open={isNewArticlesModalOpen}
+        onOpenChange={setIsNewArticlesModalOpen}
       />
     </div>
   );

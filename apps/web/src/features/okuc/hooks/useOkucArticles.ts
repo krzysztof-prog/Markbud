@@ -11,7 +11,8 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { okucArticlesApi } from '@/features/okuc/api/okucApi';
+import { okucArticlesApi, okucLocationsApi } from '@/features/okuc/api/okucApi';
+import { okucLocationsKeys } from './useOkucLocations';
 import { toast } from '@/hooks/useToast';
 import type {
   OkucArticle,
@@ -33,6 +34,7 @@ export const okucArticlesKeys = {
   details: () => [...okucArticlesKeys.all, 'detail'] as const,
   detail: (id: number) => [...okucArticlesKeys.details(), id] as const,
   aliases: (id: number) => [...okucArticlesKeys.all, 'aliases', id] as const,
+  pendingReview: () => [...okucArticlesKeys.all, 'pending-review'] as const,
 };
 
 // ============================================================================
@@ -293,6 +295,142 @@ export function useAddOkucArticleAlias(callbacks?: {
       toast({
         title: 'Błąd dodawania aliasu',
         description: error.message || 'Nie udało się dodać aliasu. Spróbuj ponownie.',
+        variant: 'destructive',
+      });
+
+      callbacks?.onError?.(error);
+    },
+  });
+}
+
+// ============================================================================
+// PENDING REVIEW - Artykuły oczekujące na weryfikację orderClass
+// ============================================================================
+
+/**
+ * Hook do pobierania artykułów oczekujących na weryfikację orderClass
+ * (utworzonych automatycznie podczas importu zapotrzebowania)
+ *
+ * @returns Query result z listą artykułów z orderClass='pending_review'
+ *
+ * @example
+ * const { data: pendingArticles, isLoading } = useOkucArticlesPendingReview();
+ */
+export function useOkucArticlesPendingReview() {
+  return useQuery({
+    queryKey: okucArticlesKeys.pendingReview(),
+    queryFn: () => okucArticlesApi.getPendingReview(),
+    staleTime: 1 * 60 * 1000, // 1 minuta - częściej odświeżamy bo to krytyczne
+  });
+}
+
+/**
+ * Hook do batch update orderClass dla wielu artykułów
+ *
+ * Używane w modalu weryfikacji nowych artykułów po imporcie.
+ * Po sukcesie:
+ * - Invaliduje listę pending review
+ * - Invaliduje wszystkie listy artykułów
+ * - Pokazuje toast z podsumowaniem
+ *
+ * @param callbacks - Opcjonalne callbacki (onSuccess, onError)
+ * @returns Mutation z funkcją mutate i stanem isPending
+ *
+ * @example
+ * const { mutate, isPending } = useBatchUpdateOrderClass({
+ *   onSuccess: () => setModalOpen(false)
+ * });
+ * mutate([
+ *   { id: 1, orderClass: 'typical' },
+ *   { id: 2, orderClass: 'atypical' }
+ * ]);
+ */
+export function useBatchUpdateOrderClass(callbacks?: {
+  onSuccess?: (result: { updated: number; failed: number }) => void;
+  onError?: (error: Error) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (articles: Array<{ id: number; orderClass: 'typical' | 'atypical' }>) =>
+      okucArticlesApi.batchUpdateOrderClass(articles),
+    onSuccess: (result) => {
+      // Invaliduj pending review (powinny zniknąć po aktualizacji)
+      queryClient.invalidateQueries({ queryKey: okucArticlesKeys.pendingReview() });
+      // Invaliduj wszystkie listy artykułów
+      queryClient.invalidateQueries({ queryKey: okucArticlesKeys.lists() });
+
+      if (result.updated > 0) {
+        toast({
+          title: 'Artykuły zaktualizowane',
+          description: `Zaktualizowano ${result.updated} artykułów.${
+            result.failed > 0 ? ` ${result.failed} nie udało się zaktualizować.` : ''
+          }`,
+          variant: result.failed > 0 ? 'default' : 'success',
+        });
+      }
+
+      callbacks?.onSuccess?.(result);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd aktualizacji',
+        description: error.message || 'Nie udało się zaktualizować artykułów. Spróbuj ponownie.',
+        variant: 'destructive',
+      });
+
+      callbacks?.onError?.(error);
+    },
+  });
+}
+
+// ============================================================================
+// ARTICLE LOCATION - Przypisywanie lokalizacji do artykulu
+// ============================================================================
+
+/**
+ * Hook do aktualizacji lokalizacji artykułu (inline edit)
+ *
+ * Po sukcesie:
+ * - Invaliduje listę artykułów
+ * - Pokazuje toast z potwierdzeniem
+ *
+ * @param callbacks - Opcjonalne callbacki (onSuccess, onError)
+ * @returns Mutation z funkcją mutate i stanem isPending
+ *
+ * @example
+ * const { mutate, isPending } = useUpdateArticleLocation();
+ * mutate({ articleId: 123, locationId: 5 });
+ */
+export function useUpdateArticleLocation(callbacks?: {
+  onSuccess?: (article: OkucArticle) => void;
+  onError?: (error: Error) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ articleId, locationId }: { articleId: number; locationId: number | null }) =>
+      okucArticlesApi.update(articleId, { locationId }),
+    onSuccess: (article) => {
+      // Invaliduj wszystkie listy
+      queryClient.invalidateQueries({ queryKey: okucArticlesKeys.lists() });
+      // Invaliduj szczegóły tego artykułu
+      queryClient.invalidateQueries({ queryKey: okucArticlesKeys.detail(article.id) });
+
+      toast({
+        title: 'Lokalizacja zmieniona',
+        description: article.location
+          ? `Artykuł ${article.articleId} przypisano do lokalizacji "${article.location.name}".`
+          : `Usunięto lokalizację artykułu ${article.articleId}.`,
+        variant: 'success',
+      });
+
+      callbacks?.onSuccess?.(article);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd zmiany lokalizacji',
+        description: error.message || 'Nie udało się zmienić lokalizacji. Spróbuj ponownie.',
         variant: 'destructive',
       });
 

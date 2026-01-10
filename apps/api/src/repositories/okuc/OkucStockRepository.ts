@@ -48,6 +48,7 @@ export class OkucStockRepository {
             name: true,
             description: true,
             orderUnit: true,
+            location: true,
           },
         },
         updatedBy: {

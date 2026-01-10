@@ -2,7 +2,7 @@
  * ColorService Unit Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ColorService } from './colorService.js';
 import { ColorRepository } from '../repositories/ColorRepository.js';
 import { NotFoundError, ConflictError } from '../utils/errors.js';

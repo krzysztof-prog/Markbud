@@ -180,16 +180,19 @@ export class PalletOptimizerRepository {
   }
 
   /**
-   * Usuń optymalizację
+   * Usuń optymalizację (jeśli istnieje)
+   * P1-4: Zmieniono na "safe" delete - nie rzuca błędu gdy optymalizacja nie istnieje
+   * ponieważ invalidacja optymalizacji jest wywoływana przy każdej zmianie zamówień w dostawie
+   * i nie zawsze optymalizacja jest zapisana.
+   *
+   * @returns true jeśli usunięto, false jeśli nie było co usunąć
    */
-  async deleteOptimization(deliveryId: number): Promise<void> {
+  async deleteOptimization(deliveryId: number): Promise<boolean> {
     const deleted = await this.prisma.palletOptimization.deleteMany({
       where: { deliveryId },
     });
 
-    if (deleted.count === 0) {
-      throw new NotFoundError('Optimization');
-    }
+    return deleted.count > 0;
   }
 
   /**

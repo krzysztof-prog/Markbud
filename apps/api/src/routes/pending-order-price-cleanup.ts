@@ -15,7 +15,7 @@ import {
 
 export async function pendingOrderPriceCleanupRoutes(
   fastify: FastifyInstance,
-  options: FastifyPluginOptions
+  _options: FastifyPluginOptions
 ) {
   // Get cleanup statistics
   fastify.get('/statistics', {

@@ -140,7 +140,7 @@ export class ImportConflictService {
   async executeResolution(
     resolution: VariantResolutionAction,
     orderNumber: string,
-    parsedData: ParsedUzyteBele
+    _parsedData: ParsedUzyteBele
   ): Promise<ConflictResolutionResult> {
     const { base } = this.csvParser.parseOrderNumber(orderNumber);
 

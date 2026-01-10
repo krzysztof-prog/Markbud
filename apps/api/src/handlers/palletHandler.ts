@@ -176,7 +176,7 @@ export class PalletHandler {
     request: FastifyRequest<{ Body: unknown }>,
     reply: FastifyReply
   ) {
-    const validated = packingRuleSchema.parse(request.body);
+    const _validated = packingRuleSchema.parse(request.body);
     return reply.status(501).send({ error: 'Not implemented yet' });
   }
 
@@ -188,8 +188,8 @@ export class PalletHandler {
     request: FastifyRequest<{ Params: { id: string }; Body: unknown }>,
     reply: FastifyReply
   ) {
-    const { id } = packingRuleParamsSchema.parse(request.params);
-    const validated = updatePackingRuleSchema.parse(request.body);
+    const { id: _id } = packingRuleParamsSchema.parse(request.params);
+    const _validated = updatePackingRuleSchema.parse(request.body);
     return reply.status(501).send({ error: 'Not implemented yet' });
   }
 
@@ -201,7 +201,7 @@ export class PalletHandler {
     request: FastifyRequest<{ Params: { id: string } }>,
     reply: FastifyReply
   ) {
-    const { id } = packingRuleParamsSchema.parse(request.params);
+    const { id: _id } = packingRuleParamsSchema.parse(request.params);
     return reply.status(501).send({ error: 'Not implemented yet' });
   }
 }

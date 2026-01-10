@@ -8,3 +8,4 @@ export { okucStockHandler } from './stockHandler.js';
 export { okucDemandHandler } from './demandHandler.js';
 export { okucOrderHandler } from './orderHandler.js';
 export { okucProportionHandler } from './proportionHandler.js';
+export { okucLocationHandler } from './locationHandler.js';

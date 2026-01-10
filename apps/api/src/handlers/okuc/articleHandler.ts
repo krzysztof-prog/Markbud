@@ -207,7 +207,299 @@ export const okucArticleHandler = {
   },
 
   /**
+   * POST /api/okuc/articles/import/preview
+   * Preview CSV import - parse and detect conflicts
+   * Format CSV: Numer artykulu;Nazwa;PVC;ALU;Typ zamowienia;Klasa wielkosci;Magazyn
+   */
+  async importPreview(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const data = await request.file();
+
+      if (!data) {
+        return reply.status(400).send({ error: 'Brak pliku CSV' });
+      }
+
+      const buffer = await data.toBuffer();
+      // Support both UTF-8 and Windows-1250 encoding
+      let csvContent = buffer.toString('utf-8');
+      // Remove BOM if present
+      if (csvContent.charCodeAt(0) === 0xFEFF) {
+        csvContent = csvContent.slice(1);
+      }
+
+      const lines = csvContent.split('\n').filter(line => line.trim());
+      if (lines.length < 2) {
+        return reply.status(400).send({ error: 'Plik CSV jest pusty lub zawiera tylko naglowek' });
+      }
+
+      const results = {
+        new: [] as Array<{
+          articleId: string;
+          name: string;
+          usedInPvc: boolean;
+          usedInAlu: boolean;
+          orderClass: 'typical' | 'atypical';
+          sizeClass: 'standard' | 'gabarat';
+          warehouseType: string;
+        }>,
+        conflicts: [] as Array<{
+          articleId: string;
+          existingData: {
+            name: string;
+            usedInPvc: boolean;
+            usedInAlu: boolean;
+            orderClass: string;
+            sizeClass: string;
+          };
+          newData: {
+            name: string;
+            usedInPvc: boolean;
+            usedInAlu: boolean;
+            orderClass: string;
+            sizeClass: string;
+            warehouseType: string;
+          };
+        }>,
+        errors: [] as Array<{ row: number; error: string; articleId?: string }>,
+      };
+
+      // Parse CSV rows (skip header)
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(';').map(v => v.trim());
+
+        try {
+          // Format: Numer artykulu;Nazwa;PVC;ALU;Typ zamowienia;Klasa wielkosci;Magazyn
+          if (values.length < 6) {
+            results.errors.push({
+              row: i + 1,
+              error: 'Nieprawidlowa liczba kolumn (oczekiwano min. 6)',
+              articleId: values[0] || undefined,
+            });
+            continue;
+          }
+
+          const articleId = values[0];
+          const name = values[1];
+
+          if (!articleId || !name) {
+            results.errors.push({
+              row: i + 1,
+              error: 'Brak numeru artykulu lub nazwy',
+              articleId: articleId || undefined,
+            });
+            continue;
+          }
+
+          // Parse boolean fields - "Tak"/"Nie" or "true"/"false"
+          const parseBool = (val: string): boolean => {
+            const lower = val?.toLowerCase().trim();
+            return lower === 'tak' || lower === 'true' || lower === '1';
+          };
+
+          const usedInPvc = parseBool(values[2]);
+          const usedInAlu = parseBool(values[3]);
+
+          // Parse order class - "Typowy"/"Atypowy" or "typical"/"atypical"
+          const parseOrderClass = (val: string): 'typical' | 'atypical' => {
+            const lower = val?.toLowerCase().trim();
+            if (lower === 'atypowy' || lower === 'atypical') return 'atypical';
+            return 'typical';
+          };
+
+          // Parse size class - "Standard"/"Gabarat" or "standard"/"gabarat"
+          const parseSizeClass = (val: string): 'standard' | 'gabarat' => {
+            const lower = val?.toLowerCase().trim();
+            if (lower === 'gabarat' || lower === 'gabaryt') return 'gabarat';
+            return 'standard';
+          };
+
+          const orderClass = parseOrderClass(values[4]);
+          const sizeClass = parseSizeClass(values[5]);
+          const warehouseType = values[6]?.trim() || '';
+
+          const newData = {
+            articleId,
+            name,
+            usedInPvc,
+            usedInAlu,
+            orderClass,
+            sizeClass,
+            warehouseType,
+          };
+
+          // Check if article already exists
+          const existing = await repository.findByArticleId(articleId);
+
+          if (existing) {
+            // Conflict - article already exists
+            results.conflicts.push({
+              articleId,
+              existingData: {
+                name: existing.name,
+                usedInPvc: existing.usedInPvc,
+                usedInAlu: existing.usedInAlu,
+                orderClass: existing.orderClass,
+                sizeClass: existing.sizeClass,
+              },
+              newData,
+            });
+          } else {
+            // New article
+            results.new.push(newData);
+          }
+        } catch (error) {
+          results.errors.push({
+            row: i + 1,
+            error: error instanceof Error ? error.message : 'Nieznany blad',
+            articleId: values[0] || undefined,
+          });
+        }
+      }
+
+      logger.info('Import preview completed', {
+        new: results.new.length,
+        conflicts: results.conflicts.length,
+        errors: results.errors.length,
+      });
+
+      return reply.status(200).send(results);
+    } catch (error) {
+      logger.error('Failed to preview articles CSV', { error });
+      return reply.status(500).send({ error: 'Blad podgladu importu artykulu' });
+    }
+  },
+
+  /**
    * POST /api/okuc/articles/import
+   * Import articles with conflict resolution
+   */
+  async importArticles(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      // Wyodrebnij dane z body (walidowane przez schema w route)
+      const body = request.body as {
+        items: Array<{
+          articleId: string;
+          name: string;
+          usedInPvc?: boolean;
+          usedInAlu?: boolean;
+          orderClass?: 'typical' | 'atypical';
+          sizeClass?: 'standard' | 'gabarat';
+          warehouseType?: string;
+        }>;
+        conflictResolution: 'skip' | 'overwrite' | 'selective';
+        selectedConflicts?: string[];
+      };
+      const { items, conflictResolution, selectedConflicts = [] } = body;
+
+      if (!items || items.length === 0) {
+        return reply.status(400).send({ error: 'Brak artykulow do importu' });
+      }
+
+      // Pobierz wszystkie lokalizacje do mapowania nazw na ID
+      const locations = await prisma.okucLocation.findMany({
+        where: { deletedAt: null },
+        select: { id: true, name: true },
+      });
+      const locationMap = new Map(locations.map((l) => [l.name.toLowerCase(), l.id]));
+
+      const results = {
+        imported: 0,
+        skipped: 0,
+        errors: [] as Array<{ articleId: string; error: string }>,
+      };
+
+      for (const item of items) {
+        try {
+          // Validate required fields
+          if (!item.articleId || !item.name) {
+            results.errors.push({
+              articleId: item.articleId || 'UNKNOWN',
+              error: 'Brak numeru artykulu lub nazwy',
+            });
+            continue;
+          }
+
+          // Znajdź locationId po nazwie magazynu (jeśli podano)
+          let locationId: number | null = null;
+          if (item.warehouseType) {
+            const foundLocationId = locationMap.get(item.warehouseType.toLowerCase());
+            if (foundLocationId) {
+              locationId = foundLocationId;
+            }
+          }
+
+          // Check if article exists
+          const existing = await repository.findByArticleId(item.articleId);
+
+          if (existing) {
+            // Handle conflict based on resolution strategy
+            if (conflictResolution === 'skip') {
+              results.skipped++;
+              continue;
+            } else if (conflictResolution === 'selective') {
+              // Only overwrite if explicitly selected
+              if (!selectedConflicts.includes(item.articleId)) {
+                results.skipped++;
+                continue;
+              }
+            }
+            // conflictResolution === 'overwrite' or selective with selection -> update
+
+            await repository.update(existing.id, {
+              name: item.name,
+              usedInPvc: item.usedInPvc ?? existing.usedInPvc,
+              usedInAlu: item.usedInAlu ?? existing.usedInAlu,
+              orderClass: item.orderClass ?? existing.orderClass,
+              sizeClass: item.sizeClass ?? existing.sizeClass,
+              ...(locationId
+                ? { location: { connect: { id: locationId } } }
+                : existing.locationId
+                  ? { location: { connect: { id: existing.locationId } } }
+                  : {}),
+            });
+
+            results.imported++;
+          } else {
+            // Create new article
+            const articleData = createArticleSchema.parse({
+              articleId: item.articleId,
+              name: item.name,
+              usedInPvc: item.usedInPvc ?? false,
+              usedInAlu: item.usedInAlu ?? false,
+              orderClass: item.orderClass ?? 'typical',
+              sizeClass: item.sizeClass ?? 'standard',
+            });
+
+            // Dodaj locationId do danych tworzenia
+            const createData = {
+              ...articleData,
+              locationId,
+            } as CreateArticleInput;
+
+            await repository.create(createData);
+            results.imported++;
+          }
+        } catch (error) {
+          results.errors.push({
+            articleId: item.articleId || 'UNKNOWN',
+            error: error instanceof Error ? error.message : 'Nieznany blad',
+          });
+          logger.warn('Failed to import article', { articleId: item.articleId, error });
+        }
+      }
+
+      logger.info('Import completed', results);
+
+      return reply.status(200).send(results);
+    } catch (error) {
+      logger.error('Failed to import articles', { error });
+      return reply.status(500).send({ error: 'Blad importu artykulow' });
+    }
+  },
+
+  /**
+   * @deprecated Use importPreview and importArticles instead
+   * POST /api/okuc/articles/import (legacy - CSV file upload)
    * Import articles from CSV file
    */
   async importCsv(request: FastifyRequest, reply: FastifyReply) {
@@ -380,44 +672,46 @@ export const okucArticleHandler = {
 
       const articles = await repository.findAll(filters);
 
-      // Generate CSV
+      // Generate CSV with semicolon separator (Polish Excel compatibility)
       const headers = [
-        'articleId',
-        'name',
-        'description',
-        'usedInPvc',
-        'usedInAlu',
-        'orderClass',
-        'sizeClass',
-        'orderUnit',
-        'packagingSizes',
-        'preferredSize',
-        'supplierCode',
-        'leadTimeDays',
-        'safetyDays',
-        'isActive',
+        'Numer artykulu',
+        'Nazwa',
+        'Opis',
+        'PVC',
+        'ALU',
+        'Typ zamowienia',
+        'Klasa wielkosci',
+        'Jednostka',
+        'Opakowania',
+        'Preferowane opakowanie',
+        'Kod dostawcy',
+        'Czas dostawy dni',
+        'Dni zapasu',
+        'Aktywny',
+        'Magazyn',
       ];
 
       const rows = articles.map(article => [
         article.articleId,
         article.name,
-        article.description || '',
-        article.usedInPvc,
-        article.usedInAlu,
-        article.orderClass,
-        article.sizeClass,
-        article.orderUnit,
+        (article.description || '').replace(/;/g, ','), // Escape semicolons in description
+        article.usedInPvc ? 'TAK' : 'NIE',
+        article.usedInAlu ? 'TAK' : 'NIE',
+        article.orderClass === 'typical' ? 'typowy' : 'atypowy',
+        article.sizeClass === 'standard' ? 'standard' : 'gabarat',
+        article.orderUnit === 'piece' ? 'sztuka' : 'paczka',
         article.packagingSizes || '',
         article.preferredSize || '',
         article.supplierCode || '',
         article.leadTimeDays,
         article.safetyDays,
-        true, // isActive is always true for non-deleted articles
+        'TAK', // isActive is always true for non-deleted articles
+        (article as { location?: { name: string } | null }).location?.name || '',
       ]);
 
       const csv = [
-        headers.join(','),
-        ...rows.map(row => row.join(',')),
+        headers.join(';'),
+        ...rows.map(row => row.join(';')),
       ].join('\n');
 
       const timestamp = new Date().toISOString().split('T')[0];

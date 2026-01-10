@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync, RouteShorthandOptions } from 'fastify';
+import type { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../index.js';
 import { DeliveryRepository } from '../repositories/DeliveryRepository.js';
 import { DeliveryService } from '../services/deliveryService.js';

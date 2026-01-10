@@ -78,6 +78,7 @@ interface DeliveriesTableProps {
   onComplete: (deliveryId: number) => void;
   onOptimize: (deliveryId: number) => void;
   onProtocol: (deliveryId: number) => void;
+  onVerify: (deliveryId: number, deliveryDate: string) => void;
   onViewOrder: (orderId: number) => void;
   protocolLoadingId?: number | null;
 }
@@ -91,6 +92,7 @@ export default function DeliveriesTable({
   onComplete,
   onOptimize,
   onProtocol,
+  onVerify,
   onViewOrder,
   protocolLoadingId,
 }: DeliveriesTableProps) {
@@ -175,13 +177,14 @@ export default function DeliveriesTable({
               onComplete={() => onComplete(delivery.id)}
               onOptimize={() => onOptimize(delivery.id)}
               onProtocol={() => onProtocol(delivery.id)}
+              onVerify={() => onVerify(delivery.id, delivery.deliveryDate)}
               isProtocolLoading={isLoading}
             />
           );
         },
       }),
     ],
-    [onComplete, onOptimize, onProtocol, protocolLoadingId]
+    [onComplete, onOptimize, onProtocol, onVerify, protocolLoadingId]
   );
 
   // Expand column - depends on expandedRows

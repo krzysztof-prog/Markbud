@@ -1,7 +1,6 @@
 import type { ID, Timestamp, Priority } from './common';
 import type { Import } from './import';
 import type { Delivery } from './delivery';
-import type { Shortage } from './warehouse';
 
 /**
  * Statystyki dashboard

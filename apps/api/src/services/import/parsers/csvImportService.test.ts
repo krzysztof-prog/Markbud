@@ -48,7 +48,7 @@ const mockPrisma = {
     update: vi.fn(),
   },
   $transaction: vi.fn((fn) => fn(mockPrisma)),
-} as any;
+} as FastifyRequest;
 
 describe('CsvImportService', () => {
   let newService: CsvImportService;

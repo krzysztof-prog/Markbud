@@ -29,30 +29,29 @@ import type {
   CreateWarehouseOrderData,
   UpdateWarehouseOrderData,
   MonthlyStockUpdate,
-  WarehouseHistory,
-  Shortage,
   RemanentHistoryEntry,
   WarehouseDataResponse,
+  Shortage,
   PalletType,
   CreatePalletTypeData,
   UpdatePalletTypeData,
-  Import,
-  ImportPreview,
   DashboardResponse,
   Alert,
   Holiday,
   WorkingDay,
-  SetWorkingDayData,
   ForProductionData,
   BulkUpdateStatusData,
   CompleteDeliveryData,
+  Import,
+  ImportPreview,
+  PaginatedResponse,
 } from '@/types';
 import type {
   OptimizationResult,
   CreatePalletTypeRequest,
   UpdatePalletTypeRequest,
 } from '@/types/pallet';
-import { fetchApi, uploadFile, fetchBlob, checkExists, API_URL, type ApiError } from './api-client';
+import { fetchApi, uploadFile, API_URL, type ApiError } from './api-client';
 import { getAuthToken } from './auth-token';
 
 // Dashboard
@@ -91,12 +90,29 @@ export const profilesApi = {
     }),
 };
 
+// Typ dla wyników wyszukiwania (zoptymalizowany, mniej pól)
+interface OrderSearchResult {
+  id: number;
+  orderNumber: string;
+  status: string;
+  client: string | null;
+  project: string | null;
+  system: string | null;
+  deadline: string | null;
+  valuePln: number | null;
+  archivedAt: string | null;
+  windows: Array<{ reference: string | null }>;
+}
+
 // Zlecenia
 export const ordersApi = {
   getAll: (params?: { status?: string; archived?: string; colorId?: string }) => {
     const query = new URLSearchParams(params as Record<string, string>).toString();
-    return fetchApi<Order[]>(`/api/orders${query ? `?${query}` : ''}`);
+    return fetchApi<PaginatedResponse<Order>>(`/api/orders${query ? `?${query}` : ''}`);
   },
+  // Zoptymalizowane wyszukiwanie dla GlobalSearch - filtruje po stronie serwera
+  search: (q: string, includeArchived: boolean = true) =>
+    fetchApi<OrderSearchResult[]>(`/api/orders/search?q=${encodeURIComponent(q)}&includeArchived=${includeArchived}`),
   getById: (id: number) => fetchApi<Order>(`/api/orders/${id}`),
   getByNumber: (orderNumber: string) => fetchApi<Order>(`/api/orders/by-number/${orderNumber}`),
   getTable: (colorId: number) => fetchApi<OrderTableData>(`/api/orders/table/${colorId}`),
@@ -137,6 +153,12 @@ export const ordersApi = {
     fetchApi<Order>(`/api/orders/${id}/unarchive`, { method: 'POST', body: JSON.stringify({}) }),
   delete: (id: number) =>
     fetchApi<void>(`/api/orders/${id}`, { method: 'DELETE' }),
+  // P1-3: Set variant type for order (correction vs additional_file)
+  setVariantType: (id: number, variantType: 'correction' | 'additional_file') =>
+    fetchApi<Order>(`/api/orders/${id}/variant-type`, {
+      method: 'PATCH',
+      body: JSON.stringify({ variantType }),
+    }),
 };
 
 // Magazyn
@@ -186,10 +208,10 @@ export const deliveriesApi = {
     fetchApi<DeliveryCalendarData>(`/api/deliveries/calendar?month=${month}&year=${year}`),
   getCalendarBatch: (months: Array<{ month: number; year: number }>) =>
     fetchApi<{
-      deliveries: any[];
-      unassignedOrders: any[];
-      workingDays: any[];
-      holidays: any[];
+      deliveries: Delivery[];
+      unassignedOrders: Order[];
+      workingDays: WorkingDay[];
+      holidays: Holiday[];
     }>(`/api/deliveries/calendar-batch?months=${encodeURIComponent(JSON.stringify(months))}`),
   getById: (id: number) => fetchApi<Delivery>(`/api/deliveries/${id}`),
   getProfileRequirements: (params?: { from?: string }) => {
@@ -499,6 +521,28 @@ export const schucoApi = {
     fetchApi<{ newCount: number; updatedCount: number; totalCount: number }>(
       '/api/schuco/debug/changed'
     ),
+  getByWeek: () =>
+    fetchApi<{
+      weeks: Array<{
+        week: string;
+        weekStart: string | null;
+        count: number;
+        deliveries: Array<{
+          id: number;
+          orderNumber: string;
+          orderName: string;
+          shippingStatus: string;
+          totalAmount: string | null;
+          extractedOrderNums: string | null;
+          changeType: string | null;
+          changedFields: string | null;
+        }>;
+      }>;
+    }>('/api/schuco/by-week'),
+  cleanupPending: () =>
+    fetchApi<{ cleaned: number; message: string }>('/api/schuco/cleanup-pending', {
+      method: 'POST',
+    }),
 };
 
 // Optymalizacja palet

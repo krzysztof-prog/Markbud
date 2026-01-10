@@ -55,9 +55,9 @@ describe('Warehouse Validation - validateSufficientStock', () => {
       ];
 
       vi.mocked(mockPrisma.orderRequirement.findMany).mockResolvedValue(
-        requirements as any
+        requirements as unknown as Awaited<ReturnType<typeof mockPrisma.orderRequirement.findMany>>
       );
-      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as any);
+      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as unknown as Awaited<ReturnType<typeof mockPrisma.warehouseStock.findMany>>);
 
       const result = await validateSufficientStock(mockPrisma, 123);
 
@@ -86,9 +86,9 @@ describe('Warehouse Validation - validateSufficientStock', () => {
       ];
 
       vi.mocked(mockPrisma.orderRequirement.findMany).mockResolvedValue(
-        requirements as any
+        requirements as unknown as Awaited<ReturnType<typeof mockPrisma.orderRequirement.findMany>>
       );
-      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as any);
+      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as unknown as Awaited<ReturnType<typeof mockPrisma.warehouseStock.findMany>>);
 
       const result = await validateSufficientStock(mockPrisma, 123);
 
@@ -127,9 +127,9 @@ describe('Warehouse Validation - validateSufficientStock', () => {
       ];
 
       vi.mocked(mockPrisma.orderRequirement.findMany).mockResolvedValue(
-        requirements as any
+        requirements as unknown as Awaited<ReturnType<typeof mockPrisma.orderRequirement.findMany>>
       );
-      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as any);
+      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as unknown as Awaited<ReturnType<typeof mockPrisma.warehouseStock.findMany>>);
 
       await expect(validateSufficientStock(mockPrisma, 123)).rejects.toThrow(
         ValidationError
@@ -157,7 +157,7 @@ describe('Warehouse Validation - validateSufficientStock', () => {
 
       // No stock records returned
       vi.mocked(mockPrisma.orderRequirement.findMany).mockResolvedValue(
-        requirements as any
+        requirements as unknown as Awaited<ReturnType<typeof mockPrisma.orderRequirement.findMany>>
       );
       vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue([]);
 
@@ -220,9 +220,9 @@ describe('Warehouse Validation - validateSufficientStock', () => {
       ];
 
       vi.mocked(mockPrisma.orderRequirement.findMany).mockResolvedValue(
-        requirements as any
+        requirements as unknown as Awaited<ReturnType<typeof mockPrisma.orderRequirement.findMany>>
       );
-      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as any);
+      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as unknown as Awaited<ReturnType<typeof mockPrisma.warehouseStock.findMany>>);
 
       await expect(validateSufficientStock(mockPrisma, 123)).rejects.toThrow(
         ValidationError
@@ -259,9 +259,9 @@ describe('Warehouse Validation - validateSufficientStock', () => {
       ];
 
       vi.mocked(mockPrisma.orderRequirement.findMany).mockResolvedValue(
-        requirements as any
+        requirements as unknown as Awaited<ReturnType<typeof mockPrisma.orderRequirement.findMany>>
       );
-      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as any);
+      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as unknown as Awaited<ReturnType<typeof mockPrisma.warehouseStock.findMany>>);
 
       await expect(validateSufficientStock(mockPrisma, 123)).rejects.toThrow(
         ValidationError
@@ -316,9 +316,9 @@ describe('Warehouse Validation - validateSufficientStock', () => {
       ];
 
       vi.mocked(mockPrisma.orderRequirement.findMany).mockResolvedValue(
-        requirements as any
+        requirements as unknown as Awaited<ReturnType<typeof mockPrisma.orderRequirement.findMany>>
       );
-      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as any);
+      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as unknown as Awaited<ReturnType<typeof mockPrisma.warehouseStock.findMany>>);
 
       await expect(validateSufficientStock(mockPrisma, 123)).rejects.toThrow(
         ValidationError
@@ -366,9 +366,9 @@ describe('Warehouse Validation - validateSufficientStock', () => {
       ];
 
       vi.mocked(mockPrisma.orderRequirement.findMany).mockResolvedValue(
-        requirements as any
+        requirements as unknown as Awaited<ReturnType<typeof mockPrisma.orderRequirement.findMany>>
       );
-      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as any);
+      vi.mocked(mockPrisma.warehouseStock.findMany).mockResolvedValue(stocks as unknown as Awaited<ReturnType<typeof mockPrisma.warehouseStock.findMany>>);
 
       const error = await validateSufficientStock(mockPrisma, 123).catch((e) => e);
 

@@ -13,6 +13,7 @@ import { useRef, useCallback } from 'react';
  *   await saveData();
  * }, 500);
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic debounce needs to accept any function signature
 export function useDebounce<T extends (...args: any[]) => Promise<any>>(
   callback: T,
   delay: number = 300

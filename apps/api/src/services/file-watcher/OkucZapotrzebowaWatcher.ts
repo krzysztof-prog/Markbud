@@ -142,7 +142,7 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
 
     return records.map((row) => ({
       // Obsluga roznych nazw kolumn (polskie i angielskie)
-      articleId: row['Numer art.'] || row['Numer art'] || row.articleId || row.article_id || '',
+      articleId: row['Numer artykulu'] || row['Numer art.'] || row['Numer art'] || row.articleId || row.article_id || '',
       name: row['Nazwa'] || row.name || row.Name || '',
       quantity: parseInt(row['Ilosc'] || row['Ilość'] || row.quantity || row.Quantity || '0', 10),
       unit: row['Jednostka'] || row.unit || row.Unit || 'szt.',

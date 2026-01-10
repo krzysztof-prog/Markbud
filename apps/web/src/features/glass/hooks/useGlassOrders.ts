@@ -46,10 +46,11 @@ export function useImportGlassOrder() {
       queryClient.invalidateQueries({ queryKey: glassOrderKeys.lists() });
       showSuccessToast('Import udany', `Zamowienie ${data.glassOrderNumber} zaimportowane`);
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const err = error as { status?: number };
       // Don't show toast for conflict errors (409) - they're handled by the modal in component
-      if (error?.status !== 409) {
-        showErrorToast('Blad importu', getErrorMessage(error));
+      if (err?.status !== 409) {
+        showErrorToast('Blad importu', getErrorMessage(error as Error));
       }
       // NOTE: Don't re-throw here! React Query doesn't allow it in onError.
       // Component will catch error via mutateAsync().catch() instead.

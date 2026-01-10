@@ -40,7 +40,7 @@
  * - "Rendered fewer hooks than expected"
  */
 
-let renderCount = 0;
+const renderCount = 0;
 
 export function useHooksSafeOrder(componentName: string) {
   // Liczy liczbę Hooks w komponencie w bieżącym renderze

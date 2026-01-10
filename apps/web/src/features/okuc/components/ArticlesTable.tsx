@@ -4,6 +4,7 @@
  * Wyświetla listę artykułów z akcjami edycji i usuwania.
  * Sortowanie domyślnie po articleId (ascending).
  * Confirmation dialog dla usuwania (inline).
+ * Inline edycja lokalizacji magazynowej.
  */
 
 'use client';
@@ -25,28 +26,41 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Check, X, Edit, Trash2 } from 'lucide-react';
-import type { OkucArticle } from '@/types/okuc';
+import type { OkucArticle, OkucLocation } from '@/types/okuc';
 
 interface ArticlesTableProps {
   articles: OkucArticle[];
+  locations: OkucLocation[];
   isLoading?: boolean;
   onEdit: (articleId: number) => void;
   onDelete: (articleId: number) => void;
+  onLocationChange: (articleId: number, locationId: number | null) => void;
   isDeletingId?: number; // ID artykułu który jest usuwany
+  isUpdatingLocationId?: number; // ID artykułu którego lokalizacja jest aktualizowana
 }
 
-type SortField = 'articleId' | 'name' | 'orderClass' | 'sizeClass';
+type SortField = 'articleId' | 'name' | 'orderClass' | 'sizeClass' | 'location';
 type SortDirection = 'asc' | 'desc';
 
 export function ArticlesTable({
   articles,
+  locations,
   isLoading = false,
   onEdit,
   onDelete,
+  onLocationChange,
   isDeletingId,
+  isUpdatingLocationId,
 }: ArticlesTableProps) {
   // State dla sortowania - domyślnie articleId ascending
   const [sortField, setSortField] = useState<SortField>('articleId');
@@ -92,6 +106,11 @@ export function ArticlesTable({
           aValue = a.sizeClass;
           bValue = b.sizeClass;
           break;
+        case 'location':
+          // Lokalizacje bez przypisania na końcu
+          aValue = a.location?.name?.toLowerCase() ?? 'zzz';
+          bValue = b.location?.name?.toLowerCase() ?? 'zzz';
+          break;
         default:
           aValue = a.articleId;
           bValue = b.articleId;
@@ -119,6 +138,12 @@ export function ArticlesTable({
 
   const handleCancelDelete = () => {
     setDeleteConfirmId(null);
+  };
+
+  // Obsługa zmiany lokalizacji
+  const handleLocationChange = (articleId: number, value: string) => {
+    const locationId = value === 'unassigned' ? null : parseInt(value, 10);
+    onLocationChange(articleId, locationId);
   };
 
   // Znalezienie artykułu do usunięcia (dla dialog)
@@ -204,6 +229,19 @@ export function ArticlesTable({
                 </div>
               </TableHead>
 
+              {/* Location - sortowalne */}
+              <TableHead
+                className="cursor-pointer select-none hover:bg-slate-50"
+                onClick={() => handleSort('location')}
+              >
+                <div className="flex items-center gap-1">
+                  Magazyn
+                  {sortField === 'location' && (
+                    <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                  )}
+                </div>
+              </TableHead>
+
               {/* Actions */}
               <TableHead className="text-right">Akcje</TableHead>
             </TableRow>
@@ -212,6 +250,7 @@ export function ArticlesTable({
           <TableBody>
             {sortedArticles.map((article) => {
               const isDeleting = isDeletingId === article.id;
+              const isUpdatingLocation = isUpdatingLocationId === article.id;
 
               return (
                 <TableRow key={article.id}>
@@ -260,6 +299,37 @@ export function ArticlesTable({
                     <Badge variant="default" className="bg-blue-500 hover:bg-blue-600">
                       {article.sizeClass === 'standard' ? 'Standard' : 'Gabarat'}
                     </Badge>
+                  </TableCell>
+
+                  {/* Location - Select inline */}
+                  <TableCell>
+                    <Select
+                      value={article.locationId?.toString() ?? 'unassigned'}
+                      onValueChange={(value) => handleLocationChange(article.id, value)}
+                      disabled={isUpdatingLocation || isDeleting}
+                    >
+                      <SelectTrigger className="w-[180px]" disabled={isUpdatingLocation}>
+                        <SelectValue placeholder="Nie przypisano">
+                          {isUpdatingLocation ? (
+                            <span className="text-muted-foreground">Zapisywanie...</span>
+                          ) : article.location?.name ? (
+                            article.location.name
+                          ) : (
+                            <span className="text-muted-foreground">Nie przypisano</span>
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">
+                          <span className="text-muted-foreground">Nie przypisano</span>
+                        </SelectItem>
+                        {locations.map((loc) => (
+                          <SelectItem key={loc.id} value={loc.id.toString()}>
+                            {loc.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </TableCell>
 
                   {/* Actions - tylko Edit + Delete */}

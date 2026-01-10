@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useDeferredValue } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +10,9 @@ import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { schucoApi } from '@/lib/api';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -25,6 +27,7 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -36,6 +39,8 @@ import {
   Calendar,
   CalendarClock,
   Trash2,
+  Search,
+  X,
 } from 'lucide-react';
 import type { SchucoDelivery, SchucoFetchLog, SchucoDeliveriesResponse } from '@/types';
 import Link from 'next/link';
@@ -74,6 +79,8 @@ export default function DostawySchucoPageContent() {
   const queryClient = useQueryClient();
   const [currentPage, setCurrentPage] = useState(1);
   const [showBrowser, setShowBrowser] = useState(false); // Default: hidden browser (headless: true)
+  const [searchQuery, setSearchQuery] = useState(''); // Wyszukiwarka po nr zamówienia
+  const deferredSearchQuery = useDeferredValue(searchQuery); // Opóźnione wyszukiwanie dla lepszej wydajności
 
   // Fetch deliveries with pagination
   const { data: deliveriesData, isLoading: isLoadingDeliveries } = useQuery<SchucoDeliveriesResponse>({
@@ -155,9 +162,19 @@ export default function DostawySchucoPageContent() {
     refreshMutation.mutate();
   };
 
-  const deliveries = deliveriesData?.data || [];
+  const allDeliveries = deliveriesData?.data || [];
   const totalPages = deliveriesData?.totalPages || 1;
   const total = deliveriesData?.total || 0;
+
+  // Filtrowanie po nr zamówienia (wyszukiwarka z deferredValue dla płynności UI)
+  const deliveries = useMemo(() => {
+    if (!deferredSearchQuery.trim()) return allDeliveries;
+    const query = deferredSearchQuery.toLowerCase().trim();
+    return allDeliveries.filter(d =>
+      d.orderNumber?.toLowerCase().includes(query) ||
+      d.orderName?.toLowerCase().includes(query)
+    );
+  }, [allDeliveries, deferredSearchQuery]);
 
   // DEBUG: Log change types
   console.log('Deliveries with changes:', deliveries.filter(d => d.changeType).map(d => ({
@@ -399,14 +416,13 @@ export default function DostawySchucoPageContent() {
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="by-week">
+              <TabsTrigger value="upcoming">
                 <Calendar className="h-4 w-4 mr-1" />
-                Tygodniowy plan
-                {byWeekData?.weeks && byWeekData.weeks.length > 0 && (
-                  <Badge variant="secondary" className="ml-2 text-xs">
-                    {byWeekData.weeks.length}
-                  </Badge>
-                )}
+                Nadchodzące dostawy
+              </TabsTrigger>
+              <TabsTrigger value="history">
+                <Clock className="h-4 w-4 mr-1" />
+                Historia dostaw
               </TabsTrigger>
               <TabsTrigger value="logs">
                 Historia pobrań
@@ -431,44 +447,82 @@ export default function DostawySchucoPageContent() {
                     <div className="flex items-center gap-2">
                       <Truck className="h-5 w-5 text-blue-600" />
                       <CardTitle>Lista zamówień ({total})</CardTitle>
-                  {/* Change indicators */}
-                  {(changedCounts.new > 0 || changedCounts.updated > 0) && (
-                    <div className="flex items-center gap-2 ml-4">
-                      {changedCounts.new > 0 && (
-                        <Badge className="bg-green-600">
-                          <Sparkles className="h-3 w-3 mr-1" />
-                          {changedCounts.new} nowe
-                        </Badge>
-                      )}
-                      {changedCounts.updated > 0 && (
-                        <Badge className="bg-amber-500">
-                          <PenLine className="h-3 w-3 mr-1" />
-                          {changedCounts.updated} zmienione
-                        </Badge>
+                      {/* Change indicators */}
+                      {(changedCounts.new > 0 || changedCounts.updated > 0) && (
+                        <div className="flex items-center gap-2 ml-4">
+                          {changedCounts.new > 0 && (
+                            <Badge className="bg-green-600">
+                              <Sparkles className="h-3 w-3 mr-1" />
+                              {changedCounts.new} nowe
+                            </Badge>
+                          )}
+                          {changedCounts.updated > 0 && (
+                            <Badge className="bg-amber-500">
+                              <PenLine className="h-3 w-3 mr-1" />
+                              {changedCounts.updated} zmienione
+                            </Badge>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
-                {total > 0 && (
-                  <p className="text-sm text-slate-500">
-                    Wyświetlono {startItem}-{endItem} z {total} (strona {currentPage} z {totalPages})
-                  </p>
-                )}
-              </div>
-            </CardHeader>
+                    {/* Wyszukiwarka */}
+                    <div className="relative w-64">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <Input
+                        type="text"
+                        placeholder="Szukaj nr zamówienia..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9 pr-8"
+                      />
+                      {searchQuery && (
+                        <button
+                          onClick={() => setSearchQuery('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 rounded"
+                        >
+                          <X className="h-4 w-4 text-slate-400" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    {total > 0 && !searchQuery && (
+                      <p className="text-sm text-slate-500">
+                        Wyświetlono {startItem}-{endItem} z {total} (strona {currentPage} z {totalPages})
+                      </p>
+                    )}
+                    {searchQuery && (
+                      <p className="text-sm text-slate-500">
+                        Znaleziono {deliveries.length} z {total} zamówień
+                      </p>
+                    )}
+                  </div>
+                </CardHeader>
             <CardContent>
               {isLoadingDeliveries ? (
                 <TableSkeleton rows={10} columns={7} />
               ) : !deliveries || deliveries.length === 0 ? (
-                <EmptyState
-                  icon={<Package className="h-12 w-12" />}
-                  title="Brak dostaw"
-                  description="Nie znaleziono danych o dostawach Schuco. Kliknij 'Odśwież dane' aby pobrać dane ze strony Schuco."
-                  action={{
-                    label: 'Odśwież dane',
-                    onClick: handleRefresh,
-                  }}
-                />
+                searchQuery ? (
+                  <EmptyState
+                    icon={<Search className="h-12 w-12" />}
+                    title="Brak wyników"
+                    description={`Nie znaleziono zamówień dla "${searchQuery}"`}
+                    action={{
+                      label: 'Wyczyść wyszukiwanie',
+                      onClick: () => setSearchQuery(''),
+                    }}
+                  />
+                ) : (
+                  <EmptyState
+                    icon={<Package className="h-12 w-12" />}
+                    title="Brak dostaw"
+                    description="Nie znaleziono danych o dostawach Schuco. Kliknij 'Odśwież dane' aby pobrać dane ze strony Schuco."
+                    action={{
+                      label: 'Odśwież dane',
+                      onClick: handleRefresh,
+                    }}
+                  />
+                )
               ) : (
                 <>
                   {/* Legend */}
@@ -679,8 +733,8 @@ export default function DostawySchucoPageContent() {
           </Card>
         </TabsContent>
 
-        {/* By Week Tab - Tygodniowy plan dostaw */}
-        <TabsContent value="by-week" className="space-y-4">
+        {/* Upcoming Deliveries Tab - Nadchodzące dostawy */}
+        <TabsContent value="upcoming" className="space-y-4">
           {isLoadingByWeek ? (
             <Card>
               <CardContent className="pt-6">
@@ -703,7 +757,6 @@ export default function DostawySchucoPageContent() {
             today.setHours(0, 0, 0, 0);
 
             const upcomingWeeks: typeof byWeekData.weeks = [];
-            const pastWeeks: typeof byWeekData.weeks = [];
 
             for (const weekData of byWeekData.weeks) {
               const weekStart = weekData.weekStart ? new Date(weekData.weekStart) : null;
@@ -718,9 +771,6 @@ export default function DostawySchucoPageContent() {
               if (weekEnd >= today) {
                 // Tydzień jeszcze trwa lub jest w przyszłości
                 upcomingWeeks.push(weekData);
-              } else {
-                // Tydzień już minął
-                pastWeeks.push(weekData);
               }
             }
 
@@ -732,6 +782,156 @@ export default function DostawySchucoPageContent() {
               return new Date(a.weekStart).getTime() - new Date(b.weekStart).getTime();
             });
 
+            // Renderer dla pojedynczego tygodnia z Collapsible
+            const renderCollapsibleWeek = (weekData: typeof byWeekData.weeks[0], defaultOpen: boolean = false) => {
+              const weekStart = weekData.weekStart ? new Date(weekData.weekStart) : null;
+              const isCurrentWeek = weekStart &&
+                weekStart <= today &&
+                new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000) > today;
+
+              return (
+                <Collapsible
+                  key={weekData.week}
+                  defaultOpen={defaultOpen || isCurrentWeek || false}
+                  className={cn(
+                    'border rounded-lg overflow-hidden',
+                    isCurrentWeek && 'border-blue-500 border-2 shadow-md'
+                  )}
+                >
+                  {/* Nagłówek tygodnia - kliknięcie rozwija/zwija */}
+                  <CollapsibleTrigger className="w-full">
+                    <div className={cn(
+                      'px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-slate-200/50 transition-colors',
+                      isCurrentWeek ? 'bg-blue-100' : 'bg-slate-100'
+                    )}>
+                      <div className="flex items-center gap-3">
+                        <ChevronDown className="h-5 w-5 text-slate-500 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                        <h3 className="font-semibold text-lg">{weekData.week}</h3>
+                        {isCurrentWeek && (
+                          <Badge className="bg-blue-600">Bieżący tydzień</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">
+                          {weekData.count} {weekData.count === 1 ? 'zamówienie' :
+                            weekData.count < 5 ? 'zamówienia' : 'zamówień'}
+                        </Badge>
+                        {weekStart && (
+                          <span className="text-sm text-slate-500">
+                            od {weekStart.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </CollapsibleTrigger>
+
+                  {/* Lista zamówień - rozwijana */}
+                  <CollapsibleContent>
+                    <div className="divide-y border-t">
+                      {weekData.deliveries.map((delivery) => (
+                        <div
+                          key={delivery.id}
+                          className={cn(
+                            'px-4 py-2 flex items-center justify-between hover:bg-slate-50',
+                            delivery.changeType === 'new' && 'bg-green-50',
+                            delivery.changeType === 'updated' && 'bg-orange-50'
+                          )}
+                        >
+                          <div className="flex items-center gap-4">
+                            <span className="font-mono text-sm">{delivery.orderNumber}</span>
+                            <span className="text-slate-600">{delivery.orderName}</span>
+                            {delivery.changeType === 'new' && (
+                              <Badge className="bg-green-600 text-xs">NOWE</Badge>
+                            )}
+                            {delivery.changeType === 'updated' && (
+                              <Badge className="bg-orange-500 text-xs">ZMIENIONE</Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Badge className={getShippingStatusBadge(delivery.shippingStatus)}>
+                              {delivery.shippingStatus}
+                            </Badge>
+                            {delivery.totalAmount && (
+                              <span className="font-semibold text-sm">{delivery.totalAmount}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              );
+            };
+
+            return (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-5 w-5 text-blue-600" />
+                      <CardTitle>Nadchodzące dostawy</CardTitle>
+                      <Badge variant="secondary">{upcomingWeeks.length} {upcomingWeeks.length === 1 ? 'tydzień' : 'tygodni'}</Badge>
+                    </div>
+                  </div>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Kliknij na nagłówek tygodnia aby rozwinąć/zwinąć listę zamówień
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {upcomingWeeks.length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>Brak nadchodzących dostaw</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {upcomingWeeks.map((weekData) => renderCollapsibleWeek(weekData))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
+        </TabsContent>
+
+        {/* History Tab - Historia dostaw */}
+        <TabsContent value="history" className="space-y-4">
+          {isLoadingByWeek ? (
+            <Card>
+              <CardContent className="pt-6">
+                <TableSkeleton rows={5} columns={4} />
+              </CardContent>
+            </Card>
+          ) : !byWeekData?.weeks || byWeekData.weeks.length === 0 ? (
+            <Card>
+              <CardContent className="pt-6">
+                <EmptyState
+                  icon={<Clock className="h-12 w-12" />}
+                  title="Brak historii"
+                  description="Nie znaleziono historycznych dostaw."
+                />
+              </CardContent>
+            </Card>
+          ) : (() => {
+            // Filtruj tylko przeszłe tygodnie
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const pastWeeks: typeof byWeekData.weeks = [];
+
+            for (const weekData of byWeekData.weeks) {
+              const weekStart = weekData.weekStart ? new Date(weekData.weekStart) : null;
+              if (!weekStart) continue; // brak daty = pomijamy w historii
+
+              // Tydzień kończy się 7 dni po rozpoczęciu
+              const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+              if (weekEnd < today) {
+                // Tydzień już minął
+                pastWeeks.push(weekData);
+              }
+            }
+
             // Sortuj przeszłe od najnowszego (malejąco)
             pastWeeks.sort((a, b) => {
               if (!a.weekStart && !b.weekStart) return 0;
@@ -740,134 +940,96 @@ export default function DostawySchucoPageContent() {
               return new Date(b.weekStart).getTime() - new Date(a.weekStart).getTime();
             });
 
-            // Ogranicz do 5 najbliższych
-            const displayUpcoming = upcomingWeeks.slice(0, 5);
-
-            // Renderer dla pojedynczego tygodnia
-            const renderWeek = (weekData: typeof byWeekData.weeks[0], isPast: boolean = false) => {
+            // Renderer dla pojedynczego tygodnia z Collapsible (historia)
+            const renderCollapsibleWeekHistory = (weekData: typeof byWeekData.weeks[0]) => {
               const weekStart = weekData.weekStart ? new Date(weekData.weekStart) : null;
-              const isCurrentWeek = weekStart &&
-                weekStart <= today &&
-                new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000) > today;
 
               return (
-                <div
+                <Collapsible
                   key={weekData.week}
-                  className={cn(
-                    'border rounded-lg overflow-hidden',
-                    isCurrentWeek && 'border-blue-500 border-2 shadow-md',
-                    isPast && 'opacity-70'
-                  )}
+                  defaultOpen={false}
+                  className="border rounded-lg overflow-hidden opacity-80"
                 >
-                  {/* Nagłówek tygodnia */}
-                  <div className={cn(
-                    'px-4 py-3 flex items-center justify-between',
-                    isCurrentWeek ? 'bg-blue-100' : isPast ? 'bg-slate-200' : 'bg-slate-100'
-                  )}>
-                    <div className="flex items-center gap-3">
-                      <h3 className="font-semibold text-lg">{weekData.week}</h3>
-                      {isCurrentWeek && (
-                        <Badge className="bg-blue-600">Bieżący tydzień</Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">
-                        {weekData.count} {weekData.count === 1 ? 'zamówienie' :
-                          weekData.count < 5 ? 'zamówienia' : 'zamówień'}
-                      </Badge>
-                      {weekStart && (
-                        <span className="text-sm text-slate-500">
-                          od {weekStart.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Lista zamówień */}
-                  <div className="divide-y">
-                    {weekData.deliveries.map((delivery) => (
-                      <div
-                        key={delivery.id}
-                        className={cn(
-                          'px-4 py-2 flex items-center justify-between hover:bg-slate-50',
-                          delivery.changeType === 'new' && 'bg-green-50',
-                          delivery.changeType === 'updated' && 'bg-orange-50'
-                        )}
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className="font-mono text-sm">{delivery.orderNumber}</span>
-                          <span className="text-slate-600">{delivery.orderName}</span>
-                          {delivery.changeType === 'new' && (
-                            <Badge className="bg-green-600 text-xs">NOWE</Badge>
-                          )}
-                          {delivery.changeType === 'updated' && (
-                            <Badge className="bg-orange-500 text-xs">ZMIENIONE</Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Badge className={getShippingStatusBadge(delivery.shippingStatus)}>
-                            {delivery.shippingStatus}
-                          </Badge>
-                          {delivery.totalAmount && (
-                            <span className="font-semibold text-sm">{delivery.totalAmount}</span>
-                          )}
-                        </div>
+                  {/* Nagłówek tygodnia - kliknięcie rozwija/zwija */}
+                  <CollapsibleTrigger className="w-full">
+                    <div className="px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-slate-200/50 transition-colors bg-slate-100">
+                      <div className="flex items-center gap-3">
+                        <ChevronDown className="h-5 w-5 text-slate-500 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                        <h3 className="font-semibold text-lg text-slate-600">{weekData.week}</h3>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">
+                          {weekData.count} {weekData.count === 1 ? 'zamówienie' :
+                            weekData.count < 5 ? 'zamówienia' : 'zamówień'}
+                        </Badge>
+                        {weekStart && (
+                          <span className="text-sm text-slate-500">
+                            od {weekStart.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </CollapsibleTrigger>
+
+                  {/* Lista zamówień - rozwijana */}
+                  <CollapsibleContent>
+                    <div className="divide-y border-t">
+                      {weekData.deliveries.map((delivery) => (
+                        <div
+                          key={delivery.id}
+                          className={cn(
+                            'px-4 py-2 flex items-center justify-between hover:bg-slate-50',
+                            delivery.changeType === 'new' && 'bg-green-50',
+                            delivery.changeType === 'updated' && 'bg-orange-50'
+                          )}
+                        >
+                          <div className="flex items-center gap-4">
+                            <span className="font-mono text-sm">{delivery.orderNumber}</span>
+                            <span className="text-slate-600">{delivery.orderName}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Badge className={getShippingStatusBadge(delivery.shippingStatus)}>
+                              {delivery.shippingStatus}
+                            </Badge>
+                            {delivery.totalAmount && (
+                              <span className="font-semibold text-sm">{delivery.totalAmount}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               );
             };
 
             return (
-              <>
-                {/* Nadchodzące dostawy - max 5 */}
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-5 w-5 text-blue-600" />
-                        <CardTitle>Nadchodzące dostawy</CardTitle>
-                      </div>
-                      {upcomingWeeks.length > 5 && (
-                        <Badge variant="outline" className="text-slate-500">
-                          +{upcomingWeeks.length - 5} więcej tygodni
-                        </Badge>
-                      )}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-slate-500" />
+                      <CardTitle className="text-slate-600">Historia dostaw</CardTitle>
+                      <Badge variant="secondary">{pastWeeks.length} {pastWeeks.length === 1 ? 'tydzień' : 'tygodni'}</Badge>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    {displayUpcoming.length === 0 ? (
-                      <div className="text-center py-8 text-slate-500">
-                        <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>Brak nadchodzących dostaw</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {displayUpcoming.map((weekData) => renderWeek(weekData, false))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Historia - przeszłe tygodnie */}
-                {pastWeeks.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-5 w-5 text-slate-500" />
-                        <CardTitle className="text-slate-600">Historia dostaw</CardTitle>
-                        <Badge variant="secondary">{pastWeeks.length} {pastWeeks.length === 1 ? 'tydzień' : 'tygodni'}</Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        {pastWeeks.map((weekData) => renderWeek(weekData, true))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </>
+                  </div>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Kliknij na nagłówek tygodnia aby rozwinąć/zwinąć listę zamówień
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {pastWeeks.length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <Clock className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>Brak historii dostaw</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {pastWeeks.map((weekData) => renderCollapsibleWeekHistory(weekData))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             );
           })()}
         </TabsContent>

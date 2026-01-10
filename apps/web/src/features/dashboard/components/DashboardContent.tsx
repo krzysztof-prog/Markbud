@@ -32,7 +32,7 @@ export function DashboardContent() {
     error: dashboardError,
     refetch: refetchDashboard,
   } = useDashboard();
-  const { data: alerts, isLoading: alertsLoading } = useAlerts();
+  const { data: alerts } = useAlerts();
   const { data: weeklyStats, isLoading: weeklyStatsLoading } = useWeeklyStats();
 
   if (dashboardLoading) {

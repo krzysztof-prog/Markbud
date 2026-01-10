@@ -18,7 +18,7 @@ vi.mock('../../utils/logger.js', () => ({
 
 describe('SchucoOrderMatcher - Integration Tests', () => {
   let matcher: SchucoOrderMatcher;
-  let prismaMock: any;
+  let prismaMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     // Create mock Prisma client

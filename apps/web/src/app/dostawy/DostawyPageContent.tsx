@@ -76,6 +76,12 @@ const WindowStatsDialog = dynamic(
   { loading: () => <DialogSkeleton />, ssr: false }
 );
 
+// P1-3: Variant Type Selection Dialog
+const VariantTypeSelectionDialog = dynamic(
+  () => import('@/components/ui/variant-type-selection-dialog').then((mod) => ({ default: mod.VariantTypeSelectionDialog })),
+  { loading: () => <DialogSkeleton />, ssr: false }
+);
+
 // Extracted hooks
 import {
   useDeliveryFilters,
@@ -84,6 +90,7 @@ import {
   useDeliverySelection,
   useDeliveryExport,
 } from './hooks';
+import { useAddOrderWithVariantCheck } from './hooks/useAddOrderWithVariantCheck';
 
 interface DostawyPageContentProps {
   initialSelectedOrderId?: number | null;
@@ -165,6 +172,11 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
     monthsToFetch: filters.monthsToFetch,
   });
 
+  // P1-3: Variant type check wrapper for addOrderToDelivery
+  const variantCheckWrapper = useAddOrderWithVariantCheck(
+    (params) => actions.addOrderToDeliveryMutation.mutateAsync(params)
+  );
+
   // === EFFECTS ===
   useEffect(() => {
     if (initialSelectedOrderId) {
@@ -214,13 +226,19 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
         await actions.moveOrderBetweenDeliveriesMutation.mutateAsync({ sourceDeliveryId: s, targetDeliveryId: t, orderId: o });
       },
       onAddOrderToDelivery: async (d, o) => {
-        await actions.addOrderToDeliveryMutation.mutateAsync({ deliveryId: d, orderId: o });
+        // P1-3: Find order to get orderNumber for variant check
+        const order = unassignedOrders.find(ord => ord.id === o);
+        if (!order) {
+          await actions.addOrderToDeliveryMutation.mutateAsync({ deliveryId: d, orderId: o });
+          return;
+        }
+        await variantCheckWrapper.addOrderWithVariantCheck(d, o, order.orderNumber);
       },
       onRemoveOrderFromDelivery: async (d, o) => {
         await actions.removeOrderFromDeliveryMutation.mutateAsync({ deliveryId: d, orderId: o });
       },
     });
-  }, [selection, actions]);
+  }, [selection, actions, unassignedOrders, variantCheckWrapper]);
 
   // === RENDER ===
   return (
@@ -257,7 +275,15 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
               unassignedOrders={unassignedOrders} deliveries={deliveries} selectedDelivery={selectedDelivery} selectedOrderIds={selection.selectedOrderIds}
               rightPanelCollapsed={selection.rightPanelCollapsed} onToggleOrderSelection={selection.toggleOrderSelection} onClearSelection={selection.clearSelection}
               onViewOrder={(id, num) => { setSelectedOrderId(id); setSelectedOrderNumber(num); }}
-              onAddOrderToDelivery={(d, o) => actions.addOrderToDeliveryMutation.mutate({ deliveryId: d, orderId: o })}
+              onAddOrderToDelivery={(d, o) => {
+                // P1-3: Find order to get orderNumber for variant check
+                const order = unassignedOrders.find(ord => ord.id === o);
+                if (!order) {
+                  actions.addOrderToDeliveryMutation.mutate({ deliveryId: d, orderId: o });
+                  return;
+                }
+                variantCheckWrapper.addOrderWithVariantCheck(d, o, order.orderNumber);
+              }}
               onSetRightPanelCollapsed={selection.setRightPanelCollapsed}
             />
           </div>
@@ -291,6 +317,18 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
         <BulkUpdateDatesDialog open={showBulkUpdateDatesDialog} onOpenChange={setShowBulkUpdateDatesDialog} />
         <OrderDetailModal orderId={selectedOrderId} orderNumber={selectedOrderNumber || undefined} open={!!selectedOrderId}
           onOpenChange={(open) => { if (!open) { setSelectedOrderId(null); setSelectedOrderNumber(null); } }}
+        />
+
+        {/* P1-3: Variant type selection dialog */}
+        <VariantTypeSelectionDialog
+          open={variantCheckWrapper.variantDialog.state?.open ?? false}
+          onOpenChange={variantCheckWrapper.variantDialog.onClose}
+          orderNumber={variantCheckWrapper.variantDialog.state?.orderNumber ?? ''}
+          conflictingOrderNumber={variantCheckWrapper.variantDialog.state?.conflictingOrderNumber ?? ''}
+          originalDelivery={variantCheckWrapper.variantDialog.state?.originalDelivery ?? { deliveryId: 0, deliveryNumber: '' }}
+          targetDeliveryId={variantCheckWrapper.variantDialog.state?.targetDeliveryId ?? 0}
+          onConfirm={variantCheckWrapper.variantDialog.onConfirm}
+          isLoading={variantCheckWrapper.variantDialog.isLoading}
         />
       </div>
       <DragOverlay>

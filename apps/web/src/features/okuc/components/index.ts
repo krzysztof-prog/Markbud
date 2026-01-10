@@ -9,10 +9,12 @@
 export { ArticlesTable } from './ArticlesTable';
 export { ArticleForm } from './ArticleForm';
 export { DeleteArticleDialog } from './DeleteArticleDialog';
+export { ImportArticlesDialog } from './ImportArticlesDialog';
 
 // Stock
 export { StockTable } from './StockTable';
 export { StockSummaryCards } from './StockSummaryCards';
+export { ImportStockDialog } from './ImportStockDialog';
 
 // Demand
 export { DemandTable } from './DemandTable';

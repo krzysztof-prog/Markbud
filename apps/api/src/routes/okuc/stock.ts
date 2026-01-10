@@ -52,6 +52,84 @@ export const okucStockRoutes: FastifyPluginAsync = async (fastify) => {
   }, okucStockHandler.summary);
 
   /**
+   * POST /api/okuc/stock/import/preview
+   * Preview stock import from CSV file
+   */
+  fastify.post('/import/preview', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Preview stock import from CSV file',
+      tags: ['okuc-stock'],
+      consumes: ['multipart/form-data'],
+    },
+  }, okucStockHandler.importPreview);
+
+  /**
+   * POST /api/okuc/stock/import
+   * Import stock with conflict resolution
+   */
+  fastify.post('/import', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Import stock with conflict resolution',
+      tags: ['okuc-stock'],
+      body: {
+        type: 'object',
+        required: ['items', 'conflictResolution'],
+        properties: {
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['articleId', 'warehouseType', 'currentQuantity'],
+              properties: {
+                articleId: { type: 'string' },
+                warehouseType: { type: 'string', enum: ['pvc', 'alu'] },
+                subWarehouse: { type: 'string' },
+                currentQuantity: { type: 'number' },
+                minStock: { type: 'number' },
+                maxStock: { type: 'number' },
+              },
+            },
+          },
+          conflictResolution: { type: 'string', enum: ['skip', 'overwrite', 'selective'] },
+          selectedConflicts: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                articleId: { type: 'string' },
+                warehouseType: { type: 'string' },
+                subWarehouse: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, okucStockHandler.importStock);
+
+  /**
+   * GET /api/okuc/stock/export
+   * Export stock to CSV
+   * Query params: warehouseType, belowMin
+   */
+  fastify.get('/export', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Export stock to CSV',
+      tags: ['okuc-stock'],
+      querystring: {
+        type: 'object',
+        properties: {
+          warehouseType: { type: 'string', enum: ['pvc', 'alu'] },
+          belowMin: { type: 'boolean' },
+        },
+      },
+    },
+  }, okucStockHandler.exportCsv);
+
+  /**
    * GET /api/okuc/stock/below-minimum
    * Get stock items below minimum level
    * Query params: warehouseType

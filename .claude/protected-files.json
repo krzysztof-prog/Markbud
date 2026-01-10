@@ -1,0 +1,6 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Protected Files Configuration",
+  "description": "Lista plików chronionych przed modyfikacją przez File Lock Guard hook",
+  "protectedFiles": []
+}

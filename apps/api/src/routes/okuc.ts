@@ -9,6 +9,7 @@ import { okucStockRoutes } from './okuc/stock.js';
 import { okucDemandRoutes } from './okuc/demand.js';
 import { okucOrderRoutes } from './okuc/orders.js';
 import { okucProportionRoutes } from './okuc/proportions.js';
+import { okucLocationRoutes } from './okuc/locations.js';
 
 export const okucRoutes: FastifyPluginAsync = async (fastify) => {
   // Article management
@@ -25,6 +26,9 @@ export const okucRoutes: FastifyPluginAsync = async (fastify) => {
 
   // Proportions (proporcje zużycia)
   await fastify.register(okucProportionRoutes, { prefix: '/proportions' });
+
+  // Locations (lokalizacje magazynowe)
+  await fastify.register(okucLocationRoutes, { prefix: '/locations' });
 
   // Health check for the module
   fastify.get('/health', async (request, reply) => {

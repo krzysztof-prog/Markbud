@@ -1,9 +1,13 @@
 /**
  * Monthly Report Service
  * Generates monthly reports based on orders with invoice numbers
+ *
+ * IMPORTANT: All monetary values in database are stored in grosze/centy (smallest units).
+ * This service converts them to PLN/EUR for display.
  */
 
 import { PrismaClient } from '@prisma/client';
+import { groszeToPln, centyToEur, type Grosze, type Centy } from '../utils/money.js';
 
 export interface MonthlyReportData {
   year: number;
@@ -88,11 +92,13 @@ export class MonthlyReportService {
     });
 
     // Calculate totals
+    // UWAGA: Wartości przechowywane są w groszach/centach (Int w bazie)
+    // Konwersja na PLN/EUR następuje przy odczycie (getReport/getAllReports)
     let totalOrders = 0;
     let totalWindows = 0;
     let totalSashes = 0;
-    let totalValuePln = 0;
-    let totalValueEur = 0;
+    let totalValuePln = 0;  // w groszach
+    let totalValueEur = 0;  // w centach
 
     const items: MonthlyReportItemData[] = [];
 
@@ -107,8 +113,8 @@ export class MonthlyReportService {
         windowsCount: order.totalWindows || 0,
         sashesCount: order.totalSashes || 0,
         unitsCount,
-        valuePln: order.valuePln,
-        valueEur: order.valueEur,
+        valuePln: order.valuePln,  // w groszach - raw value
+        valueEur: order.valueEur,  // w centach - raw value
       });
 
       totalOrders++;
@@ -217,6 +223,7 @@ export class MonthlyReportService {
 
   /**
    * Get monthly report by year and month
+   * Converts grosze/centy to PLN/EUR for display
    */
   async getReport(year: number, month: number) {
     const report = await this.prisma.monthlyReport.findUnique({
@@ -235,11 +242,26 @@ export class MonthlyReportService {
       },
     });
 
-    return report;
+    if (!report) {
+      return null;
+    }
+
+    // Konwersja groszy/centów na PLN/EUR dla wyświetlania
+    return {
+      ...report,
+      totalValuePln: groszeToPln(report.totalValuePln as Grosze),
+      totalValueEur: centyToEur(report.totalValueEur as Centy),
+      reportItems: report.reportItems.map(item => ({
+        ...item,
+        valuePln: item.valuePln !== null ? groszeToPln(item.valuePln as Grosze) : null,
+        valueEur: item.valueEur !== null ? centyToEur(item.valueEur as Centy) : null,
+      })),
+    };
   }
 
   /**
    * Get all monthly reports
+   * Converts grosze/centy to PLN/EUR for display
    */
   async getAllReports(limit: number = 12) {
     const reports = await this.prisma.monthlyReport.findMany({
@@ -255,7 +277,12 @@ export class MonthlyReportService {
       },
     });
 
-    return reports;
+    // Konwersja groszy/centów na PLN/EUR dla wyświetlania
+    return reports.map(report => ({
+      ...report,
+      totalValuePln: groszeToPln(report.totalValuePln as Grosze),
+      totalValueEur: centyToEur(report.totalValueEur as Centy),
+    }));
   }
 
   /**
@@ -274,14 +301,23 @@ export class MonthlyReportService {
 
   /**
    * Generate and save report in one operation
+   * Returns data with values converted to PLN/EUR for display
    */
   async generateAndSaveReport(year: number, month: number) {
     const reportData = await this.generateReport(year, month);
     const reportId = await this.saveReport(reportData);
 
+    // Konwersja groszy/centów na PLN/EUR dla wyświetlania
     return {
       reportId,
       ...reportData,
+      totalValuePln: groszeToPln(reportData.totalValuePln as Grosze),
+      totalValueEur: centyToEur(reportData.totalValueEur as Centy),
+      items: reportData.items.map(item => ({
+        ...item,
+        valuePln: item.valuePln !== null ? groszeToPln(item.valuePln as Grosze) : null,
+        valueEur: item.valueEur !== null ? centyToEur(item.valueEur as Centy) : null,
+      })),
     };
   }
 }

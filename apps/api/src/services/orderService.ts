@@ -21,6 +21,17 @@ export class OrderService {
     return this.repository.findAll(filters);
   }
 
+  /**
+   * Wyszukiwanie zleceń - zoptymalizowane dla GlobalSearch
+   * Filtruje po stronie serwera, zwraca tylko niezbędne pola
+   */
+  async searchOrders(query: string, includeArchived: boolean = true) {
+    if (!query || query.length < 2) {
+      return [];
+    }
+    return this.repository.search(query, includeArchived);
+  }
+
   async getOrderById(id: number) {
     const order = await this.repository.findById(id);
 

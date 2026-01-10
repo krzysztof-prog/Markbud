@@ -14,7 +14,7 @@ const mockPrisma = {
     findUnique: vi.fn(),
     update: vi.fn(),
   },
-} as any;
+} as FastifyRequest;
 
 // Mock pdf-parse
 vi.mock('pdf-parse', () => ({

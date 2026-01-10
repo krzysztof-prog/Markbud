@@ -5,14 +5,21 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DeliveryHandler } from './deliveryHandler.js';
-import { DeliveryService } from '../services/deliveryService.js';
-import { DeliveryProtocolService } from '../services/delivery-protocol-service.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
+
+interface MockDeliveryService {
+  getProtocolData: ReturnType<typeof vi.fn>;
+}
+
+interface MockDeliveryProtocolService {
+  generatePdf: ReturnType<typeof vi.fn>;
+  generateFilename: ReturnType<typeof vi.fn>;
+}
 
 describe('DeliveryHandler', () => {
   let handler: DeliveryHandler;
-  let mockService: any;
-  let mockProtocolService: any;
+  let mockService: MockDeliveryService;
+  let mockProtocolService: MockDeliveryProtocolService;
   let mockRequest: Partial<FastifyRequest>;
   let mockReply: Partial<FastifyReply>;
 
@@ -42,7 +49,7 @@ describe('DeliveryHandler', () => {
         replyHeaders[key] = value;
         return mockReply;
       }),
-    } as any;
+    } as Partial<FastifyReply>;
 
     handler = new DeliveryHandler(mockService, mockProtocolService);
   });

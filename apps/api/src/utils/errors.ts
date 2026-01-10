@@ -14,9 +14,33 @@ export class AppError extends Error {
 }
 
 export class ValidationError extends AppError {
-  constructor(message: string, public errors?: Record<string, string[]>) {
-    super(message, 400, 'VALIDATION_ERROR');
+  public metadata?: Record<string, unknown>;
+  public errors?: Record<string, string[]>;
+
+  /**
+   * P1-2: Extended with metadata for additional context (e.g., variant type selection)
+   * Backward compatible - can accept either errors or metadata as second param
+   */
+  constructor(
+    message: string,
+    errorsOrMetadata?: Record<string, unknown> | Record<string, string[]>
+  ) {
+    // Determine if second arg is errors (Record<string, string[]>) or metadata
+    // Check: non-empty object where ALL values are string arrays
+    const isErrors =
+      errorsOrMetadata &&
+      Object.keys(errorsOrMetadata).length > 0 &&
+      Object.values(errorsOrMetadata).every(
+        v => Array.isArray(v) && v.every(item => typeof item === 'string')
+      );
+
+    const metadata = isErrors ? undefined : (errorsOrMetadata as Record<string, unknown>);
+    const errors = isErrors ? (errorsOrMetadata as Record<string, string[]>) : undefined;
+
+    super(message, 400, (metadata?.code as string) || 'VALIDATION_ERROR');
     this.name = 'ValidationError';
+    this.metadata = metadata;
+    this.errors = errors;
   }
 }
 
@@ -42,7 +66,7 @@ export class ForbiddenError extends AppError {
 }
 
 export class ConflictError extends AppError {
-  constructor(message: string, public details?: Record<string, any>) {
+  constructor(message: string, public details?: Record<string, unknown>) {
     super(message, 409, 'CONFLICT');
     this.name = 'ConflictError';
   }

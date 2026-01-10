@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync, RouteShorthandOptions } from 'fastify';
+import type { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../index.js';
 import { ColorRepository } from '../repositories/ColorRepository.js';
 import { ColorService } from '../services/colorService.js';

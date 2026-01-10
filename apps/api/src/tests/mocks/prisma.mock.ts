@@ -198,6 +198,16 @@ export const createMockPrisma = () => {
       deleteMany: vi.fn(),
       count: vi.fn(),
     },
+    // Pallet optimization
+    palletOptimization: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+      count: vi.fn(),
+    },
     $transaction: vi.fn() as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     $queryRaw: vi.fn(),
   } as unknown as PrismaClient;

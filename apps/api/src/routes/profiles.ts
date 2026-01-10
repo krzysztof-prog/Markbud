@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync, RouteShorthandOptions } from 'fastify';
+import type { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../index.js';
 import { verifyAuth } from '../middleware/auth.js';
 import { ProfileRepository } from '../repositories/ProfileRepository.js';

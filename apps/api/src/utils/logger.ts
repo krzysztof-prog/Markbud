@@ -34,7 +34,7 @@ class Logger {
   /**
    * Log with specific level (for backwards compatibility)
    */
-  log(level: LogLevel, message: string, meta?: Record<string, any>) {
+  log(level: LogLevel, message: string, meta?: Record<string, unknown>) {
     switch (level) {
       case 'debug':
         this.debug(message, meta);
@@ -51,7 +51,7 @@ class Logger {
     }
   }
 
-  debug(message: string, meta?: Record<string, any>) {
+  debug(message: string, meta?: Record<string, unknown>) {
     if (meta) {
       this.pino.debug(meta, message);
     } else {
@@ -59,7 +59,7 @@ class Logger {
     }
   }
 
-  info(message: string, meta?: Record<string, any>) {
+  info(message: string, meta?: Record<string, unknown>) {
     if (meta) {
       this.pino.info(meta, message);
     } else {
@@ -67,7 +67,7 @@ class Logger {
     }
   }
 
-  warn(message: string, meta?: Record<string, any>) {
+  warn(message: string, meta?: Record<string, unknown>) {
     if (meta) {
       this.pino.warn(meta, message);
     } else {
@@ -75,7 +75,7 @@ class Logger {
     }
   }
 
-  error(message: string, error?: Error | unknown, meta?: Record<string, any>) {
+  error(message: string, error?: Error | unknown, meta?: Record<string, unknown>) {
     const errorMeta = {
       ...meta,
       ...(error instanceof Error && {
@@ -97,7 +97,7 @@ class Logger {
   /**
    * Create a child logger with bound context
    */
-  child(bindings: Record<string, any>) {
+  child(bindings: Record<string, unknown>) {
     return this.pino.child(bindings);
   }
 

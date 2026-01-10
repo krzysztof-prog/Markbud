@@ -6,7 +6,6 @@ import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
 import { dashboardApi } from '../api/dashboardApi';
-import type { DashboardResponse, Alert } from '@/types';
 
 export const DASHBOARD_QUERY_KEY = ['dashboard'] as const;
 export const ALERTS_QUERY_KEY = ['alerts'] as const;

@@ -5,7 +5,6 @@
 import { z } from 'zod';
 import {
   optionalDateSchema,
-  nullableDateSchema,
   idParamsSchema,
   paginationQuerySchema,
 } from './common.js';

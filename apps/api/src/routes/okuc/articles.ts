@@ -25,13 +25,92 @@ export const okucArticleRoutes: FastifyPluginAsync = async (fastify) => {
         properties: {
           usedInPvc: { type: 'boolean' },
           usedInAlu: { type: 'boolean' },
-          orderClass: { type: 'string', enum: ['typical', 'atypical'] },
+          orderClass: { type: 'string', enum: ['typical', 'atypical', 'pending_review'] },
           sizeClass: { type: 'string', enum: ['standard', 'gabarat'] },
           isActive: { type: 'boolean' },
         },
       },
     },
   }, okucArticleHandler.list);
+
+  /**
+   * GET /api/okuc/articles/pending-review
+   * List all articles awaiting orderClass verification (created during import)
+   */
+  fastify.get('/pending-review', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'List all articles awaiting orderClass verification',
+      tags: ['okuc-articles'],
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'number' },
+              articleId: { type: 'string' },
+              name: { type: 'string' },
+              orderClass: { type: 'string' },
+              usedInPvc: { type: 'boolean' },
+              usedInAlu: { type: 'boolean' },
+              createdAt: { type: 'string', format: 'date-time' },
+            },
+          },
+        },
+      },
+    },
+  }, okucArticleHandler.listPendingReview);
+
+  /**
+   * POST /api/okuc/articles/batch-update-order-class
+   * Update orderClass for multiple articles at once
+   */
+  fastify.post<{
+    Body: { articles: Array<{ id: number; orderClass: 'typical' | 'atypical' }> };
+  }>('/batch-update-order-class', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Update orderClass for multiple articles at once',
+      tags: ['okuc-articles'],
+      body: {
+        type: 'object',
+        properties: {
+          articles: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'number' },
+                orderClass: { type: 'string', enum: ['typical', 'atypical'] },
+              },
+              required: ['id', 'orderClass'],
+            },
+          },
+        },
+        required: ['articles'],
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            updated: { type: 'number' },
+            failed: { type: 'number' },
+            errors: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'number' },
+                  error: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, okucArticleHandler.batchUpdateOrderClass);
 
   /**
    * GET /api/okuc/articles/:id
@@ -204,21 +283,45 @@ export const okucArticleRoutes: FastifyPluginAsync = async (fastify) => {
   }, okucArticleHandler.getAliases);
 
   /**
-   * POST /api/okuc/articles/import
-   * Import articles from CSV file
+   * POST /api/okuc/articles/import/preview
+   * Preview import - parses CSV and detects conflicts before actual import
    */
-  fastify.post('/import', {
+  fastify.post('/import/preview', {
     preHandler: verifyAuth,
     schema: {
-      description: 'Import articles from CSV file',
+      description: 'Preview CSV import - detect conflicts before importing',
       tags: ['okuc-articles'],
       consumes: ['multipart/form-data'],
       response: {
         200: {
           type: 'object',
           properties: {
-            success: { type: 'number' },
-            failed: { type: 'number' },
+            new: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  articleId: { type: 'string' },
+                  name: { type: 'string' },
+                  usedInPvc: { type: 'boolean' },
+                  usedInAlu: { type: 'boolean' },
+                  orderClass: { type: 'string' },
+                  sizeClass: { type: 'string' },
+                  warehouseType: { type: 'string' },
+                },
+              },
+            },
+            conflicts: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  articleId: { type: 'string' },
+                  existingData: { type: 'object' },
+                  newData: { type: 'object' },
+                },
+              },
+            },
             errors: {
               type: 'array',
               items: {
@@ -234,7 +337,68 @@ export const okucArticleRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-  }, okucArticleHandler.importCsv);
+  }, okucArticleHandler.importPreview);
+
+  /**
+   * POST /api/okuc/articles/import
+   * Import articles from CSV file with conflict resolution
+   */
+  fastify.post('/import', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Import articles from CSV file with conflict resolution',
+      tags: ['okuc-articles'],
+      body: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                articleId: { type: 'string' },
+                name: { type: 'string' },
+                usedInPvc: { type: 'boolean' },
+                usedInAlu: { type: 'boolean' },
+                orderClass: { type: 'string' },
+                sizeClass: { type: 'string' },
+                warehouseType: { type: 'string' },
+              },
+              required: ['articleId', 'name'],
+            },
+          },
+          conflictResolution: {
+            type: 'string',
+            enum: ['skip', 'overwrite', 'selective'],
+          },
+          selectedConflicts: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+        required: ['items', 'conflictResolution'],
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            imported: { type: 'number' },
+            skipped: { type: 'number' },
+            errors: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  articleId: { type: 'string' },
+                  error: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, okucArticleHandler.importArticles);
 
   /**
    * GET /api/okuc/articles/export

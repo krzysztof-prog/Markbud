@@ -5,7 +5,7 @@
  * Route -> Handler -> Service -> Repository
  */
 
-import type { FastifyPluginAsync, RouteShorthandOptions } from 'fastify';
+import type { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../index.js';
 import { ImportRepository } from '../repositories/ImportRepository.js';
 import { ImportService } from '../services/importService.js';

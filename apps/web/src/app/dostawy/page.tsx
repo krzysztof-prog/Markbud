@@ -22,7 +22,7 @@ const DostawyPageContent = dynamic(
 
 function DostawyPageInner() {
   const searchParams = useSearchParams();
-  const router = useRouter();
+  const _router = useRouter();
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
 
   // Handle order query param

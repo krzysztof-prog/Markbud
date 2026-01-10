@@ -7,8 +7,8 @@
  * - Edge cases and error handling
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { OrderRepository, OrderFilters } from './OrderRepository.js';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { OrderRepository } from './OrderRepository.js';
 import { createMockPrisma, setupTransactionMock } from '../tests/mocks/prisma.mock.js';
 import { Prisma } from '@prisma/client';
 

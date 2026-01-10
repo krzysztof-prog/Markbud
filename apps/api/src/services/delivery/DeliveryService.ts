@@ -26,6 +26,11 @@ import { deliveryTotalsService } from '../deliveryTotalsService.js';
 import { logger } from '../../utils/logger.js';
 import { prisma } from '../../index.js';
 import { groszeToPln, type Grosze } from '../../utils/money.js';
+import {
+  validateDeliveryStatusTransition,
+  validateOrdersForDeliveryStatus,
+  type DeliveryStatus,
+} from '../../utils/delivery-status-machine.js';
 
 // Import sub-services
 import { DeliveryNumberGenerator } from './DeliveryNumberGenerator.js';
@@ -118,6 +123,19 @@ export class DeliveryService {
     // Verify delivery exists and get previous status for status change notifications
     const existingDelivery = await this.getDeliveryById(id);
     const previousStatus = existingDelivery.status;
+
+    // Validate status transition if status is being changed
+    if (data.status && data.status !== previousStatus) {
+      validateDeliveryStatusTransition(previousStatus || 'planned', data.status);
+
+      // When completing delivery, validate that all orders are ready
+      if (data.status === 'completed') {
+        const orderStatuses = existingDelivery.deliveryOrders?.map(
+          (dOrder: { order?: { status?: string } }) => dOrder.order?.status || 'new'
+        ) || [];
+        validateOrdersForDeliveryStatus(data.status as DeliveryStatus, orderStatuses);
+      }
+    }
 
     const delivery = await this.repository.update(id, {
       deliveryDate: parseDateSafe(data.deliveryDate),

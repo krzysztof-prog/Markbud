@@ -53,11 +53,23 @@ const navigation: NavigationItem[] = [
     icon: Warehouse,
     subItems: [
       { name: 'Kalendarz dostaw', href: '/dostawy', icon: Calendar },
+      { name: 'Weryfikacja listy', href: '/dostawy/weryfikacja', icon: ListChecks },
       { name: 'Profile na dostawy', href: '/magazyn/akrobud/profile-na-dostawy', icon: Box },
     ]
   },
   { name: 'Magazyn PVC', href: '/magazyn/pvc', icon: Box },
-  { name: 'Okucia', href: '/magazyn/okuc', icon: Wrench },
+  {
+    name: 'Okucia',
+    href: '/magazyn/okuc',
+    icon: Wrench,
+    subItems: [
+      { name: 'Stan magazynu', href: '/magazyn/okuc', icon: Warehouse },
+      { name: 'Artykuły', href: '/magazyn/okuc/artykuly', icon: Box },
+      { name: 'Zapotrzebowanie', href: '/magazyn/okuc/zapotrzebowanie', icon: ClipboardList },
+      { name: 'Zamówienia', href: '/magazyn/okuc/zamowienia', icon: FileText },
+      { name: 'Historia', href: '/magazyn/okuc/historia', icon: Archive },
+    ]
+  },
   { name: 'Dostawy Schuco', href: '/magazyn/dostawy-schuco', icon: Truck },
   {
     name: 'Szyby',

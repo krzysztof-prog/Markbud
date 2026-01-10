@@ -66,17 +66,10 @@ const MonthlyReportContent = dynamic(
 );
 
 /**
- * Panel Kierownika - strona główna
- *
- * Zawiera 6 zakładek:
- * 1. Dodaj do produkcji - wybieranie zleceń do produkcji (status: in_progress)
- * 2. Zakończ zlecenia - oznaczanie zleceń jako wyprodukowane (status: completed)
- * 3. Zestawienie miesięczne - istniejąca strona zestawień (przeniesiona z /zestawienia)
- * 4. Godzinówki - placeholder (przyszłość)
- * 5. Paletówki - placeholder (przyszłość)
- * 6. B-Z - placeholder (przyszłość)
+ * Component wrapujący useSearchParams() w Suspense boundary
+ * Wymagane przez Next.js 15 dla static export
  */
-export default function KierownikPage() {
+function TabManager() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState('add-to-production');
 
@@ -89,84 +82,102 @@ export default function KierownikPage() {
   }, [searchParams]);
 
   return (
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+      <div className="border-b bg-white px-6">
+        <TabsList className="h-auto p-0 bg-transparent">
+          <TabsTrigger
+            value="add-to-production"
+            className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
+          >
+            <PlayCircle className="h-4 w-4" />
+            Dodaj do produkcji
+          </TabsTrigger>
+          <TabsTrigger
+            value="complete-orders"
+            className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
+          >
+            <CheckCircle className="h-4 w-4" />
+            Zakończ zlecenia
+          </TabsTrigger>
+          <TabsTrigger
+            value="monthly-report"
+            className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
+          >
+            <FileText className="h-4 w-4" />
+            Zestawienie miesięczne
+          </TabsTrigger>
+          <TabsTrigger
+            value="time-tracker"
+            className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
+          >
+            <Clock className="h-4 w-4" />
+            Godzinówki
+          </TabsTrigger>
+          <TabsTrigger
+            value="pallets"
+            className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
+          >
+            <Package className="h-4 w-4" />
+            Paletówki
+          </TabsTrigger>
+          <TabsTrigger
+            value="bz"
+            className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
+          >
+            <FileCheck className="h-4 w-4" />
+            B-Z
+          </TabsTrigger>
+        </TabsList>
+      </div>
+
+      <div className="flex-1 overflow-auto">
+        <TabsContent value="add-to-production" className="m-0 h-full">
+          <AddToProductionTab />
+        </TabsContent>
+
+        <TabsContent value="complete-orders" className="m-0 h-full">
+          <CompleteOrdersTab />
+        </TabsContent>
+
+        <TabsContent value="monthly-report" className="m-0 h-full">
+          <MonthlyReportContent />
+        </TabsContent>
+
+        <TabsContent value="time-tracker" className="m-0 h-full">
+          <TimeTrackerTab />
+        </TabsContent>
+
+        <TabsContent value="pallets" className="m-0 h-full">
+          <PalletsTab />
+        </TabsContent>
+
+        <TabsContent value="bz" className="m-0 h-full">
+          <BZTab />
+        </TabsContent>
+      </div>
+    </Tabs>
+  );
+}
+
+/**
+ * Panel Kierownika - strona główna
+ *
+ * Zawiera 6 zakładek:
+ * 1. Dodaj do produkcji - wybieranie zleceń do produkcji (status: in_progress)
+ * 2. Zakończ zlecenia - oznaczanie zleceń jako wyprodukowane (status: completed)
+ * 3. Zestawienie miesięczne - istniejąca strona zestawień (przeniesiona z /zestawienia)
+ * 4. Godzinówki - placeholder (przyszłość)
+ * 5. Paletówki - placeholder (przyszłość)
+ * 6. B-Z - placeholder (przyszłość)
+ */
+export default function KierownikPage() {
+  return (
     <div className="flex flex-col h-full">
       <Header title="Panel Kierownika" />
-
       <div className="flex-1 overflow-hidden">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-          <div className="border-b bg-white px-6">
-            <TabsList className="h-auto p-0 bg-transparent">
-              <TabsTrigger
-                value="add-to-production"
-                className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
-              >
-                <PlayCircle className="h-4 w-4" />
-                Dodaj do produkcji
-              </TabsTrigger>
-              <TabsTrigger
-                value="complete-orders"
-                className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
-              >
-                <CheckCircle className="h-4 w-4" />
-                Zakończ zlecenia
-              </TabsTrigger>
-              <TabsTrigger
-                value="monthly-report"
-                className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
-              >
-                <FileText className="h-4 w-4" />
-                Zestawienie miesięczne
-              </TabsTrigger>
-              <TabsTrigger
-                value="time-tracker"
-                className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
-              >
-                <Clock className="h-4 w-4" />
-                Godzinówki
-              </TabsTrigger>
-              <TabsTrigger
-                value="pallets"
-                className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
-              >
-                <Package className="h-4 w-4" />
-                Paletówki
-              </TabsTrigger>
-              <TabsTrigger
-                value="bz"
-                className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
-              >
-                <FileCheck className="h-4 w-4" />
-                B-Z
-              </TabsTrigger>
-            </TabsList>
-          </div>
-
-          <div className="flex-1 overflow-auto">
-            <TabsContent value="add-to-production" className="m-0 h-full">
-              <AddToProductionTab />
-            </TabsContent>
-
-            <TabsContent value="complete-orders" className="m-0 h-full">
-              <CompleteOrdersTab />
-            </TabsContent>
-
-            <TabsContent value="monthly-report" className="m-0 h-full">
-              <MonthlyReportContent />
-            </TabsContent>
-
-            <TabsContent value="time-tracker" className="m-0 h-full">
-              <TimeTrackerTab />
-            </TabsContent>
-
-            <TabsContent value="pallets" className="m-0 h-full">
-              <PalletsTab />
-            </TabsContent>
-
-            <TabsContent value="bz" className="m-0 h-full">
-              <BZTab />
-            </TabsContent>
-          </div>
-        </Tabs>
+        <Suspense fallback={<TabLoader />}>
+          <TabManager />
+        </Suspense>
       </div>
     </div>
   );

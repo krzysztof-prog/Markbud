@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { importsApi } from '../api/importsApi';
-import type { Import, ImportPreview } from '@/types';
 
 export const IMPORTS_QUERY_KEY = ['imports'] as const;
 
@@ -15,6 +14,7 @@ export function useImports() {
 export function useImportPreview(importId: number | null) {
   return useQuery({
     queryKey: ['import-preview', importId],
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- enabled check guarantees importId is not null
     queryFn: () => importsApi.getPreview(importId!),
     enabled: !!importId,
     staleTime: 2 * 60 * 1000,

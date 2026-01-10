@@ -384,7 +384,7 @@ export class WarehouseRepository {
       const results = [];
 
       for (const update of updates) {
-        const { profileId, currentStock, usedBeams, orderedBeams } = update;
+        const { profileId, currentStock, usedBeams: _usedBeams, orderedBeams } = update;
 
         // Get existing stock
         const existingStock = await tx.warehouseStock.findUnique({
@@ -668,7 +668,7 @@ export class WarehouseRepository {
   /**
    * Get completed orders for a specific month (used in monthly finalization)
    */
-  async getCompletedOrdersInMonth(month: Date, preview = false) {
+  async getCompletedOrdersInMonth(month: Date, _preview = false) {
     const startOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
     const endOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0);
 

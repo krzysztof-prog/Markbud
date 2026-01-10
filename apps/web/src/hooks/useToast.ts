@@ -1,5 +1,6 @@
 import * as React from "react"
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- React.ReactElement needs any for props
 export type ToastActionElement = React.ReactElement<any>
 
 type ToastBase = {
@@ -18,7 +19,15 @@ type ToasterToast = ToastBase & {
   onOpenChange?: (open: boolean) => void
 }
 
-const actionTypes = {
+type ActionType = {
+  readonly ADD_TOAST: "ADD_TOAST";
+  readonly UPDATE_TOAST: "UPDATE_TOAST";
+  readonly DISMISS_TOAST: "DISMISS_TOAST";
+  readonly REMOVE_TOAST: "REMOVE_TOAST";
+}
+
+// Reserved for future use - Action type definitions
+const _actionTypes: ActionType = {
   ADD_TOAST: "ADD_TOAST",
   UPDATE_TOAST: "UPDATE_TOAST",
   DISMISS_TOAST: "DISMISS_TOAST",
@@ -31,8 +40,6 @@ function genId() {
   count = (count + 1) % Number.MAX_VALUE
   return count.toString()
 }
-
-type ActionType = typeof actionTypes
 
 type Action =
   | {

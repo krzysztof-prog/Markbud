@@ -5,7 +5,7 @@
 import { useSuspenseQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { deliveriesApi } from '../api/deliveriesApi';
 import { deliveriesApi as mainDeliveriesApi } from '@/lib/api';
-import type { Delivery, DeliveryCalendarData } from '@/types';
+import type { DeliveryCalendarData } from '@/types';
 
 export const DELIVERIES_CALENDAR_QUERY_KEY = (monthsParams: { month: number; year: number }[]) =>
   ['deliveries-calendar', monthsParams] as const;

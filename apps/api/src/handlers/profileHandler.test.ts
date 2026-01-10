@@ -4,21 +4,30 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ProfileHandler } from './profileHandler.js';
-import { ProfileService } from '../services/profileService.js';
 import { NotFoundError, ConflictError } from '../utils/errors.js';
-import type { FastifyReply } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+
+// Mock types for testing
+interface MockProfileService {
+  getAllProfiles: ReturnType<typeof vi.fn>;
+  getProfileById: ReturnType<typeof vi.fn>;
+  createProfile: ReturnType<typeof vi.fn>;
+  updateProfile: ReturnType<typeof vi.fn>;
+  deleteProfile: ReturnType<typeof vi.fn>;
+  updateProfileOrders: ReturnType<typeof vi.fn>;
+}
 
 // Mock Fastify Reply
 const createMockReply = (): FastifyReply => {
   return {
     send: vi.fn().mockReturnThis(),
     status: vi.fn().mockReturnThis(),
-  } as any;
+  } as Partial<FastifyReply> as FastifyReply;
 };
 
 describe('ProfileHandler', () => {
   let handler: ProfileHandler;
-  let service: ProfileService;
+  let service: MockProfileService;
 
   beforeEach(() => {
     service = {
@@ -28,7 +37,7 @@ describe('ProfileHandler', () => {
       updateProfile: vi.fn(),
       deleteProfile: vi.fn(),
       updateProfileOrders: vi.fn(),
-    } as any;
+    };
 
     handler = new ProfileHandler(service);
   });
@@ -43,7 +52,7 @@ describe('ProfileHandler', () => {
       vi.mocked(service.getAllProfiles).mockResolvedValue(mockProfiles);
       const reply = createMockReply();
 
-      await handler.getAll({} as any, reply);
+      await handler.getAll({} as FastifyRequest, reply);
 
       expect(service.getAllProfiles).toHaveBeenCalled();
       expect(reply.send).toHaveBeenCalledWith(mockProfiles);
@@ -66,7 +75,7 @@ describe('ProfileHandler', () => {
 
       vi.mocked(service.getProfileById).mockResolvedValue(mockProfile);
       const reply = createMockReply();
-      const request = { params: { id: '1' } } as any;
+      const request = { params: { id: '1' } } as FastifyRequest;
 
       await handler.getById(request, reply);
 
@@ -77,14 +86,14 @@ describe('ProfileHandler', () => {
     it('should throw NotFoundError when profile not found', async () => {
       vi.mocked(service.getProfileById).mockRejectedValue(new NotFoundError('Profile'));
       const reply = createMockReply();
-      const request = { params: { id: '999' } } as any;
+      const request = { params: { id: '999' } } as FastifyRequest;
 
       await expect(handler.getById(request, reply)).rejects.toThrow(NotFoundError);
     });
 
     it('should reject invalid profile ID format', async () => {
       const reply = createMockReply();
-      const request = { params: { id: 'invalid' } } as any;
+      const request = { params: { id: 'invalid' } } as FastifyRequest;
 
       await expect(handler.getById(request, reply)).rejects.toThrow();
     });
@@ -97,7 +106,7 @@ describe('ProfileHandler', () => {
 
       vi.mocked(service.createProfile).mockResolvedValue(mockCreated);
       const reply = createMockReply();
-      const request = { body: input } as any;
+      const request = { body: input } as FastifyRequest;
 
       await handler.create(request, reply);
 
@@ -113,14 +122,14 @@ describe('ProfileHandler', () => {
         new ConflictError('Profile with this number already exists')
       );
       const reply = createMockReply();
-      const request = { body: input } as any;
+      const request = { body: input } as FastifyRequest;
 
       await expect(handler.create(request, reply)).rejects.toThrow(ConflictError);
     });
 
     it('should reject invalid input', async () => {
       const reply = createMockReply();
-      const request = { body: { name: 'No Number' } } as any; // Missing required 'number'
+      const request = { body: { name: 'No Number' } } as FastifyRequest; // Missing required 'number'
 
       await expect(handler.create(request, reply)).rejects.toThrow();
     });
@@ -142,7 +151,7 @@ describe('ProfileHandler', () => {
 
       vi.mocked(service.updateProfile).mockResolvedValue(mockUpdated);
       const reply = createMockReply();
-      const request = { params: { id: '1' }, body: updateData } as any;
+      const request = { params: { id: '1' }, body: updateData } as FastifyRequest;
 
       await handler.update(request, reply);
 
@@ -153,14 +162,14 @@ describe('ProfileHandler', () => {
     it('should throw NotFoundError when profile does not exist', async () => {
       vi.mocked(service.updateProfile).mockRejectedValue(new NotFoundError('Profile'));
       const reply = createMockReply();
-      const request = { params: { id: '999' }, body: { name: 'Test' } } as any;
+      const request = { params: { id: '999' }, body: { name: 'Test' } } as FastifyRequest;
 
       await expect(handler.update(request, reply)).rejects.toThrow(NotFoundError);
     });
 
     it('should reject invalid ID', async () => {
       const reply = createMockReply();
-      const request = { params: { id: 'invalid' }, body: { name: 'Test' } } as any;
+      const request = { params: { id: 'invalid' }, body: { name: 'Test' } } as FastifyRequest;
 
       await expect(handler.update(request, reply)).rejects.toThrow();
     });
@@ -170,7 +179,7 @@ describe('ProfileHandler', () => {
     it('should delete profile and return 204', async () => {
       vi.mocked(service.deleteProfile).mockResolvedValue(undefined);
       const reply = createMockReply();
-      const request = { params: { id: '1' } } as any;
+      const request = { params: { id: '1' } } as FastifyRequest;
 
       await handler.delete(request, reply);
 
@@ -182,7 +191,7 @@ describe('ProfileHandler', () => {
     it('should throw NotFoundError when profile does not exist', async () => {
       vi.mocked(service.deleteProfile).mockRejectedValue(new NotFoundError('Profile'));
       const reply = createMockReply();
-      const request = { params: { id: '999' } } as any;
+      const request = { params: { id: '999' } } as FastifyRequest;
 
       await expect(handler.delete(request, reply)).rejects.toThrow(NotFoundError);
     });
@@ -192,14 +201,14 @@ describe('ProfileHandler', () => {
         new ConflictError('Nie można usunąć profilu - istnieją powiązane dane')
       );
       const reply = createMockReply();
-      const request = { params: { id: '1' } } as any;
+      const request = { params: { id: '1' } } as FastifyRequest;
 
       await expect(handler.delete(request, reply)).rejects.toThrow(ConflictError);
     });
 
     it('should reject invalid ID', async () => {
       const reply = createMockReply();
-      const request = { params: { id: 'invalid' } } as any;
+      const request = { params: { id: 'invalid' } } as FastifyRequest;
 
       await expect(handler.delete(request, reply)).rejects.toThrow();
     });
@@ -216,7 +225,7 @@ describe('ProfileHandler', () => {
 
       vi.mocked(service.updateProfileOrders).mockResolvedValue(undefined);
       const reply = createMockReply();
-      const request = { body: input } as any;
+      const request = { body: input } as FastifyRequest;
 
       await handler.updateOrders(request, reply);
 
@@ -230,7 +239,7 @@ describe('ProfileHandler', () => {
 
       vi.mocked(service.updateProfileOrders).mockResolvedValue(undefined);
       const reply = createMockReply();
-      const request = { body: input } as any;
+      const request = { body: input } as FastifyRequest;
 
       await handler.updateOrders(request, reply);
 
@@ -240,7 +249,7 @@ describe('ProfileHandler', () => {
 
     it('should reject invalid input', async () => {
       const reply = createMockReply();
-      const request = { body: { profileOrders: 'invalid' } } as any; // Should be array
+      const request = { body: { profileOrders: 'invalid' } } as FastifyRequest; // Should be array
 
       await expect(handler.updateOrders(request, reply)).rejects.toThrow();
     });

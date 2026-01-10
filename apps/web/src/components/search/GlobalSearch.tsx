@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, KeyboardEvent, useMemo } from 'react';
+import { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { Search, X, FileText, Calendar, Package } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
@@ -8,69 +8,51 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ordersApi } from '@/lib/api';
 import { formatGrosze, type Grosze } from '@/lib/money';
-import type { Order } from '@/types';
-import { useRouter } from 'next/navigation';
 import { useDebounce } from '@/hooks/useDebounce';
+import { OrderDetailModal } from '@/components/orders/order-detail-modal';
 
 interface GlobalSearchProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+// Typ dla wyników wyszukiwania (zgodny z OrderSearchResult z API)
+interface SearchResult {
+  id: number;
+  orderNumber: string;
+  status: string;
+  client: string | null;
+  project: string | null;
+  system: string | null;
+  deadline: string | null;
+  valuePln: number | null;
+  archivedAt: string | null;
+  windows: Array<{ reference: string | null }>;
+}
+
 export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const selectedItemRef = useRef<HTMLButtonElement>(null);
-  const router = useRouter();
 
   // Debounce search query to avoid too many API calls
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
-  // Pobierz wszystkie zlecenia (aktywne i zarchiwizowane) - używamy debounced query
-  const { data: activeOrders = [], isLoading: loadingActive } = useQuery({
-    queryKey: ['orders', 'search', 'active', debouncedSearchQuery],
-    queryFn: () => ordersApi.getAll({ archived: 'false' }),
+  // Używamy zoptymalizowanego endpointu /search - filtrowanie po stronie serwera
+  // Jedno zapytanie zamiast dwóch, bez COUNT, tylko potrzebne pola
+  const { data: searchResults = [], isLoading } = useQuery({
+    queryKey: ['orders', 'search', debouncedSearchQuery],
+    queryFn: () => ordersApi.search(debouncedSearchQuery, true), // includeArchived=true
     enabled: isOpen && debouncedSearchQuery.length >= 2,
     staleTime: 30000, // Cache for 30 seconds
   });
-
-  const { data: archivedOrders = [], isLoading: loadingArchived } = useQuery({
-    queryKey: ['orders', 'search', 'archived', debouncedSearchQuery],
-    queryFn: () => ordersApi.getAll({ archived: 'true' }),
-    enabled: isOpen && debouncedSearchQuery.length >= 2,
-    staleTime: 30000, // Cache for 30 seconds
-  });
-
-  const isLoading = loadingActive || loadingArchived;
-  const allOrders = useMemo(() => [...activeOrders, ...archivedOrders], [activeOrders, archivedOrders]);
-
-  // Filtruj wyniki na podstawie zapytania (client-side filtering)
-  const filteredOrders = useMemo(() => {
-    if (debouncedSearchQuery.length < 2) return [];
-
-    const query = debouncedSearchQuery.toLowerCase();
-    return allOrders.filter((order) => {
-      // Podstawowe pola
-      const matchesBasic =
-        order.orderNumber.toLowerCase().includes(query) ||
-        order.client?.toLowerCase().includes(query) ||
-        order.project?.toLowerCase().includes(query) ||
-        order.system?.toLowerCase().includes(query);
-
-      // Wyszukiwanie po referencjach okien
-      const matchesReference = order.windows?.some(
-        (window) => window.reference?.toLowerCase().includes(query)
-      );
-
-      return matchesBasic || matchesReference;
-    });
-  }, [allOrders, debouncedSearchQuery]);
 
   // Reset selected index when results change
   useEffect(() => {
     setSelectedIndex(0);
-  }, [filteredOrders]);
+  }, [searchResults]);
 
   // Focus input and reset when opened/closed
   useEffect(() => {
@@ -97,23 +79,26 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex((prev) => Math.min(prev + 1, filteredOrders.length - 1));
+      setSelectedIndex((prev) => Math.min(prev + 1, searchResults.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSelectedIndex((prev) => Math.max(prev - 1, 0));
-    } else if (e.key === 'Enter' && filteredOrders[selectedIndex]) {
+    } else if (e.key === 'Enter' && searchResults[selectedIndex]) {
       e.preventDefault();
-      handleSelectOrder(filteredOrders[selectedIndex]);
+      handleSelectOrder(searchResults[selectedIndex]);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       onClose();
     }
   };
 
-  const handleSelectOrder = (order: Order) => {
-    // Otwórz szczegóły zlecenia z modal'em
-    router.push(`/dostawy?order=${order.id}`);
-    onClose();
+  const handleSelectOrder = (order: SearchResult) => {
+    // Otwórz modal ze szczegółami zlecenia bezpośrednio (bez przekierowania)
+    setSelectedOrderId(order.id);
+  };
+
+  const handleCloseOrderModal = () => {
+    setSelectedOrderId(null);
   };
 
   if (!isOpen) return null;
@@ -161,13 +146,13 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
               <div className="p-8 text-center text-sm text-slate-500">
                 Wyszukiwanie...
               </div>
-            ) : filteredOrders.length === 0 ? (
+            ) : searchResults.length === 0 ? (
               <div className="p-8 text-center text-sm text-slate-500">
-                Nie znaleziono zleceń pasujących do: "{searchQuery}"
+                Nie znaleziono zleceń pasujących do: &quot;{searchQuery}&quot;
               </div>
             ) : (
               <div className="divide-y">
-                {filteredOrders.map((order, index) => (
+                {searchResults.map((order, index) => (
                   <button
                     key={order.id}
                     ref={index === selectedIndex ? selectedItemRef : null}
@@ -230,17 +215,14 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                               <span>{order.system}</span>
                             </div>
                           )}
-                          {/* Pokaż pasujące referencje */}
-                          {order.windows
-                            ?.filter((w) =>
-                              w.reference?.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-                            )
-                            .slice(0, 3)
-                            .map((w, i) => (
+                          {/* Pokaż pasujące referencje - już przefiltrowane przez serwer */}
+                          {order.windows?.map((w, i) => (
+                            w.reference && (
                               <div key={i} className="text-xs text-blue-600">
                                 <span className="font-medium">Referencja:</span> {w.reference}
                               </div>
-                            ))}
+                            )
+                          ))}
                         </div>
                       </div>
 
@@ -267,7 +249,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
           </div>
 
           {/* Footer with hints */}
-          {filteredOrders.length > 0 && (
+          {searchResults.length > 0 && (
             <div className="p-3 border-t bg-slate-50 flex items-center justify-between text-xs text-slate-500">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-1">
@@ -283,11 +265,22 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                   <span>Zamknij</span>
                 </div>
               </div>
-              <div>{filteredOrders.length} wyników</div>
+              <div>{searchResults.length} wyników</div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Modal ze szczegółami zlecenia */}
+      {selectedOrderId && (
+        <OrderDetailModal
+          orderId={selectedOrderId}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) handleCloseOrderModal();
+          }}
+        />
+      )}
     </>
   );
 }

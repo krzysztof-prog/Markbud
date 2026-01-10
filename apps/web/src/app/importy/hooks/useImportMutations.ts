@@ -35,6 +35,10 @@ interface ImportFolderResult {
     skippedCount: number;
     failCount: number;
     totalFiles: number;
+    /** P0-3: Number of files that had validation errors (rows skipped) */
+    filesWithValidationErrors?: number;
+    /** P0-3: Total validation errors across all files */
+    totalValidationErrors?: number;
   };
   delivery: {
     deliveryNumber: string;
@@ -47,6 +51,18 @@ interface ImportFolderResult {
     skipped?: boolean;
     skipReason?: string;
     orderNumber?: string;
+    /** P0-3: Validation errors for this specific file */
+    validationErrors?: Array<{
+      row: number;
+      field?: string;
+      reason: string;
+    }>;
+    /** P0-3: Validation summary for this file */
+    validationSummary?: {
+      totalRows: number;
+      successRows: number;
+      failedRows: number;
+    };
   }>;
 }
 
@@ -271,7 +287,7 @@ export function useFolderImportMutations(callbacks?: {
   const importFolderMutation = useMutation({
     mutationFn: ({ path, deliveryNumber }: { path: string; deliveryNumber: 'I' | 'II' | 'III' }) =>
       importsApi.importFolder(path, deliveryNumber),
-    onSuccess: (data: ImportFolderResult, variables) => {
+    onSuccess: (data: ImportFolderResult, _variables) => {
       queryClient.invalidateQueries({ queryKey: ['imports'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['deliveries'] });
@@ -299,10 +315,38 @@ export function useFolderImportMutations(callbacks?: {
         }
       }
 
+      // P0-3: Show validation errors if any rows were skipped due to validation
+      if (summary.filesWithValidationErrors && summary.filesWithValidationErrors > 0) {
+        const filesWithErrors = results.filter((r) => r.validationErrors && r.validationErrors.length > 0);
+
+        // Build detailed error message
+        const errorDetails = filesWithErrors.map((file) => {
+          const errorCount = file.validationErrors?.length || 0;
+          const summary = file.validationSummary;
+          return `${file.orderNumber || file.filename}: ${errorCount} wierszy pominięto (${summary?.successRows || 0}/${summary?.totalRows || 0} zaimportowano)`;
+        }).join('\n');
+
+        toast({
+          title: `Uwaga: ${summary.totalValidationErrors} wierszy pominięto`,
+          description: errorDetails || 'Niektóre wiersze nie zostały zaimportowane z powodu błędów walidacji',
+          variant: 'warning',
+        });
+      }
+
+      // Determine toast variant based on issues
+      let toastVariant: 'success' | 'info' | 'warning' | 'destructive' = 'success';
+      if (summary.failCount > 0) {
+        toastVariant = 'destructive';
+      } else if (summary.filesWithValidationErrors && summary.filesWithValidationErrors > 0) {
+        toastVariant = 'warning';
+      } else if (summary.skippedCount > 0) {
+        toastVariant = 'info';
+      }
+
       toast({
         title: TOAST_MESSAGES.import.folderImported,
         description,
-        variant: summary.failCount > 0 ? 'destructive' : summary.skippedCount > 0 ? 'info' : 'success',
+        variant: toastVariant,
       });
 
       callbacks?.onImportSuccess?.();

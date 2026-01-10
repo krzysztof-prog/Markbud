@@ -34,6 +34,7 @@ export interface UseFormValidationReturn<T> {
  * });
  * ```
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic form validation needs to accept any value type
 export function useFormValidation<T extends Record<string, any>>(
   schema: ValidationSchema<T>
 ): UseFormValidationReturn<T> {

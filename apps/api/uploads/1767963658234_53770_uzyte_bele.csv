@@ -1,0 +1,23 @@
+﻿Numer zlecenia;Numer art.;Nowych bel;reszta
+53770;18866000;9;0
+53770;19016000;4;3840
+53770;19315000;11;1407
+53770;19671000;15;0
+53770;202609;8;3038
+53770;202623;14;1272
+
+Lista okien i drzwi dla tego zlecenia:
+Lp.;Szerokosc;Wysokosc;Typ profilu;Ilosc sztuk;Referencja
+1;3160;1435;BLOK;1;D5447
+2;3003;1435;BLOK;1;D5447
+3;2905;1435;BLOK;1;D5447
+4;2898;1195;BLOK;1;D5996
+5;2690;1475;BLOK;1;D5663
+6;2369;1435;BLOK;1;D5178
+7;1666;1435;BLOK;1;D5178
+8;1500;1475;BLOK;1;D5663
+Laczna liczba sztuk okien i drzwi:;8
+Laczna liczba skrzydel:;12
+Laczna liczba szyb:;22
+
+Klient:AKROBUD SOKOŁOWSKI SPÓŁKA KOMANDYTOWA

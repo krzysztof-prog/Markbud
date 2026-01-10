@@ -25,6 +25,24 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
     preHandler: verifyAuth,
   }, handler.getAll.bind(handler));
 
+  // GET /api/orders/search - Zoptymalizowane wyszukiwanie dla GlobalSearch
+  // WAŻNE: Musi być PRZED /:id żeby nie było traktowane jako ID
+  fastify.get<{ Querystring: { q: string; includeArchived?: string } }>('/search', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Search orders - optimized for GlobalSearch',
+      tags: ['orders'],
+      querystring: {
+        type: 'object',
+        required: ['q'],
+        properties: {
+          q: { type: 'string', minLength: 2, description: 'Search query (min 2 chars)' },
+          includeArchived: { type: 'string', enum: ['true', 'false'], default: 'true' },
+        },
+      },
+    },
+  }, handler.search.bind(handler));
+
   fastify.get<{ Params: { id: string } }>('/:id', {
     preHandler: verifyAuth,
   }, handler.getById.bind(handler));
@@ -336,5 +354,54 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     return Object.values(totals);
+  });
+
+  // P1-2: PATCH /api/orders/:id/variant-type - set variant type for order
+  fastify.patch<{
+    Params: { id: string };
+    Body: { variantType: 'correction' | 'additional_file' };
+  }>('/:id/variant-type', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Set variant type for an order (correction or additional_file)',
+      tags: ['orders'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string', description: 'Order ID' },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['variantType'],
+        properties: {
+          variantType: {
+            type: 'string',
+            enum: ['correction', 'additional_file'],
+            description: 'correction = must be in same delivery, additional_file = can be in different delivery',
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { variantType } = request.body;
+
+    const order = await prisma.order.update({
+      where: { id: parseIntParam(id, 'id') },
+      data: { variantType },
+    });
+
+    emitOrderUpdated(order);
+
+    return reply.send({
+      success: true,
+      order: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        variantType: order.variantType,
+      },
+    });
   });
 };

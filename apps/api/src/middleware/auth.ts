@@ -3,8 +3,6 @@
  */
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { UnauthorizedError } from '../utils/errors.js';
-import { extractToken, decodeToken } from '../utils/jwt.js';
 
 export interface AuthenticatedRequest extends FastifyRequest {
   user?: {
@@ -19,7 +17,7 @@ export interface AuthenticatedRequest extends FastifyRequest {
  *
  * NOTE: Temporarily disabled for single-user setup
  */
-export async function verifyAuth(request: AuthenticatedRequest, reply: FastifyReply) {
+export async function verifyAuth(request: AuthenticatedRequest, _reply: FastifyReply) {
   // TEMPORARY: Skip auth for single-user system
   // Set a default system user
   request.user = {

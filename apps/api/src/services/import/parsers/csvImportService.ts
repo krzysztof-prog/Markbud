@@ -764,6 +764,9 @@ export class CsvImportService implements ICsvImportService {
       content = buffer.toString('utf-8');
     }
 
+    // Usuń UTF-8 BOM jeśli istnieje (pliki eksportowane z Excela często mają BOM)
+    content = stripBOM(content);
+
     const lines = content.split('\n').filter((line) => line.trim());
 
     const requirements: ParsedRequirement[] = [];

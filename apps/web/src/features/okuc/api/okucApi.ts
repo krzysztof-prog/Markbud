@@ -10,16 +10,23 @@
 import { fetchApi, uploadFile, fetchBlob } from '@/lib/api-client';
 import type {
   OkucArticle,
+  OkucLocation,
   CreateArticleInput,
   UpdateArticleInput,
   ArticleFilters,
   OkucArticleAlias,
   AddAliasInput,
   ImportArticlesResponse,
+  ImportArticlesPreviewResponse,
+  ImportArticlesInput,
+  ImportArticlesResult,
   OkucStock,
   UpdateStockInput,
   StockFilters,
   StockSummary,
+  ImportStockPreviewResponse,
+  ImportStockInput,
+  ImportStockResult,
   OkucHistory,
   HistoryFilters,
   OkucDemand,
@@ -154,14 +161,34 @@ export const okucArticlesApi = {
   // ============================================================================
 
   /**
+   * POST /api/okuc/articles/import/preview
+   * Podgląd importu artykułów z pliku CSV - wykrywa konflikty
+   *
+   * Format CSV: Numer artykulu;Nazwa;PVC;ALU;Typ zamowienia;Klasa wielkosci;Magazyn
+   *
+   * @param file - Plik CSV do podglądu
+   * @returns Podgląd importu (new, conflicts, errors)
+   */
+  importPreview: (file: File) =>
+    uploadFile<ImportArticlesPreviewResponse>('/api/okuc/articles/import/preview', file),
+
+  /**
    * POST /api/okuc/articles/import
-   * Importuj artykuły z pliku CSV
+   * Importuj artykuły z rozwiązaniem konfliktów
    *
-   * Format CSV:
-   * - articleId, name, description, usedInPvc, usedInAlu, orderClass, sizeClass, ...
-   *
-   * @param file - Plik CSV do importu
-   * @returns Wynik importu (success/failed/errors)
+   * @param input - Dane do importu z wybranym rozwiązaniem konfliktów
+   * @returns Wynik importu (imported, skipped, errors)
+   */
+  import: (input: ImportArticlesInput) =>
+    fetchApi<ImportArticlesResult>('/api/okuc/articles/import', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  /**
+   * @deprecated Używaj importPreview + import zamiast tego
+   * POST /api/okuc/articles/import
+   * Importuj artykuły z pliku CSV (stary endpoint)
    */
   importCsv: (file: File) =>
     uploadFile<ImportArticlesResponse>('/api/okuc/articles/import', file),
@@ -180,6 +207,35 @@ export const okucArticlesApi = {
     const queryString = params.toString();
     return fetchBlob(`/api/okuc/articles/export${queryString ? `?${queryString}` : ''}`);
   },
+
+  // ============================================================================
+  // PENDING REVIEW - Artykuły oczekujące na weryfikację orderClass
+  // ============================================================================
+
+  /**
+   * GET /api/okuc/articles/pending-review
+   * Pobierz artykuły utworzone podczas importu, oczekujące na weryfikację orderClass
+   *
+   * @returns Lista artykułów z orderClass='pending_review'
+   */
+  getPendingReview: () =>
+    fetchApi<OkucArticle[]>('/api/okuc/articles/pending-review'),
+
+  /**
+   * POST /api/okuc/articles/batch-update-order-class
+   * Zaktualizuj orderClass dla wielu artykułów jednocześnie
+   *
+   * @param articles - Lista artykułów do aktualizacji
+   * @returns Wynik aktualizacji (updated/failed/errors)
+   */
+  batchUpdateOrderClass: (articles: Array<{ id: number; orderClass: 'typical' | 'atypical' }>) =>
+    fetchApi<{ updated: number; failed: number; errors: Array<{ id: number; error: string }> }>(
+      '/api/okuc/articles/batch-update-order-class',
+      {
+        method: 'POST',
+        body: JSON.stringify({ articles }),
+      }
+    ),
 };
 
 // ============================================================================
@@ -310,6 +366,80 @@ export const okucStockApi = {
 
     const queryString = params.toString();
     return fetchApi<OkucHistory[]>(`/api/okuc/stock/history/${articleId}${queryString ? `?${queryString}` : ''}`);
+  },
+
+  /**
+   * GET /api/okuc/stock/export
+   * Eksportuj stany magazynowe do CSV
+   * Funkcja pobiera plik CSV bezpośrednio (nie przez fetchApi)
+   *
+   * @param filters - Opcjonalne filtry (warehouseType, belowMin)
+   */
+  /**
+   * POST /api/okuc/stock/import/preview
+   * Podgląd importu stanu magazynowego z pliku CSV
+   *
+   * @param file - Plik CSV do zaimportowania
+   * @returns Podgląd importu (new, conflicts, errors)
+   */
+  importPreview: (file: File) =>
+    uploadFile<ImportStockPreviewResponse>('/api/okuc/stock/import/preview', file),
+
+  /**
+   * POST /api/okuc/stock/import
+   * Importuj stan magazynowy z rozwiązaniem konfliktów
+   *
+   * @param input - Dane do importu z wybranym rozwiązaniem konfliktów
+   * @returns Wynik importu (imported, skipped, errors)
+   */
+  import: (input: ImportStockInput) =>
+    fetchApi<ImportStockResult>('/api/okuc/stock/import', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  /**
+   * GET /api/okuc/stock/export
+   * Eksportuj stany magazynowe do CSV
+   * Funkcja pobiera plik CSV bezpośrednio (nie przez fetchApi)
+   *
+   * @param filters - Opcjonalne filtry (warehouseType, belowMin)
+   */
+  exportCsv: async (filters?: { warehouseType?: WarehouseType; belowMin?: boolean }) => {
+    const params = new URLSearchParams();
+    if (filters?.warehouseType) params.append('warehouseType', filters.warehouseType);
+    if (filters?.belowMin !== undefined) params.append('belowMin', String(filters.belowMin));
+
+    const queryString = params.toString();
+    const response = await fetch(`/api/okuc/stock/export${queryString ? `?${queryString}` : ''}`, {
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to export stock');
+    }
+
+    // Pobierz blob i wywołaj download
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+
+    // Wyciągnij nazwę pliku z Content-Disposition lub użyj domyślnej
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename = 'stan-magazynu-okuc.csv';
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="(.+)"/);
+      if (match) {
+        filename = match[1];
+      }
+    }
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
   },
 };
 
@@ -627,5 +757,72 @@ export const okucProportionsApi = {
   delete: (id: number) =>
     fetchApi<void>(`/api/okuc/proportions/${id}`, {
       method: 'DELETE',
+    }),
+};
+
+// ============================================================================
+// LOCATIONS - Zarządzanie lokalizacjami magazynowymi
+// ============================================================================
+
+export const okucLocationsApi = {
+  /**
+   * GET /api/okuc/locations
+   * Pobierz wszystkie lokalizacje magazynowe
+   * Posortowane po sortOrder, zawiera liczbe artykulow
+   *
+   * @returns Lista lokalizacji z articlesCount
+   */
+  getAll: () => fetchApi<OkucLocation[]>('/api/okuc/locations'),
+
+  /**
+   * POST /api/okuc/locations
+   * Utworz nowa lokalizacje magazynowa
+   *
+   * @param data - Dane lokalizacji (name, sortOrder?)
+   * @returns Utworzona lokalizacja
+   */
+  create: (data: { name: string; sortOrder?: number }) =>
+    fetchApi<OkucLocation>('/api/okuc/locations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * PATCH /api/okuc/locations/:id
+   * Zaktualizuj lokalizacje
+   *
+   * @param id - ID lokalizacji
+   * @param data - Dane do aktualizacji (name?, sortOrder?)
+   * @returns Zaktualizowana lokalizacja
+   */
+  update: (id: number, data: { name?: string; sortOrder?: number }) =>
+    fetchApi<OkucLocation>(`/api/okuc/locations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * DELETE /api/okuc/locations/:id
+   * Usun lokalizacje (soft delete)
+   *
+   * @param id - ID lokalizacji
+   * @returns void
+   */
+  delete: (id: number) =>
+    fetchApi<void>(`/api/okuc/locations/${id}`, {
+      method: 'DELETE',
+    }),
+
+  /**
+   * POST /api/okuc/locations/reorder
+   * Zmien kolejnosc lokalizacji
+   *
+   * @param ids - Tablica ID lokalizacji w nowej kolejnosci
+   * @returns Lista zaktualizowanych lokalizacji
+   */
+  reorder: (ids: number[]) =>
+    fetchApi<OkucLocation[]>('/api/okuc/locations/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
     }),
 };

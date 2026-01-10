@@ -14,6 +14,7 @@ import {
   PalletTypesTab,
   ColorsTab,
   ProfilesTab,
+  OkucLocationsTab,
   PalletDialog,
   ColorDialog,
   ProfileDialog,
@@ -70,7 +71,7 @@ export default function UstawieniaPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [userFolderPath, setUserFolderPath] = useState<string>('');
-  const [userFolderHasChanges, setUserFolderHasChanges] = useState(false);
+  const [_userFolderHasChanges, setUserFolderHasChanges] = useState(false);
 
   // Dialog states
   const [palletDialog, setPalletDialog] = useState<DialogState<PalletType>>({
@@ -183,7 +184,7 @@ export default function UstawieniaPage() {
     },
   });
 
-  const { data: userFolderData, isLoading: isLoadingUserFolder } = useQuery({
+  const { data: userFolderData, isLoading: _isLoadingUserFolder } = useQuery({
     queryKey: ['user-folder-path'],
     queryFn: settingsApi.getUserFolderPath,
   });
@@ -280,12 +281,12 @@ export default function UstawieniaPage() {
     restartFileWatcherMutation.mutate();
   };
 
-  const handleUserFolderPathChange = (path: string) => {
+  const _handleUserFolderPathChange = (path: string) => {
     setUserFolderPath(path);
     setUserFolderHasChanges(true);
   };
 
-  const handleSaveUserFolder = () => {
+  const _handleSaveUserFolder = () => {
     updateUserFolderMutation.mutate(userFolderPath);
   };
 
@@ -434,12 +435,13 @@ export default function UstawieniaPage() {
       <div className="flex-1 p-6 overflow-auto">
         <Tabs defaultValue="general">
           <TabsList className="mb-6">
-            <TabsTrigger value="general">Ogólne</TabsTrigger>
+            <TabsTrigger value="general">Ogolne</TabsTrigger>
             <TabsTrigger value="folders">Foldery</TabsTrigger>
             <TabsTrigger value="glass">Auto-watch Szyb</TabsTrigger>
             <TabsTrigger value="pallets">Palety</TabsTrigger>
             <TabsTrigger value="colors">Kolory</TabsTrigger>
             <TabsTrigger value="profiles">Profile PVC</TabsTrigger>
+            <TabsTrigger value="okuc-locations">Magazyny OKUC</TabsTrigger>
           </TabsList>
 
           <TabsContent value="general">
@@ -529,6 +531,10 @@ export default function UstawieniaPage() {
                 setDeleteDialog({ open: true, type: 'profile', id: profile.id, name: profile.name })
               }
             />
+          </TabsContent>
+
+          <TabsContent value="okuc-locations">
+            <OkucLocationsTab />
           </TabsContent>
         </Tabs>
       </div>

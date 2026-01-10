@@ -7,6 +7,7 @@
  * - Dodawanie nowych artykułów
  * - Edycja istniejących artykułów
  * - Usuwanie artykułów (soft delete)
+ * - Inline edycja lokalizacji magazynowej
  *
  * Filtry:
  * - Search (po name, articleId, description)
@@ -14,6 +15,7 @@
  * - ALU (tak/nie/wszystkie)
  * - OrderClass (typical/atypical/wszystkie)
  * - SizeClass (standard/gabarat/wszystkie)
+ * - Magazyn (wszystkie/nieprzypisane/konkretna lokalizacja)
  */
 
 'use client';
@@ -31,26 +33,41 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Search, Package } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Plus, Search, Package, Upload, ChevronDown } from 'lucide-react';
 import { ArticlesTable } from '@/features/okuc/components/ArticlesTable';
 import { ArticleForm } from '@/features/okuc/components/ArticleForm';
 import { DeleteArticleDialog } from '@/features/okuc/components/DeleteArticleDialog';
+import { ImportArticlesDialog } from '@/features/okuc/components/ImportArticlesDialog';
+import { useQueryClient } from '@tanstack/react-query';
 import {
+  okucArticlesKeys,
   useOkucArticles,
   useCreateOkucArticle,
   useUpdateOkucArticle,
   useDeleteOkucArticle,
-} from '@/features/okuc/hooks/useOkucArticles';
+  useUpdateArticleLocation,
+  useOkucLocations,
+} from '@/features/okuc/hooks';
 import type { OkucArticle, OrderClass, SizeClass, CreateArticleInput, UpdateArticleInput } from '@/types/okuc';
 
 export default function OkucArticlesPage() {
   // === DATA FETCHING ===
+  const queryClient = useQueryClient();
   const { data: articles = [], isLoading, error } = useOkucArticles();
+  const { data: locations = [] } = useOkucLocations();
 
   // === STATE ===
   const [selectedArticle, setSelectedArticle] = useState<OkucArticle | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [_isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [updatingLocationArticleId, setUpdatingLocationArticleId] = useState<number | undefined>(undefined);
 
   // Filtry
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,6 +75,7 @@ export default function OkucArticlesPage() {
   const [filterAlu, setFilterAlu] = useState<'all' | 'yes' | 'no'>('all');
   const [filterOrderClass, setFilterOrderClass] = useState<OrderClass | 'all'>('all');
   const [filterSizeClass, setFilterSizeClass] = useState<SizeClass | 'all'>('all');
+  const [filterLocation, setFilterLocation] = useState<'all' | 'unassigned' | string>('all');
 
   // === MUTATIONS ===
   const createMutation = useCreateOkucArticle({
@@ -78,6 +96,15 @@ export default function OkucArticlesPage() {
     onSuccess: () => {
       setIsDeleteDialogOpen(false);
       setSelectedArticle(null);
+    },
+  });
+
+  const updateLocationMutation = useUpdateArticleLocation({
+    onSuccess: () => {
+      setUpdatingLocationArticleId(undefined);
+    },
+    onError: () => {
+      setUpdatingLocationArticleId(undefined);
     },
   });
 
@@ -120,8 +147,16 @@ export default function OkucArticlesPage() {
       result = result.filter((a) => a.sizeClass === filterSizeClass);
     }
 
+    // Location filter
+    if (filterLocation === 'unassigned') {
+      result = result.filter((a) => !a.locationId);
+    } else if (filterLocation !== 'all') {
+      const locationId = parseInt(filterLocation, 10);
+      result = result.filter((a) => a.locationId === locationId);
+    }
+
     return result;
-  }, [articles, searchQuery, filterPvc, filterAlu, filterOrderClass, filterSizeClass]);
+  }, [articles, searchQuery, filterPvc, filterAlu, filterOrderClass, filterSizeClass, filterLocation]);
 
   // === EVENT HANDLERS ===
   const handleAddNew = () => {
@@ -157,6 +192,16 @@ export default function OkucArticlesPage() {
     deleteMutation.mutate(id);
   };
 
+  const handleImportSuccess = () => {
+    // Odswiezenie listy artykulow po imporcie
+    queryClient.invalidateQueries({ queryKey: okucArticlesKeys.lists() });
+  };
+
+  const handleLocationChange = (articleId: number, locationId: number | null) => {
+    setUpdatingLocationArticleId(articleId);
+    updateLocationMutation.mutate({ articleId, locationId });
+  };
+
   // === RENDER ===
   return (
     <div className="flex flex-col h-full">
@@ -171,10 +216,27 @@ export default function OkucArticlesPage() {
               { label: 'Artykuły', icon: <Package className="h-4 w-4" /> },
             ]}
           />
-          <Button onClick={handleAddNew}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nowy artykuł
-          </Button>
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import
+                  <ChevronDown className="h-4 w-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setIsImportDialogOpen(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Artykuly (lista CSV)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button onClick={handleAddNew}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nowy artykul
+            </Button>
+          </div>
         </div>
 
         {/* Filtry */}
@@ -184,7 +246,7 @@ export default function OkucArticlesPage() {
             <h3 className="font-semibold text-sm">Filtry</h3>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
             {/* Search */}
             <div className="space-y-2">
               <Label htmlFor="search">Szukaj</Label>
@@ -261,6 +323,28 @@ export default function OkucArticlesPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Magazyn (Location) */}
+            <div className="space-y-2">
+              <Label htmlFor="filterLocation">Magazyn</Label>
+              <Select
+                value={filterLocation}
+                onValueChange={(v) => setFilterLocation(v)}
+              >
+                <SelectTrigger id="filterLocation">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Wszystkie</SelectItem>
+                  <SelectItem value="unassigned">Nieprzypisane</SelectItem>
+                  {locations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id.toString()}>
+                      {loc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Stats */}
@@ -295,9 +379,12 @@ export default function OkucArticlesPage() {
         {!isLoading && !error && (
           <ArticlesTable
             articles={filteredArticles}
+            locations={locations}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            onLocationChange={handleLocationChange}
             isDeletingId={deleteMutation.isPending ? selectedArticle?.id : undefined}
+            isUpdatingLocationId={updatingLocationArticleId}
           />
         )}
       </div>
@@ -319,6 +406,12 @@ export default function OkucArticlesPage() {
         }}
         onConfirm={handleDeleteConfirm}
         isPending={deleteMutation.isPending}
+      />
+
+      <ImportArticlesDialog
+        open={isImportDialogOpen}
+        onOpenChange={setIsImportDialogOpen}
+        onSuccess={handleImportSuccess}
       />
     </div>
   );

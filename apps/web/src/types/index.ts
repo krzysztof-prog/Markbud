@@ -23,3 +23,4 @@ export * from './settings';
 export * from './okuc';
 export * from './schuco';
 export * from './manager';
+export * from './akrobud-verification';

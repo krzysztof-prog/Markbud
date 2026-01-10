@@ -5,7 +5,6 @@ import multipart from '@fastify/multipart';
 import compress from '@fastify/compress';
 import rateLimit from '@fastify/rate-limit';
 import { config as dotenvConfig } from 'dotenv';
-import { Prisma } from '@prisma/client';
 import { prisma } from './utils/prisma.js';
 
 // Routes
@@ -30,6 +29,7 @@ import { glassDeliveryRoutes } from './routes/glass-deliveries.js';
 import { glassValidationRoutes } from './routes/glass-validations.js';
 import { pendingOrderPriceCleanupRoutes } from './routes/pending-order-price-cleanup.js';
 import { okucRoutes } from './routes/okuc.js';
+import { akrobudVerificationRoutes } from './routes/akrobud-verification.js';
 
 // Services
 import { FileWatcherService } from './services/file-watcher/index.js';
@@ -37,7 +37,6 @@ import { startSchucoScheduler, stopSchucoScheduler } from './services/schuco/sch
 import { startPendingPriceCleanupScheduler, stopPendingPriceCleanupScheduler } from './services/pendingOrderPriceCleanupScheduler.js';
 import { startImportLockCleanupScheduler, stopImportLockCleanupScheduler } from './services/importLockCleanupScheduler.js';
 import { setupWebSocket } from './plugins/websocket.js';
-import { setupSwagger } from './plugins/swagger.js';
 
 // Utils and middleware
 import { logger } from './utils/logger.js';
@@ -170,6 +169,9 @@ await fastify.register(pendingOrderPriceCleanupRoutes, { prefix: '/api/cleanup/p
 
 // DualStock (Okuc) Routes
 await fastify.register(okucRoutes, { prefix: '/api/okuc' });
+
+// Akrobud Verification Routes
+await fastify.register(akrobudVerificationRoutes, { prefix: '/api/akrobud-verification' });
 
 // Health checks
 fastify.get('/api/health', {

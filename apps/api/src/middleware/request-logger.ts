@@ -7,7 +7,7 @@ import { logger } from '../utils/logger.js';
 
 export function setupRequestLogging(fastify: FastifyInstance) {
   // Log all requests
-  fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.addHook('onRequest', async (request: FastifyRequest, _reply: FastifyReply) => {
     logger.info('Incoming request', {
       method: request.method,
       url: request.url,

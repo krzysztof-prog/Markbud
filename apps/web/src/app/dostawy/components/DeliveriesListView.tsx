@@ -13,7 +13,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Plus, List } from 'lucide-react';
+import { List } from 'lucide-react';
 import { deliveriesApi } from '@/lib/api';
 import { showSuccessToast, showErrorToast, getErrorMessage } from '@/lib/toast-helpers';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
@@ -138,6 +138,12 @@ export function DeliveriesListView({ initialDateRange = '14' }: DeliveriesListVi
     router.push(`/dostawy/${deliveryId}/optymalizacja`);
   }, [router]);
 
+  const handleVerify = useCallback((_deliveryId: number, deliveryDate: string) => {
+    // Przekieruj do strony weryfikacji z datą w query params
+    const dateOnly = deliveryDate.split('T')[0];
+    router.push(`/dostawy/weryfikacja?date=${dateOnly}`);
+  }, [router]);
+
   const handleProtocol = useCallback((deliveryId: number) => {
     setProtocolLoadingId(deliveryId);
     downloadProtocolMutation.mutate(deliveryId, {
@@ -255,6 +261,7 @@ export function DeliveriesListView({ initialDateRange = '14' }: DeliveriesListVi
               onComplete={handleComplete}
               onOptimize={handleOptimize}
               onProtocol={handleProtocol}
+              onVerify={handleVerify}
               onViewOrder={handleViewOrder}
               protocolLoadingId={protocolLoadingId}
             />

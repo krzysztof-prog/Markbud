@@ -340,4 +340,78 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
       return reply.send({ message: 'Link deleted' });
     },
   });
+
+  // GET /api/schuco/by-week - Get deliveries grouped by delivery week
+  fastify.get('/by-week', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get Schuco deliveries grouped by delivery week',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            weeks: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  week: { type: 'string' },
+                  weekStart: { type: 'string', format: 'date-time', nullable: true },
+                  count: { type: 'integer' },
+                  deliveries: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'integer' },
+                        orderNumber: { type: 'string' },
+                        orderName: { type: 'string' },
+                        shippingStatus: { type: 'string' },
+                        totalAmount: { type: 'string', nullable: true },
+                        extractedOrderNums: { type: 'string', nullable: true },
+                        changeType: { type: 'string', nullable: true },
+                        changedFields: { type: 'string', nullable: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const result = await schucoService.getDeliveriesByWeek();
+      return reply.send(result);
+    },
+  });
+
+  // POST /api/schuco/cleanup-pending - Clean up stale pending logs
+  fastify.post('/cleanup-pending', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Clean up stale pending logs (older than 10 minutes)',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            cleaned: { type: 'integer' },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const cleaned = await schucoService.cleanupStalePendingLogs();
+      return reply.send({
+        cleaned,
+        message: cleaned > 0
+          ? `Wyczyszczono ${cleaned} starych logów 'pending'`
+          : 'Brak starych logów do wyczyszczenia',
+      });
+    },
+  });
 }

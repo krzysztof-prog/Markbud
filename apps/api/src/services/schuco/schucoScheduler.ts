@@ -29,6 +29,11 @@ export class SchucoScheduler {
 
     logger.info('[SchucoScheduler] Starting scheduler...');
 
+    // Wyczyść stare pending logi przy starcie
+    this.schucoService.cleanupStalePendingLogs().catch((error) => {
+      logger.error('[SchucoScheduler] Failed to cleanup stale pending logs on start:', error);
+    });
+
     // Schedule for 8:00 AM (Europe/Warsaw timezone)
     const task8am = cron.schedule('0 8 * * *', () => this.runFetch('8:00'), {
       timezone: 'Europe/Warsaw',
@@ -78,6 +83,9 @@ export class SchucoScheduler {
     logger.info(`[SchucoScheduler] Running scheduled fetch (${scheduledTime})...`);
 
     try {
+      // Wyczyść stare pending logi przed nowym pobieraniem
+      await this.schucoService.cleanupStalePendingLogs();
+
       const result = await this.schucoService.fetchAndStoreDeliveries(true, 'scheduled');
 
       if (result.success) {

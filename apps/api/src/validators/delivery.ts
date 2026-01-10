@@ -18,7 +18,7 @@ export const createDeliverySchema = z.object({
 
 export const updateDeliverySchema = z.object({
   deliveryDate: optionalDateSchema,
-  status: z.enum(['pending', 'completed', 'cancelled']).optional(),
+  status: z.enum(['planned', 'in_progress', 'completed']).optional(),
   notes: z.string().optional(),
 });
 

@@ -48,8 +48,7 @@ import { ImportRepository } from '../../../repositories/ImportRepository.js';
 import { createMockPrisma, setupTransactionMock } from '../../../tests/mocks/prisma.mock.js';
 import { resetTestDatabase, seedMinimalData, cleanupTestDatabase } from '../../../tests/utils/test-db.js';
 import { OrderBuilder } from '../../../tests/fixtures/orders.fixture.js';
-import type { ParsedUzyteBele, ParseResult } from '../../parsers/csv-parser.js';
-import { ValidationError, ConflictError } from '../../../utils/errors.js';
+import { ConflictError } from '../../../utils/errors.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -63,8 +62,8 @@ const prisma = realPrisma;
 describe('ImportService - Critical Paths', () => {
   let validationService: ImportValidationService;
   let conflictService: ImportConflictService;
-  let lockService: ImportLockService;
-  let fileSystemService: ImportFileSystemService;
+  let _lockService: ImportLockService;
+  let _fileSystemService: ImportFileSystemService;
   let transactionService: ImportTransactionService;
   let repository: ImportRepository;
 
@@ -76,8 +75,8 @@ describe('ImportService - Critical Paths', () => {
     validationService = new ImportValidationService(prisma, repository);
     transactionService = new ImportTransactionService(prisma, repository);
     conflictService = new ImportConflictService(prisma, repository, transactionService);
-    lockService = new ImportLockService(prisma);
-    fileSystemService = new ImportFileSystemService();
+    _lockService = new ImportLockService(prisma);
+    _fileSystemService = new ImportFileSystemService();
   });
 
   afterAll(async () => {

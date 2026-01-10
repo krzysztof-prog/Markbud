@@ -59,6 +59,7 @@ export class OrderRepository {
           orderedGlassCount: true,
           deliveredGlassCount: true,
           glassOrderStatus: true,
+          okucDemandStatus: true,
           createdAt: true,
           archivedAt: true,
           // Usunięto pełną tablicę windows - używamy _count.windows dla list view
@@ -482,6 +483,53 @@ export class OrderRepository {
         },
       },
       orderBy: { completedAt: 'desc' },
+    });
+  }
+
+  /**
+   * Wyszukiwanie zleceń - zoptymalizowane dla GlobalSearch
+   * Nie robi COUNT, zwraca tylko niezbędne pola, filtruje po stronie serwera
+   * SQLite domyślnie robi case-insensitive dla LIKE (ASCII)
+   */
+  async search(query: string, includeArchived: boolean = true) {
+    const where: Prisma.OrderWhereInput = {
+      OR: [
+        { orderNumber: { contains: query } },
+        { client: { contains: query } },
+        { project: { contains: query } },
+        { system: { contains: query } },
+        // Wyszukiwanie po referencjach okien
+        { windows: { some: { reference: { contains: query } } } },
+      ],
+      // Opcjonalnie wyklucz zarchiwizowane
+      ...(includeArchived ? {} : { archivedAt: null }),
+    };
+
+    return this.prisma.order.findMany({
+      where,
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        client: true,
+        project: true,
+        system: true,
+        deadline: true,
+        valuePln: true,
+        archivedAt: true,
+        // Tylko referencje okien (do podświetlenia w wynikach)
+        windows: {
+          select: {
+            reference: true,
+          },
+          where: {
+            reference: { contains: query },
+          },
+          take: 3, // Max 3 pasujące referencje
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50, // Max 50 wyników
     });
   }
 }

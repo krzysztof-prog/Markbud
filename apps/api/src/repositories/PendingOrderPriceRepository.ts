@@ -3,7 +3,6 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import { logger } from '../utils/logger.js';
 
 export class PendingOrderPriceRepository {
   constructor(private prisma: PrismaClient) {}

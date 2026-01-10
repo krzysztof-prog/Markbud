@@ -13,7 +13,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { WarehouseRepository } from './WarehouseRepository.js';
 import { createMockPrisma, setupTransactionMock } from '../tests/mocks/prisma.mock.js';
 import { OptimisticLockError } from '../utils/optimistic-locking.js';
-import { Prisma } from '@prisma/client';
 
 // Mock logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({

@@ -76,6 +76,7 @@ export default function ImportyPage() {
 
   const { data: preview, isLoading: previewLoading } = useQuery({
     queryKey: ['import-preview', previewId],
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- previewId is guaranteed to be non-null by enabled condition
     queryFn: () => importsApi.getPreview(previewId!),
     enabled: !!previewId,
   });
