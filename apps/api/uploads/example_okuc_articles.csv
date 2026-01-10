@@ -1,6 +1,0 @@
-articleId,name,usedInPvc,usedInAlu,orderClass,sizeClass,orderUnit,leadTimeDays,safetyDays,description
-OK-001,Zawias okienny standard,true,false,typical,standard,piece,7,3,Zawias standardowy do okien PVC
-OK-002,Rączka aluminiowa,false,true,typical,standard,piece,14,5,Rączka standardowa do drzwi ALU
-OK-003,Uszczelka EPDM,true,true,typical,standard,meter,10,7,Uszczelka uniwersalna czarna
-OK-004,Zawieszka narożna,true,false,specific,large,piece,5,2,Zawieszka wzmocniona do okien dużych
-OK-005,Klamka antywłamaniowa,true,true,specific,standard,piece,21,10,Klamka z certyfikatem RC2

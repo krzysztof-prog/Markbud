@@ -7,6 +7,7 @@ dist/
 build/
 .next/
 out/
+.turbo/cache/
 
 # Environment files
 
@@ -33,12 +34,19 @@ coverage/
 # Prisma
 prisma/*.db
 prisma/*.db-journal
+# Database backups
+*.backup-*
+apps/api/prisma/*.backup-*
 
 # Temporary files
 tmp/
 temp/
 *.tmp
 nul
+
+# Uploads
+apps/api/uploads/
+apps/api/downloads/schuco/*.csv
 
 # Claude Code session state
 .claude/.session-state/
