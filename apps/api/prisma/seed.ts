@@ -113,31 +113,35 @@ async function main() {
   const palletTypes = [
     {
       name: 'Paleta 4000',
-      lengthMm: 6000,  // długość (może wystawać do 700mm)
-      widthMm: 4000,   // szerokość palety
-      heightMm: 2000,
-      loadWidthMm: 960  // max załadunek głębokości
+      lengthMm: 6000,     // długość palety (może wystawać do 700mm)
+      widthMm: 4000,      // szerokość palety
+      heightMm: 2000,     // wysokość palety
+      loadWidthMm: 960,   // max załadunek głębokości
+      loadDepthMm: 6000   // głębokość załadunku
     },
     {
       name: 'Paleta 3500',
       lengthMm: 6000,
       widthMm: 3500,
       heightMm: 2000,
-      loadWidthMm: 960
+      loadWidthMm: 960,
+      loadDepthMm: 6000
     },
     {
       name: 'Paleta 3000',
       lengthMm: 6000,
       widthMm: 3000,
       heightMm: 2000,
-      loadWidthMm: 960
+      loadWidthMm: 960,
+      loadDepthMm: 6000
     },
     {
       name: 'Mała paleta',
       lengthMm: 6000,
       widthMm: 2400,
       heightMm: 1500,
-      loadWidthMm: 700  // mała paleta ma mniejszy załadunek
+      loadWidthMm: 700,   // mała paleta ma mniejszy załadunek
+      loadDepthMm: 6000
     },
   ];
 
@@ -202,6 +206,7 @@ async function main() {
           profileId: profile.id,
           colorId: color.id,
           currentStockBeams: 0,
+          updatedById: systemUser.id,  // Wymagane pole - użytkownik systemowy
         },
       });
     }

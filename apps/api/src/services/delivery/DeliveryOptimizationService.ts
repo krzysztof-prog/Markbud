@@ -307,14 +307,28 @@ export class DeliveryOptimizationService {
   /**
    * Create a new pallet type
    */
-  async createPalletType(data: { name: string; lengthMm: number; loadDepthMm: number }) {
+  async createPalletType(data: {
+    name: string;
+    lengthMm: number;
+    widthMm: number;
+    heightMm: number;
+    loadWidthMm?: number;
+    loadDepthMm?: number;
+  }) {
     return this.palletOptimizerService.createPalletType(data);
   }
 
   /**
    * Update a pallet type
    */
-  async updatePalletType(id: number, data: { name?: string; lengthMm?: number; loadDepthMm?: number }) {
+  async updatePalletType(id: number, data: {
+    name?: string;
+    lengthMm?: number;
+    widthMm?: number;
+    heightMm?: number;
+    loadWidthMm?: number;
+    loadDepthMm?: number;
+  }) {
     return this.palletOptimizerService.updatePalletType(id, data);
   }
 

@@ -41,7 +41,10 @@ export const optimizeDeliveryBodySchema = z.object({
 export const palletTypeSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
   lengthMm: z.number().int().positive('Length must be positive'),
-  loadDepthMm: z.number().int().positive('Load depth must be positive'),
+  widthMm: z.number().int().positive('Width must be positive'),
+  heightMm: z.number().int().positive('Height must be positive'),
+  loadWidthMm: z.number().int().nonnegative('Load width must be non-negative').optional(),
+  loadDepthMm: z.number().int().positive('Load depth must be positive').optional(),
 });
 
 export const updatePalletTypeSchema = palletTypeSchema.partial();

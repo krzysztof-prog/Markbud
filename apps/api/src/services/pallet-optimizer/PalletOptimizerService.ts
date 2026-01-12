@@ -599,10 +599,13 @@ export class PalletOptimizerService {
   async createPalletType(data: {
     name: string;
     lengthMm: number;      // Długość palety
-    loadDepthMm: number;   // Głębokość załadunku
+    widthMm: number;       // Szerokość palety
+    heightMm: number;      // Wysokość palety
+    loadWidthMm?: number;  // Max załadunek głębokości
+    loadDepthMm?: number;  // Głębokość załadunku
   }) {
     const created = await this.repository.createPalletType(data);
-    logger.info(`Created pallet type: ${data.name} (${data.lengthMm}mm)`);
+    logger.info(`Created pallet type: ${data.name} (${data.lengthMm}mm x ${data.widthMm}mm)`);
     return created;
   }
 
@@ -612,6 +615,9 @@ export class PalletOptimizerService {
   async updatePalletType(id: number, data: {
     name?: string;
     lengthMm?: number;       // Długość palety
+    widthMm?: number;        // Szerokość palety
+    heightMm?: number;       // Wysokość palety
+    loadWidthMm?: number;    // Max załadunek głębokości
     loadDepthMm?: number;    // Głębokość załadunku
   }) {
     const updated = await this.repository.updatePalletType(id, data);

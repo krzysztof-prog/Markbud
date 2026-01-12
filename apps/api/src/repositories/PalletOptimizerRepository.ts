@@ -220,7 +220,10 @@ export class PalletOptimizerRepository {
   async createPalletType(data: {
     name: string;
     lengthMm: number;      // Długość palety
-    loadDepthMm: number;   // Głębokość załadunku
+    widthMm: number;       // Szerokość palety
+    heightMm: number;      // Wysokość palety
+    loadWidthMm?: number;  // Max załadunek głębokości
+    loadDepthMm?: number;  // Głębokość załadunku
   }) {
     return this.prisma.palletType.create({ data });
   }
@@ -231,6 +234,9 @@ export class PalletOptimizerRepository {
   async updatePalletType(id: number, data: {
     name?: string;
     lengthMm?: number;       // Długość palety
+    widthMm?: number;        // Szerokość palety
+    heightMm?: number;       // Wysokość palety
+    loadWidthMm?: number;    // Max załadunek głębokości
     loadDepthMm?: number;    // Głębokość załadunku
   }) {
     // POPRAWKA: Obsługa błędu gdy rekord nie istnieje
