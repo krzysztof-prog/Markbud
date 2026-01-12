@@ -5,6 +5,8 @@ import { DeliveryService } from '../services/deliveryService.js';
 import { DeliveryHandler } from '../handlers/deliveryHandler.js';
 import { DeliveryProtocolService } from '../services/delivery-protocol-service.js';
 import { verifyAuth } from '../middleware/auth.js';
+import { parseIntParam } from '../utils/errors.js';
+import { ReadinessOrchestrator } from '../services/readinessOrchestrator.js';
 
 
 export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
@@ -107,4 +109,71 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch<{ Body: { fromDate: string; toDate: string; yearOffset: number } }>('/bulk-update-dates', {
     preHandler: verifyAuth,
   }, handler.bulkUpdateDates.bind(handler));
+
+  // P1-R4: GET /api/deliveries/:id/readiness - get shipping readiness checklist (System Brain)
+  fastify.get<{ Params: { id: string } }>('/:id/readiness', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get shipping readiness checklist for a delivery (System Brain)',
+      tags: ['deliveries', 'readiness'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string', description: 'Delivery ID' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ready: { type: 'boolean', description: 'Whether delivery is ready for shipping' },
+            blocking: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  module: { type: 'string' },
+                  requirement: { type: 'string' },
+                  status: { type: 'string' },
+                  message: { type: 'string' },
+                  actionRequired: { type: 'string' },
+                },
+              },
+            },
+            warnings: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  module: { type: 'string' },
+                  requirement: { type: 'string' },
+                  status: { type: 'string' },
+                  message: { type: 'string' },
+                  actionRequired: { type: 'string' },
+                },
+              },
+            },
+            checklist: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  label: { type: 'string' },
+                  checked: { type: 'boolean' },
+                  blocking: { type: 'boolean' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const orchestrator = new ReadinessOrchestrator(prisma);
+    const result = await orchestrator.canShipDelivery(parseIntParam(id, 'id'));
+    return reply.send(result);
+  });
 };

@@ -87,6 +87,17 @@ export class DeliveryOrderService {
       throw new NotFoundError('Order');
     }
 
+    // P0-R1: Wymuszenie variantType dla zleceń z sufixem
+    const { suffix } = this.csvParser.parseOrderNumber(order.orderNumber);
+    if (suffix && !order.variantType) {
+      throw new ValidationError(
+        `Zlecenie ${order.orderNumber} jest wariantem (ma sufix "${suffix}"). ` +
+          `Przed przypisaniem do dostawy musisz określić typ wariantu: ` +
+          `korekta (correction) lub dodatkowy plik (additional_file).`,
+        { code: 'VARIANT_TYPE_REQUIRED_FOR_SUFFIX' }
+      );
+    }
+
     // P1-2: Check for variant conflicts with variant type
     await this.validateNoVariantConflict(
       order.orderNumber,

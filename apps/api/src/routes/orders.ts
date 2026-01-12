@@ -12,6 +12,7 @@ import {
   emitOrderUpdated,
 } from '../services/event-emitter.js';
 import { plnToGrosze, eurToCenty } from '../utils/money.js';
+import { ReadinessOrchestrator } from '../services/readinessOrchestrator.js';
 
 
 export const orderRoutes: FastifyPluginAsync = async (fastify) => {
@@ -354,6 +355,73 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     return Object.values(totals);
+  });
+
+  // P1-R4: GET /api/orders/:id/readiness - get production readiness checklist (System Brain)
+  fastify.get<{ Params: { id: string } }>('/:id/readiness', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get production readiness checklist for an order (System Brain)',
+      tags: ['orders', 'readiness'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string', description: 'Order ID' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ready: { type: 'boolean', description: 'Whether order is ready for production' },
+            blocking: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  module: { type: 'string' },
+                  requirement: { type: 'string' },
+                  status: { type: 'string' },
+                  message: { type: 'string' },
+                  actionRequired: { type: 'string' },
+                },
+              },
+            },
+            warnings: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  module: { type: 'string' },
+                  requirement: { type: 'string' },
+                  status: { type: 'string' },
+                  message: { type: 'string' },
+                  actionRequired: { type: 'string' },
+                },
+              },
+            },
+            checklist: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  label: { type: 'string' },
+                  checked: { type: 'boolean' },
+                  blocking: { type: 'boolean' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const orchestrator = new ReadinessOrchestrator(prisma);
+    const result = await orchestrator.canStartProduction(parseIntParam(id, 'id'));
+    return reply.send(result);
   });
 
   // P1-2: PATCH /api/orders/:id/variant-type - set variant type for order

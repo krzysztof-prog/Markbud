@@ -13,6 +13,7 @@ import {
   emitOrderUpdated,
   emitOrderDeleted,
 } from './event-emitter.js';
+import { ReadinessOrchestrator } from './readinessOrchestrator.js';
 
 export class OrderService {
   constructor(private repository: OrderRepository) {}
@@ -68,10 +69,23 @@ export class OrderService {
     if (data.status && typeof data.status === 'string') {
       validateStatusTransition(currentOrder.status, data.status);
 
-      // CRITICAL: Validate warehouse stock BEFORE starting production
-      // Prevents edge case: start production without sufficient materials → negative stock
+      // P1-R5: Full production readiness check including Glass + Okuc
+      // Prevents edge case: start production without sufficient materials/glass/okuc → deadline missed
       if (data.status === ORDER_STATUSES.IN_PROGRESS) {
+        // Legacy warehouse check (fast, critical)
         await validateSufficientStock(prisma, id);
+
+        // P1-R5: Extended readiness check (glass + okuc status)
+        const orchestrator = new ReadinessOrchestrator(prisma);
+        const readiness = await orchestrator.canStartProduction(id);
+
+        if (!readiness.ready) {
+          const blockingMessages = readiness.blocking.map((b) => b.message).join('; ');
+          throw new ValidationError(
+            `Nie można rozpocząć produkcji: ${blockingMessages}`,
+            { code: 'PRODUCTION_NOT_READY', blocking: readiness.blocking }
+          );
+        }
       }
     }
 

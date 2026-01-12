@@ -17,8 +17,11 @@ import { Prisma } from '@prisma/client';
 import { logger } from '../utils/logger.js';
 import { ConflictError } from '../utils/errors.js';
 
-// Lock expires after 5 minutes (300000ms)
-const LOCK_EXPIRATION_MS = 300000;
+// P0-R3: Dynamic lock expiration - base 5 minutes + 30s per file
+const BASE_LOCK_EXPIRATION_MS = 300000; // 5 minutes base
+const PER_FILE_EXTENSION_MS = 30000; // 30 seconds per file
+const MAX_LOCK_EXPIRATION_MS = 1800000; // 30 minutes max
+const HEARTBEAT_INTERVAL_MS = 120000; // 2 minutes heartbeat
 
 interface ImportLockWithUser extends ImportLock {
   user: {
@@ -30,15 +33,26 @@ export class ImportLockService {
   constructor(private prisma: PrismaClient) {}
 
   /**
+   * P0-R3: Calculate dynamic lock expiration based on file count
+   * Base 5 min + 30s per file, max 30 min
+   */
+  private calculateExpiration(fileCount: number = 1): Date {
+    const dynamicMs = BASE_LOCK_EXPIRATION_MS + fileCount * PER_FILE_EXTENSION_MS;
+    const cappedMs = Math.min(dynamicMs, MAX_LOCK_EXPIRATION_MS);
+    return new Date(Date.now() + cappedMs);
+  }
+
+  /**
    * Try to acquire a lock for a folder
    *
    * @param folderPath - Absolute path to the folder being imported
    * @param userId - ID of the user requesting the lock
+   * @param fileCount - Number of files to import (for dynamic expiration)
    * @returns Lock object if successful, null if lock already exists
    * @throws ConflictError if lock is held by another user
    */
-  async acquireLock(folderPath: string, userId: number): Promise<ImportLock | null> {
-    const expiresAt = new Date(Date.now() + LOCK_EXPIRATION_MS);
+  async acquireLock(folderPath: string, userId: number, fileCount: number = 1): Promise<ImportLock | null> {
+    const expiresAt = this.calculateExpiration(fileCount);
     const processId = String(process.pid);
 
     logger.info('Attempting to acquire import lock', {
@@ -375,5 +389,91 @@ export class ImportLockService {
       logger.error('Error force releasing lock', error, { folderPath });
       throw error;
     }
+  }
+
+  /**
+   * P0-R3: Heartbeat - extend lock expiration during long imports
+   * Should be called every 2 minutes during import
+   *
+   * @param lockId - ID of the lock to extend
+   * @param remainingFiles - Number of remaining files (for dynamic extension)
+   * @returns true if lock was extended, false if lock not found/expired
+   */
+  async heartbeat(lockId: number, remainingFiles: number = 1): Promise<boolean> {
+    try {
+      const lock = await this.prisma.importLock.findUnique({
+        where: { id: lockId },
+      });
+
+      if (!lock) {
+        logger.warn('Heartbeat failed - lock not found', { lockId });
+        return false;
+      }
+
+      // Check if lock is expired
+      if (new Date() > lock.expiresAt) {
+        logger.warn('Heartbeat failed - lock already expired', {
+          lockId,
+          expiredAt: lock.expiresAt,
+        });
+        return false;
+      }
+
+      // Extend lock expiration
+      const newExpiresAt = this.calculateExpiration(remainingFiles);
+
+      await this.prisma.importLock.update({
+        where: { id: lockId },
+        data: { expiresAt: newExpiresAt },
+      });
+
+      logger.debug('Lock heartbeat successful', {
+        lockId,
+        remainingFiles,
+        newExpiresAt,
+      });
+
+      return true;
+    } catch (error) {
+      logger.error('Error during lock heartbeat', error, { lockId });
+      return false;
+    }
+  }
+
+  /**
+   * P0-R3: Create a heartbeat manager for long-running imports
+   * Returns functions to start/stop the heartbeat
+   */
+  createHeartbeatManager(
+    lockId: number,
+    getRemainingFiles: () => number
+  ): { start: () => void; stop: () => void } {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const start = () => {
+      if (intervalId) return; // Already started
+
+      intervalId = setInterval(async () => {
+        const remaining = getRemainingFiles();
+        const success = await this.heartbeat(lockId, remaining);
+
+        if (!success) {
+          logger.error('Heartbeat failed, stopping heartbeat manager', { lockId });
+          stop();
+        }
+      }, HEARTBEAT_INTERVAL_MS);
+
+      logger.info('Heartbeat manager started', { lockId, intervalMs: HEARTBEAT_INTERVAL_MS });
+    };
+
+    const stop = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+        logger.info('Heartbeat manager stopped', { lockId });
+      }
+    };
+
+    return { start, stop };
   }
 }

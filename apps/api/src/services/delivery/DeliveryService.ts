@@ -19,7 +19,7 @@
 import { DeliveryRepository } from '../../repositories/DeliveryRepository.js';
 import { OrderRepository } from '../../repositories/OrderRepository.js';
 import { PalletOptimizerRepository } from '../../repositories/PalletOptimizerRepository.js';
-import { NotFoundError } from '../../utils/errors.js';
+import { NotFoundError, ValidationError } from '../../utils/errors.js';
 import { parseDate, parseDateSafe } from '../../utils/date-helpers.js';
 import { OrderService } from '../orderService.js';
 import { deliveryTotalsService } from '../deliveryTotalsService.js';
@@ -39,6 +39,7 @@ import { DeliveryCalendarService, type CalendarMonth } from './DeliveryCalendarS
 import { DeliveryNotificationService, deliveryNotificationService } from './DeliveryNotificationService.js';
 import { DeliveryOptimizationService, type OptimizationStatus } from './DeliveryOptimizationService.js';
 import { DeliveryOrderService } from './DeliveryOrderService.js';
+import { PalletValidationService } from '../palletValidationService.js';
 import type { OptimizationOptions, OptimizationResult } from '../pallet-optimizer/PalletOptimizerService.js';
 
 export class DeliveryService {
@@ -49,6 +50,7 @@ export class DeliveryService {
   private calendarService: DeliveryCalendarService;
   private optimizationService: DeliveryOptimizationService;
   private deliveryOrderService: DeliveryOrderService;
+  private palletValidationService: PalletValidationService;
 
   constructor(private repository: DeliveryRepository, orderService?: OrderService) {
     // Allow injection for testing, otherwise create internally
@@ -63,6 +65,7 @@ export class DeliveryService {
       prisma
     );
     this.deliveryOrderService = new DeliveryOrderService(repository, prisma);
+    this.palletValidationService = new PalletValidationService(prisma);
   }
 
   // ===================
@@ -134,6 +137,16 @@ export class DeliveryService {
           (dOrder: { order?: { status?: string } }) => dOrder.order?.status || 'new'
         ) || [];
         validateOrdersForDeliveryStatus(data.status as DeliveryStatus, orderStatuses);
+      }
+
+      // P0-R2: When shipping delivery, validate pallet optimization
+      if (data.status === 'shipped' || data.status === 'in_transit') {
+        const palletCheck = await this.palletValidationService.canShipDelivery(id);
+        if (!palletCheck.canShip) {
+          throw new ValidationError(
+            palletCheck.reason || 'Nie można wysłać dostawy - weryfikacja palet nie powiodła się'
+          );
+        }
       }
     }
 

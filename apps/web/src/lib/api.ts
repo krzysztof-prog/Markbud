@@ -159,6 +159,8 @@ export const ordersApi = {
       method: 'PATCH',
       body: JSON.stringify({ variantType }),
     }),
+  // P1-R4: Get production readiness checklist (System Brain)
+  getReadiness: (id: number) => fetchApi<ReadinessResult>(`/api/orders/${id}/readiness`),
 };
 
 // Magazyn
@@ -344,7 +346,33 @@ export const deliveriesApi = {
       periodStart: string;
       periodEnd: string;
     }>(`/api/deliveries/stats/windows/by-weekday${months ? `?months=${months}` : ''}`),
+  // P1-R4: Get shipping readiness checklist (System Brain)
+  getReadiness: (id: number) => fetchApi<ReadinessResult>(`/api/deliveries/${id}/readiness`),
 };
+
+// ReadinessResult type for System Brain
+export interface ReadinessResult {
+  ready: boolean;
+  blocking: ReadinessSignal[];
+  warnings: ReadinessSignal[];
+  checklist: ChecklistItem[];
+}
+
+export interface ReadinessSignal {
+  module: 'warehouse' | 'glass' | 'okuc' | 'pallet' | 'approval' | 'variant';
+  requirement: string;
+  status: 'ok' | 'warning' | 'blocking';
+  message: string;
+  actionRequired?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ChecklistItem {
+  id: string;
+  label: string;
+  checked: boolean;
+  blocking: boolean;
+}
 
 // Typy dla importu z folderu
 interface FolderListResult {

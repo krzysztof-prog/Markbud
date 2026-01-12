@@ -4,10 +4,12 @@ import { Eye } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { groszeToPln, centyToEur, type Grosze, type Centy } from '@/lib/money';
+import { ReadinessChecklist } from '@/components/ReadinessChecklist';
 
 interface DeliveryDetailsProps {
   delivery: {
     id: number;
+    status?: string;
     notes?: string | null;
     deliveryOrders?: Array<{
       orderId?: number;
@@ -44,8 +46,20 @@ export default function DeliveryDetails({
     delivery.deliveryItems && delivery.deliveryItems.length > 0;
   const hasNotes = delivery.notes && delivery.notes.trim().length > 0;
 
+  // Pokazuj checklist tylko dla dostaw które nie zostały jeszcze wysłane
+  const showReadinessChecklist = delivery.status && !['shipped', 'in_transit', 'delivered'].includes(delivery.status);
+
   return (
     <div className="p-4 bg-slate-50 rounded-lg space-y-4">
+      {/* P1-R4: System Brain - Shipping Readiness Checklist */}
+      {showReadinessChecklist && (
+        <ReadinessChecklist
+          type="shipping"
+          entityId={delivery.id}
+          className="mb-2"
+        />
+      )}
+
       {/* Orders Section */}
       {hasOrders && delivery.deliveryOrders && (
         <div>

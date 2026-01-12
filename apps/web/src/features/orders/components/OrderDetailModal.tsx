@@ -16,6 +16,7 @@ import { formatGrosze, formatCenty, type Grosze, type Centy } from '@/lib/money'
 import { Package, Layers, Grid3X3, Calendar, FileText, FileDown, ChevronDown, ChevronUp, Truck } from 'lucide-react';
 import type { Order, SchucoDeliveryLink } from '@/types';
 import type { Requirement } from '@/types';
+import { ReadinessChecklist } from '@/components/ReadinessChecklist';
 
 // Extended order with additional fields from PDF/imports
 interface OrderDetail extends Order {
@@ -133,6 +134,15 @@ export function OrderDetailModal({
           </div>
         ) : order ? (
           <div className="space-y-6">
+            {/* P1-R4: System Brain - Production Readiness Checklist */}
+            {order.status === 'new' && (
+              <ReadinessChecklist
+                type="production"
+                entityId={order.id}
+                className="mb-4"
+              />
+            )}
+
             {/* Podsumowanie */}
             {(() => {
               // Oblicz totals z danych okien jako fallback

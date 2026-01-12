@@ -185,6 +185,7 @@ export class ImportConflictService {
 
   /**
    * Handle replace resolution - replace existing order with new one
+   * P0-R6: Block replace for orders in shipped/loading deliveries
    */
   private async handleReplaceResolution(
     baseNumber: string,
@@ -195,6 +196,29 @@ export class ImportConflictService {
 
     if (!targetOrder) {
       throw new ValidationError(`Nie znaleziono zlecenia do zastapienia: ${targetOrderNumber}`);
+    }
+
+    // P0-R6: Check if target order is in a shipped/loading delivery
+    const deliveryAssignment = await this.prisma.deliveryOrder.findFirst({
+      where: { orderId: targetOrder.id },
+      include: {
+        delivery: {
+          select: { id: true, deliveryNumber: true, status: true },
+        },
+      },
+    });
+
+    if (deliveryAssignment) {
+      const blockedStatuses = ['shipped', 'loading', 'in_transit'];
+      if (blockedStatuses.includes(deliveryAssignment.delivery.status)) {
+        throw new ValidationError(
+          `Nie mozna zastapic zlecenia ${targetOrderNumber} - jest w dostawie ` +
+            `${deliveryAssignment.delivery.deliveryNumber || deliveryAssignment.delivery.id} ` +
+            `o statusie "${deliveryAssignment.delivery.status}". ` +
+            `Wybierz "Zachowaj oba" aby zaimportowac jako nowy wariant.`,
+          { code: 'CANNOT_REPLACE_SHIPPED_ORDER' }
+        );
+      }
     }
 
     logger.info('Replacing existing order', {

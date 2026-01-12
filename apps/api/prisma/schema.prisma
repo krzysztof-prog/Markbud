@@ -322,6 +322,11 @@ model PalletOptimization {
   optimizationData String            @map("optimization_data")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
+  // P0-R2: Physical validation status
+  // 'pending' - awaiting validation, 'valid' - validated OK, 'invalid' - validation failed
+  validationStatus String?           @default("pending") @map("validation_status")
+  validatedAt      DateTime?         @map("validated_at")
+  validationErrors String?           @map("validation_errors")
   pallets          OptimizedPallet[]
   delivery         Delivery          @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
