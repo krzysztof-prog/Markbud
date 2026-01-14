@@ -218,15 +218,17 @@ export class OkucArticleRepository {
   }
 
   /**
-   * Delete an article
+   * Delete an article (SOFT DELETE)
    */
   async delete(id: number) {
     try {
-      const article = await this.prisma.okucArticle.delete({
+      // Soft delete: ustawiamy deletedAt zamiast usuwać
+      const article = await this.prisma.okucArticle.update({
         where: { id },
+        data: { deletedAt: new Date() },
       });
 
-      logger.info('Deleted article', { id, articleId: article.articleId });
+      logger.info('Soft deleted article', { id, articleId: article.articleId });
       return article;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {

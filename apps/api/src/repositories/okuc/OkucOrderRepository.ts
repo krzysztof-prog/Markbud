@@ -355,14 +355,16 @@ export class OkucOrderRepository {
   }
 
   /**
-   * Delete order (only if draft)
+   * Delete order (SOFT DELETE - only if draft)
    */
   async delete(id: number) {
-    const order = await this.prisma.okucOrder.delete({
+    // Soft delete: ustawiamy deletedAt zamiast usuwać
+    const order = await this.prisma.okucOrder.update({
       where: { id },
+      data: { deletedAt: new Date() },
     });
 
-    logger.info('Deleted order', { id, orderNumber: order.orderNumber });
+    logger.info('Soft deleted order', { id, orderNumber: order.orderNumber });
     return order;
   }
 }

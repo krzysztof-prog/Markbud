@@ -174,14 +174,16 @@ export class OkucProportionRepository {
   }
 
   /**
-   * Delete proportion
+   * Delete proportion (SOFT DELETE)
    */
   async delete(id: number) {
-    const proportion = await this.prisma.okucProportion.delete({
+    // Soft delete: ustawiamy deletedAt zamiast usuwać
+    const proportion = await this.prisma.okucProportion.update({
       where: { id },
+      data: { deletedAt: new Date() },
     });
 
-    logger.info('Deleted proportion', { id });
+    logger.info('Soft deleted proportion', { id });
     return proportion;
   }
 

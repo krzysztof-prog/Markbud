@@ -256,14 +256,16 @@ export class OkucDemandRepository {
   }
 
   /**
-   * Delete demand
+   * Delete demand (SOFT DELETE)
    */
   async delete(id: number) {
-    const demand = await this.prisma.okucDemand.delete({
+    // Soft delete: ustawiamy deletedAt zamiast usuwać
+    const demand = await this.prisma.okucDemand.update({
       where: { id },
+      data: { deletedAt: new Date() },
     });
 
-    logger.info('Deleted demand', { id, articleId: demand.articleId });
+    logger.info('Soft deleted demand', { id, articleId: demand.articleId });
     return demand;
   }
 }

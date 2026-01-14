@@ -1,10 +1,10 @@
 /**
  * OkucLocation Handler - HTTP request handling for warehouse location management
- * Zarządzanie lokalizacjami magazynowymi dla okuć
+ * Zrefaktoryzowany: logika biznesowa przeniesiona do OkucLocationService
  */
 
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from '../../utils/prisma.js';
+import { OkucLocationService } from '../../services/okuc/OkucLocationService.js';
 import {
   createOkucLocationSchema,
   updateOkucLocationSchema,
@@ -14,6 +14,8 @@ import {
   type UpdateOkucLocationInput,
 } from '../../validators/okuc-location.js';
 
+const service = new OkucLocationService();
+
 export const okucLocationHandler = {
   /**
    * GET /api/okuc/locations
@@ -22,32 +24,8 @@ export const okucLocationHandler = {
    * Zawiera liczbe artykulow przypisanych do kazdej lokalizacji
    */
   async list(_request: FastifyRequest, reply: FastifyReply) {
-    const locations = await prisma.okucLocation.findMany({
-      where: {
-        deletedAt: null,
-      },
-      orderBy: [
-        { sortOrder: 'asc' },
-        { name: 'asc' },
-      ],
-      include: {
-        _count: {
-          select: { articles: true },
-        },
-      },
-    });
-
-    // Mapuj wyniki aby zwrocic articlesCount zamiast _count
-    const result = locations.map((loc) => ({
-      id: loc.id,
-      name: loc.name,
-      sortOrder: loc.sortOrder,
-      createdAt: loc.createdAt,
-      updatedAt: loc.updatedAt,
-      articlesCount: loc._count.articles,
-    }));
-
-    return reply.status(200).send(result);
+    const locations = await service.getAllLocations();
+    return reply.status(200).send(locations);
   },
 
   /**
@@ -56,11 +34,7 @@ export const okucLocationHandler = {
    */
   async create(request: FastifyRequest, reply: FastifyReply) {
     const validated = createOkucLocationSchema.parse(request.body);
-
-    const location = await prisma.okucLocation.create({
-      data: validated as CreateOkucLocationInput,
-    });
-
+    const location = await service.createLocation(validated as CreateOkucLocationInput);
     return reply.status(201).send(location);
   },
 
@@ -75,85 +49,31 @@ export const okucLocationHandler = {
     const { id } = okucLocationParamsSchema.parse(request.params);
     const validated = updateOkucLocationSchema.parse(request.body);
 
-    // Sprawdź czy lokalizacja istnieje i nie jest usunięta
-    const existing = await prisma.okucLocation.findFirst({
-      where: {
-        id: parseInt(id, 10),
-        deletedAt: null,
-      },
-    });
-
-    if (!existing) {
-      return reply.status(404).send({ error: 'Lokalizacja nie została znaleziona' });
-    }
-
-    const location = await prisma.okucLocation.update({
-      where: { id: parseInt(id, 10) },
-      data: validated as UpdateOkucLocationInput,
-    });
-
+    const location = await service.updateLocation(parseInt(id, 10), validated as UpdateOkucLocationInput);
     return reply.status(200).send(location);
   },
 
   /**
    * DELETE /api/okuc/locations/:id
-   * Soft delete - ustawia deletedAt zamiast usuwać rekord
+   * Soft delete - ustawia deletedAt zamiast usuwac rekord
    */
   async delete(
     request: FastifyRequest<{ Params: { id: string } }>,
     reply: FastifyReply
   ) {
     const { id } = okucLocationParamsSchema.parse(request.params);
-
-    // Sprawdź czy lokalizacja istnieje i nie jest już usunięta
-    const existing = await prisma.okucLocation.findFirst({
-      where: {
-        id: parseInt(id, 10),
-        deletedAt: null,
-      },
-    });
-
-    if (!existing) {
-      return reply.status(404).send({ error: 'Lokalizacja nie została znaleziona' });
-    }
-
-    await prisma.okucLocation.update({
-      where: { id: parseInt(id, 10) },
-      data: { deletedAt: new Date() },
-    });
-
+    await service.deleteLocation(parseInt(id, 10));
     return reply.status(204).send();
   },
 
   /**
    * POST /api/okuc/locations/reorder
-   * Zmiana kolejności lokalizacji
-   * Przyjmuje tablicę IDs w nowej kolejności
+   * Zmiana kolejnosci lokalizacji
+   * Przyjmuje tablice IDs w nowej kolejnosci
    */
   async reorder(request: FastifyRequest, reply: FastifyReply) {
     const { ids } = reorderOkucLocationsSchema.parse(request.body);
-
-    // Aktualizuj sortOrder dla każdej lokalizacji zgodnie z kolejnością w tablicy
-    await prisma.$transaction(
-      ids.map((id, index) =>
-        prisma.okucLocation.update({
-          where: { id },
-          data: { sortOrder: index },
-        })
-      )
-    );
-
-    // Zwróć zaktualizowaną listę
-    const locations = await prisma.okucLocation.findMany({
-      where: {
-        deletedAt: null,
-      },
-      orderBy: [
-        { sortOrder: 'asc' },
-        { name: 'asc' },
-      ],
-    });
-
+    const locations = await service.reorderLocations(ids);
     return reply.status(200).send(locations);
   },
 };
