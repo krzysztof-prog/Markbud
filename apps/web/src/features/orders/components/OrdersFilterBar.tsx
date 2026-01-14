@@ -1,0 +1,173 @@
+'use client';
+
+/**
+ * Komponent paska filtrów dla zestawienia zleceń
+ */
+
+import React from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Download, Search, TrendingUp, Settings } from 'lucide-react';
+import type { FilterState, GroupBy } from '../types';
+
+// ================================
+// Typy
+// ================================
+
+interface OrdersFilterBarProps {
+  // Wyszukiwanie
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+
+  // Filtry główne
+  filters: FilterState;
+  setFilters: React.Dispatch<React.SetStateAction<FilterState>>;
+
+  // Grupowanie
+  groupBy: GroupBy;
+  setGroupBy: (groupBy: GroupBy) => void;
+
+  // Akcje
+  onColumnSettingsClick: () => void;
+  onStatsClick: () => void;
+  onExportClick: () => void;
+}
+
+// ================================
+// Komponent
+// ================================
+
+export const OrdersFilterBar: React.FC<OrdersFilterBarProps> = ({
+  searchQuery,
+  setSearchQuery,
+  filters,
+  setFilters,
+  groupBy,
+  setGroupBy,
+  onColumnSettingsClick,
+  onStatsClick,
+  onExportClick,
+}) => {
+  return (
+    <div className="flex flex-wrap items-center gap-4">
+      {/* Wyszukiwanie */}
+      <div className="relative w-64">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        <Input
+          placeholder="Szukaj po numerze, kliencie..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
+      {/* Checkboxy filtrów */}
+      <div className="flex items-center gap-4 border-l pl-4">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="filter-akrobud"
+            checked={filters.clientFilter === 'akrobud'}
+            onCheckedChange={(checked) => {
+              setFilters(prev => ({
+                ...prev,
+                clientFilter: checked ? 'akrobud' : 'all'
+              }));
+            }}
+          />
+          <Label htmlFor="filter-akrobud" className="text-sm cursor-pointer">
+            Tylko Akrobud
+          </Label>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="filter-private"
+            checked={filters.clientFilter === 'private'}
+            onCheckedChange={(checked) => {
+              setFilters(prev => ({
+                ...prev,
+                clientFilter: checked ? 'private' : 'all'
+              }));
+            }}
+          />
+          <Label htmlFor="filter-private" className="text-sm cursor-pointer">
+            Tylko prywatne
+          </Label>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="filter-hide-produced"
+            checked={filters.hideProduced}
+            onCheckedChange={(checked) => {
+              setFilters(prev => ({
+                ...prev,
+                hideProduced: !!checked
+              }));
+            }}
+          />
+          <Label htmlFor="filter-hide-produced" className="text-sm cursor-pointer">
+            Ukryj wyprodukowane
+          </Label>
+        </div>
+      </div>
+
+      {/* Data od */}
+      <div className="flex items-center gap-2 border-l pl-4">
+        <Label htmlFor="date-from" className="text-sm text-muted-foreground whitespace-nowrap">
+          Od daty:
+        </Label>
+        <Input
+          id="date-from"
+          type="date"
+          value={filters.dateFrom}
+          onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+          className="w-36"
+        />
+      </div>
+
+      {/* Grupowanie */}
+      <div className="flex items-center gap-2 border-l pl-4">
+        <span className="text-sm text-muted-foreground">Grupuj:</span>
+        <select
+          value={groupBy}
+          onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+          className="px-3 py-2 border rounded-md text-sm"
+        >
+          <option value="none">Brak</option>
+          <option value="client">Klient</option>
+          <option value="system">System</option>
+          <option value="deadline-day">Termin (dzień)</option>
+          <option value="deadline-week">Termin (tydzień)</option>
+          <option value="deadline-month">Termin (miesiąc)</option>
+        </select>
+      </div>
+
+      {/* Przyciski akcji */}
+      <div className="flex gap-2 ml-auto">
+        <Button
+          variant="outline"
+          onClick={onColumnSettingsClick}
+        >
+          <Settings className="h-4 w-4 mr-2" />
+          Kolumny
+        </Button>
+        <Button
+          variant="outline"
+          onClick={onStatsClick}
+        >
+          <TrendingUp className="h-4 w-4 mr-2" />
+          Statystyki
+        </Button>
+        <Button onClick={onExportClick}>
+          <Download className="h-4 w-4 mr-2" />
+          Eksport CSV
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+export default OrdersFilterBar;

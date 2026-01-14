@@ -1,20 +1,36 @@
 /**
- * AkrobudVerificationService - Logika weryfikacji list dostaw Akrobud
+ * AkrobudVerificationService - Orkiestrator weryfikacji list dostaw Akrobud
  *
  * Serwis odpowiada za:
- * - Tworzenie i zarządzanie listami weryfikacyjnymi
- * - Parsowanie numerów zleceń (obsługa wariantów)
- * - Porównywanie listy z dostawą
- * - Aplikowanie zmian (dodawanie/usuwanie zleceń z dostawy)
+ * - Tworzenie i zarządzanie listami weryfikacyjnymi (CRUD)
+ * - Zarządzanie elementami listy
+ * - Orkiestracja procesu weryfikacji
+ * - Koordynacja aplikowania zmian
+ *
+ * Deleguje do:
+ * - OrderNumberMatcher - dopasowywanie numerów zleceń
+ * - VerificationListComparator - porównywanie list z dostawami
+ * - VerificationChangeApplier - aplikowanie zmian
  */
 
 import type { PrismaClient } from '@prisma/client';
 import { AkrobudVerificationRepository } from '../../repositories/AkrobudVerificationRepository.js';
-import { DeliveryRepository } from '../../repositories/DeliveryRepository.js';
 import { CsvParser } from '../parsers/csv-parser.js';
-import { DeliveryOrderService } from '../delivery/DeliveryOrderService.js';
 import { NotFoundError, ValidationError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
+import {
+  VerificationListComparator,
+  type MatchedItem,
+  type MissingItem,
+  type ExcessItem,
+  type NotFoundItem,
+  type DuplicateItem,
+  type DeliveryOrderItem,
+} from './utils/VerificationListComparator.js';
+import {
+  VerificationChangeApplier,
+  type ApplyChangesResult,
+} from './utils/VerificationChangeApplier.js';
 
 // ===================
 // Types
@@ -28,61 +44,6 @@ export interface ParsedOrderNumber {
   base: string;
   suffix: string | null;
   full: string;
-}
-
-/**
- * Pojedynczy element dopasowany
- */
-export interface MatchedItem {
-  itemId: number;
-  orderNumberInput: string;
-  orderId: number;
-  orderNumber: string;
-  client: string | null;
-  project: string | null;
-  position: number;
-  matchStatus: 'found' | 'variant_match';
-}
-
-/**
- * Element brakujący w dostawie (jest na liście klienta, ale nie w dostawie)
- */
-export interface MissingItem {
-  itemId: number;
-  orderNumberInput: string;
-  orderId: number;
-  orderNumber: string;
-  client: string | null;
-  project: string | null;
-  position: number;
-}
-
-/**
- * Element nadmiarowy w dostawie (jest w dostawie, ale nie na liście klienta)
- */
-export interface ExcessItem {
-  orderId: number;
-  orderNumber: string;
-  client: string | null;
-  project: string | null;
-  deliveryPosition: number;
-}
-
-/**
- * Element nieznaleziony w systemie
- */
-export interface NotFoundItem {
-  itemId: number;
-  orderNumberInput: string;
-  position: number;
-}
-
-/**
- * Duplikat na liście
- */
-export interface DuplicateItem {
-  orderNumber: string;
-  positions: number[];
 }
 
 /**
@@ -118,14 +79,8 @@ export interface VerificationResult {
   };
 }
 
-/**
- * Wynik aplikowania zmian
- */
-export interface ApplyChangesResult {
-  added: number[];
-  removed: number[];
-  errors: Array<{ orderId: number; reason: string }>;
-}
+// Re-eksport typów dla kompatybilności wstecznej
+export type { MatchedItem, MissingItem, ExcessItem, NotFoundItem, DuplicateItem, ApplyChangesResult };
 
 // ===================
 // Service
@@ -133,18 +88,15 @@ export interface ApplyChangesResult {
 
 export class AkrobudVerificationService {
   private repository: AkrobudVerificationRepository;
-  private deliveryRepository: DeliveryRepository;
-  private deliveryOrderService: DeliveryOrderService;
   private csvParser: CsvParser;
+  private listComparator: VerificationListComparator;
+  private changeApplier: VerificationChangeApplier;
 
   constructor(private prisma: PrismaClient) {
     this.repository = new AkrobudVerificationRepository(prisma);
-    this.deliveryRepository = new DeliveryRepository(prisma);
-    this.deliveryOrderService = new DeliveryOrderService(
-      this.deliveryRepository,
-      prisma
-    );
     this.csvParser = new CsvParser();
+    this.listComparator = new VerificationListComparator(prisma);
+    this.changeApplier = new VerificationChangeApplier(prisma);
   }
 
   // ===================
@@ -154,11 +106,7 @@ export class AkrobudVerificationService {
   /**
    * Tworzy nową listę weryfikacyjną
    */
-  async createList(
-    deliveryDate: Date,
-    title?: string,
-    notes?: string
-  ) {
+  async createList(deliveryDate: Date, title?: string, notes?: string) {
     logger.info('Tworzenie nowej listy weryfikacyjnej', { deliveryDate, title });
 
     const list = await this.repository.create({
@@ -230,7 +178,7 @@ export class AkrobudVerificationService {
   async addItems(
     listId: number,
     items: VerificationItemInput[],
-    inputMode: 'textarea' | 'single'
+    _inputMode: 'textarea' | 'single'
   ): Promise<{
     added: number;
     duplicates: DuplicateItem[];
@@ -243,9 +191,10 @@ export class AkrobudVerificationService {
 
     // Pobierz istniejące pozycje aby ustalić następną
     const existingItems = await this.repository.getItemsWithOrders(listId);
-    let nextPosition = existingItems.length > 0
-      ? Math.max(...existingItems.map(i => i.position)) + 1
-      : 1;
+    let nextPosition =
+      existingItems.length > 0
+        ? Math.max(...existingItems.map((i) => i.position)) + 1
+        : 1;
 
     const itemsToAdd: Array<{
       listId: number;
@@ -255,32 +204,18 @@ export class AkrobudVerificationService {
       position: number;
     }> = [];
 
-    const duplicates: DuplicateItem[] = [];
     const errors: Array<{ orderNumber: string; reason: string }> = [];
 
-    // Wykryj duplikaty na wejściu
-    const orderNumberCounts = new Map<string, number[]>();
-
-    for (let i = 0; i < items.length; i++) {
-      const orderNumber = items[i].orderNumber.trim();
-      if (!orderNumberCounts.has(orderNumber)) {
-        orderNumberCounts.set(orderNumber, []);
-      }
-      orderNumberCounts.get(orderNumber)!.push(i + 1); // 1-indexed pozycja
-    }
-
-    // Znajdź duplikaty
-    for (const [orderNumber, positions] of orderNumberCounts.entries()) {
-      if (positions.length > 1) {
-        duplicates.push({ orderNumber, positions });
-      }
-    }
+    // Wykryj duplikaty w danych wejściowych
+    const duplicates = this.listComparator.findDuplicatesInInput(
+      items.map((i, idx) => ({ orderNumber: i.orderNumber, position: idx + 1 }))
+    );
 
     // Przygotuj items do dodania (bez duplikatów - tylko pierwsze wystąpienie)
     const processedOrderNumbers = new Set<string>();
 
-    for (let i = 0; i < items.length; i++) {
-      const orderNumber = items[i].orderNumber.trim();
+    for (const item of items) {
+      const orderNumber = item.orderNumber.trim();
 
       // Pomiń duplikaty (dodajemy tylko pierwsze wystąpienie)
       if (processedOrderNumbers.has(orderNumber)) {
@@ -290,7 +225,7 @@ export class AkrobudVerificationService {
 
       // Pomiń jeśli już istnieje na liście
       const existsOnList = existingItems.some(
-        item => item.orderNumberInput === orderNumber
+        (existingItem) => existingItem.orderNumberInput === orderNumber
       );
       if (existsOnList) {
         errors.push({
@@ -347,7 +282,7 @@ export class AkrobudVerificationService {
       throw new NotFoundError('Lista weryfikacyjna');
     }
 
-    const item = list.items.find(i => i.id === itemId);
+    const item = list.items.find((i) => i.id === itemId);
     if (!item) {
       throw new NotFoundError('Element listy');
     }
@@ -406,16 +341,19 @@ export class AkrobudVerificationService {
       ? await this.getDeliveryOrders(delivery.id)
       : [];
 
-    // 3. Porównaj listy
-    const result = await this.compareListWithDelivery(
-      list,
-      delivery,
-      deliveryOrders,
-      needsDeliveryCreation
+    // 3. Porównaj listy - delegacja do VerificationListComparator
+    const comparisonResult = await this.listComparator.compareListWithDelivery(
+      list.items.map((item) => ({
+        id: item.id,
+        orderNumberInput: item.orderNumberInput,
+        orderNumberBase: item.orderNumberBase,
+        position: item.position,
+      })),
+      deliveryOrders
     );
 
     // 4. Zaktualizuj statusy dopasowania w bazie
-    await this.updateMatchStatuses(result);
+    await this.updateMatchStatuses(comparisonResult);
 
     // 5. Połącz listę z dostawą (jeśli istnieje)
     if (delivery && !list.deliveryId) {
@@ -425,8 +363,128 @@ export class AkrobudVerificationService {
     // 6. Zaktualizuj status listy
     await this.repository.update(listId, { status: 'verified' });
 
+    // Zbuduj wynik weryfikacji
+    const result: VerificationResult = {
+      listId: list.id,
+      deliveryDate: list.deliveryDate,
+      delivery: delivery
+        ? {
+            id: delivery.id,
+            deliveryNumber: delivery.deliveryNumber,
+            status: delivery.status,
+          }
+        : null,
+      needsDeliveryCreation,
+      matched: comparisonResult.matched,
+      missing: comparisonResult.missing,
+      excess: comparisonResult.excess,
+      notFound: comparisonResult.notFound,
+      duplicates: comparisonResult.duplicates,
+      summary: comparisonResult.summary,
+    };
+
     return result;
   }
+
+  // ===================
+  // Apply Changes
+  // ===================
+
+  /**
+   * Aplikuje zmiany - dodaje brakujące i/lub usuwa nadmiarowe zlecenia z dostawy
+   */
+  async applyChanges(
+    listId: number,
+    addMissing: number[],
+    removeExcess: number[]
+  ): Promise<ApplyChangesResult> {
+    const list = await this.repository.findById(listId);
+    if (!list) {
+      throw new NotFoundError('Lista weryfikacyjna');
+    }
+
+    if (!list.deliveryId) {
+      throw new ValidationError(
+        'Lista nie jest połączona z dostawą. Najpierw uruchom weryfikację.'
+      );
+    }
+
+    const deliveryId = list.deliveryId;
+    const delivery = await this.prisma.delivery.findUnique({
+      where: { id: deliveryId },
+    });
+
+    if (!delivery) {
+      throw new NotFoundError('Dostawa');
+    }
+
+    logger.info('Aplikowanie zmian weryfikacji', {
+      listId,
+      deliveryId,
+      addMissing,
+      removeExcess,
+    });
+
+    // Delegacja do VerificationChangeApplier
+    const result = await this.changeApplier.applyChanges(
+      deliveryId,
+      addMissing,
+      removeExcess,
+      delivery.deliveryNumber ?? undefined,
+      { continueOnError: true, verbose: true }
+    );
+
+    // Zaktualizuj status listy
+    if (result.added.length > 0 || result.removed.length > 0) {
+      await this.repository.update(listId, { status: 'applied' });
+    }
+
+    logger.info('Zmiany weryfikacji zastosowane', {
+      listId,
+      added: result.added.length,
+      removed: result.removed.length,
+      errors: result.errors.length,
+    });
+
+    return result;
+  }
+
+  // ===================
+  // Text Parsing
+  // ===================
+
+  /**
+   * Parsuje tekst z textarea na listę numerów zleceń
+   * Obsługuje różne separatory: nowa linia, przecinek, średnik, tab
+   */
+  parseTextareaInput(text: string): string[] {
+    if (!text || text.trim().length === 0) {
+      return [];
+    }
+
+    // Podziel po różnych separatorach
+    const parts = text
+      .split(/[\n\r,;\t]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    // Usuń duplikaty zachowując kolejność
+    const seen = new Set<string>();
+    const result: string[] = [];
+
+    for (const part of parts) {
+      if (!seen.has(part)) {
+        seen.add(part);
+        result.push(part);
+      }
+    }
+
+    return result;
+  }
+
+  // ===================
+  // Private Methods - Delivery Operations
+  // ===================
 
   /**
    * Znajduje dostawę dla daty (z tolerancją na cały dzień)
@@ -529,9 +587,9 @@ export class AkrobudVerificationService {
   }
 
   /**
-   * Pobiera zlecenia z dostawy
+   * Pobiera zlecenia z dostawy w formacie dla komparatora
    */
-  private async getDeliveryOrders(deliveryId: number) {
+  private async getDeliveryOrders(deliveryId: number): Promise<DeliveryOrderItem[]> {
     const delivery = await this.prisma.delivery.findUnique({
       where: { id: deliveryId },
       include: {
@@ -555,234 +613,18 @@ export class AkrobudVerificationService {
     return delivery?.deliveryOrders ?? [];
   }
 
-  /**
-   * Porównuje listę weryfikacyjną z dostawą
-   */
-  private async compareListWithDelivery(
-    list: Awaited<ReturnType<typeof this.repository.findById>>,
-    delivery: { id: number; deliveryNumber: string | null; status: string } | null,
-    deliveryOrders: Array<{
-      orderId: number;
-      position: number;
-      order: {
-        id: number;
-        orderNumber: string;
-        client: string | null;
-        project: string | null;
-        status: string;
-      };
-    }>,
-    needsDeliveryCreation: boolean
-  ): Promise<VerificationResult> {
-    const matched: MatchedItem[] = [];
-    const missing: MissingItem[] = [];
-    const notFound: NotFoundItem[] = [];
-
-    // Zbiór orderIds z dostawy
-    const deliveryOrderIds = new Set(deliveryOrders.map(d => d.orderId));
-    const deliveryOrderNumbersNormalized = new Map<string, typeof deliveryOrders[0]>();
-
-    for (const d of deliveryOrders) {
-      // Normalizuj numer do porównania (bez sufiksu)
-      const parsed = this.csvParser.parseOrderNumber(d.order.orderNumber);
-      deliveryOrderNumbersNormalized.set(parsed.base, d);
-      deliveryOrderNumbersNormalized.set(d.order.orderNumber, d);
-    }
-
-    // Zbiór orderIds dopasowanych z listy (do wykrywania excess)
-    const matchedOrderIds = new Set<number>();
-
-    // Przetwórz każdy element listy
-    for (const item of list!.items) {
-      const orderNumberInput = item.orderNumberInput;
-      const orderNumberBase = item.orderNumberBase ?? orderNumberInput;
-
-      // Szukaj zlecenia w bazie
-      const matchResult = await this.findMatchingOrder(orderNumberInput, orderNumberBase);
-
-      if (!matchResult) {
-        // Nie znaleziono w systemie
-        notFound.push({
-          itemId: item.id,
-          orderNumberInput,
-          position: item.position,
-        });
-        continue;
-      }
-
-      const { order, matchStatus } = matchResult;
-      matchedOrderIds.add(order.id);
-
-      // Sprawdź czy jest w dostawie
-      const isInDelivery = deliveryOrderIds.has(order.id);
-
-      if (isInDelivery) {
-        // Dopasowane - jest na liście i w dostawie
-        matched.push({
-          itemId: item.id,
-          orderNumberInput,
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          client: order.client,
-          project: order.project,
-          position: item.position,
-          matchStatus,
-        });
-      } else {
-        // Brakuje w dostawie - jest na liście, ale nie w dostawie
-        missing.push({
-          itemId: item.id,
-          orderNumberInput,
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          client: order.client,
-          project: order.project,
-          position: item.position,
-        });
-      }
-    }
-
-    // Znajdź nadmiarowe (są w dostawie, ale nie na liście)
-    const excess: ExcessItem[] = [];
-    for (const d of deliveryOrders) {
-      if (!matchedOrderIds.has(d.orderId)) {
-        excess.push({
-          orderId: d.orderId,
-          orderNumber: d.order.orderNumber,
-          client: d.order.client,
-          project: d.order.project,
-          deliveryPosition: d.position,
-        });
-      }
-    }
-
-    // Wykryj duplikaty na liście (bazując na orderNumberBase)
-    const duplicates = this.findDuplicatesOnList(list!.items);
-
-    return {
-      listId: list!.id,
-      deliveryDate: list!.deliveryDate,
-      delivery: delivery
-        ? {
-            id: delivery.id,
-            deliveryNumber: delivery.deliveryNumber,
-            status: delivery.status,
-          }
-        : null,
-      needsDeliveryCreation,
-      matched,
-      missing,
-      excess,
-      notFound,
-      duplicates,
-      summary: {
-        totalItems: list!.items.length,
-        matchedCount: matched.length,
-        missingCount: missing.length,
-        excessCount: excess.length,
-        notFoundCount: notFound.length,
-        duplicatesCount: duplicates.length,
-      },
-    };
-  }
-
-  /**
-   * Szuka dopasowanego zlecenia w bazie
-   * Najpierw dokładne dopasowanie, potem po base
-   */
-  private async findMatchingOrder(
-    orderNumberInput: string,
-    orderNumberBase: string
-  ): Promise<{
-    order: { id: number; orderNumber: string; client: string | null; project: string | null };
-    matchStatus: 'found' | 'variant_match';
-  } | null> {
-    // 1. Szukaj dokładnego dopasowania
-    const exactMatch = await this.prisma.order.findUnique({
-      where: { orderNumber: orderNumberInput },
-      select: {
-        id: true,
-        orderNumber: true,
-        client: true,
-        project: true,
-      },
-    });
-
-    if (exactMatch) {
-      return { order: exactMatch, matchStatus: 'found' };
-    }
-
-    // 2. Szukaj po bazie (bez sufiksu)
-    if (orderNumberBase !== orderNumberInput) {
-      const baseMatch = await this.prisma.order.findUnique({
-        where: { orderNumber: orderNumberBase },
-        select: {
-          id: true,
-          orderNumber: true,
-          client: true,
-          project: true,
-        },
-      });
-
-      if (baseMatch) {
-        return { order: baseMatch, matchStatus: 'variant_match' };
-      }
-    }
-
-    // 3. Szukaj wariantów (np. input="52341" szuka "52341-a", "52341a" itd.)
-    const variants = await this.prisma.order.findMany({
-      where: {
-        OR: [
-          { orderNumber: { startsWith: `${orderNumberBase}-` } },
-          { orderNumber: { startsWith: orderNumberBase, contains: orderNumberBase } },
-        ],
-      },
-      select: {
-        id: true,
-        orderNumber: true,
-        client: true,
-        project: true,
-      },
-      take: 1,
-    });
-
-    if (variants.length > 0) {
-      return { order: variants[0], matchStatus: 'variant_match' };
-    }
-
-    return null;
-  }
-
-  /**
-   * Wykrywa duplikaty na liście (po orderNumberBase)
-   */
-  private findDuplicatesOnList(
-    items: Array<{ orderNumberInput: string; orderNumberBase: string | null; position: number }>
-  ): DuplicateItem[] {
-    const baseToPositions = new Map<string, number[]>();
-
-    for (const item of items) {
-      const base = item.orderNumberBase ?? item.orderNumberInput;
-      if (!baseToPositions.has(base)) {
-        baseToPositions.set(base, []);
-      }
-      baseToPositions.get(base)!.push(item.position);
-    }
-
-    const duplicates: DuplicateItem[] = [];
-    for (const [orderNumber, positions] of baseToPositions.entries()) {
-      if (positions.length > 1) {
-        duplicates.push({ orderNumber, positions });
-      }
-    }
-
-    return duplicates;
-  }
+  // ===================
+  // Private Methods - Match Status Updates
+  // ===================
 
   /**
    * Aktualizuje statusy dopasowania w bazie
    */
-  private async updateMatchStatuses(result: VerificationResult) {
+  private async updateMatchStatuses(result: {
+    matched: MatchedItem[];
+    missing: MissingItem[];
+    notFound: NotFoundItem[];
+  }) {
     const updates: Array<{
       itemId: number;
       matchStatus: string;
@@ -819,124 +661,5 @@ export class AkrobudVerificationService {
     if (updates.length > 0) {
       await this.repository.batchUpdateMatchStatus(updates);
     }
-  }
-
-  // ===================
-  // Apply Changes
-  // ===================
-
-  /**
-   * Aplikuje zmiany - dodaje brakujące i/lub usuwa nadmiarowe zlecenia z dostawy
-   */
-  async applyChanges(
-    listId: number,
-    addMissing: number[],
-    removeExcess: number[]
-  ): Promise<ApplyChangesResult> {
-    const list = await this.repository.findById(listId);
-    if (!list) {
-      throw new NotFoundError('Lista weryfikacyjna');
-    }
-
-    if (!list.deliveryId) {
-      throw new ValidationError('Lista nie jest połączona z dostawą. Najpierw uruchom weryfikację.');
-    }
-
-    const deliveryId = list.deliveryId;
-    const delivery = await this.prisma.delivery.findUnique({
-      where: { id: deliveryId },
-    });
-
-    if (!delivery) {
-      throw new NotFoundError('Dostawa');
-    }
-
-    const added: number[] = [];
-    const removed: number[] = [];
-    const errors: Array<{ orderId: number; reason: string }> = [];
-
-    logger.info('Aplikowanie zmian weryfikacji', {
-      listId,
-      deliveryId,
-      addMissing,
-      removeExcess,
-    });
-
-    // Dodaj brakujące
-    for (const orderId of addMissing) {
-      try {
-        await this.deliveryOrderService.addOrderToDelivery(
-          deliveryId,
-          orderId,
-          delivery.deliveryNumber ?? undefined
-        );
-        added.push(orderId);
-      } catch (error) {
-        errors.push({
-          orderId,
-          reason: error instanceof Error ? error.message : 'Nieznany błąd',
-        });
-      }
-    }
-
-    // Usuń nadmiarowe
-    for (const orderId of removeExcess) {
-      try {
-        await this.deliveryOrderService.removeOrderFromDelivery(deliveryId, orderId);
-        removed.push(orderId);
-      } catch (error) {
-        errors.push({
-          orderId,
-          reason: error instanceof Error ? error.message : 'Nieznany błąd',
-        });
-      }
-    }
-
-    // Zaktualizuj status listy
-    if (added.length > 0 || removed.length > 0) {
-      await this.repository.update(listId, { status: 'applied' });
-    }
-
-    logger.info('Zmiany weryfikacji zastosowane', {
-      listId,
-      added: added.length,
-      removed: removed.length,
-      errors: errors.length,
-    });
-
-    return { added, removed, errors };
-  }
-
-  // ===================
-  // Text Parsing
-  // ===================
-
-  /**
-   * Parsuje tekst z textarea na listę numerów zleceń
-   * Obsługuje różne separatory: nowa linia, przecinek, średnik, tab
-   */
-  parseTextareaInput(text: string): string[] {
-    if (!text || text.trim().length === 0) {
-      return [];
-    }
-
-    // Podziel po różnych separatorach
-    const parts = text
-      .split(/[\n\r,;\t]+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
-
-    // Usuń duplikaty zachowując kolejność
-    const seen = new Set<string>();
-    const result: string[] = [];
-
-    for (const part of parts) {
-      if (!seen.has(part)) {
-        seen.add(part);
-        result.push(part);
-      }
-    }
-
-    return result;
   }
 }

@@ -1,9 +1,18 @@
 /**
  * Delivery Repository - Database access layer
+ *
+ * Odpowiedzialność:
+ * - TYLKO operacje na bazie danych (CRUD)
+ * - Proste zapytania findById, findMany, create, update, delete
+ * - Operacje na relacjach DeliveryOrder, DeliveryItem
+ *
+ * UWAGA: Logika biznesowa (święta, dni robocze, kalendarz) została przeniesiona do:
+ * - CalendarService (apps/api/src/services/calendar/CalendarService.ts)
+ * - EasterCalculator (apps/api/src/services/calendar/utils/EasterCalculator.ts)
  */
 
 import { PrismaClient, Prisma } from '@prisma/client';
-import { PaginationParams, PaginatedResponse } from '../validators/common';
+import { PaginationParams, PaginatedResponse } from '../validators/common.js';
 
 export interface DeliveryFilters {
   from?: Date;
@@ -13,6 +22,10 @@ export interface DeliveryFilters {
 
 export class DeliveryRepository {
   constructor(private prisma: PrismaClient) {}
+
+  // ===================
+  // Basic CRUD Operations
+  // ===================
 
   async findAll(filters: DeliveryFilters = {}, pagination?: PaginationParams): Promise<PaginatedResponse<any>> {
     const where: Prisma.DeliveryWhereInput = {};
@@ -198,6 +211,10 @@ export class DeliveryRepository {
     });
   }
 
+  // ===================
+  // DeliveryOrder Operations
+  // ===================
+
   async addOrderToDelivery(deliveryId: number, orderId: number, position: number) {
     return this.prisma.deliveryOrder.create({
       data: {
@@ -286,11 +303,7 @@ export class DeliveryRepository {
       })
     );
 
-    try {
-      await this.prisma.$transaction(updates);
-    } catch (error) {
-      throw new Error(`Failed to reorder delivery orders: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    await this.prisma.$transaction(updates);
   }
 
   async moveOrderBetweenDeliveries(
@@ -340,6 +353,10 @@ export class DeliveryRepository {
     });
   }
 
+  // ===================
+  // DeliveryItem Operations
+  // ===================
+
   async addItem(deliveryId: number, data: { itemType: string; description: string; quantity: number }) {
     return this.prisma.deliveryItem.create({
       data: {
@@ -354,6 +371,10 @@ export class DeliveryRepository {
       where: { id: itemId },
     });
   }
+
+  // ===================
+  // Query Methods (for Services)
+  // ===================
 
   async getDeliveryOrders(deliveryId: number) {
     return this.prisma.delivery.findUnique({
@@ -380,6 +401,7 @@ export class DeliveryRepository {
 
   /**
    * Get calendar data for a specific month/year
+   * Zwraca dostawy i nieprzypisane zlecenia dla widoku kalendarza
    */
   async getCalendarData(year: number, month: number) {
     const startDate = new Date(year, month - 1, 1);
@@ -633,6 +655,7 @@ export class DeliveryRepository {
 
   /**
    * Get working days for a specific month/year
+   * Pobiera z bazy danych (override dni roboczych)
    */
   async getWorkingDays(month: number, year: number) {
     const startDate = new Date(year, month - 1, 1);
@@ -646,100 +669,5 @@ export class DeliveryRepository {
         },
       },
     });
-  }
-
-  /**
-   * Get holidays for a specific year
-   */
-  async getHolidays(year: number) {
-    // Polish fixed holidays
-    const POLISH_HOLIDAYS = [
-      { month: 1, day: 1, name: 'Nowy Rok' },
-      { month: 1, day: 6, name: 'Trzech Króli' },
-      { month: 5, day: 1, name: 'Święto Pracy' },
-      { month: 5, day: 3, name: 'Święto Konstytucji 3 Maja' },
-      { month: 8, day: 15, name: 'Wniebowzięcie NMP' },
-      { month: 11, day: 1, name: 'Wszystkich Świętych' },
-      { month: 11, day: 11, name: 'Narodowe Święto Niepodległości' },
-      { month: 12, day: 25, name: 'Boże Narodzenie' },
-      { month: 12, day: 26, name: 'Drugi dzień Bożego Narodzenia' },
-    ];
-
-    const holidays = [];
-
-    // Add fixed holidays
-    for (const holiday of POLISH_HOLIDAYS) {
-      holidays.push({
-        date: new Date(year, holiday.month - 1, holiday.day),
-        name: holiday.name,
-        country: 'PL',
-        isWorking: false,
-      });
-    }
-
-    // Calculate Easter and movable holidays
-    const easter = this.calculateEaster(year);
-
-    // Easter Sunday
-    holidays.push({
-      date: new Date(easter),
-      name: 'Niedziela Wielkanocna',
-      country: 'PL',
-      isWorking: false,
-    });
-
-    // Easter Monday
-    const easterMonday = new Date(easter);
-    easterMonday.setDate(easter.getDate() + 1);
-    holidays.push({
-      date: easterMonday,
-      name: 'Poniedziałek Wielkanocny',
-      country: 'PL',
-      isWorking: false,
-    });
-
-    // Pentecost (49 days after Easter)
-    const pentecost = new Date(easter);
-    pentecost.setDate(easter.getDate() + 49);
-    holidays.push({
-      date: pentecost,
-      name: 'Zielone Świątki',
-      country: 'PL',
-      isWorking: false,
-    });
-
-    // Corpus Christi (60 days after Easter)
-    const corpusChristi = new Date(easter);
-    corpusChristi.setDate(easter.getDate() + 60);
-    holidays.push({
-      date: corpusChristi,
-      name: 'Boże Ciało',
-      country: 'PL',
-      isWorking: false,
-    });
-
-    return holidays;
-  }
-
-  /**
-   * Calculate Easter date using Meeus algorithm
-   */
-  private calculateEaster(year: number): Date {
-    const a = year % 19;
-    const b = Math.floor(year / 100);
-    const c = year % 100;
-    const d = Math.floor(b / 4);
-    const e = b % 4;
-    const f = Math.floor((b + 8) / 25);
-    const g = Math.floor((b - f + 1) / 3);
-    const h = (19 * a + b - d - g + 15) % 30;
-    const i = Math.floor(c / 4);
-    const k = c % 4;
-    const l = (32 + 2 * e + 2 * i - h - k) % 7;
-    const m = Math.floor((a + 11 * h + 22 * l) / 451);
-    const month = Math.floor((h + l - 7 * m + 114) / 31);
-    const day = ((h + l - 7 * m + 114) % 31) + 1;
-
-    return new Date(year, month - 1, day);
   }
 }

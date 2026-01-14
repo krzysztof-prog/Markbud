@@ -470,6 +470,50 @@ describe('DeliveryService', () => {
 
 ---
 
+## 🕐 Strefy czasowe i daty
+
+### ❌ DON'T - Używaj toISOString() do formatowania dat lokalnych
+```typescript
+// ❌ ŹLE - toISOString() zwraca datę w UTC!
+const dateKey = entry.date.toISOString().split('T')[0];
+// Wpis z 14 stycznia 00:00 CET → "2026-01-13" (bo UTC-1)!
+
+// ❌ ŹLE - new Date().toISOString() też
+const today = new Date().toISOString().split('T')[0];
+```
+
+**Konsekwencja:** Kalendarz pokazuje wpisy pod ZŁYM dniem (poprzedni dzień w UTC).
+
+### ✅ DO - Używaj lokalnych metod getFullYear/getMonth/getDate
+```typescript
+// ✅ POPRAWNIE - formatowanie lokalnej daty
+const d = entry.date;
+const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// Wpis z 14 stycznia 00:00 CET → "2026-01-14" (poprawnie!)
+
+// ✅ POPRAWNIE - helper function
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+```
+
+**Gdzie sprawdzić:** Problem naprawiony w [apps/api/src/services/timesheetsService.ts](apps/api/src/services/timesheetsService.ts)
+
+**Kiedy używać UTC:**
+- Przechowywanie w bazie (Prisma robi to automatycznie)
+- API responses (standard ISO 8601)
+- Porównywanie dat między strefami czasowymi
+
+**Kiedy używać lokalnej daty:**
+- Wyświetlanie użytkownikowi
+- Grupowanie po dniu (kalendarz, raporty)
+- Filtrowanie "dzisiejsze wpisy"
+
+---
+
 ## 📱 Responsive Design
 
 ### ❌ DON'T - Tabele na mobile bez dostosowania

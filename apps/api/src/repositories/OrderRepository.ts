@@ -9,6 +9,7 @@ export interface OrderFilters {
   status?: string;
   archived?: string;
   colorId?: string;
+  documentAuthorUserId?: string;
 }
 
 export class OrderRepository {
@@ -33,6 +34,10 @@ export class OrderRepository {
           colorId: parseInt(filters.colorId),
         },
       };
+    }
+
+    if (filters.documentAuthorUserId) {
+      where.documentAuthorUserId = parseInt(filters.documentAuthorUserId);
     }
 
     // Run count and findMany in parallel using transaction
@@ -184,6 +189,19 @@ export class OrderRepository {
         },
         orderNotes: {
           select: { id: true, content: true, createdAt: true },
+        },
+        glasses: {
+          select: {
+            id: true,
+            lp: true,
+            position: true,
+            widthMm: true,
+            heightMm: true,
+            quantity: true,
+            packageType: true,
+            areaSqm: true,
+          },
+          orderBy: { lp: 'asc' },
         },
         schucoLinks: {
           select: {
@@ -531,5 +549,57 @@ export class OrderRepository {
       orderBy: { createdAt: 'desc' },
       take: 50, // Max 50 wyników
     });
+  }
+
+  /**
+   * Get completeness statistics for operator dashboard
+   * Calculates how many orders (assigned to user) have:
+   * - Files attached
+   * - Glass ordered/delivered
+   * - Hardware (okuc) available
+   * - Ready for production (all complete)
+   */
+  async getCompletenessStats(userId: number) {
+    const orders = await this.prisma.order.findMany({
+      where: {
+        documentAuthorUserId: userId,
+        archivedAt: null,
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        glassOrderStatus: true,
+        okucDemandStatus: true,
+      },
+    });
+
+    const totalOrders = orders.length;
+    // TODO: Dodać relację files do modelu Order gdy będzie potrzebna
+    const withFiles = 0;
+
+    // Glass status: ordered lub delivered
+    const withGlass = orders.filter(
+      (o) => o.glassOrderStatus === 'ordered' || o.glassOrderStatus === 'delivered'
+    ).length;
+
+    // Okuc status: available lub ordered
+    const withHardware = orders.filter(
+      (o) => o.okucDemandStatus === 'available' || o.okucDemandStatus === 'ordered'
+    ).length;
+
+    // Ready for production: glass delivered + hardware available
+    const readyForProduction = orders.filter(
+      (o) =>
+        o.glassOrderStatus === 'delivered' &&
+        o.okucDemandStatus === 'available'
+    ).length;
+
+    return {
+      totalOrders,
+      withFiles,
+      withGlass,
+      withHardware,
+      readyForProduction,
+    };
   }
 }

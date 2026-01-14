@@ -56,6 +56,46 @@ export type { ParserComparisonResult } from './feature-flags.js';
 // CSV Import Service
 export { CsvImportService, createCsvImportService } from './csvImportService.js';
 
+// CSV Validators
+export {
+  CsvRowValidator,
+  csvRowValidator,
+  articleNumberSchema,
+  orderNumberSchema,
+  requirementRowSchema,
+  windowRowSchema,
+} from './validators/CsvRowValidator.js';
+export type { RowValidationResult } from './validators/CsvRowValidator.js';
+
+// CSV Transformers
+export {
+  CsvDataTransformer,
+  csvDataTransformer,
+} from './transformers/CsvDataTransformer.js';
+export type {
+  ArticleNumberParsed,
+  RawRequirementRow,
+  RawWindowRow,
+  OrderMetadata,
+} from './transformers/CsvDataTransformer.js';
+
+// CSV Utils
+export {
+  OrderNumberParser,
+  orderNumberParser,
+  orderNumberValidationSchema,
+} from './utils/OrderNumberParser.js';
+export type { OrderNumberValidationResult } from './utils/OrderNumberParser.js';
+
+export {
+  CurrencyConverter,
+  currencyConverter,
+  parseSchucoEurAmount,
+  parsePlnAmount,
+  schucoEurAmountSchema,
+} from './utils/CurrencyConverter.js';
+export type { CurrencyConversionResult } from './utils/CurrencyConverter.js';
+
 // PDF Import Service
 export { PdfImportService, createPdfImportService } from './pdfImportService.js';
 

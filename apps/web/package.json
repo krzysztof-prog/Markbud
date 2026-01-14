@@ -1,5 +1,5 @@
 {
-  "name": "@akrobud/web",
+  "name": "@markbud/web",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -12,6 +12,7 @@
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
+    "@markbud/shared": "workspace:*",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -31,6 +32,7 @@
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slider": "^1.3.6",
     "@radix-ui/react-slot": "^1.0.2",
+    "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.0.4",
     "@radix-ui/react-toast": "^1.1.5",
     "@radix-ui/react-tooltip": "^1.0.7",

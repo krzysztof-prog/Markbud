@@ -1,15 +1,11 @@
 /**
  * CSV Import Service
  *
- * Handles parsing and processing of CSV files for order imports.
- * This is a refactored version of the CsvParser class with improved:
- * - Error handling
- * - Type safety
- * - Testability
- * - Separation of concerns
+ * Orkiestrator importu plikow CSV "uzyte bele".
+ * Deleguje walidacje, transformacje i konwersje do wyspecjalizowanych klas.
  *
- * IMPORTANT: This service is behind a feature flag.
- * Enable with ENABLE_NEW_CSV_PARSER=true or ENABLE_NEW_PARSERS=true
+ * WAZNE: Ten serwis jest za feature flag.
+ * Wlacz przez ENABLE_NEW_CSV_PARSER=true lub ENABLE_NEW_PARSERS=true
  */
 
 import fs from 'fs';
@@ -25,7 +21,12 @@ import type {
   OrderNumberParsed,
   ParserServiceConfig,
 } from './types.js';
-import { BEAM_LENGTH_MM, REST_ROUNDING_MM } from './types.js';
+
+// Import wyodrebnionych klas
+import { CsvRowValidator } from './validators/CsvRowValidator.js';
+import { CsvDataTransformer } from './transformers/CsvDataTransformer.js';
+import { OrderNumberParser } from './utils/OrderNumberParser.js';
+import { CurrencyConverter } from './utils/CurrencyConverter.js';
 
 // Typ dla transakcji Prisma
 type PrismaTransaction = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
@@ -33,190 +34,83 @@ type PrismaTransaction = Parameters<Parameters<PrismaClient['$transaction']>[0]>
 /**
  * CSV Import Service Implementation
  *
- * Provides methods for parsing and processing "uzyte bele" CSV files.
- * Extracted from the monolithic CsvParser for better maintainability.
+ * Orkiestruje parsowanie i przetwarzanie plikow CSV "uzyte bele".
+ * Deleguje szczegolowa logike do wyspecjalizowanych klas:
+ * - CsvRowValidator - walidacja wierszy
+ * - CsvDataTransformer - transformacja danych
+ * - OrderNumberParser - parsowanie numerow zlecen
+ * - CurrencyConverter - konwersja walut
  */
 export class CsvImportService implements ICsvImportService {
   private prisma: PrismaClient;
   private debug: boolean;
 
+  // Wyspecjalizowane klasy pomocnicze
+  private validator: CsvRowValidator;
+  private transformer: CsvDataTransformer;
+  private orderNumberParser: OrderNumberParser;
+  private currencyConverter: CurrencyConverter;
+
   constructor(config: ParserServiceConfig) {
     this.prisma = config.prisma;
     this.debug = config.debug ?? false;
+
+    // Inicjalizacja klas pomocniczych
+    this.validator = new CsvRowValidator();
+    this.transformer = new CsvDataTransformer();
+    this.orderNumberParser = new OrderNumberParser();
+    this.currencyConverter = new CurrencyConverter();
   }
 
   /**
-   * Parse EUR amount from Schuco format
-   * Converts "62,30 EUR" to 62.30
-   * Converts "2 321,02 EUR" to 2321.02
+   * Parsuje kwote EUR z formatu Schuco
+   * Deleguje do CurrencyConverter
    */
   parseEurAmountFromSchuco(amountStr: string): number | null {
-    if (!amountStr) return null;
-
-    try {
-      // Remove currency symbol and spaces
-      let cleaned = amountStr.replace(/€/g, '').replace(/EUR/gi, '').trim();
-
-      // Remove thousands separator (space)
-      cleaned = cleaned.replace(/\s/g, '');
-
-      // Replace comma with dot for decimal separator
-      cleaned = cleaned.replace(/,/g, '.');
-
-      const amount = parseFloat(cleaned);
-      return isNaN(amount) ? null : amount;
-    } catch {
-      return null;
-    }
+    return this.currencyConverter.parseEurFromSchuco(amountStr);
   }
 
   /**
-   * Parse order number into base and suffix components
-   *
-   * Examples:
-   * - "54222" -> { base: "54222", suffix: null }
-   * - "54222-a" -> { base: "54222", suffix: "a" }
-   * - "54222a" -> { base: "54222", suffix: "a" }
-   * - "54222-abc" -> { base: "54222", suffix: "abc" }
-   * - "54222 xxx" -> { base: "54222", suffix: "xxx" }
+   * Parsuje numer zlecenia na skladowe: baza i sufiks
+   * Deleguje do OrderNumberParser
    */
   parseOrderNumber(orderNumber: string): OrderNumberParsed {
-    // Basic validation
-    if (!orderNumber || orderNumber.trim().length === 0) {
-      throw new Error('Numer zlecenia nie moze byc pusty');
-    }
-
-    const trimmed = orderNumber.trim();
-
-    // Length limit
-    if (trimmed.length > 20) {
-      throw new Error('Numer zlecenia zbyt dlugi (max 20 znakow)');
-    }
-
-    // Pattern 1: digits + separator (dash/space) + 1-3 alphanumeric chars
-    const matchWithSeparator = trimmed.match(/^(\d+)[-\s]([a-zA-Z0-9]{1,3})$/);
-    // Pattern 2: digits + 1-3 letters WITHOUT separator (format "54222a")
-    const matchWithoutSeparator = trimmed.match(/^(\d+)([a-zA-Z]{1,3})$/);
-    // Pattern 3: just digits
-    const matchPlain = trimmed.match(/^(\d+)$/);
-
-    if (matchWithSeparator) {
-      const [, base, suffix] = matchWithSeparator;
-      return { base, suffix, full: trimmed };
-    }
-
-    if (matchWithoutSeparator) {
-      const [, base, suffix] = matchWithoutSeparator;
-      return { base, suffix, full: trimmed };
-    }
-
-    if (matchPlain) {
-      const [, base] = matchPlain;
-      return { base, suffix: null, full: trimmed };
-    }
-
-    // Invalid format - throw error instead of fallback
-    throw new Error(
-      `Nieprawidlowy format numeru zlecenia: "${trimmed}". ` +
-      `Oczekiwany format: cyfry lub cyfry-sufiks (np. "54222" lub "54222-a")`
-    );
+    return this.orderNumberParser.parse(orderNumber);
   }
 
   /**
-   * Parse article number into profile number and color code
-   * Format: X-profil-kolor, e.g., 19016050 -> 9016 = profile, 050 = color
-   * Supports optional "p" suffix (e.g., 19016000p)
+   * Parsuje numer artykulu na numer profilu i kod koloru
+   * Deleguje do CsvDataTransformer
    */
   parseArticleNumber(articleNumber: string): { profileNumber: string; colorCode: string } {
-    if (!articleNumber || articleNumber.length < 4) {
-      throw new Error(`Nieprawidlowy numer artykulu: "${articleNumber}"`);
-    }
-
-    // Remove "p" suffix if present (e.g., "19016000p" -> "19016000")
-    const cleanedNumber = articleNumber.replace(/p$/i, '');
-
-    // Remove first character (doesn't have meaning)
-    const withoutPrefix = cleanedNumber.substring(1);
-
-    // Last 3 characters are color code
-    const colorCode = withoutPrefix.slice(-3);
-
-    // Rest is profile number
-    const profileNumber = withoutPrefix.slice(0, -3);
-
-    return { profileNumber, colorCode };
+    return this.transformer.parseArticleNumber(articleNumber);
   }
 
   /**
-   * Calculate beams and meters according to specification
-   * - Round up rest to multiple of 500mm
-   * - If rest > 0, subtract 1 from beams
-   * - rest2 = 6000mm - rounded rest -> to meters
+   * Oblicza liczbe bel i metrow wedlug specyfikacji
+   * Deleguje do CsvDataTransformer
    */
   calculateBeamsAndMeters(originalBeams: number, restMm: number): { beams: number; meters: number } {
-    // Input validation
-    if (!Number.isFinite(originalBeams) || !Number.isFinite(restMm)) {
-      throw new Error('Wartosci musza byc liczbami skonczonym');
-    }
-
-    if (originalBeams < 0) {
-      throw new Error('Liczba bel nie moze byc ujemna');
-    }
-
-    if (restMm < 0) {
-      throw new Error('Reszta nie moze byc ujemna');
-    }
-
-    if (restMm > BEAM_LENGTH_MM) {
-      throw new Error(`Reszta (${restMm}mm) nie moze byc wieksza niz dlugosc beli (${BEAM_LENGTH_MM}mm)`);
-    }
-
-    if (restMm === 0) {
-      return { beams: originalBeams, meters: 0 };
-    }
-
-    // Check if we can subtract a beam
-    if (originalBeams < 1) {
-      throw new Error('Brak bel do odjecia (oryginalna liczba < 1, ale reszta > 0)');
-    }
-
-    // Round up rest to multiple of 500mm
-    const roundedRest = Math.ceil(restMm / REST_ROUNDING_MM) * REST_ROUNDING_MM;
-
-    // Subtract 1 beam
-    const beams = originalBeams - 1;
-
-    // rest2 = 6000 - roundedRest
-    const reszta2Mm = BEAM_LENGTH_MM - roundedRest;
-
-    // Result validation (protection against calculation errors)
-    if (reszta2Mm < 0) {
-      logger.warn(`Negative reszta2Mm: ${reszta2Mm}, roundedRest: ${roundedRest}`);
-      return { beams, meters: 0 }; // Safe fallback
-    }
-
-    const meters = reszta2Mm / 1000;
-
-    return { beams, meters };
+    return this.transformer.calculateBeamsAndMeters(originalBeams, restMm);
   }
 
   /**
-   * Preview a CSV file without saving to database
+   * Podglad pliku CSV bez zapisywania do bazy
    */
   async previewUzyteBele(filepath: string): Promise<ParsedUzyteBele> {
     const parsed = await this.parseUzyteBeleFile(filepath);
 
-    // Parse order number and check for conflicts
-    const orderNumberParsed = this.parseOrderNumber(parsed.orderNumber);
+    // Parsuj numer zlecenia i sprawdz konflikty
+    const orderNumberParsed = this.orderNumberParser.parse(parsed.orderNumber);
     parsed.orderNumberParsed = orderNumberParsed;
 
-    // If order has suffix, check if base order exists
+    // Jesli zlecenie ma sufiks, sprawdz czy bazowe zlecenie istnieje
     if (orderNumberParsed.suffix) {
       const baseOrder = await this.prisma.order.findUnique({
         where: { orderNumber: orderNumberParsed.base },
       });
 
-      // Always return conflict info, even if base order doesn't exist
+      // Zawsze zwroc informacje o konflikcie, nawet jesli bazowe nie istnieje
       parsed.conflict = {
         baseOrderExists: baseOrder !== null,
         baseOrderId: baseOrder?.id,
@@ -228,11 +122,11 @@ export class CsvImportService implements ICsvImportService {
   }
 
   /**
-   * Process and save CSV data to database
+   * Przetwarza i zapisuje dane CSV do bazy
    *
-   * @param filepath - Path to CSV file
-   * @param action - 'overwrite' (overwrite existing) or 'add_new' (create new/update)
-   * @param replaceBase - If true and order has suffix, replace base order instead of creating new
+   * @param filepath - Sciezka do pliku CSV
+   * @param action - 'overwrite' (nadpisz istniejace) lub 'add_new' (utworz nowe/aktualizuj)
+   * @param replaceBase - Jesli true i zlecenie ma sufiks, zastap bazowe zlecenie
    */
   async processUzyteBele(
     filepath: string,
@@ -241,11 +135,11 @@ export class CsvImportService implements ICsvImportService {
   ): Promise<CsvProcessResult> {
     const parsed = await this.parseUzyteBeleFile(filepath);
 
-    // Parse order number (before transaction)
-    const orderNumberParsed = this.parseOrderNumber(parsed.orderNumber);
+    // Parsuj numer zlecenia (przed transakcja)
+    const orderNumberParsed = this.orderNumberParser.parse(parsed.orderNumber);
     let targetOrderNumber = parsed.orderNumber;
 
-    // If order has suffix and user wants to replace base
+    // Jesli zlecenie ma sufiks i uzytkownik chce zastapic bazowe
     if (orderNumberParsed.suffix && replaceBase) {
       targetOrderNumber = orderNumberParsed.base;
       if (this.debug) {
@@ -253,21 +147,21 @@ export class CsvImportService implements ICsvImportService {
       }
     }
 
-    // Process in transaction for atomicity
+    // Przetwarzaj w transakcji dla atomowosci
     const result = await this.processInTransaction(
       parsed,
       targetOrderNumber,
       action
     );
 
-    // Post-transaction operations (glass delivery re-matching, Schuco linking)
+    // Operacje post-transakcyjne (re-matching szklenia, linkowanie Schuco)
     await this.postProcessOrder(targetOrderNumber, result.orderId);
 
     return result;
   }
 
   /**
-   * Process order data in a database transaction
+   * Przetwarza dane zlecenia w transakcji bazodanowej
    */
   private async processInTransaction(
     parsed: ParsedUzyteBele,
@@ -276,26 +170,26 @@ export class CsvImportService implements ICsvImportService {
   ): Promise<CsvProcessResult> {
     return this.prisma.$transaction(
       async (tx) => {
-        // Find or create order
+        // Znajdz lub utworz zlecenie
         let order = await tx.order.findUnique({
           where: { orderNumber: targetOrderNumber },
         });
 
         if (order && action === 'overwrite') {
-          // Atomically delete existing requirements and windows
+          // Atomowo usun istniejace requirements i okna
           await tx.orderRequirement.deleteMany({
             where: { orderId: order.id },
           });
           await tx.orderWindow.deleteMany({
             where: { orderId: order.id },
           });
-          // Update order with new CSV data
+          // Zaktualizuj zlecenie nowymi danymi CSV
           order = await tx.order.update({
             where: { id: order.id },
             data: this.buildOrderUpdateData(parsed),
           });
         } else if (!order) {
-          // Create new order
+          // Utworz nowe zlecenie
           const eurValue = await this.getEurValueFromSchuco(tx, targetOrderNumber);
           const pendingPrice = await this.getPendingPrice(tx, targetOrderNumber);
 
@@ -306,7 +200,7 @@ export class CsvImportService implements ICsvImportService {
             },
           });
 
-          // Mark pending price as applied
+          // Oznacz pending price jako zastosowana
           if (pendingPrice) {
             await tx.pendingOrderPrice.update({
               where: { id: pendingPrice.id },
@@ -319,17 +213,17 @@ export class CsvImportService implements ICsvImportService {
             logger.info(`Applied pending price to order ${targetOrderNumber} (ID: ${order.id})`);
           }
         } else if (action === 'add_new') {
-          // Update existing order with new CSV data
+          // Zaktualizuj istniejace zlecenie nowymi danymi CSV
           order = await tx.order.update({
             where: { id: order.id },
             data: this.buildOrderUpdateData(parsed),
           });
         }
 
-        // Add requirements - batch fetch profiles and colors first to avoid N+1
+        // Dodaj requirements - batch fetch profili i kolorow aby uniknac N+1
         await this.processRequirementsBatch(tx, order.id, parsed.requirements);
 
-        // Add windows
+        // Dodaj okna
         for (const win of parsed.windows) {
           await tx.orderWindow.create({
             data: {
@@ -349,17 +243,17 @@ export class CsvImportService implements ICsvImportService {
           windowsCount: parsed.windows.length,
         };
       },
-      { timeout: 30000 } // 30s for large imports
+      { timeout: 30000 } // 30s dla duzych importow
     );
   }
 
   /**
-   * Build order update data from parsed CSV
+   * Buduje dane aktualizacji zlecenia z sparsowanego CSV
    */
   private buildOrderUpdateData(parsed: ParsedUzyteBele) {
     return {
       client: parsed.client || undefined,
-      // Fix: Empty string should be null, not undefined
+      // Fix: Pusty string powinien byc null, nie undefined
       project: parsed.project?.trim() || null,
       system: parsed.system?.trim() || null,
       deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
@@ -371,7 +265,7 @@ export class CsvImportService implements ICsvImportService {
   }
 
   /**
-   * Build order create data from parsed CSV
+   * Buduje dane tworzenia zlecenia z sparsowanego CSV
    */
   private buildOrderCreateData(
     parsed: ParsedUzyteBele,
@@ -391,7 +285,7 @@ export class CsvImportService implements ICsvImportService {
 
     return {
       client: parsed.client || undefined,
-      // Fix: Empty string should be null, not undefined
+      // Fix: Pusty string powinien byc null, nie undefined
       project: parsed.project?.trim() || null,
       system: parsed.system?.trim() || null,
       deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
@@ -405,7 +299,7 @@ export class CsvImportService implements ICsvImportService {
   }
 
   /**
-   * Get EUR value from linked Schuco delivery
+   * Pobiera wartosc EUR z polaczonej dostawy Schuco
    */
   private async getEurValueFromSchuco(
     tx: PrismaTransaction,
@@ -423,7 +317,9 @@ export class CsvImportService implements ICsvImportService {
     });
 
     if (schucoLink?.schucoDelivery?.totalAmount) {
-      const parsedAmount = this.parseEurAmountFromSchuco(schucoLink.schucoDelivery.totalAmount);
+      const parsedAmount = this.currencyConverter.parseEurFromSchuco(
+        schucoLink.schucoDelivery.totalAmount
+      );
       return parsedAmount ?? undefined;
     }
 
@@ -431,7 +327,7 @@ export class CsvImportService implements ICsvImportService {
   }
 
   /**
-   * Get pending price for order
+   * Pobiera oczekujaca cene dla zlecenia
    */
   private async getPendingPrice(
     tx: PrismaTransaction,
@@ -447,11 +343,11 @@ export class CsvImportService implements ICsvImportService {
   }
 
   /**
-   * Process requirements in batch to avoid N+1 query problem
-   * Instead of 3+ queries per requirement, we do:
-   * - 1 batch query for all profiles
-   * - 1 batch query for all colors
-   * - N upserts for requirements (unavoidable with upsert logic)
+   * Przetwarza requirements batch'em aby uniknac problemu N+1 queries
+   * Zamiast 3+ zapytan na requirement, robimy:
+   * - 1 zapytanie batch dla wszystkich profili
+   * - 1 zapytanie batch dla wszystkich kolorow
+   * - N upsertow dla requirements (nieuniknione z logika upsert)
    */
   private async processRequirementsBatch(
     tx: PrismaTransaction,
@@ -465,7 +361,7 @@ export class CsvImportService implements ICsvImportService {
     const articleNumbers = [...new Set(requirements.map(r => r.articleNumber).filter(Boolean))];
     const colorCodes = [...new Set(requirements.map(r => r.colorCode).filter(Boolean))];
 
-    // Batch fetch profiles - jedno zapytanie zamiast N
+    // Batch fetch profili - jedno zapytanie zamiast N
     const profiles = await tx.profile.findMany({
       where: {
         OR: [
@@ -481,13 +377,13 @@ export class CsvImportService implements ICsvImportService {
       profiles.filter(p => p.articleNumber).map(p => [p.articleNumber!, p])
     );
 
-    // Batch fetch colors - jedno zapytanie zamiast N
+    // Batch fetch kolorow - jedno zapytanie zamiast N
     const colors = await tx.color.findMany({
       where: { code: { in: colorCodes } },
     });
     const colorByCode = new Map(colors.map(c => [c.code, c]));
 
-    // Zbieramy profile do utworzenia i do aktualizacji
+    // Zbieramy profile do utworzenia i aktualizacji
     const profilesToCreate: Array<{ number: string; name: string; articleNumber: string }> = [];
     const profilesToUpdate: Array<{ id: number; articleNumber: string }> = [];
 
@@ -500,7 +396,7 @@ export class CsvImportService implements ICsvImportService {
       }
 
       if (!profile) {
-        // Profile nie istnieje - dodajemy do listy do utworzenia
+        // Profil nie istnieje - dodajemy do listy do utworzenia
         // Sprawdzamy czy juz nie dodalismy tego samego profilu
         const alreadyToCreate = profilesToCreate.find(p => p.number === req.profileNumber);
         if (!alreadyToCreate) {
@@ -630,90 +526,14 @@ export class CsvImportService implements ICsvImportService {
   }
 
   /**
-   * Upsert a requirement for an order
-   * @deprecated Use processRequirementsBatch instead to avoid N+1 queries
-   */
-  private async upsertRequirement(
-    tx: PrismaTransaction,
-    orderId: number,
-    req: ParsedRequirement
-  ): Promise<void> {
-    // Find or create profile with articleNumber
-    let profile = await tx.profile.findUnique({
-      where: { number: req.profileNumber },
-    });
-
-    if (!profile) {
-      // Try to find by articleNumber
-      profile = await tx.profile.findUnique({
-        where: { articleNumber: req.articleNumber },
-      });
-
-      if (!profile) {
-        // Create new profile if doesn't exist
-        profile = await tx.profile.create({
-          data: {
-            number: req.profileNumber,
-            name: req.profileNumber,
-            articleNumber: req.articleNumber,
-          },
-        });
-        if (this.debug) {
-          logger.info(`Created new profile ${req.profileNumber} with article number ${req.articleNumber}`);
-        }
-      }
-    } else if (!profile.articleNumber) {
-      // If profile exists but has no articleNumber, update it
-      profile = await tx.profile.update({
-        where: { id: profile.id },
-        data: { articleNumber: req.articleNumber },
-      });
-    }
-
-    // Find color
-    const color = await tx.color.findUnique({
-      where: { code: req.colorCode },
-    });
-
-    if (!color) {
-      logger.warn(`Color ${req.colorCode} not found, skipping`);
-      return;
-    }
-
-    // Create or update requirement
-    await tx.orderRequirement.upsert({
-      where: {
-        orderId_profileId_colorId: {
-          orderId,
-          profileId: profile.id,
-          colorId: color.id,
-        },
-      },
-      update: {
-        beamsCount: req.calculatedBeams,
-        meters: req.calculatedMeters,
-        restMm: req.originalRest,
-      },
-      create: {
-        orderId,
-        profileId: profile.id,
-        colorId: color.id,
-        beamsCount: req.calculatedBeams,
-        meters: req.calculatedMeters,
-        restMm: req.originalRest,
-      },
-    });
-  }
-
-  /**
-   * Post-process order after transaction completes
-   * - Re-match glass deliveries
-   * - Link to Schuco deliveries
+   * Post-procesowanie zlecenia po zakonczeniu transakcji
+   * - Re-match dostaw szkla
+   * - Linkowanie do dostaw Schuco
    */
   private async postProcessOrder(orderNumber: string, orderId: number): Promise<void> {
-    // Re-match unmatched glass delivery items
+    // Re-match niedopasowanych pozycji dostaw szkla
     try {
-      // Dynamic import to avoid circular dependency
+      // Dynamiczny import aby uniknac circular dependency
       const { GlassDeliveryService } = await import('../../glass-delivery/index.js');
       const glassDeliveryService = new GlassDeliveryService(this.prisma);
       const rematchResult = await glassDeliveryService.rematchUnmatchedForOrders([orderNumber]);
@@ -728,7 +548,7 @@ export class CsvImportService implements ICsvImportService {
       );
     }
 
-    // Auto-link to waiting Schuco deliveries
+    // Auto-link do oczekujacych dostaw Schuco
     try {
       const { SchucoLinkService } = await import('../../schuco/schucoLinkService.js');
       const schucoLinkService = new SchucoLinkService(this.prisma);
@@ -744,27 +564,27 @@ export class CsvImportService implements ICsvImportService {
   }
 
   /**
-   * Parse CSV "uzyte bele" file
+   * Parsuje plik CSV "uzyte bele"
    */
   private async parseUzyteBeleFile(filepath: string): Promise<ParsedUzyteBele> {
-    // Read file as buffer, then decode from Windows-1250
+    // Czytaj plik jako buffer, potem dekoduj z Windows-1250
     const buffer = await fs.promises.readFile(filepath);
 
-    // Try Windows-1250 first (Polish characters in Windows)
+    // Najpierw probuj Windows-1250 (polskie znaki w Windows)
     let content: string;
     try {
       const decoder = new TextDecoder('windows-1250');
       content = decoder.decode(buffer);
-      // Check if there are Polish characters - if not, try UTF-8
+      // Sprawdz czy sa polskie znaki - jesli nie, probuj UTF-8
       if (!content.match(/[acelnoszAcelnoszZzCN]/)) {
         content = buffer.toString('utf-8');
       }
     } catch {
-      // Fallback to UTF-8
+      // Fallback do UTF-8
       content = buffer.toString('utf-8');
     }
 
-    // Usuń UTF-8 BOM jeśli istnieje (pliki eksportowane z Excela często mają BOM)
+    // Usun UTF-8 BOM jesli istnieje (pliki eksportowane z Excela czesto maja BOM)
     content = stripBOM(content);
 
     const lines = content.split('\n').filter((line) => line.trim());
@@ -787,45 +607,40 @@ export class CsvImportService implements ICsvImportService {
       const parts = line.split(';').map((p) => p.trim());
       const lineLower = line.toLowerCase();
 
-      // Parse optional order metadata
-      this.parseMetadata(lineLower, line, {
-        setClient: (v) => { client = v; },
-        setProject: (v) => { project = v; },
-        setSystem: (v) => { system = v; },
-        setDeadline: (v) => { deadline = v; },
-        setPvcDeliveryDate: (v) => { pvcDeliveryDate = v; },
-      });
+      // Parsuj opcjonalne metadane zlecenia
+      const metadata = this.transformer.parseMetadataLine(lineLower, line);
+      if (metadata) {
+        if (metadata.client) client = metadata.client;
+        if (metadata.project) project = metadata.project;
+        if (metadata.system) system = metadata.system;
+        if (metadata.deadline) deadline = metadata.deadline;
+        if (metadata.pvcDeliveryDate) pvcDeliveryDate = metadata.pvcDeliveryDate;
+      }
 
-      // Detect transition to windows section
-      if (lineLower.includes('lista okien') || lineLower.includes('lista drzwi')) {
+      // Wykryj przejscie do sekcji okien
+      if (this.validator.isWindowsSectionStart(lineLower)) {
         currentSection = 'windows';
         windowsHeaderSkipped = false;
         continue;
       }
 
-      // Parse summary rows
-      if (lineLower.includes('laczna liczba') || lineLower.includes('laczna liczba')) {
-        const value = parseInt(parts[1]) || 0;
-        if (lineLower.includes('okien') || lineLower.includes('drzwi')) {
-          totals.windows = value;
-        } else if (lineLower.includes('skrzyd')) {
-          totals.sashes = value;
-        } else if (lineLower.includes('szyb')) {
-          totals.glasses = value;
-        }
+      // Parsuj wiersze podsumowania
+      const summary = this.transformer.parseSummaryLine(lineLower, parts);
+      if (summary) {
+        totals[summary.type] = summary.value;
         continue;
       }
 
       if (currentSection === 'requirements') {
-        // Skip requirements header
-        if (!requirementsHeaderSkipped && (parts[0]?.toLowerCase().includes('zlec') || parts[0]?.toLowerCase().includes('numer'))) {
+        // Pomin naglowek requirements
+        if (!requirementsHeaderSkipped && this.validator.isRequirementsHeader(parts)) {
           requirementsHeaderSkipped = true;
           continue;
         }
 
-        // Parse requirements row
+        // Parsuj wiersz requirement
         if (parts.length >= 4 && parts[0] && parts[1]) {
-          // First data row - extract order number
+          // Pierwszy wiersz danych - wyciagnij numer zlecenia
           if (orderNumber === 'UNKNOWN' && parts[0].match(/^\d+(?:[-\s][a-zA-Z0-9]{1,3})?$/)) {
             orderNumber = parts[0];
           }
@@ -834,73 +649,54 @@ export class CsvImportService implements ICsvImportService {
           const nowychBel = parseInt(parts[2]) || 0;
           const reszta = parseInt(parts[3]) || 0;
 
-          // Check if it looks like a valid Schüco article number
-          // Format: 8 digits + optional "p" suffix (e.g., 19016000, 19016000p)
-          // Skip non-Schüco articles (e.g., steel articles like 202620)
-          if (!numArt.match(/^\d{8}p?$/i)) {
+          // Sprawdz czy to wyglada na prawidlowy numer artykulu Schuco
+          // Format: 8 cyfr + opcjonalny suffix "p" (np. 19016000, 19016000p)
+          // Pomin artykuly nie-Schuco (np. stalowe jak 202620)
+          if (!this.validator.isRequirementRow(parts)) {
             continue;
           }
 
-          const { profileNumber, colorCode } = this.parseArticleNumber(numArt);
-          const { beams, meters } = this.calculateBeamsAndMeters(nowychBel, reszta);
-
-          requirements.push({
-            articleNumber: numArt,
-            profileNumber,
-            colorCode,
-            originalBeams: nowychBel,
-            originalRest: reszta,
-            calculatedBeams: beams,
-            calculatedMeters: meters,
-          });
+          try {
+            const requirement = this.transformer.transformRequirementRow({
+              orderNumber: parts[0],
+              articleNumber: numArt,
+              beamsCount: nowychBel,
+              restMm: reszta,
+            });
+            requirements.push(requirement);
+          } catch (error) {
+            // Loguj blad transformacji ale kontynuuj
+            if (this.debug) {
+              logger.warn(`Failed to transform requirement row: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+          }
         }
       } else if (currentSection === 'windows') {
-        // Skip windows header
-        if (!windowsHeaderSkipped && (parts[0]?.toLowerCase().includes('lp') || parts[1]?.toLowerCase().includes('szerok'))) {
+        // Pomin naglowek okien
+        if (!windowsHeaderSkipped && this.validator.isWindowsHeader(parts)) {
           windowsHeaderSkipped = true;
           continue;
         }
 
-        // Parse windows row
-        if (parts.length >= 5 && parts[0].match(/^\d+$/)) {
-          windows.push({
-            lp: parseInt(parts[0]) || 0,
-            szer: parseInt(parts[1]) || 0,
-            wys: parseInt(parts[2]) || 0,
-            typProfilu: parts[3] || '',
-            ilosc: parseInt(parts[4]) || 1,
-            referencja: parts[5] || '',
-          });
+        // Parsuj wiersz okna
+        if (this.validator.isWindowRow(parts)) {
+          const rawWindow = this.transformer.parseWindowParts(parts);
+          if (rawWindow) {
+            windows.push(this.transformer.transformWindowRow(rawWindow));
+          }
         }
       }
     }
 
-    // Automatyczne wypełnienie project i system z danych okien
-    // jeśli nie zostały sparsowane z metadanych CSV
-    let finalProject = project;
-    let finalSystem = system;
-
-    if ((!finalProject || finalProject.trim() === '') && windows.length > 0) {
-      // Pobierz unikalne referencje z okien
-      const references = [...new Set(windows.map(w => w.referencja).filter(Boolean))];
-      if (references.length > 0) {
-        finalProject = references.join(', ');
-      }
-    }
-
-    if ((!finalSystem || finalSystem.trim() === '') && windows.length > 0) {
-      // Pobierz unikalne typy profili z okien
-      const profileTypes = [...new Set(windows.map(w => w.typProfilu).filter(Boolean))];
-      if (profileTypes.length > 0) {
-        finalSystem = profileTypes.join(', ');
-      }
-    }
+    // Automatyczne uzupelnienie project i system z danych okien
+    // jesli nie zostaly sparsowane z metadanych CSV
+    const autoFilled = this.transformer.autoFillFromWindows(windows, project, system);
 
     return {
       orderNumber,
       client,
-      project: finalProject,
-      system: finalSystem,
+      project: autoFilled.project,
+      system: autoFilled.system,
       deadline,
       pvcDeliveryDate,
       requirements,
@@ -908,46 +704,10 @@ export class CsvImportService implements ICsvImportService {
       totals,
     };
   }
-
-  /**
-   * Parse metadata from a line
-   */
-  private parseMetadata(
-    lineLower: string,
-    line: string,
-    setters: {
-      setClient: (v: string) => void;
-      setProject: (v: string) => void;
-      setSystem: (v: string) => void;
-      setDeadline: (v: string) => void;
-      setPvcDeliveryDate: (v: string) => void;
-    }
-  ): void {
-    if (lineLower.includes('klient:')) {
-      const match = line.match(/klient:\s*([^;]+)/i);
-      if (match) setters.setClient(match[1].trim());
-    }
-    if (lineLower.includes('projekt:')) {
-      const match = line.match(/projekt:\s*([^;]+)/i);
-      if (match) setters.setProject(match[1].trim());
-    }
-    if (lineLower.includes('system:')) {
-      const match = line.match(/system:\s*([^;]+)/i);
-      if (match) setters.setSystem(match[1].trim());
-    }
-    if (lineLower.includes('termin') && lineLower.includes('realizacji')) {
-      const match = line.match(/termin.*realizacji:\s*([^;]+)/i);
-      if (match) setters.setDeadline(match[1].trim());
-    }
-    if (lineLower.includes('dostawa') && lineLower.includes('pvc')) {
-      const match = line.match(/dostawa\s+pvc:\s*([^;]+)/i);
-      if (match) setters.setPvcDeliveryDate(match[1].trim());
-    }
-  }
 }
 
 /**
- * Create a new CSV import service instance
+ * Tworzy nowa instancje CSV import service
  */
 export function createCsvImportService(config: ParserServiceConfig): ICsvImportService {
   return new CsvImportService(config);
