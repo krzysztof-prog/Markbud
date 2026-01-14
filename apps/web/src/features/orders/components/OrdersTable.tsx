@@ -671,6 +671,8 @@ const getCellValue = (order: ExtendedOrder, columnId: ColumnId): string => {
       return order.system || '';
     case 'documentAuthor':
       return order.documentAuthor || '';
+    case 'productionDate':
+      return order.productionDate ? formatDateUtil(order.productionDate) : '';
     default:
       return '';
   }
