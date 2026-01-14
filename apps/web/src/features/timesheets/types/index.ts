@@ -258,12 +258,14 @@ export interface SpecialWorkType {
 
 export interface CreateSpecialWorkTypeInput {
   name: string;
+  shortName?: string | null;
   sortOrder?: number;
   isActive?: boolean;
 }
 
 export interface UpdateSpecialWorkTypeInput {
   name?: string;
+  shortName?: string | null;
   sortOrder?: number;
   isActive?: boolean;
 }

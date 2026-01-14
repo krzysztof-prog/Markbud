@@ -60,6 +60,12 @@ const navigation: NavigationItem[] = [
     // Dostępne dla wszystkich
   },
   {
+    name: 'Dashboard Operatora',
+    href: '/operator',
+    icon: Activity,
+    // Dostępne dla wszystkich - każdy widzi swoje dane, kierownik+ może przełączać
+  },
+  {
     name: 'Moja Praca',
     href: '/moja-praca',
     icon: ClipboardCheck,
