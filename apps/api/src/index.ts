@@ -9,6 +9,7 @@ import { prisma } from './utils/prisma.js';
 
 // Routes
 import { authRoutes } from './routes/auth.js';
+import userRoutes from './routes/users.js';
 import { profileRoutes } from './routes/profiles.js';
 import { colorRoutes } from './routes/colors.js';
 import { orderRoutes } from './routes/orders.js';
@@ -30,6 +31,12 @@ import { glassValidationRoutes } from './routes/glass-validations.js';
 import { pendingOrderPriceCleanupRoutes } from './routes/pending-order-price-cleanup.js';
 import { okucRoutes } from './routes/okuc.js';
 import { akrobudVerificationRoutes } from './routes/akrobud-verification.js';
+import { timesheetsRoutes } from './routes/timesheets.js';
+import { palletStockRoutes } from './routes/pallet-stock.js';
+import { productionReportRoutes } from './routes/production-reports.js';
+import { bugReportRoutes } from './routes/bug-reports.js';
+import { healthRoutes } from './routes/health.js';
+import { mojaPracaRoutes } from './routes/moja-praca.js';
 
 // Services
 import { FileWatcherService } from './services/file-watcher/index.js';
@@ -37,6 +44,7 @@ import { startSchucoScheduler, stopSchucoScheduler } from './services/schuco/sch
 import { startPendingPriceCleanupScheduler, stopPendingPriceCleanupScheduler } from './services/pendingOrderPriceCleanupScheduler.js';
 import { startImportLockCleanupScheduler, stopImportLockCleanupScheduler } from './services/importLockCleanupScheduler.js';
 import { setupWebSocket } from './plugins/websocket.js';
+import { seedDefaultWorkers } from './services/seedDefaultWorkers.js';
 
 // Utils and middleware
 import { logger } from './utils/logger.js';
@@ -143,6 +151,7 @@ await setupWebSocket(fastify);
 
 // Rejestracja routów
 await fastify.register(authRoutes, { prefix: '/api/auth' });
+await fastify.register(userRoutes, { prefix: '/api/users' });
 await fastify.register(profileRoutes, { prefix: '/api/profiles' });
 await fastify.register(colorRoutes, { prefix: '/api/colors' });
 await fastify.register(orderRoutes, { prefix: '/api/orders' });
@@ -173,7 +182,22 @@ await fastify.register(okucRoutes, { prefix: '/api/okuc' });
 // Akrobud Verification Routes
 await fastify.register(akrobudVerificationRoutes, { prefix: '/api/akrobud-verification' });
 
-// Health checks
+// Timesheets Routes (Godzinówki)
+await fastify.register(timesheetsRoutes, { prefix: '/api/timesheets' });
+
+// Pallet Stock Routes (Paletówki)
+await fastify.register(palletStockRoutes, { prefix: '/api/pallet-stock' });
+
+// Production Reports Routes (Zestawienie Miesięczne Produkcji)
+await fastify.register(productionReportRoutes, { prefix: '/api/production-reports' });
+
+// Bug Reports Routes (Zgłoszenia błędów)
+await fastify.register(bugReportRoutes, { prefix: '/api/bug-reports' });
+
+// Moja Praca Routes (Konflikty importu, zlecenia użytkownika)
+await fastify.register(mojaPracaRoutes, { prefix: '/api/moja-praca' });
+
+// Health checks (basic - must be before extended health routes)
 fastify.get('/api/health', {
   schema: {
     description: 'Basic health check endpoint',
@@ -242,6 +266,9 @@ fastify.get('/api/ready', {
   }
 });
 
+// Extended Health Check Routes (must be AFTER basic /api/health)
+await fastify.register(healthRoutes, { prefix: '/api/health' });
+
 // Graceful shutdown
 const closeGracefully = async (signal: string) => {
   logger.info(`${signal} received, shutting down gracefully...`);
@@ -259,6 +286,9 @@ process.on('SIGTERM', () => closeGracefully('SIGTERM'));
 // Start serwera
 const start = async () => {
   try {
+    // Seed domyślnych pracowników (przed startem serwera HTTP)
+    await seedDefaultWorkers(prisma);
+
     await fastify.listen({ port: config.api.port, host: '127.0.0.1' });
 
     logger.info(`Server started`, {

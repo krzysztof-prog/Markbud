@@ -1,9 +1,10 @@
 import chokidar, { type FSWatcher } from 'chokidar';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
 import { readdir, copyFile } from 'fs/promises';
 import type { PrismaClient } from '@prisma/client';
-import { CsvParser } from '../parsers/csv-parser.js';
+import { CsvParser, type ParsedUzyteBele } from '../parsers/csv-parser.js';
 import { logger } from '../../utils/logger.js';
 import { emitDeliveryCreated, emitOrderUpdated } from '../event-emitter.js';
 import type { IFileWatcher, DeliveryNumber, WatcherConfig } from './types.js';
@@ -16,6 +17,11 @@ import {
   ensureDirectoryExists,
   generateSafeFilename,
 } from './utils.js';
+import { MojaPracaRepository } from '../../repositories/MojaPracaRepository.js';
+
+// ESM compatibility: __dirname equivalent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Domyślna konfiguracja watchera dla "użyte bele"
@@ -33,10 +39,30 @@ export class UzyteBeleWatcher implements IFileWatcher {
   private prisma: PrismaClient;
   private watchers: FSWatcher[] = [];
   private config: WatcherConfig;
+  private mojaPracaRepository: MojaPracaRepository;
 
   constructor(prisma: PrismaClient, config: WatcherConfig = DEFAULT_CONFIG) {
     this.prisma = prisma;
     this.config = config;
+    this.mojaPracaRepository = new MojaPracaRepository(prisma);
+  }
+
+  /**
+   * Oblicza sugestię systemu na podstawie porównania okien i szyb
+   * Jeśli liczby się zgadzają → sugeruj zastąpienie bazowego
+   */
+  private calculateSuggestion(
+    existingWindows: number | null,
+    existingGlasses: number | null,
+    newWindows: number | null,
+    newGlasses: number | null
+  ): 'replace_base' | 'keep_both' | 'manual' {
+    // Jeśli okna I szyby się zgadzają → sugeruj zastąpienie
+    if (existingWindows === newWindows && existingGlasses === newGlasses) {
+      return 'replace_base';
+    }
+    // W przeciwnym razie - decyzja manualna
+    return 'manual';
   }
 
   /**
@@ -194,25 +220,13 @@ export class UzyteBeleWatcher implements IFileWatcher {
       const hasRealConflict = preview.conflict?.baseOrderExists === true;
 
       if (hasRealConflict) {
-        // Konflikt - zostaw jako PENDING
-        await this.prisma.fileImport.create({
-          data: {
-            filename: safeFilename,
-            filepath: destPath,
-            fileType: 'uzyte_bele',
-            status: 'pending',
-            metadata: JSON.stringify({
-              preview,
-              autoDetectedConflict: true,
-              singleFileImport: true,
-            }),
-          },
-        });
+        // Konflikt - utwórz PendingImportConflict zamiast FileImport
+        await this.createPendingConflict(preview, destPath, safeFilename);
 
         logger.warn(
           `   ⚠️ Konflikt: ${originalFilename} → zlecenie ${preview.orderNumber} (bazowe ${preview.conflict?.baseOrderNumber} ISTNIEJE)`
         );
-        logger.info(`   ⏸️ Plik oczekuje na decyzję użytkownika`);
+        logger.info(`   ⏸️ Konflikt utworzony - oczekuje na decyzję użytkownika w "Moja Praca"`);
         return 'skipped';
       }
 
@@ -581,25 +595,13 @@ export class UzyteBeleWatcher implements IFileWatcher {
       const hasRealConflict = preview.conflict?.baseOrderExists === true;
 
       if (hasRealConflict) {
-        // Jeśli jest konflikt (bazowe istnieje), zostaw jako PENDING i poczekaj na decyzję użytkownika
-        await this.prisma.fileImport.create({
-          data: {
-            filename: safeFilename,
-            filepath: destPath,
-            fileType: 'uzyte_bele',
-            status: 'pending',
-            metadata: JSON.stringify({
-              preview,
-              deliveryId,
-              autoDetectedConflict: true,
-            }),
-          },
-        });
+        // Konflikt - utwórz PendingImportConflict zamiast FileImport
+        await this.createPendingConflict(preview, destPath, safeFilename);
 
         logger.warn(
           `   ⚠️ Konflikt: ${relativePath} → zlecenie ${preview.orderNumber} (bazowe ${preview.conflict?.baseOrderNumber} ISTNIEJE)`
         );
-        logger.info(`   ⏸️ Plik oczekuje na decyzję użytkownika`);
+        logger.info(`   ⏸️ Konflikt utworzony - oczekuje na decyzję użytkownika w "Moja Praca"`);
         return 'skipped';
       }
 
@@ -717,6 +719,72 @@ export class UzyteBeleWatcher implements IFileWatcher {
       process.env.WATCH_FOLDER_UZYTE_BELE ||
       (await getSetting(this.prisma, 'watchFolderUzyteBele')) ||
       path.join(projectRoot, 'uzyte bele')
+    );
+  }
+
+  /**
+   * Tworzy PendingImportConflict dla konfliktu importu
+   * Konflikt jest przypisywany do użytkownika na podstawie DocumentAuthorMapping
+   */
+  private async createPendingConflict(
+    preview: ParsedUzyteBele,
+    filepath: string,
+    filename: string
+  ): Promise<void> {
+    if (!preview.conflict?.baseOrderId || !preview.conflict?.baseOrderNumber) {
+      logger.error('Nie można utworzyć konfliktu - brak danych bazowego zlecenia');
+      return;
+    }
+
+    // Pobierz dane bazowego zlecenia do porównania
+    const baseOrder = await this.prisma.order.findUnique({
+      where: { id: preview.conflict.baseOrderId },
+      select: { totalWindows: true, totalGlasses: true },
+    });
+
+    if (!baseOrder) {
+      logger.error(`Nie znaleziono bazowego zlecenia ID: ${preview.conflict.baseOrderId}`);
+      return;
+    }
+
+    // Znajdź użytkownika przypisanego do autora dokumentu
+    let authorUserId: number | null = null;
+    if (preview.documentAuthor) {
+      const authorMapping = await this.prisma.documentAuthorMapping.findFirst({
+        where: { authorName: preview.documentAuthor },
+      });
+      authorUserId = authorMapping?.userId ?? null;
+    }
+
+    // Oblicz sugestię
+    const suggestion = this.calculateSuggestion(
+      baseOrder.totalWindows,
+      baseOrder.totalGlasses,
+      preview.totals?.windows ?? null,
+      preview.totals?.glasses ?? null
+    );
+
+    // Utwórz PendingImportConflict
+    await this.mojaPracaRepository.createConflict({
+      orderNumber: preview.orderNumber,
+      baseOrderNumber: preview.conflict.baseOrderNumber,
+      suffix: preview.orderNumberParsed?.suffix || '',
+      baseOrderId: preview.conflict.baseOrderId,
+      documentAuthor: preview.documentAuthor ?? null,
+      authorUserId,
+      filepath,
+      filename,
+      parsedData: JSON.stringify(preview),
+      existingWindowsCount: baseOrder.totalWindows,
+      existingGlassCount: baseOrder.totalGlasses,
+      newWindowsCount: preview.totals?.windows ?? null,
+      newGlassCount: preview.totals?.glasses ?? null,
+      systemSuggestion: suggestion,
+    });
+
+    logger.info(
+      `   📝 Utworzono konflikt: ${preview.orderNumber} (bazowe: ${preview.conflict.baseOrderNumber})` +
+        (authorUserId ? ` - przypisano do użytkownika ID: ${authorUserId}` : ' - brak mapowania użytkownika')
     );
   }
 }

@@ -49,14 +49,12 @@ export interface Position {
 
 export interface CreatePositionInput {
   name: string;
-  shortName?: string | null;
   sortOrder?: number;
   isActive?: boolean;
 }
 
 export interface UpdatePositionInput {
   name?: string;
-  shortName?: string | null;
   sortOrder?: number;
   isActive?: boolean;
 }
@@ -174,6 +172,14 @@ export interface SetStandardDayInput {
   entries: BulkWorkerEntry[];
 }
 
+export interface SetAbsenceRangeInput {
+  workerId: number;
+  positionId: number;
+  absenceType: AbsenceType;
+  fromDate: string; // YYYY-MM-DD
+  toDate: string; // YYYY-MM-DD
+}
+
 // ============================================
 // CALENDAR & SUMMARY
 // ============================================
@@ -252,14 +258,12 @@ export interface SpecialWorkType {
 
 export interface CreateSpecialWorkTypeInput {
   name: string;
-  shortName?: string | null;
   sortOrder?: number;
   isActive?: boolean;
 }
 
 export interface UpdateSpecialWorkTypeInput {
   name?: string;
-  shortName?: string | null;
   sortOrder?: number;
   isActive?: boolean;
 }
