@@ -186,9 +186,10 @@ export const currencyConfigRoutes: FastifyPluginAsync = async (fastify) => {
 
       const pln = await currencyConfigService.convertEurToPln(amount);
 
+      // Zaokrąglenie do 2 miejsc dziesiętnych bez parseFloat(toFixed()) anti-pattern
       return {
         eur: amount,
-        pln: parseFloat(pln.toFixed(2)),
+        pln: Math.round(pln * 100) / 100,
         rate: config.eurToPlnRate,
       };
     } catch (error: unknown) {
@@ -236,9 +237,10 @@ export const currencyConfigRoutes: FastifyPluginAsync = async (fastify) => {
 
       const eur = await currencyConfigService.convertPlnToEur(amount);
 
+      // Zaokrąglenie do 2 miejsc dziesiętnych bez parseFloat(toFixed()) anti-pattern
       return {
         pln: amount,
-        eur: parseFloat(eur.toFixed(2)),
+        eur: Math.round(eur * 100) / 100,
         rate: config.eurToPlnRate,
       };
     } catch (error: unknown) {

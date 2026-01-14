@@ -1,5 +1,4 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { Prisma } from '@prisma/client';
 import { prisma } from '../index.js';
 import { createReadStream, existsSync } from 'fs';
 import { OrderRepository } from '../repositories/OrderRepository.js';
@@ -8,10 +7,7 @@ import { OrderHandler } from '../handlers/orderHandler.js';
 import { parseIntParam } from '../utils/errors.js';
 import { verifyAuth } from '../middleware/auth.js';
 import type { BulkUpdateStatusInput, ForProductionQuery, MonthlyProductionQuery } from '../validators/order.js';
-import {
-  emitOrderUpdated,
-} from '../services/event-emitter.js';
-import { plnToGrosze, eurToCenty } from '../utils/money.js';
+import { emitOrderUpdated } from '../services/event-emitter.js';
 import { ReadinessOrchestrator } from '../services/readinessOrchestrator.js';
 
 
@@ -22,7 +18,7 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
   const handler = new OrderHandler(service);
 
   // Routes delegated to handler - all require authentication
-  fastify.get<{ Querystring: { status?: string; archived?: string; colorId?: string; skip?: number; take?: number } }>('/', {
+  fastify.get<{ Querystring: { status?: string; archived?: string; colorId?: string; documentAuthorUserId?: string; skip?: number; take?: number } }>('/', {
     preHandler: verifyAuth,
   }, handler.getAll.bind(handler));
 
@@ -43,6 +39,23 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
   }, handler.search.bind(handler));
+
+  // GET /api/orders/completeness-stats - Statistics for operator dashboard
+  // WAŻNE: Musi być PRZED /:id żeby nie było traktowane jako ID
+  fastify.get<{ Querystring: { userId: string } }>('/completeness-stats', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get completeness statistics for operator dashboard',
+      tags: ['orders'],
+      querystring: {
+        type: 'object',
+        required: ['userId'],
+        properties: {
+          userId: { type: 'string', description: 'User ID to filter orders' },
+        },
+      },
+    },
+  }, handler.getCompletenessStats.bind(handler));
 
   fastify.get<{ Params: { id: string } }>('/:id', {
     preHandler: verifyAuth,
@@ -97,7 +110,7 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
     },
   }, handler.getMonthlyProduction.bind(handler));
 
-  // PATCH /api/orders/:id - partial update (inline - not covered by handler)
+  // PATCH /api/orders/:id - partial update
   fastify.patch<{
     Params: { id: string };
     Body: {
@@ -108,36 +121,7 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
     };
   }>('/:id', {
     preHandler: verifyAuth,
-  }, async (request) => {
-    const { id } = request.params;
-    const { valuePln, valueEur, deadline, status } = request.body;
-
-    const updateData: Prisma.OrderUpdateInput = {};
-
-    if (valuePln !== undefined) {
-      // Convert PLN string (e.g., "123.45") to grosze (12345)
-      updateData.valuePln = valuePln !== null ? plnToGrosze(Number(valuePln)) : null;
-    }
-    if (valueEur !== undefined) {
-      // Convert EUR string (e.g., "123.45") to cents (12345)
-      updateData.valueEur = valueEur !== null ? eurToCenty(Number(valueEur)) : null;
-    }
-    if (deadline !== undefined) {
-      updateData.deadline = deadline ? new Date(deadline) : null;
-    }
-    if (status !== undefined) {
-      updateData.status = status ?? undefined;
-    }
-
-    const order = await prisma.order.update({
-      where: { id: parseIntParam(id, 'id') },
-      data: updateData,
-    });
-
-    emitOrderUpdated(order);
-
-    return order;
-  });
+  }, handler.patch.bind(handler));
 
   // GET /api/orders/:id/has-pdf - check if PDF exists for order
   fastify.get<{ Params: { id: string } }>('/:id/has-pdf', {

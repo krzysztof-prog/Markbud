@@ -7,6 +7,7 @@ import { OrderService } from '../services/orderService.js';
 import {
   createOrderSchema,
   updateOrderSchema,
+  patchOrderSchema,
   orderParamsSchema,
   orderQuerySchema,
   bulkUpdateStatusSchema,
@@ -14,6 +15,7 @@ import {
   monthlyProductionQuerySchema,
   type CreateOrderInput,
   type UpdateOrderInput,
+  type PatchOrderInput,
   type BulkUpdateStatusInput,
   type ForProductionQuery,
   type MonthlyProductionQuery,
@@ -23,7 +25,7 @@ export class OrderHandler {
   constructor(private service: OrderService) {}
 
   async getAll(
-    request: FastifyRequest<{ Querystring: { status?: string; archived?: string; colorId?: string } }>,
+    request: FastifyRequest<{ Querystring: { status?: string; archived?: string; colorId?: string; documentAuthorUserId?: string } }>,
     reply: FastifyReply
   ) {
     const validated = orderQuerySchema.parse(request.query);
@@ -142,5 +144,40 @@ export class OrderHandler {
 
     const orders = await this.service.searchOrders(q, includeArchivedBool);
     return reply.status(200).send(orders);
+  }
+
+  /**
+   * Get completeness statistics for operator dashboard
+   * GET /api/orders/completeness-stats?userId=X
+   */
+  async getCompletenessStats(
+    request: FastifyRequest<{ Querystring: { userId: string } }>,
+    reply: FastifyReply
+  ) {
+    const userId = parseInt(request.query.userId, 10);
+
+    if (isNaN(userId)) {
+      return reply.status(400).send({ error: 'userId musi być liczbą' });
+    }
+
+    const stats = await this.service.getCompletenessStats(userId);
+    return reply.status(200).send(stats);
+  }
+
+  /**
+   * Partial update of order
+   * PATCH /api/orders/:id
+   */
+  async patch(
+    request: FastifyRequest<{
+      Params: { id: string };
+      Body: PatchOrderInput;
+    }>,
+    reply: FastifyReply
+  ) {
+    const { id } = orderParamsSchema.parse(request.params);
+    const validated = patchOrderSchema.parse(request.body);
+    const order = await this.service.patchOrder(parseInt(id), validated);
+    return reply.send(order);
   }
 }

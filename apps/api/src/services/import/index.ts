@@ -4,6 +4,13 @@
  * This module contains specialized services extracted from the monolithic ImportService.
  * Each service has a single responsibility following SOLID principles.
  *
+ * Orchestration Layer:
+ * - ImportOrchestrator: Main entry point, coordinates all import operations
+ *
+ * Processors:
+ * - UzyteBeleProcessor: Processes CSV "uzyte bele" files
+ * - CenyProcessor: Processes PDF price files
+ *
  * Services (Phase 1):
  * - ImportFileSystemService: File system operations (read, write, copy, delete, scan)
  * - ImportSettingsService: Settings and path resolution with caching
@@ -18,6 +25,24 @@
  * - PdfImportService: Parses price PDF files (behind feature flag)
  * - ExcelImportService: Parses Excel/XLSX files (behind feature flag)
  */
+
+// Orchestration Layer
+export { ImportOrchestrator } from './ImportOrchestrator.js';
+
+// Processors
+export { UzyteBeleProcessor } from './UzyteBeleProcessor.js';
+export type {
+  FolderImportFileResult,
+  FolderImportResult,
+  FolderScanResult,
+  UzyteBeleProcessResult,
+} from './UzyteBeleProcessor.js';
+
+export { CenyProcessor } from './CenyProcessor.js';
+export type {
+  PdfAutoImportResult,
+  PdfApprovalResult,
+} from './CenyProcessor.js';
 
 // Phase 1 - File System and Settings
 export { ImportFileSystemService, importFileSystemService } from './importFileSystemService.js';

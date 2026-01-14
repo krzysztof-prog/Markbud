@@ -18,6 +18,7 @@ model User {
   role                      String                  @default("user") // owner | admin | kierownik | ksiegowa | user
   createdAt                 DateTime                @default(now()) @map("created_at")
   updatedAt                 DateTime                @updatedAt @map("updated_at")
+  deletedAt                 DateTime?               @map("deleted_at") // Soft delete - data usunięcia użytkownika
   notes                     Note[]
   warehouseHistory          WarehouseHistory[]      @relation("RecordedBy")
   warehouseOrdersCreated    WarehouseOrder[]        @relation("WarehouseOrderCreatedBy")

@@ -103,6 +103,7 @@ export const createMockPrisma = () => {
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+      upsert: vi.fn(),
     },
     setting: {
       findMany: vi.fn(),
@@ -112,6 +113,15 @@ export const createMockPrisma = () => {
       upsert: vi.fn(),
     },
     // DualStock (Okuc) models
+    okucLocation: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      count: vi.fn(),
+    },
     okucArticle: {
       findMany: vi.fn(),
       findUnique: vi.fn(),

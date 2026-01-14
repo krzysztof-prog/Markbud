@@ -1,0 +1,701 @@
+/**
+ * Parser plików "użyte bele"
+ * Odpowiada za parsowanie, walidację i przetwarzanie plików CSV z danymi o użytych belach
+ */
+
+import fs from 'fs';
+import { prisma } from '../../index.js';
+import { GlassDeliveryService } from '../glass-delivery/index.js';
+import { SchucoLinkService } from '../schuco/schucoLinkService.js';
+import { logger } from '../../utils/logger.js';
+import { stripBOM } from '../../utils/string-utils.js';
+
+import { OrderNumberParser } from './OrderNumberParser.js';
+import { ArticleNumberParser } from './ArticleNumberParser.js';
+import { BeamCalculator } from './BeamCalculator.js';
+import type {
+  ParsedUzyteBele,
+  ParseResult,
+  ParseError,
+  UzyteBeleWindow,
+  UzyteBeleGlass,
+} from './types.js';
+
+/**
+ * Klasa do parsowania plików "użyte bele"
+ */
+export class UzyteBeleParser {
+  private orderNumberParser: OrderNumberParser;
+  private articleNumberParser: ArticleNumberParser;
+  private beamCalculator: BeamCalculator;
+
+  constructor() {
+    this.orderNumberParser = new OrderNumberParser();
+    this.articleNumberParser = new ArticleNumberParser();
+    this.beamCalculator = new BeamCalculator();
+  }
+
+  /**
+   * Parse EUR amount from Schuco format
+   * Converts "62,30 €" to 62.30
+   * Converts "2 321,02 €" to 2321.02
+   */
+  parseEurAmountFromSchuco(amountStr: string): number | null {
+    if (!amountStr) return null;
+
+    try {
+      // Remove currency symbol and spaces
+      let cleaned = amountStr.replace(/€/g, '').trim();
+
+      // Remove thousands separator (space)
+      cleaned = cleaned.replace(/\s/g, '');
+
+      // Replace comma with dot for decimal separator
+      cleaned = cleaned.replace(/,/g, '.');
+
+      const amount = parseFloat(cleaned);
+      return isNaN(amount) ? null : amount;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Podgląd pliku "użyte bele" przed importem
+   */
+  async previewUzyteBele(filepath: string): Promise<ParsedUzyteBele> {
+    const parsed = await this.parseUzyteBeleFile(filepath);
+
+    // Parsuj numer zlecenia i sprawdź konflikty
+    const orderNumberParsed = this.orderNumberParser.parse(parsed.orderNumber);
+    parsed.orderNumberParsed = orderNumberParsed;
+
+    // Jeśli zlecenie ma sufiks, sprawdź czy istnieje zlecenie bazowe
+    if (orderNumberParsed.suffix) {
+      const baseOrder = await prisma.order.findUnique({
+        where: { orderNumber: orderNumberParsed.base },
+      });
+
+      // Zawsze zwróć informacje o konflikcie, nawet jeśli zlecenia bazowego nie ma
+      parsed.conflict = {
+        baseOrderExists: baseOrder !== null,
+        baseOrderId: baseOrder?.id,
+        baseOrderNumber: baseOrder?.orderNumber,
+      };
+    }
+
+    return parsed;
+  }
+
+  /**
+   * Podgląd pliku "użyte bele" z raportowaniem błędów walidacji
+   * Zwraca ParseResult z listą błędów dla wierszy które nie przeszły walidacji
+   */
+  async previewUzyteBeleWithErrors(filepath: string): Promise<ParseResult<ParsedUzyteBele>> {
+    const errors: ParseError[] = [];
+    let totalRows = 0;
+    let successRows = 0;
+    let failedRows = 0;
+
+    // Parsuj plik
+    const parsed = await this.parseUzyteBeleFile(filepath);
+
+    // Parsuj numer zlecenia
+    const orderNumberParsed = this.orderNumberParser.parse(parsed.orderNumber);
+    parsed.orderNumberParsed = orderNumberParsed;
+
+    // Walidacja requirements - sprawdź czy profile i kolory istnieją w bazie
+    totalRows = parsed.requirements.length;
+
+    for (let i = 0; i < parsed.requirements.length; i++) {
+      const req = parsed.requirements[i];
+      let hasError = false;
+
+      // Sprawdź czy profil istnieje
+      const profile = await prisma.profile.findFirst({
+        where: { number: req.profileNumber },
+      });
+
+      if (!profile) {
+        errors.push({
+          row: i + 1,
+          field: 'profile',
+          reason: `Profil ${req.profileNumber} nie znaleziony w systemie`,
+          rawData: req,
+        });
+        hasError = true;
+        failedRows++;
+      }
+
+      // Sprawdź czy kolor istnieje
+      const color = await prisma.color.findFirst({
+        where: { code: req.colorCode },
+      });
+
+      if (!color) {
+        errors.push({
+          row: i + 1,
+          field: 'color',
+          reason: `Kolor ${req.colorCode} nie znaleziony w systemie`,
+          rawData: req,
+        });
+        hasError = true;
+        if (!hasError) failedRows++; // Zlicz tylko raz per wiersz
+      }
+
+      if (!hasError) {
+        successRows++;
+      }
+    }
+
+    // Sprawdź konflikty wariantów
+    if (orderNumberParsed.suffix) {
+      const baseOrder = await prisma.order.findUnique({
+        where: { orderNumber: orderNumberParsed.base },
+      });
+
+      parsed.conflict = {
+        baseOrderExists: baseOrder !== null,
+        baseOrderId: baseOrder?.id,
+        baseOrderNumber: baseOrder?.orderNumber,
+      };
+    }
+
+    return {
+      data: parsed,
+      errors,
+      summary: {
+        totalRows,
+        successRows,
+        failedRows,
+        skippedRows: 0,
+      },
+    };
+  }
+
+  /**
+   * Znajdź userId dla autora dokumentu na podstawie mapowania
+   * Zwraca undefined jeśli brak autora lub brak mapowania
+   */
+  private async findDocumentAuthorUserId(authorName: string | undefined): Promise<number | undefined> {
+    if (!authorName) {
+      return undefined;
+    }
+
+    // Sprawdź czy istnieje mapowanie dla tego autora
+    const mapping = await prisma.documentAuthorMapping.findUnique({
+      where: { authorName },
+      select: { userId: true },
+    });
+
+    return mapping?.userId;
+  }
+
+  /**
+   * Przetwórz plik "użyte bele" i zapisz do bazy
+   * @param filepath - Ścieżka do pliku CSV
+   * @param action - 'overwrite' (nadpisz istniejące) lub 'add_new' (utwórz nowe/zaktualizuj)
+   * @param replaceBase - Jeśli true i zlecenie ma sufiks, zamieni zlecenie bazowe zamiast tworzyć nowe
+   */
+  async processUzyteBele(
+    filepath: string,
+    action: 'overwrite' | 'add_new',
+    replaceBase?: boolean
+  ): Promise<{ orderId: number; requirementsCount: number; windowsCount: number; glassesCount: number }> {
+    const parsed = await this.parseUzyteBeleFile(filepath);
+
+    // Parsuj numer zlecenia (przed transakcją)
+    const orderNumberParsed = this.orderNumberParser.parse(parsed.orderNumber);
+    let targetOrderNumber = parsed.orderNumber;
+
+    // Jeśli zlecenie ma sufiks i użytkownik chce zamienić bazowe
+    if (orderNumberParsed.suffix && replaceBase) {
+      targetOrderNumber = orderNumberParsed.base;
+      console.log(`   🔄 Zamienianie zlecenia bazowego ${orderNumberParsed.base} (zamiast tworzenia ${parsed.orderNumber})`);
+    }
+
+    // Znajdź userId dla autora dokumentu (PRZED transakcją)
+    const documentAuthorUserId = await this.findDocumentAuthorUserId(parsed.documentAuthor);
+    if (parsed.documentAuthor && !documentAuthorUserId) {
+      console.warn(`⚠️  Autor "${parsed.documentAuthor}" nie ma mapowania - zlecenie zostanie zaimportowane bez przypisanego użytkownika`);
+    }
+
+    // Całość w transakcji dla atomicity
+    return prisma.$transaction(async (tx) => {
+      // Znajdź lub utwórz zlecenie
+      let order = await tx.order.findUnique({
+        where: { orderNumber: targetOrderNumber },
+      });
+
+      if (order && action === 'overwrite') {
+        // Atomowo usuń istniejące requirements, windows i glasses
+        await tx.orderRequirement.deleteMany({
+          where: { orderId: order.id },
+        });
+        await tx.orderWindow.deleteMany({
+          where: { orderId: order.id },
+        });
+        await tx.orderGlass.deleteMany({
+          where: { orderId: order.id },
+        });
+        // Zaktualizuj zlecenie o nowe dane z CSV
+        order = await tx.order.update({
+          where: { id: order.id },
+          data: {
+            client: parsed.client || undefined,
+            project: parsed.project || undefined,
+            system: parsed.system || undefined,
+            deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
+            pvcDeliveryDate: parsed.pvcDeliveryDate ? new Date(parsed.pvcDeliveryDate) : undefined,
+            totalWindows: parsed.totals.windows || undefined,
+            totalSashes: parsed.totals.sashes || undefined,
+            totalGlasses: parsed.totals.glasses || undefined,
+            documentAuthor: parsed.documentAuthor || undefined,
+            documentAuthorUserId: documentAuthorUserId || undefined,
+          },
+        });
+      } else if (!order) {
+        // Try to get EUR value from linked Schuco delivery if available
+        const schucoLink = await tx.orderSchucoLink.findFirst({
+          where: {
+            order: {
+              orderNumber: targetOrderNumber,
+            },
+          },
+          include: {
+            schucoDelivery: {
+              select: { totalAmount: true },
+            },
+          },
+        });
+
+        let eurValue: number | undefined;
+        if (schucoLink?.schucoDelivery?.totalAmount) {
+          const parsedAmount = this.parseEurAmountFromSchuco(schucoLink.schucoDelivery.totalAmount);
+          if (parsedAmount !== null) {
+            eurValue = parsedAmount;
+          }
+        }
+
+        // Sprawdź czy jest oczekująca cena dla tego zlecenia
+        const pendingPrice = await tx.pendingOrderPrice.findFirst({
+          where: {
+            orderNumber: targetOrderNumber,
+            status: 'pending',
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        let valueEurFromPending: number | undefined;
+        let valuePlnFromPending: number | undefined;
+
+        if (pendingPrice) {
+          if (pendingPrice.currency === 'EUR') {
+            valueEurFromPending = pendingPrice.valueNetto;
+          } else {
+            valuePlnFromPending = pendingPrice.valueNetto;
+          }
+          logger.info(`Found pending price for ${targetOrderNumber}: ${pendingPrice.currency} ${pendingPrice.valueNetto}`);
+        }
+
+        order = await tx.order.create({
+          data: {
+            orderNumber: targetOrderNumber,
+            client: parsed.client || undefined,
+            project: parsed.project || undefined,
+            system: parsed.system || undefined,
+            deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
+            pvcDeliveryDate: parsed.pvcDeliveryDate ? new Date(parsed.pvcDeliveryDate) : undefined,
+            totalWindows: parsed.totals.windows || undefined,
+            totalSashes: parsed.totals.sashes || undefined,
+            totalGlasses: parsed.totals.glasses || undefined,
+            valueEur: eurValue ?? valueEurFromPending,
+            valuePln: valuePlnFromPending,
+            documentAuthor: parsed.documentAuthor || undefined,
+            documentAuthorUserId: documentAuthorUserId || undefined,
+          },
+        });
+
+        // Oznacz pending price jako zastosowaną
+        if (pendingPrice) {
+          await tx.pendingOrderPrice.update({
+            where: { id: pendingPrice.id },
+            data: {
+              status: 'applied',
+              appliedAt: new Date(),
+              appliedToOrderId: order.id,
+            },
+          });
+          logger.info(`Applied pending price to order ${targetOrderNumber} (ID: ${order.id})`);
+        }
+      } else if (action === 'add_new') {
+        // Zaktualizuj istniejące zlecenie o nowe dane z CSV
+        order = await tx.order.update({
+          where: { id: order.id },
+          data: {
+            client: parsed.client || undefined,
+            project: parsed.project || undefined,
+            system: parsed.system || undefined,
+            deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
+            pvcDeliveryDate: parsed.pvcDeliveryDate ? new Date(parsed.pvcDeliveryDate) : undefined,
+            totalWindows: parsed.totals.windows || undefined,
+            totalSashes: parsed.totals.sashes || undefined,
+            totalGlasses: parsed.totals.glasses || undefined,
+            documentAuthor: parsed.documentAuthor || undefined,
+            documentAuthorUserId: documentAuthorUserId || undefined,
+          },
+        });
+      }
+
+      // Dodaj requirements (w tej samej transakcji)
+      for (const req of parsed.requirements) {
+        // Znajdź lub utwórz profil z articleNumber
+        let profile = await tx.profile.findUnique({
+          where: { number: req.profileNumber },
+        });
+
+        if (!profile) {
+          // Spróbuj znaleźć po articleNumber
+          profile = await tx.profile.findUnique({
+            where: { articleNumber: req.articleNumber },
+          });
+
+          if (!profile) {
+            // Utwórz nowy profil jeśli nie istnieje
+            profile = await tx.profile.create({
+              data: {
+                number: req.profileNumber,
+                name: req.profileNumber,
+                articleNumber: req.articleNumber,
+              },
+            });
+            console.log(`Utworzony nowy profil ${req.profileNumber} z numerem artykułu ${req.articleNumber}`);
+          }
+        } else if (!profile.articleNumber) {
+          // Jeśli profil istnieje ale nie ma articleNumber, zaktualizuj go
+          profile = await tx.profile.update({
+            where: { id: profile.id },
+            data: { articleNumber: req.articleNumber },
+          });
+        }
+
+        // Znajdź kolor
+        const color = await tx.color.findUnique({
+          where: { code: req.colorCode },
+        });
+
+        if (!color) {
+          console.warn(`Kolor ${req.colorCode} nie znaleziony, pomijam`);
+          continue;
+        }
+
+        // Utwórz lub zaktualizuj requirement
+        await tx.orderRequirement.upsert({
+          where: {
+            orderId_profileId_colorId: {
+              orderId: order.id,
+              profileId: profile.id,
+              colorId: color.id,
+            },
+          },
+          update: {
+            beamsCount: req.calculatedBeams,
+            meters: req.calculatedMeters,
+            restMm: req.originalRest,
+          },
+          create: {
+            orderId: order.id,
+            profileId: profile.id,
+            colorId: color.id,
+            beamsCount: req.calculatedBeams,
+            meters: req.calculatedMeters,
+            restMm: req.originalRest,
+          },
+        });
+      }
+
+      // Dodaj windows (w tej samej transakcji)
+      for (const win of parsed.windows) {
+        await tx.orderWindow.create({
+          data: {
+            orderId: order.id,
+            widthMm: win.szer,
+            heightMm: win.wys,
+            profileType: win.typProfilu,
+            quantity: win.ilosc,
+            reference: win.referencja,
+          },
+        });
+      }
+
+      // Dodaj glasses (szyby) (w tej samej transakcji)
+      for (const glass of parsed.glasses) {
+        await tx.orderGlass.create({
+          data: {
+            orderId: order.id,
+            lp: glass.lp,
+            position: glass.position,
+            widthMm: glass.widthMm,
+            heightMm: glass.heightMm,
+            quantity: glass.quantity,
+            packageType: glass.packageType,
+            areaSqm: glass.areaSqm,
+          },
+        });
+      }
+
+      return {
+        orderId: order.id,
+        requirementsCount: parsed.requirements.length,
+        windowsCount: parsed.windows.length,
+        glassesCount: parsed.glasses.length,
+      };
+    }, {
+      timeout: 30000, // 30s dla dużych importów
+    }).then(async (result) => {
+      // Re-match unmatched glass delivery items AFTER transaction completes
+      try {
+        const glassDeliveryService = new GlassDeliveryService(prisma);
+        const rematchResult = await glassDeliveryService.rematchUnmatchedForOrders([targetOrderNumber]);
+        if (rematchResult.rematched > 0) {
+          logger.info(`Re-match dostaw szyb dla ${targetOrderNumber}: ${rematchResult.rematched} dopasowanych, ${rematchResult.stillUnmatched} nadal niedopasowanych`);
+        }
+      } catch (error) {
+        logger.warn(`Błąd re-matchingu dostaw szyb dla ${targetOrderNumber}: ${error instanceof Error ? error.message : 'Nieznany błąd'}`);
+      }
+
+      // AUTOMATYCZNE POWIĄZYWANIE SCHUCO (PO ZAKOŃCZENIU TRANSAKCJI)
+      // Sprawdź czy istnieją dostawy Schuco czekające na powiązanie z tym zleceniem
+      try {
+        const schucoLinkService = new SchucoLinkService(prisma);
+        const linksCreated = await schucoLinkService.linkOrderToWaitingDeliveries(targetOrderNumber);
+        if (linksCreated > 0) {
+          logger.info(`Auto-linked ${linksCreated} Schuco delivery/ies to order ${targetOrderNumber}`);
+        }
+      } catch (error) {
+        logger.warn(`Failed to auto-link Schuco deliveries for ${targetOrderNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+
+      return result;
+    });
+  }
+
+  /**
+   * Parsuj plik CSV "użyte bele"
+   */
+  async parseUzyteBeleFile(filepath: string): Promise<ParsedUzyteBele> {
+    // Odczytaj plik jako buffer, następnie dekoduj z Windows-1250
+    const buffer = await fs.promises.readFile(filepath);
+
+    // Próbuj najpierw Windows-1250 (polskie znaki w Windows)
+    let content: string;
+    try {
+      const decoder = new TextDecoder('windows-1250');
+      content = decoder.decode(buffer);
+      // Sprawdź czy są polskie znaki - jeśli nie, spróbuj UTF-8
+      if (!content.match(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/)) {
+        content = buffer.toString('utf-8');
+      }
+    } catch {
+      // Fallback do UTF-8
+      content = buffer.toString('utf-8');
+    }
+
+    // Usuń UTF-8 BOM jeśli istnieje (pliki eksportowane z Excela często mają BOM)
+    content = stripBOM(content);
+
+    const lines = content.split('\n').filter((line) => line.trim());
+
+    const requirements: ParsedUzyteBele['requirements'] = [];
+    const windows: UzyteBeleWindow[] = [];
+    const glasses: UzyteBeleGlass[] = [];
+    const totals = { windows: 0, sashes: 0, glasses: 0 };
+
+    let orderNumber = 'UNKNOWN';
+    let client: string | undefined;
+    let project: string | undefined;
+    let system: string | undefined;
+    let deadline: string | undefined;
+    let pvcDeliveryDate: string | undefined;
+    let documentAuthor: string | undefined;
+    let currentSection = 'requirements'; // 'requirements', 'windows' lub 'glasses'
+    let requirementsHeaderSkipped = false;
+    let windowsHeaderSkipped = false;
+    let glassesHeaderSkipped = false;
+    let glassLpCounter = 0;
+
+    for (const line of lines) {
+      const parts = line.split(';').map((p) => p.trim());
+      const lineLower = line.toLowerCase();
+
+      // Parsuj opcjonalne metadane zlecenia (mogą być przed danymi)
+      // Format: Klient: ABC Corp; Projekt: Proj-001; System: Profil 70; etc.
+      if (lineLower.includes('klient:')) {
+        const match = line.match(/klient:\s*([^;]+)/i);
+        if (match) client = match[1].trim();
+      }
+      if (lineLower.includes('projekt:')) {
+        const match = line.match(/projekt:\s*([^;]+)/i);
+        if (match) project = match[1].trim();
+      }
+      if (lineLower.includes('system:')) {
+        const match = line.match(/system:\s*([^;]+)/i);
+        if (match) system = match[1].trim();
+      }
+      if (lineLower.includes('termin') && lineLower.includes('realizacji')) {
+        const match = line.match(/termin.*realizacji:\s*([^;]+)/i);
+        if (match) deadline = match[1].trim();
+      }
+      if (lineLower.includes('dostawa') && lineLower.includes('pvc')) {
+        const match = line.match(/dostawa\s+pvc:\s*([^;]+)/i);
+        if (match) pvcDeliveryDate = match[1].trim();
+      }
+      if (lineLower.includes('autor') && lineLower.includes('dokumentu')) {
+        const match = line.match(/autor.*dokumentu:\s*([^;]+)/i);
+        if (match) documentAuthor = match[1].trim();
+      }
+
+      // Wykryj przejście do sekcji windows
+      if (lineLower.includes('lista okien') || lineLower.includes('lista drzwi')) {
+        currentSection = 'windows';
+        windowsHeaderSkipped = false;
+        continue;
+      }
+
+      // Wykryj przejście do sekcji glasses (szyby)
+      if (lineLower.includes('lista szyb')) {
+        currentSection = 'glasses';
+        glassesHeaderSkipped = false;
+        glassLpCounter = 0;
+        continue;
+      }
+
+      // Parsuj wiersze podsumowujące
+      if (lineLower.includes('laczna liczba') || lineLower.includes('łączna liczba')) {
+        const value = parseInt(parts[1]) || 0;
+        if (lineLower.includes('okien') || lineLower.includes('drzwi')) {
+          totals.windows = value;
+        } else if (lineLower.includes('skrzyd')) {
+          totals.sashes = value;
+        } else if (lineLower.includes('szyb')) {
+          totals.glasses = value;
+        }
+        continue;
+      }
+
+      // Parsuj podsumowanie szyb (format: "Laczna lic:;14")
+      if (lineLower.includes('laczna lic') || lineLower.includes('łączna lic')) {
+        // Jeśli jeszcze nie mamy totals.glasses, użyj tej wartości
+        const value = parseInt(parts[1]) || 0;
+        if (totals.glasses === 0 && value > 0) {
+          totals.glasses = value;
+        }
+        continue;
+      }
+
+      if (currentSection === 'requirements') {
+        // Pomiń nagłówek requirements
+        if (!requirementsHeaderSkipped && (parts[0]?.toLowerCase().includes('zlec') || parts[0]?.toLowerCase().includes('numer'))) {
+          requirementsHeaderSkipped = true;
+          continue;
+        }
+
+        // Parsuj wiersz requirements - musi mieć numer zlecenia w pierwszej kolumnie
+        if (parts.length >= 4 && parts[0] && parts[1]) {
+          // Pierwszy wiersz z danymi - wyciągnij numer zlecenia
+          // Akceptuj cyfry opcjonalnie z separatorem + sufiks: 54222, 54222-a, 54222 xxx
+          if (orderNumber === 'UNKNOWN' && parts[0].match(/^\d+(?:[-\s][a-zA-Z0-9]{1,3})?$/)) {
+            orderNumber = parts[0];
+          }
+
+          const numArt = parts[1];
+          const nowychBel = parseInt(parts[2]) || 0;
+          const reszta = parseInt(parts[3]) || 0;
+
+          // Sprawdź czy to wygląda jak poprawny numer artykułu (8 cyfr, opcjonalnie "p" na końcu)
+          // Przykłady: 19016000, 18866000, 19016000p
+          if (!numArt.match(/^\d{8}p?$/i)) {
+            continue;
+          }
+
+          const { profileNumber, colorCode } = this.articleNumberParser.parse(numArt);
+          const { beams, meters } = this.beamCalculator.calculate(nowychBel, reszta);
+
+          requirements.push({
+            articleNumber: numArt,
+            profileNumber,
+            colorCode,
+            originalBeams: nowychBel,
+            originalRest: reszta,
+            calculatedBeams: beams,
+            calculatedMeters: meters,
+          });
+        }
+      } else if (currentSection === 'windows') {
+        // Pomiń nagłówek windows
+        if (!windowsHeaderSkipped && (parts[0]?.toLowerCase().includes('lp') || parts[1]?.toLowerCase().includes('szerok'))) {
+          windowsHeaderSkipped = true;
+          continue;
+        }
+
+        // Parsuj wiersz windows - lp musi być liczbą
+        if (parts.length >= 5 && parts[0].match(/^\d+$/)) {
+          windows.push({
+            lp: parseInt(parts[0]) || 0,
+            szer: parseInt(parts[1]) || 0,
+            wys: parseInt(parts[2]) || 0,
+            typProfilu: parts[3] || '',
+            ilosc: parseInt(parts[4]) || 1,
+            referencja: parts[5] || '',
+          });
+        }
+      } else if (currentSection === 'glasses') {
+        // Pomiń nagłówek glasses
+        // Format nagłówka: "Lp.;Pozycja;Szerokosc;Wysokosc;Ilosc;Typ pakietu"
+        if (!glassesHeaderSkipped && (parts[0]?.toLowerCase().includes('lp') || parts[1]?.toLowerCase().includes('pozycja'))) {
+          glassesHeaderSkipped = true;
+          continue;
+        }
+
+        // Parsuj wiersz glasses - lp musi być liczbą
+        // Format: 1;1;773;2222;1;4/18/4/18/4S3 Ug=0.5
+        if (parts.length >= 6 && parts[0].match(/^\d+$/)) {
+          glassLpCounter++;
+          const widthMm = parseInt(parts[2]) || 0;
+          const heightMm = parseInt(parts[3]) || 0;
+          const quantity = parseInt(parts[4]) || 1;
+
+          // Oblicz powierzchnię w m² (szerokość × wysokość / 1000000)
+          const areaSqm = (widthMm * heightMm) / 1000000;
+
+          glasses.push({
+            lp: glassLpCounter,
+            position: parseInt(parts[1]) || 0,
+            widthMm,
+            heightMm,
+            quantity,
+            packageType: parts[5] || '',
+            areaSqm: Math.round(areaSqm * 10000) / 10000, // Zaokrąglenie do 4 miejsc po przecinku
+          });
+        }
+      }
+    }
+
+    return {
+      orderNumber,
+      client,
+      project,
+      system,
+      deadline,
+      pvcDeliveryDate,
+      documentAuthor,
+      requirements,
+      windows,
+      glasses,
+      totals,
+    };
+  }
+}
+
+// Eksport instancji singletona dla wygody
+export const uzyteBeleParser = new UzyteBeleParser();

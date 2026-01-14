@@ -18,7 +18,7 @@ import { ReadinessOrchestrator } from './readinessOrchestrator.js';
 export class OrderService {
   constructor(private repository: OrderRepository) {}
 
-  async getAllOrders(filters: { status?: string; archived?: string; colorId?: string }) {
+  async getAllOrders(filters: { status?: string; archived?: string; colorId?: string; documentAuthorUserId?: string }) {
     return this.repository.findAll(filters);
   }
 
@@ -73,6 +73,7 @@ export class OrderService {
       // Prevents edge case: start production without sufficient materials/glass/okuc → deadline missed
       if (data.status === ORDER_STATUSES.IN_PROGRESS) {
         // Legacy warehouse check (fast, critical)
+        // Fixed: ignoruje requirements z beamsCount = 0
         await validateSufficientStock(prisma, id);
 
         // P1-R5: Extended readiness check (glass + okuc status)
@@ -197,6 +198,7 @@ export class OrderService {
 
     // CRITICAL: Validate warehouse stock for ALL orders if starting production
     // Check BEFORE transaction to fail fast
+    // Fixed: ignoruje requirements z beamsCount = 0
     if (status === ORDER_STATUSES.IN_PROGRESS) {
       for (const order of orders) {
         if (order) {
@@ -251,23 +253,23 @@ export class OrderService {
       : {};
 
     const [overdueOrders, upcomingOrders, privateOrders] = await Promise.all([
-      // Overdue orders: deadline < today, status not completed/archived, NOT AKROBUD
+      // Overdue orders: deadline < today, status = new (not yet in production), NOT AKROBUD
       this.repository.findPrivateOrders({
         deadline: { lt: today },
-        status: { notIn: ['completed', 'archived'] },
+        status: 'new',
         archivedAt: null,
       }),
 
-      // Upcoming orders: deadline between today and upcoming date, NOT AKROBUD
+      // Upcoming orders: deadline between today and upcoming date, status = new, NOT AKROBUD
       this.repository.findPrivateOrders({
         deadline: { gte: today, lte: upcomingDate },
-        status: { notIn: ['completed', 'archived'] },
+        status: 'new',
         archivedAt: null,
       }),
 
-      // Private orders (all non-AKROBUD): status not completed/archived
+      // Private orders (all non-AKROBUD): status = new (waiting to be added to production)
       this.repository.findPrivateOrders({
-        status: { notIn: ['completed', 'archived'] },
+        status: 'new',
         archivedAt: null,
       }),
     ]);
@@ -294,5 +296,60 @@ export class OrderService {
     }
 
     return this.repository.findMonthlyProduction(year, month);
+  }
+
+  /**
+   * Get completeness statistics for operator dashboard
+   * Shows how many orders have files, glass, and hardware ready
+   *
+   * @param userId - User ID to filter by (null = all orders)
+   */
+  async getCompletenessStats(userId: number | null) {
+    return this.repository.getCompletenessStats(userId);
+  }
+
+  /**
+   * Partial update of order (PATCH)
+   * Handles conversion of PLN/EUR strings to grosze/centy
+   */
+  async patchOrder(
+    id: number,
+    data: {
+      valuePln?: string | null;
+      valueEur?: string | null;
+      deadline?: string | null;
+      status?: string | null;
+    }
+  ) {
+    // Verify order exists
+    await this.getOrderById(id);
+
+    // Import money conversion functions lazily to avoid circular deps
+    const { plnToGrosze, eurToCenty } = await import('../utils/money.js');
+
+    // Build update data with proper conversions
+    const updateData: Prisma.OrderUpdateInput = {};
+
+    if (data.valuePln !== undefined) {
+      // Convert PLN string (e.g., "123.45") to grosze (12345)
+      updateData.valuePln = data.valuePln !== null ? plnToGrosze(Number(data.valuePln)) : null;
+    }
+    if (data.valueEur !== undefined) {
+      // Convert EUR string (e.g., "123.45") to cents (12345)
+      updateData.valueEur = data.valueEur !== null ? eurToCenty(Number(data.valueEur)) : null;
+    }
+    if (data.deadline !== undefined) {
+      // Convert deadline string to Date or null
+      updateData.deadline = data.deadline ? new Date(data.deadline) : null;
+    }
+    if (data.status !== undefined) {
+      updateData.status = data.status ?? undefined;
+    }
+
+    const order = await this.repository.update(id, updateData);
+
+    emitOrderUpdated(order);
+
+    return order;
   }
 }

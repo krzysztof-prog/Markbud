@@ -44,7 +44,7 @@ export const updateOrderSchema = z.object({
 export const patchOrderSchema = z.object({
   valuePln: z.string().nullable().optional(),
   valueEur: z.string().nullable().optional(),
-  deadline: z.string().nullable().optional().transform((val) => (val ? new Date(val) : null)),
+  deadline: z.string().nullable().optional(),
   status: z.string().nullable().optional(),
 });
 
@@ -54,6 +54,7 @@ export const orderQuerySchema = paginationQuerySchema.extend({
   status: z.string().optional(),
   archived: z.string().optional(),
   colorId: z.string().optional(),
+  documentAuthorUserId: z.string().optional(), // Filter orders by assigned user
 });
 
 // Bulk update status schema
