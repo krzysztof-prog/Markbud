@@ -28,6 +28,16 @@ interface OrderDetail extends Order {
     quantity?: number;
     reference?: string;
   }[];
+  glasses?: {
+    id: number;
+    lp: number;
+    position: number;
+    widthMm: number;
+    heightMm: number;
+    quantity: number;
+    packageType: string;
+    areaSqm: number;
+  }[];
   totalWindows?: number;
   totalSashes?: number;
   totalGlasses?: number;
@@ -60,6 +70,7 @@ export function OrderDetailModal({
 
   const [hasPdf, setHasPdf] = React.useState(false);
   const [windowsExpanded, setWindowsExpanded] = React.useState(false);
+  const [glassesExpanded, setGlassesExpanded] = React.useState(false);
   const [requirementsExpanded, setRequirementsExpanded] = React.useState(false);
   const [schucoExpanded, setSchucoExpanded] = React.useState(true); // Domyślnie rozwinięte
 
@@ -385,6 +396,72 @@ export function OrderDetailModal({
                             </tr>
                           ))}
                         </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Lista szyb - Collapsible */}
+            {order.glasses && order.glasses.length > 0 && (
+              <div className="border rounded-lg border-cyan-200">
+                <button
+                  onClick={() => setGlassesExpanded(!glassesExpanded)}
+                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-cyan-50 transition-colors"
+                >
+                  <h4 className="font-medium flex items-center gap-2 text-cyan-900">
+                    <Package className="h-4 w-4" />
+                    Lista szyb ({order.glasses.length})
+                  </h4>
+                  {glassesExpanded ? (
+                    <ChevronUp className="h-5 w-5 text-cyan-500" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-cyan-500" />
+                  )}
+                </button>
+                {glassesExpanded && (
+                  <div className="border-t border-cyan-200">
+                    <div className="max-h-[400px] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-cyan-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-3 py-2 text-center w-12">Lp.</th>
+                            <th className="px-3 py-2 text-center">Pozycja</th>
+                            <th className="px-3 py-2 text-center">Szerokość</th>
+                            <th className="px-3 py-2 text-center">Wysokość</th>
+                            <th className="px-3 py-2 text-center">Ilość</th>
+                            <th className="px-3 py-2 text-left">Typ pakietu</th>
+                            <th className="px-3 py-2 text-right">Pow. (m²)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {order.glasses.map((glass, i: number) => (
+                            <tr key={glass.id} className={`border-t hover:bg-cyan-50 ${i % 2 === 0 ? 'bg-white' : 'bg-cyan-50/30'}`}>
+                              <td className="px-3 py-2 text-center text-slate-500">{glass.lp}</td>
+                              <td className="px-3 py-2 text-center font-medium">{glass.position}</td>
+                              <td className="px-3 py-2 text-center font-mono">{glass.widthMm} mm</td>
+                              <td className="px-3 py-2 text-center font-mono">{glass.heightMm} mm</td>
+                              <td className="px-3 py-2 text-center font-medium">{glass.quantity}</td>
+                              <td className="px-3 py-2 text-slate-600 max-w-[200px] truncate" title={glass.packageType}>
+                                {glass.packageType}
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono">{glass.areaSqm.toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-cyan-100 font-medium">
+                          <tr>
+                            <td colSpan={4} className="px-3 py-2 text-right">Suma:</td>
+                            <td className="px-3 py-2 text-center">
+                              {order.glasses.reduce((sum, g) => sum + g.quantity, 0)}
+                            </td>
+                            <td className="px-3 py-2"></td>
+                            <td className="px-3 py-2 text-right font-mono">
+                              {order.glasses.reduce((sum, g) => sum + g.areaSqm * g.quantity, 0).toFixed(2)}
+                            </td>
+                          </tr>
+                        </tfoot>
                       </table>
                     </div>
                   </div>

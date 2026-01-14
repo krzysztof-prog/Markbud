@@ -67,6 +67,7 @@ export class OrderRepository {
           okucDemandStatus: true,
           createdAt: true,
           archivedAt: true,
+          productionDate: true,
           // Usunięto pełną tablicę windows - używamy _count.windows dla list view
           // Redukcja danych o ~70%
           // Removed glassOrderItems - relation no longer exists (FK constraint removed)
@@ -554,15 +555,17 @@ export class OrderRepository {
   /**
    * Get completeness statistics for operator dashboard
    * Calculates how many orders (assigned to user) have:
-   * - Files attached
+   * - Files attached (schucoLinks)
    * - Glass ordered/delivered
-   * - Hardware (okuc) available
+   * - Hardware (okuc) complete (imported or none needed)
    * - Ready for production (all complete)
+   *
+   * @param userId - User ID to filter by (null = all orders)
    */
-  async getCompletenessStats(userId: number) {
+  async getCompletenessStats(userId: number | null) {
     const orders = await this.prisma.order.findMany({
       where: {
-        documentAuthorUserId: userId,
+        ...(userId !== null ? { documentAuthorUserId: userId } : {}),
         archivedAt: null,
       },
       select: {
@@ -570,28 +573,34 @@ export class OrderRepository {
         orderNumber: true,
         glassOrderStatus: true,
         okucDemandStatus: true,
+        schucoLinks: {
+          select: { id: true },
+        },
       },
     });
 
     const totalOrders = orders.length;
-    // TODO: Dodać relację files do modelu Order gdy będzie potrzebna
-    const withFiles = 0;
+
+    // Files: zlecenie ma powiazanie ze Schuco (schucoLinks)
+    const withFiles = orders.filter((o) => o.schucoLinks.length > 0).length;
 
     // Glass status: ordered lub delivered
     const withGlass = orders.filter(
       (o) => o.glassOrderStatus === 'ordered' || o.glassOrderStatus === 'delivered'
     ).length;
 
-    // Okuc status: available lub ordered
+    // Okuc status: imported (zaimportowano) lub none (brak potrzeby)
+    // has_atypical i pending = niekompletne
     const withHardware = orders.filter(
-      (o) => o.okucDemandStatus === 'available' || o.okucDemandStatus === 'ordered'
+      (o) => o.okucDemandStatus === 'imported' || o.okucDemandStatus === 'none'
     ).length;
 
-    // Ready for production: glass delivered + hardware available
+    // Ready for production: pliki + szyby delivered + okucia OK
     const readyForProduction = orders.filter(
       (o) =>
+        o.schucoLinks.length > 0 &&
         o.glassOrderStatus === 'delivered' &&
-        o.okucDemandStatus === 'available'
+        (o.okucDemandStatus === 'imported' || o.okucDemandStatus === 'none')
     ).length;
 
     return {
