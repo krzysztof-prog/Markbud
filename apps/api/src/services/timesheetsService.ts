@@ -18,6 +18,7 @@ import type {
   UpdateTimeEntryInput,
   TimeEntryQuery,
   SetStandardDayInput,
+  SetAbsenceRangeInput,
   CalendarQuery,
 } from '../validators/timesheets.js';
 
