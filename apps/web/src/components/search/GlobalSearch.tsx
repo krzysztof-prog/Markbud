@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, KeyboardEvent, Suspense } from 'react';
+import { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import dynamic from 'next/dynamic';
 import { Search, X, FileText, Calendar, Package } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';

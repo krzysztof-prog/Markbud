@@ -352,4 +352,12 @@ export class OrderService {
 
     return order;
   }
+
+  /**
+   * Get requirements totals grouped by profile and color
+   * Used for the requirements totals view
+   */
+  async getRequirementsTotals() {
+    return this.repository.getRequirementsTotals();
+  }
 }

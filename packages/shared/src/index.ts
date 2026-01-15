@@ -5,4 +5,5 @@ export * from './types/orders';
 export * from './types/warehouse';
 export * from './types/deliveries';
 export * from './types/settings';
+export * from './types/user-roles';
 export * from './constants';

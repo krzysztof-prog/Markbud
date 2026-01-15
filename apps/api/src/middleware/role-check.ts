@@ -105,6 +105,40 @@ export async function requireManagerAccess(
 }
 
 /**
+ * Middleware: Sprawdza czy użytkownik jest administratorem
+ * Tylko owner i admin
+ */
+export async function requireAdmin(
+  request: AuthenticatedRequest,
+  reply: FastifyReply
+): Promise<void> {
+  const userId = request.user?.userId;
+
+  if (!userId) {
+    return reply.status(401).send({ error: 'Brak autoryzacji. Zaloguj się ponownie.' });
+  }
+
+  // Konwertuj userId na number jeśli jest stringiem
+  const userIdNumber = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+
+  // Pobierz użytkownika z bazy
+  const user = await prisma.user.findUnique({
+    where: { id: userIdNumber },
+    select: { role: true },
+  });
+
+  if (!user) {
+    return reply.status(401).send({ error: 'Użytkownik nie istnieje.' });
+  }
+
+  if (user.role !== UserRole.ADMIN && user.role !== UserRole.OWNER) {
+    return reply.status(403).send({
+      error: 'Dostęp tylko dla administratorów.',
+    });
+  }
+}
+
+/**
  * Middleware generyczny: Sprawdza konkretne uprawnienie
  */
 export function requirePermission(permission: string) {

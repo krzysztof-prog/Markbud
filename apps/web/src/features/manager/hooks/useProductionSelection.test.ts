@@ -66,13 +66,14 @@ describe('useProductionSelection', () => {
       id: 1,
       deliveryNumber: 'D001',
       deliveryDate: '2026-01-15',
+      notes: null,
       status: 'planned',
       deliveryOrders: [
-        { id: 1, deliveryId: 1, orderId: 10, position: 1, order: { id: 10 } as any },
-        { id: 2, deliveryId: 1, orderId: 20, position: 2, order: { id: 20 } as any },
-        { id: 3, deliveryId: 1, orderId: 30, position: 3, order: { id: 30 } as any },
+        { order: { id: 10, orderNumber: 'ORD-10' } },
+        { order: { id: 20, orderNumber: 'ORD-20' } },
+        { order: { id: 30, orderNumber: 'ORD-30' } },
       ],
-    } as Delivery;
+    };
 
     it('should add delivery to selection when checked', () => {
       const { result } = renderHook(() => useProductionSelection());

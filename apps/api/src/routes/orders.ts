@@ -300,46 +300,10 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
     }
   );
 
-  // GET /api/orders/requirements/totals - get totals for each profile (inline - specific logic)
+  // GET /api/orders/requirements/totals - get totals for each profile
   fastify.get('/requirements/totals', {
     preHandler: verifyAuth,
-  }, async () => {
-    const requirements = await prisma.orderRequirement.findMany({
-      select: {
-        profileId: true,
-        colorId: true,
-        beamsCount: true,
-        meters: true,
-        profile: {
-          select: { id: true, number: true, articleNumber: true },
-        },
-        color: {
-          select: { id: true, code: true },
-        },
-      },
-    });
-
-    const totals: Record<string, { profileId: number; profileNumber: string; profileArticleNumber: string | null; colorId: number; colorCode: string; totalBeams: number; totalMeters: number }> = {};
-
-    for (const req of requirements) {
-      const key = `${req.profileId}-${req.colorId}`;
-      if (!totals[key]) {
-        totals[key] = {
-          profileId: req.profileId,
-          profileNumber: req.profile.number,
-          profileArticleNumber: req.profile.articleNumber,
-          colorId: req.colorId,
-          colorCode: req.color.code,
-          totalBeams: 0,
-          totalMeters: 0,
-        };
-      }
-      totals[key].totalBeams += req.beamsCount;
-      totals[key].totalMeters += req.meters;
-    }
-
-    return Object.values(totals);
-  });
+  }, handler.getRequirementsTotals.bind(handler));
 
   // P1-R4: GET /api/orders/:id/readiness - get production readiness checklist (System Brain)
   fastify.get<{ Params: { id: string } }>('/:id/readiness', {

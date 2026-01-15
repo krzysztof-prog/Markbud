@@ -61,7 +61,6 @@ interface SortableRowProps {
   profile: ProfileRow;
   idx: number;
   colorGroupId: string;
-  deliveries: DeliveryData[];
   sumColumns: number;
   getSumForColumns: (deliveries: DeliveryData[], columns: number) => number;
   handleMagValueChange: (colorId: string, profileId: string, value: string) => void;
@@ -72,7 +71,6 @@ function SortableRow({
   profile,
   idx,
   colorGroupId,
-  deliveries,
   sumColumns,
   getSumForColumns,
   handleMagValueChange,
@@ -594,7 +592,6 @@ export function ProfileDeliveryTable() {
                               profile={profile}
                               idx={idx}
                               colorGroupId={colorGroup.id}
-                              deliveries={deliveries}
                               sumColumns={sumColumns}
                               getSumForColumns={getSumForColumns}
                               handleMagValueChange={handleMagValueChange}

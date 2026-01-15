@@ -180,4 +180,16 @@ export class OrderHandler {
     const order = await this.service.patchOrder(parseInt(id), validated);
     return reply.send(order);
   }
+
+  /**
+   * Get requirements totals grouped by profile and color
+   * GET /api/orders/requirements/totals
+   */
+  async getRequirementsTotals(
+    _request: FastifyRequest,
+    reply: FastifyReply
+  ) {
+    const totals = await this.service.getRequirementsTotals();
+    return reply.send(totals);
+  }
 }
