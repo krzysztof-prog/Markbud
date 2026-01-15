@@ -10,9 +10,6 @@ import {
   createOkucOrderSchema,
   updateOkucOrderSchema,
   receiveOrderSchema,
-  type CreateOkucOrderInput,
-  type UpdateOkucOrderInput,
-  type ReceiveOrderInput,
 } from '../../validators/okuc.js';
 
 const repository = new OkucOrderRepository(prisma);
@@ -76,7 +73,7 @@ export const okucOrderHandler = {
    * Create a new order
    */
   async create(request: FastifyRequest, reply: FastifyReply) {
-    const data = createOkucOrderSchema.parse(request.body) as CreateOkucOrderInput;
+    const data = createOkucOrderSchema.parse(request.body);
 
     // TODO: Get userId from auth middleware when implemented
     const userId = 1; // Placeholder
@@ -113,7 +110,7 @@ export const okucOrderHandler = {
       return reply.status(400).send({ error: 'Invalid order ID' });
     }
 
-    const data = updateOkucOrderSchema.parse(request.body) as UpdateOkucOrderInput;
+    const data = updateOkucOrderSchema.parse(request.body);
 
     // TODO: Get userId from auth middleware when implemented
     const userId = 1; // Placeholder
@@ -143,7 +140,7 @@ export const okucOrderHandler = {
       return reply.status(400).send({ error: 'Invalid order ID' });
     }
 
-    const data = receiveOrderSchema.parse(request.body) as ReceiveOrderInput;
+    const data = receiveOrderSchema.parse(request.body);
 
     // TODO: Get userId from auth middleware when implemented
     const userId = 1; // Placeholder

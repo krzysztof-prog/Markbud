@@ -15,6 +15,66 @@
 
 ---
 
+## 2026-01-15 - Zbędne Type Assertions po Zod Parse + Brakujące ErrorBoundary
+
+**Co się stało:**
+Podczas audytu tech debt odkryto 12 miejsc gdzie kod używał `as Type` po `.parse()` Zod:
+```typescript
+// ❌ Zbędne - Zod już zwraca poprawny typ
+const data = createDemandSchema.parse(request.body) as CreateDemandInput;
+```
+
+Dodatkowo, komponent `ErrorBoundary` istniał w projekcie ale NIE BYŁ UŻYWANY - błędy React renderowania nie były łapane.
+
+**Root cause:**
+1. **Type assertions**: Copy-paste starszego kodu gdzie używano `as` dla type safety, nie rozumiejąc że Zod automatycznie inferuje typy przez `z.infer<typeof schema>`
+2. **ErrorBoundary**: Komponent stworzony "na potem" i zapomniany - nigdy nie dodany do layout.tsx
+
+**Impact:**
+- Niski (Type assertions): Niepotrzebny kod, trudniejsze utrzymanie, fałszywe przekonanie o bezpieczeństwie typów
+- Średni (ErrorBoundary): Błędy renderowania crashowały całą aplikację zamiast pokazać przyjazną stronę błędu
+
+**Fix:**
+
+1. **Type assertions - usuń wszystkie:**
+```typescript
+// ✅ Zod infer działa automatycznie
+const data = createDemandSchema.parse(request.body);
+// TypeScript zna typ 'data' z definicji schematu!
+```
+
+Usunięto w 4 plikach:
+- `mojaPracaHandler.ts` - 4 miejsca + usunięto nieużywany import typu
+- `demandHandler.ts` - 2 miejsca
+- `orderHandler.ts` - 3 miejsca
+- `proportionHandler.ts` - 2 miejsca
+
+2. **ErrorBoundary - dodaj do layout:**
+```typescript
+// apps/web/src/app/layout.tsx
+import { ErrorBoundary } from '@/components/error-boundary';
+
+<Providers>
+  <ErrorBoundary>
+    <div className="flex h-screen">
+      {/* ...content */}
+    </div>
+  </ErrorBoundary>
+</Providers>
+```
+
+**Prevention:**
+1. ✅ **NIGDY `as Type` po Zod parse** - Zod już daje poprawny typ przez `z.infer`
+2. ✅ **Komponenty utility (ErrorBoundary, Loading)** - od razu używaj po stworzeniu
+3. ✅ **Grep po `as ` w handlerach** - sprawdź czy assertions są potrzebne
+4. ✅ **Zod inference** - korzystaj z `z.infer<typeof schema>` zamiast ręcznych typów
+
+**Lekcja:**
+- Zod + TypeScript = type inference działa automatycznie. `as Type` po `.parse()` to code smell
+- Komponenty "na później" często zostają "nigdy" - używaj od razu lub usuń
+
+---
+
 ## 2026-01-05 - Dashboard nie ładował się po restarcie (WebSocket interference + cache)
 
 **Co się stało:**

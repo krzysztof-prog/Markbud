@@ -9,8 +9,6 @@ import { OkucDemandRepository } from '../../repositories/okuc/OkucDemandReposito
 import {
   createDemandSchema,
   updateDemandSchema,
-  type CreateDemandInput,
-  type UpdateDemandInput,
 } from '../../validators/okuc.js';
 
 const repository = new OkucDemandRepository(prisma);
@@ -91,7 +89,7 @@ export const okucDemandHandler = {
    * Create a new demand
    */
   async create(request: FastifyRequest, reply: FastifyReply) {
-    const data = createDemandSchema.parse(request.body) as CreateDemandInput;
+    const data = createDemandSchema.parse(request.body);
 
     const demand = await repository.create(data);
 
@@ -115,7 +113,7 @@ export const okucDemandHandler = {
       return reply.status(400).send({ error: 'Invalid demand ID' });
     }
 
-    const data = updateDemandSchema.parse(request.body) as UpdateDemandInput;
+    const data = updateDemandSchema.parse(request.body);
 
     // TODO: Get userId from auth middleware when implemented
     const userId = 1; // Placeholder

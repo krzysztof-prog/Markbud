@@ -6,7 +6,6 @@ import {
   conflictIdParamsSchema,
   conflictResolutionSchema,
   dateQuerySchema,
-  type DateQuery,
 } from '../validators/moja-praca.js';
 import { NotFoundError, ValidationError, ForbiddenError } from '../utils/errors.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
@@ -127,7 +126,7 @@ export const mojaPracaHandler = {
   async getOrders(request: AuthenticatedRequest, reply: FastifyReply) {
     const userId = getUserId(request);
 
-    const query = dateQuerySchema.parse(request.query) as DateQuery;
+    const query = dateQuerySchema.parse(request.query);
     const date = parseDate(query.date);
 
     const service = new MojaPracaService(prisma);
@@ -143,7 +142,7 @@ export const mojaPracaHandler = {
   async getDeliveries(request: AuthenticatedRequest, reply: FastifyReply) {
     const userId = getUserId(request);
 
-    const query = dateQuerySchema.parse(request.query) as DateQuery;
+    const query = dateQuerySchema.parse(request.query);
     const date = parseDate(query.date);
 
     const service = new MojaPracaService(prisma);
@@ -159,7 +158,7 @@ export const mojaPracaHandler = {
   async getGlassOrders(request: AuthenticatedRequest, reply: FastifyReply) {
     const userId = getUserId(request);
 
-    const query = dateQuerySchema.parse(request.query) as DateQuery;
+    const query = dateQuerySchema.parse(request.query);
     const date = parseDate(query.date);
 
     const service = new MojaPracaService(prisma);
@@ -175,7 +174,7 @@ export const mojaPracaHandler = {
   async getDaySummary(request: AuthenticatedRequest, reply: FastifyReply) {
     const userId = getUserId(request);
 
-    const query = dateQuerySchema.parse(request.query) as DateQuery;
+    const query = dateQuerySchema.parse(request.query);
     const date = parseDate(query.date);
 
     const service = new MojaPracaService(prisma);

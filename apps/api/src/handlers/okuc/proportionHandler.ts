@@ -9,8 +9,6 @@ import { OkucProportionRepository } from '../../repositories/okuc/OkucProportion
 import {
   createProportionSchema,
   updateProportionSchema,
-  type CreateProportionInput,
-  type UpdateProportionInput,
 } from '../../validators/okuc.js';
 
 const repository = new OkucProportionRepository(prisma);
@@ -103,7 +101,7 @@ export const okucProportionHandler = {
    * Create a new proportion
    */
   async create(request: FastifyRequest, reply: FastifyReply) {
-    const data = createProportionSchema.parse(request.body) as CreateProportionInput;
+    const data = createProportionSchema.parse(request.body);
 
     // Check if proportion already exists
     const exists = await repository.exists(data.sourceArticleId, data.targetArticleId);
@@ -135,7 +133,7 @@ export const okucProportionHandler = {
       return reply.status(400).send({ error: 'Invalid proportion ID' });
     }
 
-    const data = updateProportionSchema.parse(request.body) as UpdateProportionInput;
+    const data = updateProportionSchema.parse(request.body);
 
     // Check if proportion exists
     const existing = await repository.findById(id);
