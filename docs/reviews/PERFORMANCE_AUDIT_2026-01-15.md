@@ -156,9 +156,13 @@
   - [x] magazyn/okuc/page.tsx - ImportArticlesDialog + ImportStockDialog lazy loaded
   - [x] magazyn/okuc/artykuly/page.tsx - ImportArticlesDialog lazy loaded
   - [x] DostawyPageContent.tsx - już było lazy loaded
-- [ ] FAZA 4 - Split plików (odłożone - wymaga więcej pracy)
+- [x] **FAZA 4** - Split plików (ŚWIADOMIE ODŁOŻONE)
+  - Analiza wykazała wysokie ryzyko regresji bez testów
+  - Szacowany czas: 15-20h dla marginalnego zysku performance
+  - Główny zysk byłby w maintainability, nie w szybkości
+  - Rekomendacja: realizować przy okazji refaktoringu konkretnych modułów
 
 ---
 
 *Wygenerowano: 2026-01-15*
-*Ostatnia aktualizacja: 2026-01-15 (Faza 3 ukończona)*
+*Ostatnia aktualizacja: 2026-01-15 (Audyt zakończony - Fazy 1-3 ukończone, Faza 4 odłożona)*
