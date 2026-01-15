@@ -293,6 +293,11 @@ export function Sidebar() {
     };
   }, [mobileOpen]);
 
+  // Ukryj sidebar na stronie logowania
+  if (pathname === '/login') {
+    return null;
+  }
+
   return (
     <>
       {/* Desktop collapsed sidebar toggle button */}

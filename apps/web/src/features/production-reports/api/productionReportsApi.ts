@@ -215,7 +215,7 @@ export const productionReportsApi = {
     fetchApi<void>(`${BASE_URL}/${year}/${month}/reopen`, { method: 'POST' }),
 
   exportPdf: async (year: number, month: number, eurRate: number = 4.30): Promise<void> => {
-    const token = localStorage.getItem('akrobud_auth_token');
+    const token = localStorage.getItem('auth_token');
     if (!token) {
       throw new Error('Brak tokenu autoryzacji');
     }

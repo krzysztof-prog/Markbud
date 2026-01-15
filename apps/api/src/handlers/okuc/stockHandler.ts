@@ -8,12 +8,7 @@ import { prisma } from '../../utils/prisma.js';
 import { OkucStockRepository } from '../../repositories/okuc/OkucStockRepository.js';
 import { OkucStockService } from '../../services/okuc/OkucStockService.js';
 import { updateStockSchema } from '../../validators/okuc.js';
-
-interface AuthenticatedRequest extends FastifyRequest {
-  user?: {
-    id: number;
-  };
-}
+import type { AuthenticatedRequest } from '../../middleware/auth.js';
 
 const repository = new OkucStockRepository(prisma);
 const service = new OkucStockService(repository);
@@ -92,10 +87,11 @@ export const okucStockHandler = {
     const validated = updateStockSchema.parse(request.body);
 
     // Extract userId from auth (assuming it's in request.user)
-    const userId = (request as AuthenticatedRequest).user?.id;
-    if (!userId) {
+    const rawUserId = (request as AuthenticatedRequest).user?.userId;
+    if (!rawUserId) {
       return reply.status(401).send({ error: 'User not authenticated' });
     }
+    const userId = typeof rawUserId === 'string' ? parseInt(rawUserId, 10) : rawUserId;
 
     const stock = await service.updateStock(id, validated, userId);
     return reply.status(200).send(stock);
@@ -113,10 +109,11 @@ export const okucStockHandler = {
     }
 
     // Extract userId from auth
-    const userId = (request as AuthenticatedRequest).user?.id;
-    if (!userId) {
+    const rawUserId = (request as AuthenticatedRequest).user?.userId;
+    if (!rawUserId) {
       return reply.status(401).send({ error: 'User not authenticated' });
     }
+    const userId = typeof rawUserId === 'string' ? parseInt(rawUserId, 10) : rawUserId;
 
     const stock = await service.adjustStockQuantity(stockId, quantity, version, userId);
     return reply.status(200).send(stock);
@@ -191,10 +188,11 @@ export const okucStockHandler = {
     };
     const { items, conflictResolution, selectedConflicts = [] } = body;
 
-    const userId = (request as AuthenticatedRequest).user?.id;
-    if (!userId) {
+    const rawUserId = (request as AuthenticatedRequest).user?.userId;
+    if (!rawUserId) {
       return reply.status(401).send({ error: 'Uzytkownik nie zalogowany' });
     }
+    const userId = typeof rawUserId === 'string' ? parseInt(rawUserId, 10) : rawUserId;
 
     const results = await service.importStock(items, conflictResolution, selectedConflicts, userId);
     return reply.status(200).send(results);

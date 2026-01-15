@@ -1,31 +1,38 @@
 'use client';
 
-import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import { CalendarView, DayView, formatDateISO } from '@/features/timesheets';
 
 /**
- * Zakładka Godzinówki - placeholder
- * Funkcjonalność będzie dodana w przyszłości
+ * Zakładka Godzinówki - moduł zarządzania czasem pracy
+ *
+ * Składa się z:
+ * - CalendarView po lewej (wybór dnia)
+ * - DayView po prawej (szczegóły dnia)
  */
 export const TimeTrackerTab: React.FC = () => {
+  // Stan wybranego dnia - domyślnie dzisiaj
+  const [selectedDate, setSelectedDate] = useState<string>(
+    formatDateISO(new Date())
+  );
+
   return (
-    <div className="p-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Clock className="h-5 w-5 text-gray-500" />
-            <CardTitle>Godzinówki</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-gray-500">Funkcjonalność w przygotowaniu...</p>
-          <p className="text-sm text-gray-400 mt-2">
-            Tutaj będzie można zarządzać godzinami pracy pracowników, śledzić czas produkcji i
-            generować raporty godzinowe.
-          </p>
-        </CardContent>
-      </Card>
+    <div className="h-full flex gap-4 p-4">
+      {/* Kalendarz - lewa strona */}
+      <div className="w-80 shrink-0">
+        <CalendarView
+          onDaySelect={setSelectedDate}
+          selectedDate={selectedDate}
+        />
+      </div>
+
+      {/* Szczegóły dnia - prawa strona */}
+      <div className="flex-1 overflow-auto">
+        <DayView
+          date={selectedDate}
+          onDateChange={setSelectedDate}
+        />
+      </div>
     </div>
   );
 };

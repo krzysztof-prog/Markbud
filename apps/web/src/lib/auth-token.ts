@@ -5,7 +5,7 @@
  * In production, tokens should come from a proper authentication system.
  */
 
-const TOKEN_STORAGE_KEY = 'akrobud_auth_token';
+const TOKEN_STORAGE_KEY = 'auth_token';
 
 // Singleton promise do zapobiegania wielokrotnym równoczesnym requestom o token
 let pendingTokenRequest: Promise<string | null> | null = null;

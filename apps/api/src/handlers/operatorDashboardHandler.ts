@@ -46,7 +46,7 @@ export async function getOperatorDashboard(
   // Pobierz userId z tokenu JWT (zalogowany uzytkownik)
   const authUser = (request as any).user;
 
-  if (!authUser?.id) {
+  if (!authUser?.userId) {
     return reply.status(401).send({ error: 'Brak autoryzacji' });
   }
 
@@ -62,7 +62,7 @@ export async function getOperatorDashboard(
   const filterByUser = isOperator ? true : query.filterByUser === 'true';
 
   // Pobierz dane z serwisu
-  const data = await getService().getDashboardData(authUser.id, filterByUser);
+  const data = await getService().getDashboardData(authUser.userId, filterByUser);
 
   reply.send(data);
 }

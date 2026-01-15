@@ -1,12 +1,21 @@
 /**
  * API Client - wspólny helper do komunikacji z backendem
  *
- * NOTE: No authentication required - single-user system
+ * Automatycznie dodaje token autoryzacji do wszystkich requestów
  */
 
 import { getErrorMessage, getErrorAction } from './error-messages';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const TOKEN_KEY = 'auth_token';
+
+/**
+ * Pobierz token z localStorage
+ */
+function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(TOKEN_KEY);
+}
 
 export interface ApiError extends Error {
   status?: number;
@@ -35,11 +44,16 @@ export async function fetchApi<T>(endpoint: string, options?: RequestInit): Prom
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 210000); // 3.5 minutes timeout
 
+  // Pobierz token autoryzacji
+  const token = getAuthToken();
+  const authHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+
   try {
     const response = await fetch(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders,
         ...options?.headers,
       },
       signal: controller.signal,
@@ -109,6 +123,9 @@ export async function uploadFile<T>(endpoint: string, file: File): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 210000); // 3.5 minutes for file uploads
 
+  // Pobierz token autoryzacji
+  const token = getAuthToken();
+
   console.log('[uploadFile] Sending fetch request...');
   const startTime = Date.now();
 
@@ -116,6 +133,7 @@ export async function uploadFile<T>(endpoint: string, file: File): Promise<T> {
     const response = await fetch(url, {
       method: 'POST',
       body: formData,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
       signal: controller.signal,
     });
 
@@ -169,8 +187,12 @@ export async function fetchBlob(endpoint: string): Promise<Blob> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 210000);
 
+  // Pobierz token autoryzacji
+  const token = getAuthToken();
+
   try {
     const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -213,9 +235,13 @@ export async function fetchBlob(endpoint: string): Promise<Blob> {
 export async function checkExists(endpoint: string): Promise<boolean> {
   const url = `${API_URL}${endpoint}`;
 
+  // Pobierz token autoryzacji
+  const token = getAuthToken();
+
   try {
     const response = await fetch(url, {
       method: 'HEAD',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     return response.ok;
   } catch {

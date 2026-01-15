@@ -3,7 +3,7 @@
 > **Claude:** Przeczytaj ten plik PRZED każdym kodowaniem!
 > Ta lista rośnie z każdym błędem - jeśli popełnisz nowy, **dodaj go tutaj**.
 
-**Ostatnia aktualizacja:** 2026-01-02
+**Ostatnia aktualizacja:** 2026-01-15
 **Źródło:** Audyt kodu + doświadczenie projektu
 
 ---
@@ -511,6 +511,84 @@ function formatLocalDate(date: Date): string {
 - Wyświetlanie użytkownikowi
 - Grupowanie po dniu (kalendarz, raporty)
 - Filtrowanie "dzisiejsze wpisy"
+
+---
+
+## 🔐 Autoryzacja i tokeny
+
+### ❌ DON'T - Duplikuj klucze tokena w localStorage
+```typescript
+// ❌ ŹLE - różne klucze w różnych miejscach
+// AuthContext.tsx:
+const TOKEN_KEY = 'auth_token';
+
+// auth-token.ts:
+const TOKEN_STORAGE_KEY = 'akrobud_auth_token'; // ← INNY KLUCZ!
+
+// api-client.ts:
+const TOKEN_KEY = 'auth_token';
+```
+
+**Konsekwencja:** Token zapisany pod jednym kluczem, szukany pod innym → 401 Unauthorized mimo zalogowania.
+
+### ✅ DO - Jeden klucz tokena w centralnym miejscu
+```typescript
+// ✅ POPRAWNIE - wszystkie pliki używają tego samego klucza
+// Idealnie: stała w constants.ts
+export const AUTH_TOKEN_KEY = 'auth_token';
+
+// Wszędzie indziej:
+import { AUTH_TOKEN_KEY } from '@/lib/constants';
+localStorage.getItem(AUTH_TOKEN_KEY);
+```
+
+### ❌ DON'T - API client bez nagłówka Authorization
+```typescript
+// ❌ ŹLE - brak tokena w requestach
+const response = await fetch(url, {
+  headers: {
+    'Content-Type': 'application/json',
+    // brak Authorization header!
+  }
+});
+```
+
+### ✅ DO - ZAWSZE dodawaj token do API requestów
+```typescript
+// ✅ POPRAWNIE
+const token = localStorage.getItem(TOKEN_KEY);
+const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+
+const response = await fetch(url, {
+  headers: {
+    'Content-Type': 'application/json',
+    ...authHeaders, // ← KLUCZOWE!
+  }
+});
+```
+
+### ❌ DON'T - Lokalna definicja AuthenticatedRequest w handlerach
+```typescript
+// ❌ ŹLE - niezgodność z middleware
+interface AuthenticatedRequest extends FastifyRequest {
+  user?: { id: number }; // middleware ustawia 'userId', nie 'id'!
+}
+```
+
+### ✅ DO - Importuj typ z middleware
+```typescript
+// ✅ POPRAWNIE
+import type { AuthenticatedRequest } from '../../middleware/auth.js';
+
+// Middleware ustawia:
+// request.user = { userId: 123, email: '...' }
+
+const userId = (request as AuthenticatedRequest).user?.userId;
+```
+
+**Gdzie sprawdzić:**
+- [apps/api/src/middleware/auth.ts](apps/api/src/middleware/auth.ts) - definicja AuthenticatedRequest
+- [apps/web/src/lib/api-client.ts](apps/web/src/lib/api-client.ts) - przykład dodawania tokena
 
 ---
 
