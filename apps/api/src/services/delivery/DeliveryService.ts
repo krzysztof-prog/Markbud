@@ -40,6 +40,7 @@ import { DeliveryNotificationService, deliveryNotificationService } from './Deli
 import { DeliveryOptimizationService, type OptimizationStatus } from './DeliveryOptimizationService.js';
 import { DeliveryOrderService } from './DeliveryOrderService.js';
 import { PalletValidationService } from '../palletValidationService.js';
+import { CalendarService } from '../calendar/CalendarService.js';
 import type { OptimizationOptions, OptimizationResult } from '../pallet-optimizer/PalletOptimizerService.js';
 
 export class DeliveryService {
@@ -58,7 +59,9 @@ export class DeliveryService {
     this.notificationService = deliveryNotificationService;
     this.numberGenerator = new DeliveryNumberGenerator(prisma);
     this.statisticsService = new DeliveryStatisticsService(repository);
-    this.calendarService = new DeliveryCalendarService(repository);
+    // CalendarService do logiki świąt (obliczane, nie z DB)
+    const calendarSvc = new CalendarService(prisma);
+    this.calendarService = new DeliveryCalendarService(repository, calendarSvc);
     this.optimizationService = new DeliveryOptimizationService(
       repository,
       new PalletOptimizerRepository(prisma),

@@ -610,6 +610,76 @@ export class TimesheetsService {
     });
   }
 
+  /**
+   * Ustawia nieobecność dla pracownika w zakresie dat
+   */
+  async setAbsenceRange(data: SetAbsenceRangeInput) {
+    const fromDate = new Date(data.fromDate);
+    const toDate = new Date(data.toDate);
+
+    if (fromDate > toDate) {
+      throw new ValidationError('Data początkowa musi być wcześniejsza niż końcowa');
+    }
+
+    // Sprawdź czy pracownik istnieje
+    const worker = await this.prisma.worker.findUnique({
+      where: { id: data.workerId },
+    });
+    if (!worker) {
+      throw new NotFoundError('Pracownik nie został znaleziony');
+    }
+
+    // Sprawdź czy stanowisko istnieje
+    const position = await this.prisma.position.findUnique({
+      where: { id: data.positionId },
+    });
+    if (!position) {
+      throw new NotFoundError('Stanowisko nie zostało znalezione');
+    }
+
+    // Generuj listę dat
+    const dates: Date[] = [];
+    const currentDate = new Date(fromDate);
+    while (currentDate <= toDate) {
+      dates.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Utwórz/aktualizuj wpisy dla każdej daty
+    return this.prisma.$transaction(async (tx) => {
+      const results = [];
+
+      for (const date of dates) {
+        date.setHours(0, 0, 0, 0);
+
+        const result = await tx.timeEntry.upsert({
+          where: {
+            date_workerId: { date, workerId: data.workerId },
+          },
+          update: {
+            positionId: data.positionId,
+            productiveHours: 0,
+            absenceType: data.absenceType,
+          },
+          create: {
+            date,
+            workerId: data.workerId,
+            positionId: data.positionId,
+            productiveHours: 0,
+            absenceType: data.absenceType,
+          },
+          include: {
+            worker: true,
+            position: true,
+          },
+        });
+        results.push(result);
+      }
+
+      return results;
+    });
+  }
+
   // ============================================
   // CALENDAR & SUMMARY
   // ============================================
