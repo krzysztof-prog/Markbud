@@ -7,8 +7,18 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../utils/prisma.js';
 import { OkucStockRepository } from '../../repositories/okuc/OkucStockRepository.js';
 import { OkucStockService } from '../../services/okuc/OkucStockService.js';
-import { updateStockSchema } from '../../validators/okuc.js';
+import { updateStockSchema, stockQueryFiltersSchema, adjustStockRequestSchema, importStockSchema } from '../../validators/okuc.js';
 import type { AuthenticatedRequest } from '../../middleware/auth.js';
+import { z } from 'zod';
+
+// Schema dla walidacji ID z params
+const idParamSchema = z.object({
+  id: z.string().regex(/^\d+$/, 'Invalid ID format').transform(val => parseInt(val, 10)),
+});
+
+const articleIdParamSchema = z.object({
+  articleId: z.string().regex(/^\d+$/, 'Invalid article ID format').transform(val => parseInt(val, 10)),
+});
 
 const repository = new OkucStockRepository(prisma);
 const service = new OkucStockService(repository);
@@ -19,19 +29,7 @@ export const okucStockHandler = {
    * List all stock with optional filters
    */
   async list(request: FastifyRequest, reply: FastifyReply) {
-    const { articleId, warehouseType, subWarehouse, belowMin } = request.query as {
-      articleId?: string;
-      warehouseType?: string;
-      subWarehouse?: string;
-      belowMin?: string;
-    };
-
-    const filters = {
-      articleId: articleId ? parseInt(articleId, 10) : undefined,
-      warehouseType,
-      subWarehouse,
-      belowMin: belowMin !== undefined ? belowMin === 'true' : undefined,
-    };
+    const filters = stockQueryFiltersSchema.parse(request.query);
 
     const stocks = await service.getAllStock(filters);
     return reply.status(200).send(stocks);
@@ -42,10 +40,7 @@ export const okucStockHandler = {
    * Get stock by ID
    */
   async getById(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-    const id = parseInt(request.params.id, 10);
-    if (isNaN(id)) {
-      return reply.status(400).send({ error: 'Invalid stock ID' });
-    }
+    const { id } = idParamSchema.parse(request.params);
 
     const stock = await service.getStockById(id);
     return reply.status(200).send(stock);
@@ -57,18 +52,13 @@ export const okucStockHandler = {
    * Query params: warehouseType, subWarehouse
    */
   async getByArticle(request: FastifyRequest<{ Params: { articleId: string } }>, reply: FastifyReply) {
-    const articleId = parseInt(request.params.articleId, 10);
-    if (isNaN(articleId)) {
-      return reply.status(400).send({ error: 'Invalid article ID' });
-    }
+    const { articleId } = articleIdParamSchema.parse(request.params);
 
-    const { warehouseType, subWarehouse } = request.query as {
-      warehouseType?: string;
-      subWarehouse?: string;
-    };
-    if (!warehouseType) {
-      return reply.status(400).send({ error: 'warehouseType is required' });
-    }
+    const querySchema = z.object({
+      warehouseType: z.string().min(1, 'warehouseType is required'),
+      subWarehouse: z.string().optional(),
+    });
+    const { warehouseType, subWarehouse } = querySchema.parse(request.query);
 
     const stock = await service.getStockByArticle(articleId, warehouseType, subWarehouse);
     return reply.status(200).send(stock);
@@ -79,11 +69,7 @@ export const okucStockHandler = {
    * Update stock quantity (with optimistic locking)
    */
   async update(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-    const id = parseInt(request.params.id, 10);
-    if (isNaN(id)) {
-      return reply.status(400).send({ error: 'Invalid stock ID' });
-    }
-
+    const { id } = idParamSchema.parse(request.params);
     const validated = updateStockSchema.parse(request.body);
 
     // Extract userId from auth (assuming it's in request.user)
@@ -101,12 +87,8 @@ export const okucStockHandler = {
    * POST /api/okuc/stock/adjust
    * Adjust stock quantity (add/subtract)
    */
-  async adjust(request: FastifyRequest<{ Body: { stockId: number; quantity: number; version: number } }>, reply: FastifyReply) {
-    const { stockId, quantity, version } = request.body;
-
-    if (!stockId || quantity === undefined || version === undefined) {
-      return reply.status(400).send({ error: 'stockId, quantity, and version are required' });
-    }
+  async adjust(request: FastifyRequest, reply: FastifyReply) {
+    const { stockId, quantity, version } = adjustStockRequestSchema.parse(request.body);
 
     // Extract userId from auth
     const rawUserId = (request as AuthenticatedRequest).user?.userId;
@@ -174,19 +156,7 @@ export const okucStockHandler = {
    * Import stock with conflict resolution
    */
   async importStock(request: FastifyRequest, reply: FastifyReply) {
-    const body = request.body as {
-      items: Array<{
-        articleId: string;
-        warehouseType: string;
-        subWarehouse?: string;
-        currentQuantity: number;
-        minStock?: number;
-        maxStock?: number;
-      }>;
-      conflictResolution: 'skip' | 'overwrite' | 'selective';
-      selectedConflicts?: Array<{ articleId: string; warehouseType: string; subWarehouse?: string }>;
-    };
-    const { items, conflictResolution, selectedConflicts = [] } = body;
+    const { items, conflictResolution, selectedConflicts } = importStockSchema.parse(request.body);
 
     const rawUserId = (request as AuthenticatedRequest).user?.userId;
     if (!rawUserId) {

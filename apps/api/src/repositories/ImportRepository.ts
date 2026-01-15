@@ -27,14 +27,16 @@ export class ImportRepository {
   constructor(private prisma: PrismaClient) {}
 
   async findAll(filters: ImportFilters = {}): Promise<FileImport[]> {
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = {
+      deletedAt: null, // Wyklucz soft-deleted
+    };
 
     if (filters.status) {
       where.status = filters.status;
     }
 
     return this.prisma.fileImport.findMany({
-      where: Object.keys(where).length > 0 ? where : undefined,
+      where,
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -47,7 +49,10 @@ export class ImportRepository {
 
   async findPending(): Promise<FileImport[]> {
     return this.prisma.fileImport.findMany({
-      where: { status: 'pending' },
+      where: {
+        status: 'pending',
+        deletedAt: null, // Wyklucz soft-deleted
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -72,8 +77,10 @@ export class ImportRepository {
   }
 
   async delete(id: number): Promise<void> {
-    await this.prisma.fileImport.delete({
+    // Soft delete - ustawienie deletedAt zamiast trwałego usunięcia
+    await this.prisma.fileImport.update({
       where: { id },
+      data: { deletedAt: new Date() },
     });
   }
 
@@ -103,8 +110,10 @@ export class ImportRepository {
   }
 
   async deleteOrder(orderId: number): Promise<void> {
-    await this.prisma.order.delete({
+    // Soft delete - archiwizacja zlecenia zamiast trwałego usunięcia
+    await this.prisma.order.update({
       where: { id: orderId },
+      data: { archivedAt: new Date() },
     });
   }
 

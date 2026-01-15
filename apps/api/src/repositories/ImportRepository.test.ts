@@ -19,7 +19,7 @@ describe('ImportRepository', () => {
   });
 
   describe('findAll', () => {
-    it('should return all imports when no filters', async () => {
+    it('should return all imports when no filters (excluding soft-deleted)', async () => {
       const mockImports = [
         { id: 1, filename: 'test1.csv', status: 'pending' },
         { id: 2, filename: 'test2.csv', status: 'completed' },
@@ -30,12 +30,12 @@ describe('ImportRepository', () => {
 
       expect(result).toEqual(mockImports);
       expect((mockPrisma.fileImport as any).findMany).toHaveBeenCalledWith({
-        where: undefined,
+        where: { deletedAt: null },
         orderBy: { createdAt: 'desc' },
       });
     });
 
-    it('should filter by status when provided', async () => {
+    it('should filter by status when provided (excluding soft-deleted)', async () => {
       const mockImports = [{ id: 1, filename: 'test1.csv', status: 'pending' }];
       (mockPrisma.fileImport as any).findMany.mockResolvedValue(mockImports);
 
@@ -43,7 +43,7 @@ describe('ImportRepository', () => {
 
       expect(result).toEqual(mockImports);
       expect((mockPrisma.fileImport as any).findMany).toHaveBeenCalledWith({
-        where: { status: 'pending' },
+        where: { status: 'pending', deletedAt: null },
         orderBy: { createdAt: 'desc' },
       });
     });
@@ -72,7 +72,7 @@ describe('ImportRepository', () => {
   });
 
   describe('findPending', () => {
-    it('should return only pending imports', async () => {
+    it('should return only pending imports (excluding soft-deleted)', async () => {
       const mockImports = [{ id: 1, filename: 'test.csv', status: 'pending' }];
       (mockPrisma.fileImport as any).findMany.mockResolvedValue(mockImports);
 
@@ -80,7 +80,7 @@ describe('ImportRepository', () => {
 
       expect(result).toEqual(mockImports);
       expect((mockPrisma.fileImport as any).findMany).toHaveBeenCalledWith({
-        where: { status: 'pending' },
+        where: { status: 'pending', deletedAt: null },
         orderBy: { createdAt: 'desc' },
       });
     });
@@ -170,13 +170,14 @@ describe('ImportRepository', () => {
   });
 
   describe('delete', () => {
-    it('should delete import by id', async () => {
-      (mockPrisma.fileImport as any).delete.mockResolvedValue({});
+    it('should soft delete import by setting deletedAt', async () => {
+      (mockPrisma.fileImport as any).update.mockResolvedValue({});
 
       await repository.delete(1);
 
-      expect((mockPrisma.fileImport as any).delete).toHaveBeenCalledWith({
+      expect((mockPrisma.fileImport as any).update).toHaveBeenCalledWith({
         where: { id: 1 },
+        data: { deletedAt: expect.any(Date) },
       });
     });
   });
@@ -239,13 +240,14 @@ describe('ImportRepository', () => {
       });
     });
 
-    it('should delete order by id', async () => {
-      mockPrisma.order.delete.mockResolvedValue({});
+    it('should soft delete order by setting archivedAt', async () => {
+      mockPrisma.order.update.mockResolvedValue({});
 
       await repository.deleteOrder(1);
 
-      expect(mockPrisma.order.delete).toHaveBeenCalledWith({
+      expect(mockPrisma.order.update).toHaveBeenCalledWith({
         where: { id: 1 },
+        data: { archivedAt: expect.any(Date) },
       });
     });
   });

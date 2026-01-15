@@ -62,6 +62,10 @@ model Profile {
   name              String
   description       String?
   sortOrder         Int                @default(0) @map("sort_order")
+  // Planowanie produkcji - dodane 2026-01-15
+  profileType       String             @default("typical") @map("profile_type") // 'typical' | 'atypical' - wpływa na lead time
+  isPalletized      Boolean            @default(false) @map("is_palletized") // Czy profil jest w paletach (przygotowanie sobota)
+  efficiencyCoeff   Decimal?           @map("efficiency_coeff") // Współczynnik wydajności (np. 0.9 = wolniejszy o 10%)
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
   orderRequirements OrderRequirement[]
@@ -79,6 +83,8 @@ model Color {
   name              String
   type              String
   hexColor          String?            @map("hex_color")
+  // Planowanie produkcji - dodane 2026-01-15
+  isTypical         Boolean            @default(true) @map("is_typical") // Czy kolor typowy (grupowany w produkcji)
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
   orderRequirements OrderRequirement[]
@@ -424,6 +430,7 @@ model FileImport {
   processedAt        DateTime?           @map("processed_at")
   errorMessage       String?             @map("error_message")
   metadata           String?
+  deletedAt          DateTime?           @map("deleted_at") // Soft delete
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
   glassDeliveries    GlassDelivery[]
@@ -432,6 +439,7 @@ model FileImport {
   @@index([status])
   @@index([createdAt])
   @@index([status, createdAt])
+  @@index([deletedAt])
   @@map("file_imports")
 }
 
@@ -1477,4 +1485,52 @@ model PendingImportConflict {
   @@index([createdAt])
   @@index([status, authorUserId])
   @@map("pending_import_conflicts")
+}
+
+// ============================================================================
+// PLANOWANIE PRODUKCJI - dodane 2026-01-15
+// ============================================================================
+
+// Konfiguracja wydajności per typ klienta
+// Wydajność bazowa: szkleń/h i skrzydeł/h przy pełnej obsadzie
+model ProductionEfficiencyConfig {
+  id                 Int      @id @default(autoincrement())
+  clientType         String   @unique @map("client_type") // 'akrobud' | 'ct' | 'living' | 'other'
+  name               String // Nazwa wyświetlana (np. "Akrobud", "CT", "Living")
+  // Wydajność bazowa
+  glazingsPerHour    Decimal  @map("glazings_per_hour") // Szkleń na godzinę produkcyjną
+  wingsPerHour       Decimal  @map("wings_per_hour") // Skrzydeł na godzinę produkcyjną
+  // Współczynnik (1.0 = baza, <1.0 = wolniejsze, >1.0 = szybsze)
+  coefficient        Decimal  @default(1.0) // Współczynnik wydajności
+  isActive           Boolean  @default(true) @map("is_active")
+  sortOrder          Int      @default(0) @map("sort_order")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("production_efficiency_configs")
+}
+
+// Kalendarz produkcyjny - dni wolne i soboty produkcyjne
+model ProductionCalendar {
+  id           Int      @id @default(autoincrement())
+  date         DateTime @unique // Data (bez czasu)
+  dayType      String   @map("day_type") // 'working' | 'holiday' | 'production_saturday' | 'custom_off'
+  description  String? // Opis (np. "Nowy Rok", "Sobota produkcyjna")
+  maxHours     Decimal? @map("max_hours") // Max godzin w tym dniu (null = domyślne)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("production_calendar")
+}
+
+// Domyślne parametry planowania produkcji
+model ProductionSettings {
+  id                    Int      @id @default(autoincrement())
+  key                   String   @unique // Klucz parametru
+  value                 String // Wartość (jako JSON string dla złożonych)
+  description           String? // Opis parametru
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("production_settings")
 }

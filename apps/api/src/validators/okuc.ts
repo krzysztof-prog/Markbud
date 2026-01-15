@@ -237,8 +237,46 @@ export const importDemandSchema = z.object({
   overwriteExisting: z.boolean().default(true), // CSV has priority
 });
 
+// ============ STOCK IMPORT VALIDATORS ============
+
+// Schema dla query params w liście stocków
+export const stockQueryFiltersSchema = z.object({
+  articleId: z.string().optional().transform(val => val ? parseInt(val, 10) : undefined),
+  warehouseType: z.string().optional(),
+  subWarehouse: z.string().optional(),
+  belowMin: z.string().optional().transform(val => val !== undefined ? val === 'true' : undefined),
+});
+
+// Schema dla adjust stock request
+export const adjustStockRequestSchema = z.object({
+  stockId: z.number().int().positive(),
+  quantity: z.number().int(),
+  version: z.number().int().min(0),
+});
+
+// Schema dla importu stocków z CSV
+export const importStockSchema = z.object({
+  items: z.array(z.object({
+    articleId: z.string().min(1),
+    warehouseType: z.string().min(1),
+    subWarehouse: z.string().optional(),
+    currentQuantity: z.number().int().nonnegative(),
+    minStock: z.number().int().nonnegative().optional(),
+    maxStock: z.number().int().nonnegative().optional(),
+  })).min(1),
+  conflictResolution: z.enum(['skip', 'overwrite', 'selective']),
+  selectedConflicts: z.array(z.object({
+    articleId: z.string().min(1),
+    warehouseType: z.string().min(1),
+    subWarehouse: z.string().optional(),
+  })).optional().default([]),
+});
+
 // ============ TYPE EXPORTS ============
 
+export type StockQueryFilters = z.infer<typeof stockQueryFiltersSchema>;
+export type AdjustStockRequest = z.infer<typeof adjustStockRequestSchema>;
+export type ImportStockInput = z.infer<typeof importStockSchema>;
 export type CreateArticleInput = z.infer<typeof createArticleSchema>;
 export type UpdateArticleInput = z.infer<typeof updateArticleSchema>;
 export type ArticleFilters = z.infer<typeof articleFiltersSchema>;
