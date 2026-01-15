@@ -255,10 +255,51 @@ export function clearErrorLogs(): void {
 }
 
 /**
+ * Sprawdza czy cache React Query jest uszkodzony i czyści go jeśli tak
+ */
+export function validateAndClearCorruptedCache(): void {
+  if (typeof window === 'undefined') return;
+
+  const cacheKey = 'AKROBUD_REACT_QUERY_CACHE';
+  try {
+    const cache = localStorage.getItem(cacheKey);
+    if (cache) {
+      // Próbujemy sparsować cache - jeśli się nie uda, jest uszkodzony
+      JSON.parse(cache);
+    }
+  } catch (e) {
+    console.warn('[Cache Validator] Uszkodzony cache React Query wykryty, czyszczenie...');
+    try {
+      localStorage.removeItem(cacheKey);
+      console.info('[Cache Validator] Cache wyczyszczony pomyślnie');
+    } catch (removeError) {
+      console.error('[Cache Validator] Nie można wyczyścić cache', removeError);
+    }
+  }
+}
+
+/**
+ * Czyści cache React Query (do ręcznego użycia)
+ */
+export function clearReactQueryCache(): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.removeItem('AKROBUD_REACT_QUERY_CACHE');
+    console.info('[Cache] React Query cache wyczyszczony');
+  } catch (e) {
+    console.warn('Nie można wyczyścić cache React Query', e);
+  }
+}
+
+/**
  * Hook window.onerror dla globalnego przechwytywania błędów
  */
 export function setupGlobalErrorHandler(): void {
   if (typeof window === 'undefined') return;
+
+  // Waliduj cache przy starcie aplikacji
+  validateAndClearCorruptedCache();
 
   window.onerror = (message, source, lineno, colno, error) => {
     logError(error || message, {
