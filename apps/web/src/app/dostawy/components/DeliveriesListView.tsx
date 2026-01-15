@@ -18,7 +18,7 @@ import { deliveriesApi } from '@/lib/api';
 import { showSuccessToast, showErrorToast, getErrorMessage } from '@/lib/toast-helpers';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 import { useDownloadDeliveryProtocol } from '@/features/deliveries/hooks/useDeliveries';
-import { OrderDetailModal } from '@/components/orders/order-detail-modal';
+import { OrderDetailModal } from '@/features/orders/components/OrderDetailModal';
 import { DeliveryFilters } from './DeliveryFilters';
 import DeliveriesTable from './DeliveriesTable';
 import type { Delivery } from '@/types/delivery';

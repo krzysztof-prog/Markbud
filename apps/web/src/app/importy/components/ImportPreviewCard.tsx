@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Check, AlertTriangle, X, AlertCircle, Download } from 'lucide-react';
-import { OrderVariantConflictModal } from '@/components/orders/order-variant-conflict-modal';
+import { OrderVariantConflictModal } from '@/features/orders/components/OrderVariantConflictModal';
 import type { ImportPreview } from '@/types';
 
 // Typy pomocnicze dla danych importu

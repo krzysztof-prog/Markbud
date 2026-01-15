@@ -1,6 +1,6 @@
 'use client';
 
-import { PROFILE_COLORS } from '../utils/visualization-helpers';
+import { PROFILE_COLORS } from '../helpers/visualization-helpers';
 
 interface PalletVisualizationLegendProps {
   className?: string;

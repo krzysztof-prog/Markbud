@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ordersApi } from '@/lib/api';
 import { formatGrosze, type Grosze } from '@/lib/money';
 import { useDebounce } from '@/hooks/useDebounce';
-import { OrderDetailModal } from '@/components/orders/order-detail-modal';
+import { OrderDetailModal } from '@/features/orders/components/OrderDetailModal';
 
 interface GlobalSearchProps {
   isOpen: boolean;

@@ -14,11 +14,11 @@ export { default as DeliveryValue } from './DeliveryValue';
 
 // Dialog components
 export {
-  NewDeliveryDialog,
-  DestructiveDeleteDeliveryDialog,
-  DeleteConfirmDialog,
+  CreateDeliveryDialog as NewDeliveryDialog,
+  DeleteDeliveryConfirmDialog as DestructiveDeleteDeliveryDialog,
+  LegacyDeleteConfirmDialog as DeleteConfirmDialog,
   AssignOrderDialog,
   AddItemDialog,
   CompleteOrdersDialog,
   DeliveryDetailsDialog,
-} from './DeliveryDialogs';
+} from './dialogs';

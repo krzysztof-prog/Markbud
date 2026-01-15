@@ -47,27 +47,27 @@ const BulkUpdateDatesDialog = dynamic(
 
 // Individual dialog components
 const DestructiveDeleteDeliveryDialog = dynamic(
-  () => import('./components/DeliveryDialogs').then((mod) => ({ default: mod.DestructiveDeleteDeliveryDialog })),
+  () => import('./components/dialogs').then((mod) => ({ default: mod.DeleteDeliveryConfirmDialog })),
   { loading: () => <DialogSkeleton />, ssr: false }
 );
 
 const AddItemDialog = dynamic(
-  () => import('./components/DeliveryDialogs').then((mod) => ({ default: mod.AddItemDialog })),
+  () => import('./components/dialogs').then((mod) => ({ default: mod.AddItemDialog })),
   { loading: () => <DialogSkeleton />, ssr: false }
 );
 
 const CompleteOrdersDialog = dynamic(
-  () => import('./components/DeliveryDialogs').then((mod) => ({ default: mod.CompleteOrdersDialog })),
+  () => import('./components/dialogs').then((mod) => ({ default: mod.CompleteOrdersDialog })),
   { loading: () => <DialogSkeleton />, ssr: false }
 );
 
 const DeliveryDetailsDialog = dynamic(
-  () => import('./components/DeliveryDialogs').then((mod) => ({ default: mod.DeliveryDetailsDialog })),
+  () => import('./components/dialogs').then((mod) => ({ default: mod.DeliveryDetailsDialog })),
   { loading: () => <DialogSkeleton />, ssr: false }
 );
 
 const OrderDetailModal = dynamic(
-  () => import('@/components/orders/order-detail-modal').then((mod) => ({ default: mod.OrderDetailModal })),
+  () => import('@/features/orders/components/OrderDetailModal').then((mod) => ({ default: mod.OrderDetailModal })),
   { loading: () => <DialogSkeleton />, ssr: false }
 );
 

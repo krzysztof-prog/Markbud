@@ -18,7 +18,7 @@ import {
   CANVAS,
   MAX_OVERHANG_MM,
   type WindowPosition,
-} from '../utils/visualization-helpers';
+} from '../helpers/visualization-helpers';
 
 interface PalletVisualizationProps {
   pallet: OptimizedPallet;

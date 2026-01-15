@@ -4,7 +4,11 @@ export { OrdersStatsModal } from './OrdersStatsModal';
 export { SchucoDeliveriesModal } from './SchucoDeliveriesModal';
 
 // Zestawienie zleceń components
-export { OrdersTable, getCellValueForExport } from './OrdersTable';
+export { OrdersTable } from './OrdersTable';
+export { OrderTableHeader } from './OrderTableHeader';
+export { OrderTableFilters } from './OrderTableFilters';
+export { OrderTableRow } from './OrderTableRow';
+export { getCellValueForExport } from './OrderTableActions';
 export { OrdersFilterBar } from './OrdersFilterBar';
 export { ColumnSettingsPanel } from './ColumnSettingsPanel';
 export { FilteredSummaryBar } from './FilteredSummaryBar';

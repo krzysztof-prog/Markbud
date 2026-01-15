@@ -7,5 +7,5 @@ export * from './components';
 // Hooks
 export * from './hooks/usePalletOptimization';
 
-// Utils
-export * from './utils/visualization-helpers';
+// Helpers
+export * from './helpers/visualization-helpers';
