@@ -26,7 +26,7 @@ pnpm db:generate
 pnpm dev
 
 # Lub osobno:
-pnpm dev:api    # Backend (Fastify) - http://localhost:4000
+pnpm dev:api    # Backend (Fastify) - http://localhost:3001
 pnpm dev:web    # Frontend (Next.js) - http://localhost:3000
 ```
 
@@ -49,7 +49,7 @@ pnpm test:unit     # Tylko unit tests
 pnpm test:coverage # Testy z pokryciem
 
 # Porty / Cleanup
-pnpm kill          # Zabij serwery dev (porty 3000/4000)
+pnpm kill          # Zabij serwery dev (porty 3000/3001)
 
 # Czyszczenie cache (gdy coś nie działa)
 Remove-Item -Recurse -Force apps/web/.next

@@ -29,19 +29,19 @@ export const mojaPracaKeys = {
 const mojaPracaApi = {
   // Konflikty
   getConflicts: async (status: 'pending' | 'resolved' | 'all' = 'pending'): Promise<ImportConflict[]> => {
-    return fetchApi<ImportConflict[]>(`/moja-praca/conflicts?status=${status}`);
+    return fetchApi<ImportConflict[]>(`/api/moja-praca/conflicts?status=${status}`);
   },
 
   getConflictsCount: async (): Promise<ConflictsCount> => {
-    return fetchApi<ConflictsCount>('/moja-praca/conflicts/count');
+    return fetchApi<ConflictsCount>('/api/moja-praca/conflicts/count');
   },
 
   getConflictDetail: async (id: number): Promise<ConflictDetail> => {
-    return fetchApi<ConflictDetail>(`/moja-praca/conflicts/${id}`);
+    return fetchApi<ConflictDetail>(`/api/moja-praca/conflicts/${id}`);
   },
 
   resolveConflict: async (id: number, input: ResolveConflictInput): Promise<ResolveConflictResult> => {
-    return fetchApi<ResolveConflictResult>(`/moja-praca/conflicts/${id}/resolve`, {
+    return fetchApi<ResolveConflictResult>(`/api/moja-praca/conflicts/${id}/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -50,22 +50,22 @@ const mojaPracaApi = {
 
   // Zlecenia
   getOrders: async (date: string): Promise<UserOrder[]> => {
-    return fetchApi<UserOrder[]>(`/moja-praca/orders?date=${date}`);
+    return fetchApi<UserOrder[]>(`/api/moja-praca/orders?date=${date}`);
   },
 
   // Dostawy
   getDeliveries: async (date: string): Promise<UserDelivery[]> => {
-    return fetchApi<UserDelivery[]>(`/moja-praca/deliveries?date=${date}`);
+    return fetchApi<UserDelivery[]>(`/api/moja-praca/deliveries?date=${date}`);
   },
 
   // Zamówienia szyb
   getGlassOrders: async (date: string): Promise<UserGlassOrder[]> => {
-    return fetchApi<UserGlassOrder[]>(`/moja-praca/glass-orders?date=${date}`);
+    return fetchApi<UserGlassOrder[]>(`/api/moja-praca/glass-orders?date=${date}`);
   },
 
   // Podsumowanie dnia
   getSummary: async (date: string): Promise<DaySummary> => {
-    return fetchApi<DaySummary>(`/moja-praca/summary?date=${date}`);
+    return fetchApi<DaySummary>(`/api/moja-praca/summary?date=${date}`);
   },
 };
 

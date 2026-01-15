@@ -203,10 +203,13 @@ export const getColumnValue = (order: ExtendedOrder, columnId: ColumnId): string
       }
       return order.pvcDeliveryDate ? formatDate(order.pvcDeliveryDate) : '';
     }
-    case 'deadline': {
-      const akrobudDeliveryDateVal = getAkrobudDeliveryDate(order.deliveryOrders);
-      if (akrobudDeliveryDateVal) return formatDateShort(akrobudDeliveryDateVal);
+    case 'deadline':
+      // Termin realizacji - tylko data z CSV (deadline)
       return order.deadline ? formatDate(order.deadline) : '';
+    case 'akrobudDeliveryDate': {
+      // Dostawa AKR - data z dostawy Akrobud (deliveryOrders)
+      const akrobudDeliveryDateVal = getAkrobudDeliveryDate(order.deliveryOrders);
+      return akrobudDeliveryDateVal ? formatDate(akrobudDeliveryDateVal) : '';
     }
     case 'archived':
       return order.archivedAt ? 'Archiwum' : 'Aktywne';

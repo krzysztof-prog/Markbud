@@ -3,6 +3,8 @@
  */
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { extractToken, decodeToken } from '../utils/jwt.js';
+import { UnauthorizedError } from '../utils/errors.js';
 
 export interface AuthenticatedRequest extends FastifyRequest {
   user?: {
@@ -14,29 +16,18 @@ export interface AuthenticatedRequest extends FastifyRequest {
 /**
  * Middleware to verify JWT token
  * Attaches user to request.user if token is valid
- *
- * NOTE: Temporarily disabled for single-user setup
  */
 export async function verifyAuth(request: AuthenticatedRequest, _reply: FastifyReply) {
-  // TEMPORARY: Skip auth for single-user system
-  // Set a default system user
-  request.user = {
-    userId: 1,
-    email: 'system@akrobud.local',
-  };
-  return;
-
-  /* Original auth logic - commented out for single-user setup
   const token = extractToken(request.headers.authorization);
 
   if (!token) {
-    throw new UnauthorizedError('Missing or invalid authorization token');
+    throw new UnauthorizedError('Brak tokenu autoryzacji');
   }
 
   const payload = decodeToken(token);
 
   if (!payload) {
-    throw new UnauthorizedError('Invalid or expired token');
+    throw new UnauthorizedError('Nieprawidłowy lub wygasły token');
   }
 
   // Attach user to request
@@ -44,7 +35,6 @@ export async function verifyAuth(request: AuthenticatedRequest, _reply: FastifyR
     userId: payload.userId,
     email: payload.email,
   };
-  */
 }
 
 /**

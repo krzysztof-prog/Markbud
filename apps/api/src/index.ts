@@ -37,6 +37,7 @@ import { productionReportRoutes } from './routes/production-reports.js';
 import { bugReportRoutes } from './routes/bug-reports.js';
 import { healthRoutes } from './routes/health.js';
 import { mojaPracaRoutes } from './routes/moja-praca.js';
+import { productionPlanningRoutes } from './routes/production-planning.js';
 
 // Services
 import { FileWatcherService } from './services/file-watcher/index.js';
@@ -196,6 +197,11 @@ await fastify.register(bugReportRoutes, { prefix: '/api/bug-reports' });
 
 // Moja Praca Routes (Konflikty importu, zlecenia użytkownika)
 await fastify.register(mojaPracaRoutes, { prefix: '/api/moja-praca' });
+// Alias dla kompatybilności wstecznej (niektóre requesty przychodzą bez /api prefix)
+await fastify.register(mojaPracaRoutes, { prefix: '/moja-praca' });
+
+// Production Planning Routes (Planowanie produkcji)
+await fastify.register(productionPlanningRoutes, { prefix: '/api/production-planning' });
 
 // Health checks (basic - must be before extended health routes)
 fastify.get('/api/health', {

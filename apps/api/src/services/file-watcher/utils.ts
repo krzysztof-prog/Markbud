@@ -136,3 +136,30 @@ export function generateSafeFilename(originalFilename: string): string {
   const safeFilename = originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_');
   return `${timestamp}_${safeFilename}`;
 }
+
+/**
+ * Przenosi plik do folderu _pominiete (dla plikow juz zarejestrowanych)
+ */
+export async function moveToSkipped(filePath: string): Promise<void> {
+  try {
+    const directory = path.dirname(filePath);
+    const filename = path.basename(filePath);
+    const skippedPath = path.join(directory, '_pominiete');
+    const skippedDestination = path.join(skippedPath, filename);
+
+    // Utworz folder _pominiete jesli nie istnieje
+    try {
+      await access(skippedPath, constants.F_OK);
+    } catch {
+      await mkdir(skippedPath, { recursive: true });
+    }
+
+    // Przenies plik do pominiete
+    await rename(filePath, skippedDestination);
+    logger.info(`   Przeniesiono do pominiete: ${filename} → _pominiete/`);
+  } catch (error) {
+    logger.warn(
+      `   Nie udalo sie przeniesc pliku ${filePath} do pominiete: ${error instanceof Error ? error.message : 'Nieznany blad'}`
+    );
+  }
+}

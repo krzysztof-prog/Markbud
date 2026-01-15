@@ -91,6 +91,7 @@ export type ColumnId =
   | 'orderStatus'
   | 'pvcDelivery'
   | 'deadline'
+  | 'akrobudDeliveryDate'
   | 'createdAt'
   | 'archived';
 
@@ -166,6 +167,7 @@ export const DEFAULT_COLUMNS: Column[] = [
   { id: 'orderStatus', label: 'Status Schuco', sortable: false, align: 'center', visible: true },
   { id: 'pvcDelivery', label: 'Dostawa PVC', sortable: false, align: 'left', visible: true },
   { id: 'deadline', label: 'Termin realizacji', sortable: false, align: 'left', visible: true },
+  { id: 'akrobudDeliveryDate', label: 'Dostawa AKR', sortable: false, align: 'left', visible: true },
   { id: 'archived', label: 'Status', sortable: false, align: 'center', visible: true },
 ];
 

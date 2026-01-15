@@ -99,7 +99,7 @@ const navigation: NavigationItem[] = [
     ]
   },
   {
-    name: 'MarkBud',
+    name: 'Akrobud',
     href: '/magazyn/akrobud',
     icon: Warehouse,
     requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.USER],
@@ -166,6 +166,7 @@ const navigation: NavigationItem[] = [
     subItems: [
       { name: 'Użytkownicy', href: '/admin/users', icon: Users },
       { name: 'Ustawienia', href: '/admin/settings', icon: Settings },
+      { name: 'Planowanie produkcji', href: '/planowanie-produkcji', icon: Calendar },
       { name: 'System Health', href: '/admin/health', icon: Activity },
       { name: 'Zgłoszenia błędów', href: '/admin/bug-reports', icon: Bug },
     ]
@@ -348,7 +349,7 @@ export function Sidebar() {
           )}>
             <Image
               src="/images/logo-markbud.png"
-              alt="MarkBud"
+              alt="Akrobud"
               width={210}
               height={60}
               className="h-[60px] w-auto"
@@ -482,7 +483,7 @@ export function Sidebar() {
           <p className={cn(
             'text-xs text-slate-500 transition-all duration-300',
             desktopCollapsed ? 'md:hidden' : ''
-          )}>MarkBud v1.0.0</p>
+          )}>Akrobud v1.0.0</p>
         </div>
       </div>
     </>

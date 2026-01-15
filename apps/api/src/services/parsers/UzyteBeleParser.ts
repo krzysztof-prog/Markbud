@@ -681,11 +681,31 @@ export class UzyteBeleParser {
       }
     }
 
+    // Auto-fill project i system z danych okien jeśli nie zostały sparsowane z metadanych
+    let finalProject = project;
+    let finalSystem = system;
+
+    if ((!finalProject || finalProject.trim() === '') && windows.length > 0) {
+      // Pobierz unikalne referencje z okien
+      const references = [...new Set(windows.map(w => w.referencja).filter(Boolean))];
+      if (references.length > 0) {
+        finalProject = references.join(', ');
+      }
+    }
+
+    if ((!finalSystem || finalSystem.trim() === '') && windows.length > 0) {
+      // Pobierz unikalne typy profili z okien
+      const profileTypes = [...new Set(windows.map(w => w.typProfilu).filter(Boolean))];
+      if (profileTypes.length > 0) {
+        finalSystem = profileTypes.join(', ');
+      }
+    }
+
     return {
       orderNumber,
       client,
-      project,
-      system,
+      project: finalProject,
+      system: finalSystem,
       deadline,
       pvcDeliveryDate,
       documentAuthor,

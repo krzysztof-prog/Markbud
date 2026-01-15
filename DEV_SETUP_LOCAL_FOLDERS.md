@@ -113,7 +113,7 @@ copy "\\192.168.1.6\Public\Markbud_import\ceny\*.pdf" "C:\DEV_DATA\ceny\"
 
 | Element | DEV | PROD |
 |---------|-----|------|
-| **Porty** | 4000/3000 | 5000/5001 |
+| **Porty** | 3001/3000 | 5000/5001 |
 | **Baza** | `dev.db` | `prod.db` |
 | **Foldery** | `C:\DEV_DATA\*` | `//192.168.1.6/...` |
 | **Lokalizacja** | Twój komputer | Serwer w biurze |

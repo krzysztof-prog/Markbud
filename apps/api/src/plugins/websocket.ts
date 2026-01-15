@@ -337,83 +337,127 @@ export async function setupWebSocket(fastify: FastifyInstance) {
 
     // Wysyłanie heartbeat (ping) co 30 sekund, aby uniknąć timeout'ów
     const heartbeat = setInterval(() => {
+      // Sprawdź czy połączenie jest jeszcze aktywne
+      if (!activeConnections.has(authConnection)) {
+        clearInterval(heartbeat);
+        return;
+      }
+
       if (!connection.destroyed && connection.socket.readyState === 1) {
         try {
           connection.write(JSON.stringify({ type: 'ping' }));
         } catch (error) {
-          logger.error('Failed to send heartbeat:', error);
+          // Błąd wysyłania - połączenie prawdopodobnie zamknięte
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          logger.debug('Failed to send heartbeat (connection likely closed):', { errorMessage });
           clearInterval(heartbeat);
+          activeConnections.delete(authConnection);
         }
+      } else {
+        // Połączenie zamknięte - wyczyść interval
+        clearInterval(heartbeat);
+        activeConnections.delete(authConnection);
       }
     }, 30000);
 
     // Pong timeout check - sprawdza co 35 sekund czy klient odpowiedział na ping
     // Jeśli nie odpowiedział przez PONG_TIMEOUT_MS, zamykamy połączenie jako martwe
     const pongCheck = setInterval(() => {
+      // Sprawdź czy połączenie jest jeszcze aktywne
+      if (!activeConnections.has(authConnection) || connection.destroyed) {
+        clearInterval(pongCheck);
+        return;
+      }
+
       const lastPong = lastPongReceived.get(connectionId);
       const now = Date.now();
 
       if (!lastPong || now - lastPong > PONG_TIMEOUT_MS) {
-        logger.warn('WebSocket connection closed due to pong timeout', {
+        logger.info('WebSocket pong timeout - closing stale connection', {
           userId: authConnection.userId,
           connectionId,
           lastPongAge: lastPong ? now - lastPong : 'never received',
           timeoutMs: PONG_TIMEOUT_MS,
         });
 
-        // Wyślij informację do klienta przed zamknięciem (może ją odebrać, może nie)
-        try {
-          connection.write(JSON.stringify({
-            type: 'error',
-            code: 'PONG_TIMEOUT',
-            message: 'Połączenie zamknięte z powodu braku odpowiedzi',
-          }));
-        } catch {
-          // Ignoruj błąd wysyłania - i tak zamykamy połączenie
+        // Wyślij informację do klienta przed zamknięciem (tylko jeśli połączenie otwarte)
+        if (connection.socket.readyState === 1) {
+          try {
+            connection.write(JSON.stringify({
+              type: 'error',
+              code: 'PONG_TIMEOUT',
+              message: 'Połączenie zamknięte z powodu braku odpowiedzi',
+            }));
+          } catch {
+            // Ignoruj błąd wysyłania - i tak zamykamy połączenie
+          }
         }
 
         // Zamknij połączenie - event 'close' wyczyści zasoby
         try {
           connection.end();
         } catch {
-          // Połączenie mogło już być zamknięte
+          // Połączenie mogło już być zamknięte - cleanup manualnie
+          activeConnections.delete(authConnection);
         }
+
+        // Wyczyść ten interval - połączenie jest zamknięte
+        clearInterval(pongCheck);
       }
     }, PONG_TIMEOUT_MS);
 
     // Słuchaj zmian danych i wyślij do klienta
     const unsubscribe = eventEmitter.onAnyChange((event: DataChangeEvent) => {
-      if (!connection.destroyed && connection.socket.readyState === 1) {
-        // Check rate limit before sending
-        if (!checkRateLimit(connectionId)) {
-          logger.warn('WebSocket rate limit exceeded', {
-            userId: authConnection.userId,
-            connectionId,
-            eventType: event.type,
-          });
-          // Don't send the message but don't close connection either
-          return;
-        }
+      // Sprawdź stan połączenia - dodatkowe sprawdzenie czy connection jest w activeConnections
+      // aby uniknąć wysyłania na połączenia w trakcie cleanup
+      if (!activeConnections.has(authConnection)) {
+        return; // Połączenie już usunięte z aktywnych - nie wysyłaj
+      }
 
-        try {
-          // Sanitize data before sending
-          const sanitizedData = sanitizeWebSocketData(event.data);
+      if (connection.destroyed || connection.socket.readyState !== 1) {
+        // Połączenie zamknięte lub w trakcie zamykania - usuń z aktywnych
+        activeConnections.delete(authConnection);
+        return;
+      }
 
-          connection.write(JSON.stringify({
-            type: 'dataChange',
-            event: {
-              type: event.type,
-              data: sanitizedData,
-              timestamp: event.timestamp,
-            },
-          }));
-        } catch (error) {
+      // Check rate limit before sending
+      if (!checkRateLimit(connectionId)) {
+        logger.warn('WebSocket rate limit exceeded', {
+          userId: authConnection.userId,
+          connectionId,
+          eventType: event.type,
+        });
+        // Don't send the message but don't close connection either
+        return;
+      }
+
+      try {
+        // Sanitize data before sending
+        const sanitizedData = sanitizeWebSocketData(event.data);
+
+        connection.write(JSON.stringify({
+          type: 'dataChange',
+          event: {
+            type: event.type,
+            data: sanitizedData,
+            timestamp: event.timestamp,
+          },
+        }));
+      } catch (error) {
+        // Błąd wysyłania - prawdopodobnie połączenie zamknięte między sprawdzeniem a wysłaniem
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        // Tylko loguj nieoczekiwane błędy
+        if (!errorMessage.includes('readyState') && !errorMessage.includes('CLOSED')) {
           logger.error('Failed to send data change event', {
-            error,
+            errorMessage,
             userId: authConnection.userId,
             eventType: event.type,
           });
         }
+
+        // Usuń z aktywnych połączeń - jest martwe
+        activeConnections.delete(authConnection);
       }
     });
 
@@ -448,11 +492,27 @@ export async function setupWebSocket(fastify: FastifyInstance) {
     });
 
     connection.on('error', (error: Error) => {
-      logger.error('WebSocket error', {
-        error,
-        userId: authConnection.userId,
-        connectionId,
-      });
+      // Ignoruj błędy ECONNRESET i zamkniętego połączenia - to normalne podczas rozłączania
+      const errorMessage = error?.message || '';
+      const isExpectedError = errorMessage.includes('ECONNRESET') ||
+                              errorMessage.includes('EPIPE') ||
+                              errorMessage.includes('closed') ||
+                              errorMessage.includes('destroyed');
+
+      if (!isExpectedError) {
+        logger.error('WebSocket error', {
+          errorMessage,
+          errorName: error?.name,
+          userId: authConnection.userId,
+          connectionId,
+        });
+      } else {
+        logger.debug('WebSocket connection error (expected during disconnect)', {
+          errorMessage,
+          userId: authConnection.userId,
+          connectionId,
+        });
+      }
       cleanupConnection(authConnection, connectionId, heartbeat, pongCheck, unsubscribe);
     });
   });

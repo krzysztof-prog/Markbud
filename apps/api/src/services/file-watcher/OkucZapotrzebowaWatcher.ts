@@ -4,7 +4,7 @@ import { readFile } from 'fs/promises';
 import type { PrismaClient } from '@prisma/client';
 import type { FSWatcher } from 'chokidar';
 import { logger } from '../../utils/logger.js';
-import { archiveFile } from './utils.js';
+import { archiveFile, moveToSkipped } from './utils.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
 import { DEFAULT_WATCHER_CONFIG } from './types.js';
 import { parse } from 'csv-parse/sync';
@@ -166,6 +166,8 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
 
       if (existing) {
         logger.info(`   ⏭️ Plik okuc zapotrzebowania juz zarejestrowany: ${filename}`);
+        // Przenies do folderu pominiete aby nie pokazywal sie ponownie
+        await moveToSkipped(filePath);
         return;
       }
 

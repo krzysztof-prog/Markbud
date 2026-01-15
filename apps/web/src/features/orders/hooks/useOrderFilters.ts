@@ -285,15 +285,23 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
       result = result.filter((order: ExtendedOrder) => !order.archivedAt);
     }
 
-    // Filtrowanie po dacie "od" (deadline >= dateFrom)
+    // Filtrowanie po dacie "od"
+    // Logika: pokaż jeśli KTÓRAKOLWIEK data (deadline LUB dostawa AKR) >= filtr
+    // Zlecenia BEZ obu dat są zawsze pokazywane (bezpieczniej - nie wiemy kiedy mają termin)
     if (filters.dateFrom) {
       const dateFromTimestamp = new Date(filters.dateFrom).getTime();
       result = result.filter((order: ExtendedOrder) => {
-        // Priorytet: data dostawy Akrobud > deadline
         const akrobudDeliveryDate = getAkrobudDeliveryDate(order.deliveryOrders);
-        const orderDate = akrobudDeliveryDate || order.deadline;
-        if (!orderDate) return false;
-        return new Date(orderDate).getTime() >= dateFromTimestamp;
+        const deadlineDate = order.deadline;
+
+        // Jeśli brak obu dat - pokaż zlecenie (nie wiemy kiedy ma termin)
+        if (!akrobudDeliveryDate && !deadlineDate) return true;
+
+        // Pokaż jeśli KTÓRAKOLWIEK data >= filtr
+        const akrOk = akrobudDeliveryDate && new Date(akrobudDeliveryDate).getTime() >= dateFromTimestamp;
+        const deadlineOk = deadlineDate && new Date(deadlineDate).getTime() >= dateFromTimestamp;
+
+        return akrOk || deadlineOk;
       });
     }
 
@@ -364,11 +372,17 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
           aValue = a.glassDeliveryDate ? new Date(a.glassDeliveryDate).getTime() : 0;
           bValue = b.glassDeliveryDate ? new Date(b.glassDeliveryDate).getTime() : 0;
           break;
-        case 'deadline': {
+        case 'deadline':
+          // Termin realizacji - tylko data z CSV
+          aValue = a.deadline ? new Date(a.deadline).getTime() : 0;
+          bValue = b.deadline ? new Date(b.deadline).getTime() : 0;
+          break;
+        case 'akrobudDeliveryDate': {
+          // Dostawa AKR - data z dostawy Akrobud
           const aDelivery = getAkrobudDeliveryDate(a.deliveryOrders);
           const bDelivery = getAkrobudDeliveryDate(b.deliveryOrders);
-          aValue = aDelivery ? new Date(aDelivery).getTime() : (a.deadline ? new Date(a.deadline).getTime() : 0);
-          bValue = bDelivery ? new Date(bDelivery).getTime() : (b.deadline ? new Date(b.deadline).getTime() : 0);
+          aValue = aDelivery ? new Date(aDelivery).getTime() : 0;
+          bValue = bDelivery ? new Date(bDelivery).getTime() : 0;
           break;
         }
         case 'archived':

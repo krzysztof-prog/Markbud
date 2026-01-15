@@ -118,6 +118,11 @@ export function BugReportsList() {
     return null;
   }
 
+  // DEBUG: Sprawdź co zwraca API
+  console.log('[BugReportsList] API response:', data);
+  console.log('[BugReportsList] content type:', typeof data.content);
+  console.log('[BugReportsList] content preview:', data.content?.substring(0, 200));
+
   const reports = parseBugReports(data.content);
 
   if (reports.length === 0) {

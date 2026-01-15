@@ -58,7 +58,7 @@ const BZTab = dynamic(
 
 // Dynamiczny import strony zestawień miesięcznych
 const MonthlyReportContent = dynamic(
-  () => import('../zestawienia/miesieczne/page').then((mod) => mod.default),
+  () => import('@/features/production-reports/ProductionReportPage').then((mod) => ({ default: mod.ProductionReportPage })),
   {
     loading: () => <TabLoader />,
     ssr: false,
@@ -165,10 +165,10 @@ function TabManager() {
  * Zawiera 6 zakładek:
  * 1. Dodaj do produkcji - wybieranie zleceń do produkcji (status: in_progress)
  * 2. Zakończ zlecenia - oznaczanie zleceń jako wyprodukowane (status: completed)
- * 3. Zestawienie miesięczne - istniejąca strona zestawień (przeniesiona z /zestawienia)
- * 4. Godzinówki - placeholder (przyszłość)
- * 5. Paletówki - placeholder (przyszłość)
- * 6. B-Z - placeholder (przyszłość)
+ * 3. Zestawienie miesięczne - raport produkcji z rozliczeniami
+ * 4. Godzinówki - zarządzanie czasem pracy pracowników
+ * 5. Paletówki - ewidencja stanu palet
+ * 6. B-Z - protokoły dostaw (w przygotowaniu)
  */
 export default function KierownikPage() {
   return (

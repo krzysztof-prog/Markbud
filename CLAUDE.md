@@ -475,7 +475,7 @@ User: "Dodaj przycisk do usuwania dostawy"
 | Aspekt | DEV (Development) | PROD (Production) |
 |--------|-------------------|-------------------|
 | **Lokalizacja** | Twój komputer deweloperski | Serwer Windows w biurze |
-| **Porty API** | `4000` | `5000` |
+| **Porty API** | `3001` | `5000` |
 | **Porty Web** | `3000` | `5001` |
 | **Baza danych** | `dev.db` | `prod.db` |
 | **PM2 Process** | `pnpm dev` (bez PM2) | PM2 jako Windows Service |
@@ -548,7 +548,7 @@ copy .env.example .env
 
 # 2. Edytuj .env i dodaj swoje credentials (Schuco itp.)
 # 3. Ustaw lokalne foldery testowe (C:\DEV_DATA\*)
-# 4. Port 4000 dla API
+# 4. Port 3001 dla API
 
 # ⚠️ NIGDY NIE COMMITUJ .env do Git!
 ```
@@ -578,20 +578,20 @@ Gdy Claude pracuje z konfiguracją środowiskową:
 
 **Przed zapisem do .env lub ecosystem.config.js:**
 
-1. ✅ **Sprawdź PORT** - DEV (4000/3000) vs PROD (5000/5001)
+1. ✅ **Sprawdź PORT** - DEV (3001/3000) vs PROD (5000/5001)
 2. ✅ **Sprawdź DATABASE_URL** - dev.db vs prod.db
 3. ✅ **Sprawdź WATCH_FOLDER_*** - lokalne vs sieciowe
 4. ✅ **Sprawdź czy to DEV czy PROD** - nie mieszaj!
 
 **Gdy Claude widzi:**
 ```env
-PORT=4000
+PORT=3001
 WATCH_FOLDER_UZYTE_BELE=//192.168.1.6/...
 ```
 
 **Claude MUSI:**
 - 🛑 ZATRZYMAĆ SIĘ
-- ❓ ZAPYTAĆ: "To jest błąd! DEV używa portów 4000/3000 + lokalnych folderów (C:\DEV_DATA\*). PROD używa portów 5000/5001 + folderów sieciowych. Którą konfigurację chcesz?"
+- ❓ ZAPYTAĆ: "To jest błąd! DEV używa portów 3001/3000 + lokalnych folderów (C:\DEV_DATA\*). PROD używa portów 5000/5001 + folderów sieciowych. Którą konfigurację chcesz?"
 
 ### 📚 Dokumentacja deployment
 
@@ -612,7 +612,7 @@ WATCH_FOLDER_UZYTE_BELE=//192.168.1.6/...
 Gdy użytkownik poprosi o deployment lub zmiany w config:
 
 - [ ] Czy wiem czy to DEV czy PROD?
-- [ ] Czy porty są poprawne (DEV: 4000/3000, PROD: 5000/5001)?
+- [ ] Czy porty są poprawne (DEV: 3001/3000, PROD: 5000/5001)?
 - [ ] Czy foldery są poprawne (DEV: lokalne, PROD: sieciowe)?
 - [ ] Czy baza jest poprawna (DEV: dev.db, PROD: prod.db)?
 - [ ] Czy PM2 jest tylko w PROD?
@@ -733,7 +733,7 @@ Gdy użytkownik poprosi o deployment lub zmiany w config:
 ```powershell
 # Development
 pnpm dev              # Backend + Frontend
-pnpm dev:api          # Tylko API (port 4000)
+pnpm dev:api          # Tylko API (port 3001)
 pnpm dev:web          # Tylko frontend (port 3000)
 
 # Database

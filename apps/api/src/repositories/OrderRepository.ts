@@ -53,6 +53,7 @@ export class OrderRepository {
           client: true,
           project: true,
           system: true,
+          documentAuthor: true,
           deadline: true,
           pvcDeliveryDate: true,
           glassDeliveryDate: true,
