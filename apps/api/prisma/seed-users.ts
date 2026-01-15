@@ -16,7 +16,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { UserRole } from '../src/types/user-roles.js';
+import { UserRole } from '../src/validators/auth.js';
 
 const prisma = new PrismaClient();
 
