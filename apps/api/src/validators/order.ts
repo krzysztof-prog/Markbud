@@ -102,6 +102,13 @@ export const monthlyProductionQuerySchema = z.object({
   month: z.string(),
 });
 
+// Variant type schema for order variants (correction or additional file)
+export const variantTypeSchema = z.object({
+  variantType: z.enum(['correction', 'additional_file'], {
+    errorMap: () => ({ message: 'Nieprawidłowy typ wariantu' }),
+  }),
+});
+
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type UpdateOrderInput = z.infer<typeof updateOrderSchema>;
 export type PatchOrderInput = z.infer<typeof patchOrderSchema>;

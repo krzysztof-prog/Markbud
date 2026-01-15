@@ -57,6 +57,14 @@ export const glassValidationOrderNumberParamsSchema = z.object({
   orderNumber: z.string().min(1, 'Numer zlecenia jest wymagany'),
 });
 
+export const glassValidationIdParamsSchema = z.object({
+  id: z.string().transform((val) => {
+    const num = parseInt(val, 10);
+    if (isNaN(num)) throw new Error('Nieprawidłowe ID');
+    return num;
+  }),
+});
+
 // ==================== TYPE EXPORTS ====================
 
 export type GlassOrderFilters = z.infer<typeof glassOrderFiltersSchema>;
@@ -66,3 +74,4 @@ export type GlassDeliveryFilters = z.infer<typeof glassDeliveryFiltersSchema>;
 export type GlassDeliveryIdParams = z.infer<typeof glassDeliveryIdParamsSchema>;
 export type GlassValidationFilters = z.infer<typeof glassValidationFiltersSchema>;
 export type GlassValidationResolve = z.infer<typeof glassValidationResolveSchema>;
+export type GlassValidationIdParams = z.infer<typeof glassValidationIdParamsSchema>;

@@ -1,14 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../index.js';
-import { createReadStream, existsSync } from 'fs';
 import { OrderRepository } from '../repositories/OrderRepository.js';
 import { OrderService } from '../services/orderService.js';
 import { OrderHandler } from '../handlers/orderHandler.js';
-import { parseIntParam } from '../utils/errors.js';
 import { verifyAuth } from '../middleware/auth.js';
 import type { BulkUpdateStatusInput, ForProductionQuery, MonthlyProductionQuery } from '../validators/order.js';
-import { emitOrderUpdated } from '../services/event-emitter.js';
-import { ReadinessOrchestrator } from '../services/readinessOrchestrator.js';
 
 
 export const orderRoutes: FastifyPluginAsync = async (fastify) => {
@@ -126,179 +122,17 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/orders/:id/has-pdf - check if PDF exists for order
   fastify.get<{ Params: { id: string } }>('/:id/has-pdf', {
     preHandler: verifyAuth,
-  }, async (request, reply) => {
-    const { id } = request.params;
+  }, handler.hasPdf.bind(handler));
 
-    const order = await prisma.order.findUnique({
-      where: { id: parseIntParam(id, 'id') },
-    });
-
-    if (!order) {
-      return reply.status(404).send({ error: 'Zlecenie nie znalezione' });
-    }
-
-    const pdfImport = await prisma.fileImport.findFirst({
-      where: {
-        fileType: 'ceny_pdf',
-        status: 'completed',
-        metadata: {
-          contains: `"orderId":${order.id}`,
-        },
-      },
-      orderBy: { processedAt: 'desc' },
-    });
-
-    return reply.send({
-      hasPdf: !!pdfImport && existsSync(pdfImport.filepath),
-      filename: pdfImport?.filename || null
-    });
-  });
-
-  // GET /api/orders/:id/pdf - download PDF file for order (inline - specific logic)
+  // GET /api/orders/:id/pdf - download PDF file for order
   fastify.get<{ Params: { id: string } }>('/:id/pdf', {
     preHandler: verifyAuth,
-  }, async (request, reply) => {
-    const { id } = request.params;
+  }, handler.downloadPdf.bind(handler));
 
-    const order = await prisma.order.findUnique({
-      where: { id: parseIntParam(id, 'id') },
-    });
-
-    if (!order) {
-      return reply.status(404).send({ error: 'Zlecenie nie znalezione' });
-    }
-
-    const pdfImport = await prisma.fileImport.findFirst({
-      where: {
-        fileType: 'ceny_pdf',
-        status: 'completed',
-        metadata: {
-          contains: `"orderId":${order.id}`,
-        },
-      },
-      orderBy: { processedAt: 'desc' },
-    });
-
-    if (!pdfImport) {
-      return reply.status(404).send({ error: 'Nie znaleziono pliku PDF dla tego zlecenia' });
-    }
-
-    if (!existsSync(pdfImport.filepath)) {
-      return reply.status(404).send({ error: 'Plik PDF nie został znaleziony na dysku' });
-    }
-
-    reply.header('Content-Type', 'application/pdf');
-    reply.header('Content-Disposition', `inline; filename="${pdfImport.filename}"`);
-
-    const stream = createReadStream(pdfImport.filepath);
-    return reply.send(stream);
-  });
-
-  // GET /api/orders/table/:colorId - orders table for given color (inline - specific logic)
-  fastify.get<{ Params: { colorId: string } }>(
-    '/table/:colorId',
-    {
-      preHandler: verifyAuth,
-    },
-    async (request) => {
-      const { colorId } = request.params;
-
-      const parsedColorId = parseIntParam(colorId, 'colorId');
-
-      const visibleProfiles = await prisma.profileColor.findMany({
-        where: {
-          colorId: parsedColorId,
-          isVisible: true,
-        },
-        select: {
-          profileId: true,
-          colorId: true,
-          isVisible: true,
-          profile: {
-            select: {
-              id: true,
-              number: true,
-              name: true,
-            },
-          },
-        },
-        orderBy: { profile: { number: 'asc' } },
-      });
-
-      const orders = await prisma.order.findMany({
-        where: {
-          archivedAt: null,
-          requirements: {
-            some: {
-              colorId: parsedColorId,
-            },
-          },
-        },
-        select: {
-          id: true,
-          orderNumber: true,
-          status: true,
-          requirements: {
-            where: {
-              colorId: parsedColorId,
-            },
-            select: {
-              id: true,
-              profileId: true,
-              colorId: true,
-              beamsCount: true,
-              meters: true,
-              profile: {
-                select: {
-                  id: true,
-                  number: true,
-                  name: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: { orderNumber: 'asc' },
-      });
-
-      const tableData = orders.map((order) => {
-        const requirements: Record<string, { beams: number; meters: number }> = {};
-
-        for (const req of order.requirements) {
-          requirements[req.profile.number] = {
-            beams: req.beamsCount,
-            meters: parseFloat(req.meters.toString()),
-          };
-        }
-
-        return {
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          requirements,
-        };
-      });
-
-      const totals: Record<string, { beams: number; meters: number }> = {};
-      for (const profile of visibleProfiles) {
-        totals[profile.profile.number] = { beams: 0, meters: 0 };
-      }
-
-      for (const row of tableData) {
-        for (const [profileNumber, data] of Object.entries(row.requirements)) {
-          if (totals[profileNumber]) {
-            totals[profileNumber].beams += data.beams;
-            totals[profileNumber].meters += data.meters;
-          }
-        }
-      }
-
-      return {
-        profiles: visibleProfiles.map((pc) => pc.profile),
-        orders: tableData,
-        totals,
-      };
-    }
-  );
+  // GET /api/orders/table/:colorId - orders table for given color
+  fastify.get<{ Params: { colorId: string } }>('/table/:colorId', {
+    preHandler: verifyAuth,
+  }, handler.getTableByColor.bind(handler));
 
   // GET /api/orders/requirements/totals - get totals for each profile
   fastify.get('/requirements/totals', {
@@ -365,12 +199,7 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-  }, async (request, reply) => {
-    const { id } = request.params;
-    const orchestrator = new ReadinessOrchestrator(prisma);
-    const result = await orchestrator.canStartProduction(parseIntParam(id, 'id'));
-    return reply.send(result);
-  });
+  }, handler.getReadiness.bind(handler));
 
   // P1-2: PATCH /api/orders/:id/variant-type - set variant type for order
   fastify.patch<{
@@ -400,24 +229,5 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-  }, async (request, reply) => {
-    const { id } = request.params;
-    const { variantType } = request.body;
-
-    const order = await prisma.order.update({
-      where: { id: parseIntParam(id, 'id') },
-      data: { variantType },
-    });
-
-    emitOrderUpdated(order);
-
-    return reply.send({
-      success: true,
-      order: {
-        id: order.id,
-        orderNumber: order.orderNumber,
-        variantType: order.variantType,
-      },
-    });
-  });
+  }, handler.setVariantType.bind(handler));
 };
