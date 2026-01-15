@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,7 +19,12 @@ import { deliveriesApi } from '@/lib/api';
 import { showSuccessToast, showErrorToast, getErrorMessage } from '@/lib/toast-helpers';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 import { useDownloadDeliveryProtocol } from '@/features/deliveries/hooks/useDeliveries';
-import { OrderDetailModal } from '@/features/orders/components/OrderDetailModal';
+
+// Lazy load OrderDetailModal - ciężki komponent (551 linii)
+const OrderDetailModal = dynamic(
+  () => import('@/features/orders/components/OrderDetailModal').then((mod) => ({ default: mod.OrderDetailModal })),
+  { ssr: false }
+);
 import { DeliveryFilters } from './DeliveryFilters';
 import DeliveriesTable from './DeliveriesTable';
 import type { Delivery } from '@/types/delivery';

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,8 +34,16 @@ import Link from 'next/link';
 import { useOkucArticles } from '@/features/okuc/hooks/useOkucArticles';
 import { useOkucStock, useUpdateOkucStock } from '@/features/okuc/hooks/useOkucStock';
 import { StockTable } from '@/features/okuc/components/StockTable';
-import { ImportArticlesDialog } from '@/features/okuc/components/ImportArticlesDialog';
-import { ImportStockDialog } from '@/features/okuc/components/ImportStockDialog';
+
+// Lazy load heavy dialogs - ładowane tylko gdy potrzebne
+const ImportArticlesDialog = dynamic(
+  () => import('@/features/okuc/components/ImportArticlesDialog').then((mod) => ({ default: mod.ImportArticlesDialog })),
+  { ssr: false }
+);
+const ImportStockDialog = dynamic(
+  () => import('@/features/okuc/components/ImportStockDialog').then((mod) => ({ default: mod.ImportStockDialog })),
+  { ssr: false }
+);
 import { okucArticlesApi, okucStockApi } from '@/features/okuc/api/okucApi';
 import { useToast } from '@/components/ui/use-toast';
 import { useQueryClient } from '@tanstack/react-query';

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
@@ -11,7 +12,12 @@ import { cn } from '@/lib/utils';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Warehouse, ClipboardCheck, History } from 'lucide-react';
-import { OrderDetailModal } from '@/features/orders/components/OrderDetailModal';
+
+// Lazy load OrderDetailModal - ciężki komponent (551 linii)
+const OrderDetailModal = dynamic(
+  () => import('@/features/orders/components/OrderDetailModal').then((mod) => ({ default: mod.OrderDetailModal })),
+  { ssr: false }
+);
 import Link from 'next/link';
 import type { Color } from '@/types';
 import { WarehouseHistory } from '@/features/warehouse/components/WarehouseHistory';

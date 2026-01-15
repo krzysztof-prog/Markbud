@@ -149,10 +149,16 @@
   - [x] useGlassDeliveries() - dodane staleTime: 2 minuty
   - [x] useLooseGlasses() + inne glass hooks - dodane staleTime: 2 minuty
   - [x] useImports() - już miał staleTime: 1 minuta
-- [ ] FAZA 3 - Lazy Loading
-- [ ] FAZA 4 - Split plików
+- [x] **FAZA 3** - Lazy Loading (UKOŃCZONE 2026-01-15)
+  - [x] GlobalSearch.tsx - OrderDetailModal lazy loaded
+  - [x] DeliveriesListView.tsx - OrderDetailModal lazy loaded
+  - [x] MagazynAkrobudPageContent.tsx - OrderDetailModal lazy loaded
+  - [x] magazyn/okuc/page.tsx - ImportArticlesDialog + ImportStockDialog lazy loaded
+  - [x] magazyn/okuc/artykuly/page.tsx - ImportArticlesDialog lazy loaded
+  - [x] DostawyPageContent.tsx - już było lazy loaded
+- [ ] FAZA 4 - Split plików (odłożone - wymaga więcej pracy)
 
 ---
 
 *Wygenerowano: 2026-01-15*
-*Ostatnia aktualizacja: 2026-01-15 (Faza 2 ukończona)*
+*Ostatnia aktualizacja: 2026-01-15 (Faza 3 ukończona)*

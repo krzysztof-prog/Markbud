@@ -21,6 +21,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { Header } from '@/components/layout/header';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
@@ -43,7 +44,12 @@ import { Plus, Search, Package, Upload, ChevronDown } from 'lucide-react';
 import { ArticlesTable } from '@/features/okuc/components/ArticlesTable';
 import { ArticleForm } from '@/features/okuc/components/ArticleForm';
 import { DeleteArticleDialog } from '@/features/okuc/components/DeleteArticleDialog';
-import { ImportArticlesDialog } from '@/features/okuc/components/ImportArticlesDialog';
+
+// Lazy load heavy dialog - 568 linii
+const ImportArticlesDialog = dynamic(
+  () => import('@/features/okuc/components/ImportArticlesDialog').then((mod) => ({ default: mod.ImportArticlesDialog })),
+  { ssr: false }
+);
 import { useQueryClient } from '@tanstack/react-query';
 import {
   okucArticlesKeys,
