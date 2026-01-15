@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
-import { ClientSidebar } from '@/components/layout/client-sidebar';
+import { ConditionalLayout } from '@/components/layout/conditional-layout';
 import { ErrorBoundary } from '@/components/error-boundary';
 
 const inter = Inter({ subsets: ['latin', 'latin-ext'] });
@@ -21,12 +21,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <Providers>
           <ErrorBoundary>
-            <div className="flex h-screen">
-              <ClientSidebar />
-              <main id="main-content" className="flex-1 overflow-auto bg-slate-50 transition-all duration-300">
-                {children}
-              </main>
-            </div>
+            <ConditionalLayout>
+              {children}
+            </ConditionalLayout>
           </ErrorBoundary>
         </Providers>
       </body>
