@@ -8,6 +8,8 @@ import { Toaster } from '@/components/ui/toaster';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 import { setupGlobalErrorHandler } from '@/lib/error-logger';
 import { AuthProvider } from '@/features/auth';
+import { ErrorBoundary } from '@/components/error-boundary';
+import { ConditionalLayout } from '@/components/layout/conditional-layout';
 
 function RealtimeSyncWrapper({ children, enabled }: { children: React.ReactNode; enabled: boolean }) {
   // WebSocket with graceful degradation - nie blokuje gdy nie działa
@@ -88,7 +90,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
         }}
       >
         <AuthProvider>
-          <RealtimeSyncWrapper enabled>{children}</RealtimeSyncWrapper>
+          <ErrorBoundary>
+            <ConditionalLayout>
+              <RealtimeSyncWrapper enabled>{children}</RealtimeSyncWrapper>
+            </ConditionalLayout>
+          </ErrorBoundary>
         </AuthProvider>
         <Toaster />
       </PersistQueryClientProvider>
@@ -100,7 +106,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <RealtimeSyncWrapper enabled={false}>{children}</RealtimeSyncWrapper>
+        <ErrorBoundary>
+          <ConditionalLayout>
+            <RealtimeSyncWrapper enabled={false}>{children}</RealtimeSyncWrapper>
+          </ConditionalLayout>
+        </ErrorBoundary>
       </AuthProvider>
       <Toaster />
     </QueryClientProvider>

@@ -2,8 +2,6 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
-import { ConditionalLayout } from '@/components/layout/conditional-layout';
-import { ErrorBoundary } from '@/components/error-boundary';
 
 const inter = Inter({ subsets: ['latin', 'latin-ext'] });
 
@@ -20,11 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Przejdź do głównej treści
         </a>
         <Providers>
-          <ErrorBoundary>
-            <ConditionalLayout>
-              {children}
-            </ConditionalLayout>
-          </ErrorBoundary>
+          {children}
         </Providers>
       </body>
     </html>
