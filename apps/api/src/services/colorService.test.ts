@@ -93,6 +93,8 @@ describe('ColorService', () => {
       mockPrisma.color.findUnique.mockResolvedValue(null);
       mockPrisma.color.create.mockResolvedValue(mockCreated);
       mockPrisma.profile.findMany.mockResolvedValue(mockProfiles);
+      mockPrisma.profileColor.findMany.mockResolvedValue([]); // No existing links
+      mockPrisma.warehouseStock.findMany.mockResolvedValue([]); // No existing stock entries
       mockPrisma.profileColor.createMany.mockResolvedValue({ count: 2 });
       mockPrisma.warehouseStock.createMany.mockResolvedValue({ count: 2 });
 

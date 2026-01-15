@@ -73,6 +73,13 @@ vi.mock('../../utils/warehouse-validation.js', () => ({
   checkWarehouseStock: vi.fn().mockResolvedValue([]),
 }));
 
+// Mock ReadinessOrchestrator for unit tests - required for new → in_progress transition
+vi.mock('../readinessOrchestrator.js', () => ({
+  ReadinessOrchestrator: class MockReadinessOrchestrator {
+    canStartProduction = vi.fn().mockResolvedValue({ ready: true, blocking: [], warnings: [] });
+  },
+}));
+
 import { OrderService } from '../orderService.js';
 import { OrderBuilder } from '../../tests/fixtures/orders.fixture.js';
 import { ValidationError } from '../../utils/errors.js';

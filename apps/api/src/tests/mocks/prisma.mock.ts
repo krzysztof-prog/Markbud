@@ -29,6 +29,7 @@ export const createMockPrisma = () => {
     delivery: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
@@ -47,6 +48,7 @@ export const createMockPrisma = () => {
     deliveryOrder: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
       delete: vi.fn(),
       deleteMany: vi.fn(),
@@ -60,6 +62,7 @@ export const createMockPrisma = () => {
       aggregate: vi.fn(),
     },
     profileColor: {
+      findMany: vi.fn(),
       createMany: vi.fn(),
       update: vi.fn(),
       deleteMany: vi.fn(),
@@ -216,6 +219,16 @@ export const createMockPrisma = () => {
       update: vi.fn(),
       delete: vi.fn(),
       deleteMany: vi.fn(),
+      count: vi.fn(),
+    },
+    // File imports
+    fileImport: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
       count: vi.fn(),
     },
     $transaction: vi.fn() as any, // eslint-disable-line @typescript-eslint/no-explicit-any
