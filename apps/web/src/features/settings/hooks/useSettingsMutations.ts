@@ -182,3 +182,41 @@ export function useUserFolderPath(callbacks?: { onUpdateSuccess?: () => void }) 
 
   return { updateMutation };
 }
+
+/**
+ * Hook for document author mapping mutations
+ */
+export function useDocumentAuthorMappingMutations(callbacks?: {
+  onCreateSuccess?: () => void;
+  onUpdateSuccess?: () => void;
+  onDeleteSuccess?: () => void;
+}) {
+  const queryClient = useQueryClient();
+
+  const createMutation = useMutation({
+    mutationFn: settingsApi.createDocumentAuthorMapping,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['document-author-mappings'] });
+      callbacks?.onCreateSuccess?.();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { authorName?: string; userId?: number } }) =>
+      settingsApi.updateDocumentAuthorMapping(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['document-author-mappings'] });
+      callbacks?.onUpdateSuccess?.();
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: settingsApi.deleteDocumentAuthorMapping,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['document-author-mappings'] });
+      callbacks?.onDeleteSuccess?.();
+    },
+  });
+
+  return { createMutation, updateMutation, deleteMutation };
+}

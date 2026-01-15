@@ -22,7 +22,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import Link from 'next/link';
-import type { Color, WarehouseTableRow } from '@/types';
+import type { Color } from '@/types';
 import type { RemanentFormEntry, FinalizeMonthResponse } from '@/types/warehouse';
 
 // Komponenty remanentu
@@ -39,7 +39,7 @@ import {
 } from '@/features/warehouse/remanent/hooks/useRemanentHistory';
 
 export default function RemanentPage() {
-  const router = useRouter();
+  const _router = useRouter();
 
   // Stan wyboru koloru i UI
   const [selectedColorId, setSelectedColorId] = useState<number | null>(null);

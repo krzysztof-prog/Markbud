@@ -54,3 +54,7 @@ export { monthlyReportsApi } from './monthly-reports';
 
 // Imports
 export { importsApi } from './imports';
+
+// Users
+export { usersApi } from './users';
+export type { User, CreateUserData, UpdateUserData } from './users';

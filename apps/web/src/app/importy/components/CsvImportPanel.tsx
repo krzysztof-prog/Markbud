@@ -3,9 +3,14 @@
 import { useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileSpreadsheet, Clock, Eye, Check, X } from 'lucide-react';
+import { FileSpreadsheet, Clock, Eye, Check, X, Loader2 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import type { Import } from '@/types';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface CsvImportPanelProps {
   pendingImports: Import[];
@@ -109,32 +114,57 @@ export function CsvImportPanel({
                     </div>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onPreview(imp.id)}
-                      title="Podglad"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => onApprove(imp.id)}
-                      disabled={isApprovePending}
-                      title="Importuj"
-                    >
-                      <Check className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => onReject(imp.id)}
-                      disabled={isRejectPending}
-                      title="Odrzuc"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onPreview(imp.id)}
+                          aria-label="Podgląd importu"
+                        >
+                          <Eye className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Podgląd</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => onApprove(imp.id)}
+                          disabled={isApprovePending || isRejectPending}
+                          aria-label="Importuj plik"
+                          aria-busy={isApprovePending}
+                        >
+                          {isApprovePending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <Check className="h-4 w-4" aria-hidden="true" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Importuj</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => onReject(imp.id)}
+                          disabled={isApprovePending || isRejectPending}
+                          aria-label="Odrzuć import"
+                          aria-busy={isRejectPending}
+                        >
+                          {isRejectPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <X className="h-4 w-4" aria-hidden="true" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Odrzuć</TooltipContent>
+                    </Tooltip>
                   </div>
                 </div>
               ))}

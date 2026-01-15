@@ -88,7 +88,11 @@ export function RemanentTable({ warehouseData, entries, onChange }: RemanentTabl
                   aria-label={`Stan rzeczywisty dla profilu ${entry.profileNumber}`}
                 />
               </td>
-              <td className={cn('px-4 py-3 text-center font-semibold', getDifferenceColor(entry.difference))}>
+              <td
+                className={cn('px-4 py-3 text-center font-semibold', getDifferenceColor(entry.difference))}
+                role={entry.actualStock !== '' && entry.difference !== 0 ? 'alert' : undefined}
+                aria-live="polite"
+              >
                 {entry.actualStock !== '' && (
                   <>
                     {entry.difference > 0 && '+'}{entry.difference} bel{' '}

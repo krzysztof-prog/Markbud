@@ -7,6 +7,7 @@ export { ColorsTab } from './ColorsTab';
 export { ProfilesTab } from './ProfilesTab';
 export { ProfileDepthsTab } from './ProfileDepthsTab';
 export { OkucLocationsTab } from './OkucLocationsTab';
+export { DocumentAuthorMappingsTab } from './DocumentAuthorMappingsTab';
 
 // Settings Dialog Components
 export {
@@ -15,3 +16,4 @@ export {
   ProfileDialog,
   DeleteConfirmDialog,
 } from './SettingsDialogs';
+export { DocumentAuthorMappingDialog } from './DocumentAuthorMappingDialog';

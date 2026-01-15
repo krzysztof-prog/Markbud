@@ -6,7 +6,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDebounce } from '@/hooks/useDebounce';
 import type {
   FilterState,
-  ClientFilter,
   Column,
   ColumnId,
   ExtendedOrder,

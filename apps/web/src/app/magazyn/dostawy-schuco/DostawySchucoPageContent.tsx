@@ -50,7 +50,7 @@ export default function DostawySchucoPageContent() {
     statistics,
     logs,
     byWeekData,
-    isLoadingDeliveries,
+    isLoadingDeliveries: _isLoadingDeliveries,
     isLoadingLogs,
     isLoadingByWeek,
   } = useSchucoData({

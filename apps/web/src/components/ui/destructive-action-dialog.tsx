@@ -99,9 +99,9 @@ export const DestructiveActionDialog: React.FC<DestructiveActionDialogProps> = (
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto max-sm:min-h-screen max-sm:rounded-none">
-        {/* Header with warning icon */}
-        <DialogHeader className={cn('border-b pb-4', config.borderClass)}>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col max-sm:min-h-screen max-sm:rounded-none">
+        {/* Header with warning icon - sticky na mobile */}
+        <DialogHeader className={cn('border-b pb-4 flex-shrink-0 sticky top-0 bg-white z-10', config.borderClass)}>
           <div className="flex items-start gap-3">
             <div className={cn('p-2 rounded-full', config.bgClass)}>
               <Icon className={cn('h-6 w-6', config.iconClass)} aria-hidden="true" />
@@ -113,7 +113,7 @@ export const DestructiveActionDialog: React.FC<DestructiveActionDialogProps> = (
           </div>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 overflow-y-auto flex-1">
           {/* Consequences */}
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" aria-hidden="true" />
@@ -180,8 +180,8 @@ export const DestructiveActionDialog: React.FC<DestructiveActionDialogProps> = (
           </div>
         </div>
 
-        {/* Footer */}
-        <DialogFooter className="border-t pt-4 flex-col sm:flex-row gap-2">
+        {/* Footer - sticky na mobile */}
+        <DialogFooter className="border-t pt-4 flex-col sm:flex-row gap-2 flex-shrink-0 sticky bottom-0 bg-white z-10">
           <Button variant="outline" onClick={handleCancel} disabled={isLoading}>
             Anuluj
           </Button>

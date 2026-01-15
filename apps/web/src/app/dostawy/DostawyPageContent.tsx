@@ -208,17 +208,17 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
     actions.createDeliveryMutation.mutate({ deliveryDate: newDeliveryDate, notes: newDeliveryNotes || undefined });
   };
 
-  const handleDayClick = (date: Date) => {
+  const handleDayClick = useCallback((date: Date) => {
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     setNewDeliveryDate(dateStr);
     setShowNewDeliveryDialog(true);
-  };
+  }, []);
 
-  const handleDayRightClick = (e: React.MouseEvent, date: Date) => {
+  const handleDayRightClick = useCallback((e: React.MouseEvent, date: Date) => {
     e.preventDefault();
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     actions.toggleWorkingDayMutation.mutate({ date: dateStr, isWorking: stats.isNonWorkingDay(date) ?? false });
-  };
+  }, [actions.toggleWorkingDayMutation, stats]);
 
   const onDragEnd = useCallback((event: import('@dnd-kit/core').DragEndEvent) => {
     selection.handleDragEnd(event, {

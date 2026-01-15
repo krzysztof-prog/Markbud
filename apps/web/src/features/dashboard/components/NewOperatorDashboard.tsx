@@ -15,7 +15,7 @@
  * - KIEROWNIK+ moze przelaczac miedzy swoimi a wszystkimi
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -136,25 +136,37 @@ export function NewOperatorDashboard() {
   }
 
   const { user, stats, alerts, recentActivity, pendingConflictsCount } = data;
-  const completenessPercent = calculateCompletenessPercent(data);
-  const problemsCount = countProblems(data);
 
-  // Rozdziel alerty na krytyczne i pozostale
-  const criticalAlerts = alerts.filter((a) => a.priority === 'critical');
-  const otherAlerts = alerts.filter((a) => a.priority !== 'critical');
+  // Memoizowane obliczenia - unikamy przeliczania przy kazdym renderze
+  const completenessPercent = useMemo(() => calculateCompletenessPercent(data), [data]);
+  const problemsCount = useMemo(() => countProblems(data), [data]);
 
-  // Oblicz procenty
-  const filesPercent =
-    stats.totalOrders > 0 ? Math.round((stats.withFiles / stats.totalOrders) * 100) : 0;
-  const glassPercent =
-    stats.totalOrders > 0 ? Math.round((stats.withGlass / stats.totalOrders) * 100) : 0;
-  const hardwarePercent =
-    stats.totalOrders > 0 ? Math.round((stats.withHardware / stats.totalOrders) * 100) : 0;
+  // Rozdziel alerty na krytyczne i pozostale (memoizowane)
+  const { criticalAlerts, otherAlerts } = useMemo(() => ({
+    criticalAlerts: alerts.filter((a) => a.priority === 'critical'),
+    otherAlerts: alerts.filter((a) => a.priority !== 'critical'),
+  }), [alerts]);
 
-  // Brakujace
-  const missingFiles = stats.totalOrders - stats.withFiles;
-  const missingGlass = stats.totalOrders - stats.withGlass;
-  const missingHardware = stats.totalOrders - stats.withHardware;
+  // Oblicz procenty i brakujace (memoizowane)
+  const computedStats = useMemo(() => {
+    const filesPercent =
+      stats.totalOrders > 0 ? Math.round((stats.withFiles / stats.totalOrders) * 100) : 0;
+    const glassPercent =
+      stats.totalOrders > 0 ? Math.round((stats.withGlass / stats.totalOrders) * 100) : 0;
+    const hardwarePercent =
+      stats.totalOrders > 0 ? Math.round((stats.withHardware / stats.totalOrders) * 100) : 0;
+
+    return {
+      filesPercent,
+      glassPercent,
+      hardwarePercent,
+      missingFiles: stats.totalOrders - stats.withFiles,
+      missingGlass: stats.totalOrders - stats.withGlass,
+      missingHardware: stats.totalOrders - stats.withHardware,
+    };
+  }, [stats]);
+
+  const { filesPercent, glassPercent, hardwarePercent, missingFiles, missingGlass, missingHardware } = computedStats;
 
   return (
     <div className="p-6 space-y-6">

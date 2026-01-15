@@ -19,15 +19,9 @@ import {
   formatHours,
   WEEKDAY_NAMES,
 } from '../helpers/dateHelpers';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { WorkerEditPanel } from './WorkerEditPanel';
 import { SetStandardDialog } from './SetStandardDialog';
 import { SettingsPanel } from './SettingsPanel';
-import type { WorkerDaySummary } from '../types';
 
 interface DayViewProps {
   date: string;

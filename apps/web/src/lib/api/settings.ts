@@ -22,8 +22,13 @@ export interface DocumentAuthorMapping {
   id: number;
   authorName: string;
   userId: number;
-  createdAt: string;
-  updatedAt: string;
+  user: {
+    id: number;
+    email: string;
+    name: string;
+  };
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CreateDocumentAuthorMappingData {
@@ -96,6 +101,9 @@ export const settingsApi = {
   update: (settings: Record<string, string>) =>
     fetchApi<Record<string, string>>('/api/settings', { method: 'PUT', body: JSON.stringify(settings) }),
   getPalletTypes: () => fetchApi<PalletType[]>('/api/settings/pallet-types'),
+  // File watcher status
+  getFileWatcherStatus: () => fetchApi<{ running: boolean; watchers: string[] }>('/api/settings/file-watcher/status'),
+  restartFileWatcher: () => fetchApi<{ success: boolean }>('/api/settings/file-watcher/restart', { method: 'POST' }),
   createPalletType: (data: CreatePalletTypeData) =>
     fetchApi<PalletType>('/api/settings/pallet-types', { method: 'POST', body: JSON.stringify(data) }),
   updatePalletType: (id: number, data: UpdatePalletTypeData) =>

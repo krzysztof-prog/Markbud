@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Package } from 'lucide-react';
 import DeliveryStats from './DeliveryStats';
 import DeliveryValue from './DeliveryValue';
 import DeliveryActions from './DeliveryActions';
@@ -202,12 +202,14 @@ export default function DeliveriesTable({
               variant="ghost"
               size="sm"
               onClick={() => onToggleRow(id)}
-              aria-label={isExpanded ? 'Zwiń wiersz' : 'Rozwiń wiersz'}
+              aria-label={isExpanded ? 'Zwiń szczegóły dostawy' : 'Rozwiń szczegóły dostawy'}
+              aria-expanded={isExpanded}
+              aria-controls={`delivery-details-${id}`}
             >
               {isExpanded ? (
-                <ChevronUp className="h-4 w-4" />
+                <ChevronUp className="h-4 w-4" aria-hidden="true" />
               ) : (
-                <ChevronDown className="h-4 w-4" />
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
               )}
             </Button>
           );
@@ -259,9 +261,15 @@ export default function DeliveriesTable({
             <TableRow>
               <TableCell
                 colSpan={columns.length}
-                className="h-24 text-center text-slate-400"
+                className="h-32 text-center"
               >
-                Brak dostaw
+                <div className="flex flex-col items-center gap-2">
+                  <Package className="h-10 w-10 text-slate-300" aria-hidden="true" />
+                  <p className="text-slate-500 font-medium">Brak dostaw</p>
+                  <p className="text-sm text-slate-400">
+                    Kliknij na dzień w kalendarzu aby dodać dostawę
+                  </p>
+                </div>
               </TableCell>
             </TableRow>
           ) : (
@@ -283,7 +291,7 @@ export default function DeliveriesTable({
 
                   {/* Expanded row with details */}
                   {isExpanded && (
-                    <TableRow>
+                    <TableRow id={`delivery-details-${row.original.id}`}>
                       <TableCell colSpan={columns.length} className="bg-slate-50">
                         <DeliveryDetails
                           delivery={row.original}

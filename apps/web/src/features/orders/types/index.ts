@@ -80,6 +80,7 @@ export type ColumnId =
   | 'project'
   | 'system'
   | 'documentAuthor'
+  | 'productionDate'
   | 'totalWindows'
   | 'totalSashes'
   | 'glasses'

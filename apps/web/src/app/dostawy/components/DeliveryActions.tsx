@@ -2,6 +2,11 @@
 
 import { CheckCircle2, Package, FileText, Loader2, ListChecks } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface DeliveryActionsProps {
   delivery: {
@@ -29,52 +34,69 @@ export default function DeliveryActions({
 
   return (
     <div className="flex gap-1">
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={onVerify}
-        title="Weryfikuj listę Akrobud"
-        aria-label="Verify Akrobud list"
-      >
-        <ListChecks className="h-4 w-4" />
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onVerify}
+            aria-label="Weryfikuj listę Akrobud"
+          >
+            <ListChecks className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Weryfikuj listę Akrobud</TooltipContent>
+      </Tooltip>
 
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={onComplete}
-        disabled={isDisabled}
-        title="Oznacz zlecenia jako zakończone"
-        aria-label="Mark orders as completed"
-      >
-        <CheckCircle2 className="h-4 w-4" />
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onComplete}
+            disabled={isDisabled}
+            aria-label="Oznacz zlecenia jako zakończone"
+          >
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Oznacz zlecenia jako zakończone</TooltipContent>
+      </Tooltip>
 
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={onOptimize}
-        disabled={isDisabled}
-        title="Optymalizuj palety"
-        aria-label="Optimize pallets"
-      >
-        <Package className="h-4 w-4" />
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onOptimize}
+            disabled={isDisabled}
+            aria-label="Optymalizuj palety"
+          >
+            <Package className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Optymalizuj palety</TooltipContent>
+      </Tooltip>
 
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={onProtocol}
-        disabled={isDisabled || isProtocolLoading}
-        title="Pobierz protokół odbioru"
-        aria-label="Download delivery protocol"
-      >
-        {isProtocolLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <FileText className="h-4 w-4" />
-        )}
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onProtocol}
+            disabled={isDisabled || isProtocolLoading}
+            aria-label="Pobierz protokół odbioru"
+            aria-busy={isProtocolLoading}
+          >
+            {isProtocolLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <FileText className="h-4 w-4" aria-hidden="true" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Pobierz protokół odbioru</TooltipContent>
+      </Tooltip>
     </div>
   );
 }

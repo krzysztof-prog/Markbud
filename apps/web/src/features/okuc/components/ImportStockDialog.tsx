@@ -21,7 +21,6 @@ import { useToast } from '@/components/ui/use-toast';
 import type {
   ImportStockPreviewResponse,
   ImportStockConflict,
-  ImportStockError,
 } from '@/types/okuc';
 
 interface ImportStockDialogProps {

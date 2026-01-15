@@ -22,7 +22,6 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { usePalletMonth } from '../hooks/usePalletStock';
-import type { PalletMonthSummary, ProductionPalletType, PalletAlert } from '../types/index';
 import { PALLET_TYPE_LABELS, PALLET_TYPES } from '../types/index';
 
 // Nazwy miesięcy po polsku

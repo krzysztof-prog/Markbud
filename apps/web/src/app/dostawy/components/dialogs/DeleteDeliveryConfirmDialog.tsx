@@ -1,6 +1,5 @@
 'use client';
 
-import { Badge } from '@/components/ui/badge';
 import { DestructiveActionDialog } from '@/components/ui/destructive-action-dialog';
 import { formatDate } from '@/lib/utils';
 import { Calendar, Package } from 'lucide-react';
@@ -130,7 +129,7 @@ export function LegacyDeleteConfirmDialog({
         'Dostawa zostanie trwale usunięta',
         'Tej operacji nie można cofnąć',
       ]}
-      onConfirm={() => deliveryId && onConfirm(deliveryId)}
+      onConfirm={() => { if (deliveryId) onConfirm(deliveryId); }}
     />
   );
 }

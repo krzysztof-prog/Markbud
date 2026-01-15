@@ -22,6 +22,7 @@ import {
   useFolderManagementMutations,
 } from './hooks/useImportMutations';
 import { ImportConflictModal } from '@/components/imports/ImportConflictModal';
+import { DestructiveActionDialog } from '@/components/ui/destructive-action-dialog';
 
 // Types for folder scan result
 interface FolderScanResult {
@@ -61,6 +62,23 @@ export default function ImportyPage() {
     lockedBy: string;
     lockedAt: Date;
   } | null>(null);
+
+  // Delete confirmation dialog state
+  const [deleteImportDialog, setDeleteImportDialog] = useState<{
+    open: boolean;
+    import: Import | null;
+  }>({ open: false, import: null });
+
+  // Archive/delete folder confirmation dialog state
+  const [archiveFolderDialog, setArchiveFolderDialog] = useState<{
+    open: boolean;
+    path: string;
+  }>({ open: false, path: '' });
+
+  const [deleteFolderDialog, setDeleteFolderDialog] = useState<{
+    open: boolean;
+    path: string;
+  }>({ open: false, path: '' });
 
   // Queries
   const { data: imports, isLoading, error } = useQuery({
@@ -179,17 +197,19 @@ export default function ImportyPage() {
   };
 
   const handleDeleteImport = (imp: Import) => {
-    const message = imp.status === 'completed'
-      ? 'Czy na pewno chcesz usunac ten import? Spowoduje to rowniez usuniecie powiazanego zlecenia i wszystkich jego danych!'
-      : 'Czy na pewno chcesz usunac ten import z historii?';
-    if (confirm(message)) {
-      deleteMutation.mutate(imp.id);
+    setDeleteImportDialog({ open: true, import: imp });
+  };
+
+  const confirmDeleteImport = () => {
+    if (deleteImportDialog.import) {
+      deleteMutation.mutate(deleteImportDialog.import.id);
       toast({
         title: 'Usuwanie...',
-        description: 'Prosze czekac',
+        description: 'Proszę czekać',
         variant: 'info',
       });
     }
+    setDeleteImportDialog({ open: false, import: null });
   };
 
   const handleImportFolder = () => {
@@ -224,15 +244,25 @@ export default function ImportyPage() {
   };
 
   const handleArchiveFolder = (path: string) => {
-    if (confirm('Czy na pewno chcesz zarchiwizowac ten folder? Zostanie przeniesiony do podkatalogu "archiwum".')) {
-      archiveFolderMutation.mutate(path);
+    setArchiveFolderDialog({ open: true, path });
+  };
+
+  const confirmArchiveFolder = () => {
+    if (archiveFolderDialog.path) {
+      archiveFolderMutation.mutate(archiveFolderDialog.path);
     }
+    setArchiveFolderDialog({ open: false, path: '' });
   };
 
   const handleDeleteFolder = (path: string) => {
-    if (confirm('Czy na pewno chcesz TRWALE USUNAC ten folder? Ta operacja jest nieodwracalna!')) {
-      deleteFolderMutation.mutate(path);
+    setDeleteFolderDialog({ open: true, path });
+  };
+
+  const confirmDeleteFolder = () => {
+    if (deleteFolderDialog.path) {
+      deleteFolderMutation.mutate(deleteFolderDialog.path);
     }
+    setDeleteFolderDialog({ open: false, path: '' });
   };
 
   // Show error state if query failed
@@ -352,6 +382,64 @@ export default function ImportyPage() {
         onClose={handleCloseConflictModal}
         onRetry={handleRetryImport}
         conflictInfo={conflictInfo}
+      />
+
+      {/* Delete Import Confirmation Dialog */}
+      <DestructiveActionDialog
+        open={deleteImportDialog.open}
+        onOpenChange={(open) => !open && setDeleteImportDialog({ open: false, import: null })}
+        title="Usunąć import?"
+        description={
+          deleteImportDialog.import?.status === 'completed'
+            ? 'Import zostanie usunięty razem ze wszystkimi powiązanymi danymi.'
+            : 'Import zostanie usunięty z historii.'
+        }
+        actionType="delete"
+        confirmText="USUŃ"
+        consequences={
+          deleteImportDialog.import?.status === 'completed'
+            ? [
+                'Powiązane zlecenie zostanie usunięte',
+                'Wszystkie dane zlecenia będą utracone',
+                'Ta operacja jest nieodwracalna',
+              ]
+            : ['Import zostanie usunięty z historii']
+        }
+        onConfirm={confirmDeleteImport}
+        isLoading={deleteMutation.isPending}
+      />
+
+      {/* Archive Folder Confirmation Dialog */}
+      <DestructiveActionDialog
+        open={archiveFolderDialog.open}
+        onOpenChange={(open) => !open && setArchiveFolderDialog({ open: false, path: '' })}
+        title="Zarchiwizować folder?"
+        description="Folder zostanie przeniesiony do podkatalogu 'archiwum'."
+        actionType="archive"
+        confirmText="ARCHIWIZUJ"
+        consequences={[
+          'Folder zostanie przeniesiony do archiwum',
+          'Pliki pozostaną dostępne w archiwum',
+        ]}
+        onConfirm={confirmArchiveFolder}
+        isLoading={archiveFolderMutation.isPending}
+      />
+
+      {/* Delete Folder Confirmation Dialog */}
+      <DestructiveActionDialog
+        open={deleteFolderDialog.open}
+        onOpenChange={(open) => !open && setDeleteFolderDialog({ open: false, path: '' })}
+        title="TRWALE usunąć folder?"
+        description="Folder i wszystkie jego pliki zostaną bezpowrotnie usunięte."
+        actionType="delete"
+        confirmText="USUŃ TRWALE"
+        consequences={[
+          'Folder zostanie trwale usunięty',
+          'Wszystkie pliki w folderze zostaną usunięte',
+          'Ta operacja jest NIEODWRACALNA',
+        ]}
+        onConfirm={confirmDeleteFolder}
+        isLoading={deleteFolderMutation.isPending}
       />
     </div>
   );

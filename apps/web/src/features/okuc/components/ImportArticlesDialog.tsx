@@ -42,7 +42,6 @@ import {
   CheckCircle,
   AlertCircle,
   ArrowRight,
-  X,
 } from 'lucide-react';
 import { okucArticlesApi } from '@/features/okuc/api/okucApi';
 import { toast } from '@/hooks/useToast';

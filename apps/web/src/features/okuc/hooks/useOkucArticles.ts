@@ -11,8 +11,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { okucArticlesApi, okucLocationsApi } from '@/features/okuc/api/okucApi';
-import { okucLocationsKeys } from './useOkucLocations';
+import { okucArticlesApi } from '@/features/okuc/api/okucApi';
 import { toast } from '@/hooks/useToast';
 import type {
   OkucArticle,
