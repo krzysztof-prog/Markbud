@@ -18,6 +18,13 @@ vi.mock('../utils/warehouse-validation.js', () => ({
   validateSufficientStock: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Mock ReadinessOrchestrator for production readiness checks
+vi.mock('./readinessOrchestrator.js', () => ({
+  ReadinessOrchestrator: class MockReadinessOrchestrator {
+    canStartProduction = vi.fn().mockResolvedValue({ ready: true, blocking: [], warnings: [] });
+  },
+}));
+
 import { OrderService } from './orderService.js';
 import { OrderRepository } from '../repositories/OrderRepository.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';

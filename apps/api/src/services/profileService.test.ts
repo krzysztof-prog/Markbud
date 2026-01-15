@@ -71,9 +71,15 @@ describe('ProfileService', () => {
     it('should create profile when number is unique', async () => {
       const input = { number: 'P001', name: 'New Profile', description: 'Test' };
       const mockCreated = { id: 1, ...input, createdAt: new Date(), updatedAt: new Date() };
+      const mockColors = [{ id: 1 }, { id: 2 }];
 
       mockPrisma.profile.findUnique.mockResolvedValue(null);
       mockPrisma.profile.create.mockResolvedValue(mockCreated);
+      mockPrisma.color.findMany.mockResolvedValue(mockColors);
+      mockPrisma.profileColor.findMany.mockResolvedValue([]); // No existing links
+      mockPrisma.warehouseStock.findMany.mockResolvedValue([]); // No existing stock
+      mockPrisma.profileColor.createMany.mockResolvedValue({ count: 2 });
+      mockPrisma.warehouseStock.createMany.mockResolvedValue({ count: 2 });
 
       const result = await service.createProfile(input);
 
@@ -273,10 +279,16 @@ describe('ProfileService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
+      const mockColors = [{ id: 1 }, { id: 2 }];
 
       // Both uniqueness checks return null
       mockPrisma.profile.findUnique.mockResolvedValue(null);
       mockPrisma.profile.create.mockResolvedValue(mockCreated);
+      mockPrisma.color.findMany.mockResolvedValue(mockColors);
+      mockPrisma.profileColor.findMany.mockResolvedValue([]);
+      mockPrisma.warehouseStock.findMany.mockResolvedValue([]);
+      mockPrisma.profileColor.createMany.mockResolvedValue({ count: 2 });
+      mockPrisma.warehouseStock.createMany.mockResolvedValue({ count: 2 });
 
       const result = await service.createProfile(input);
 
@@ -297,9 +309,15 @@ describe('ProfileService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
+      const mockColors = [{ id: 1 }, { id: 2 }];
 
       mockPrisma.profile.findUnique.mockResolvedValue(null);
       mockPrisma.profile.create.mockResolvedValue(mockCreated);
+      mockPrisma.color.findMany.mockResolvedValue(mockColors);
+      mockPrisma.profileColor.findMany.mockResolvedValue([]);
+      mockPrisma.warehouseStock.findMany.mockResolvedValue([]);
+      mockPrisma.profileColor.createMany.mockResolvedValue({ count: 2 });
+      mockPrisma.warehouseStock.createMany.mockResolvedValue({ count: 2 });
 
       const result = await service.createProfile(input);
 
