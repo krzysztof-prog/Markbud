@@ -17,6 +17,7 @@ import { Package, Layers, Grid3X3, Calendar, FileText, FileDown, ChevronDown, Ch
 import type { Order, SchucoDeliveryLink } from '@/types';
 import type { Requirement } from '@/types';
 import { ReadinessChecklist } from '@/components/ReadinessChecklist';
+import { isAkrobudOrder } from '../helpers/orderHelpers';
 
 // Extended order with additional fields from PDF/imports
 interface OrderDetail extends Order {
@@ -253,8 +254,8 @@ export function OrderDetailModal({
                 )}
               </div>
 
-              {/* Projekty */}
-              {(() => {
+              {/* Projekty - widoczne tylko dla klientów AKROBUD */}
+              {isAkrobudOrder(order.clientName) && (() => {
                 const references = Array.from(
                   new Set(
                     order.windows

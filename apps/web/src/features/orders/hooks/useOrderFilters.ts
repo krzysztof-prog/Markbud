@@ -219,10 +219,20 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
     localStorage.removeItem(STORAGE_KEY_COLUMNS_VISIBILITY);
   }, []);
 
-  const visibleColumns = useMemo(() =>
-    columns.filter(col => col.visible !== false),
-    [columns]
-  );
+  // Kolumna "project" widoczna tylko gdy filtr "Tylko Akrobud" jest włączony
+  const visibleColumns = useMemo(() => {
+    return columns.filter(col => {
+      // Ukryj kolumnę jeśli jest oznaczona jako niewidoczna
+      if (col.visible === false) return false;
+
+      // Kolumna "project" widoczna tylko dla filtra "akrobud"
+      if (col.id === 'project' && filters.clientFilter !== 'akrobud') {
+        return false;
+      }
+
+      return true;
+    });
+  }, [columns, filters.clientFilter]);
 
   // ================================
   // Drag & Drop kolumn
