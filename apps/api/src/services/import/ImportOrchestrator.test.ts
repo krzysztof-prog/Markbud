@@ -1,6 +1,6 @@
 /**
  * ImportOrchestrator Unit Tests
- * Podstawowe testy dla orchestratora (bez testowania pełnej logiki processorów)
+ * Podstawowe testy dla orchestratora (bez testowania pelnej logiki procesorow)
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -8,7 +8,7 @@ import { ImportOrchestrator } from './ImportOrchestrator.js';
 import { ImportRepository } from '../../repositories/ImportRepository.js';
 import { NotFoundError } from '../../utils/errors.js';
 
-// Mock wszystkich zależności
+// Mock wszystkich zaleznosci
 vi.mock('../../index.js', () => ({
   prisma: {},
 }));
@@ -18,86 +18,103 @@ vi.mock('../event-emitter.js', () => ({
   emitDeliveryCreated: vi.fn(),
 }));
 
-vi.mock('../importLockService.js', () => ({
-  ImportLockService: vi.fn().mockImplementation(() => ({
-    acquireLock: vi.fn().mockResolvedValue({ id: 1 }),
-    releaseLock: vi.fn().mockResolvedValue(true),
-    checkLock: vi.fn().mockResolvedValue(null),
-  })),
-}));
+// Mock klasy jako prawdziwe klasy (wymagane przez Vitest 4)
+vi.mock('../importLockService.js', () => {
+  return {
+    ImportLockService: class MockImportLockService {
+      acquireLock = vi.fn().mockResolvedValue({ id: 1 });
+      releaseLock = vi.fn().mockResolvedValue(true);
+      checkLock = vi.fn().mockResolvedValue(null);
+    },
+  };
+});
 
-vi.mock('./importFileSystemService.js', () => ({
-  ImportFileSystemService: vi.fn(),
-  importFileSystemService: {
-    ensureUploadsDirectory: vi.fn().mockResolvedValue('/uploads'),
-    generateSafeFilename: vi.fn().mockReturnValue('safe-filename.csv'),
-    joinPath: vi.fn((a: string, b: string) => `${a}/${b}`),
-    writeFile: vi.fn().mockResolvedValue(undefined),
-    exists: vi.fn().mockReturnValue(true),
-    normalizePath: vi.fn((p: string) => p),
-    validatePathWithinBase: vi.fn(),
-    validateDirectory: vi.fn(),
-    readDirectory: vi.fn().mockResolvedValue([]),
-    extractDateFromFolderName: vi.fn().mockReturnValue(new Date()),
-    getBaseName: vi.fn((p: string) => p.split('/').pop() || p),
-    getDirName: vi.fn((p: string) => p.split('/').slice(0, -1).join('/') || '/'),
-  },
-}));
+vi.mock('./importFileSystemService.js', () => {
+  return {
+    ImportFileSystemService: class MockImportFileSystemService {},
+    importFileSystemService: {
+      ensureUploadsDirectory: vi.fn().mockResolvedValue('/uploads'),
+      generateSafeFilename: vi.fn().mockReturnValue('safe-filename.csv'),
+      joinPath: vi.fn((a, b) => a + '/' + b),
+      writeFile: vi.fn().mockResolvedValue(undefined),
+      exists: vi.fn().mockReturnValue(true),
+      normalizePath: vi.fn((p) => p),
+      validatePathWithinBase: vi.fn(),
+      validateDirectory: vi.fn(),
+      readDirectory: vi.fn().mockResolvedValue([]),
+      extractDateFromFolderName: vi.fn().mockReturnValue(new Date()),
+      getBaseName: vi.fn((p) => p.split('/').pop() || p),
+      getDirName: vi.fn((p) => p.split('/').slice(0, -1).join('/') || '/'),
+    },
+  };
+});
 
-vi.mock('./importSettingsService.js', () => ({
-  ImportSettingsService: vi.fn().mockImplementation(() => ({
-    getImportsBasePath: vi.fn().mockResolvedValue('/imports'),
-  })),
-}));
+vi.mock('./importSettingsService.js', () => {
+  return {
+    ImportSettingsService: class MockImportSettingsService {
+      getImportsBasePath = vi.fn().mockResolvedValue('/imports');
+    },
+  };
+});
 
-vi.mock('./importValidationService.js', () => ({
-  ImportValidationService: vi.fn().mockImplementation(() => ({
-    validateUploadedFile: vi.fn(),
-    detectFileType: vi.fn().mockReturnValue('uzyte_bele'),
-    sanitizeFilename: vi.fn((f: string) => f),
-    validateImportCanBeProcessed: vi.fn().mockImplementation(async (id: number) => ({
-      id,
-      fileType: 'uzyte_bele',
-      status: 'pending',
-    })),
-  })),
-}));
+vi.mock('./importValidationService.js', () => {
+  return {
+    ImportValidationService: class MockImportValidationService {
+      validateUploadedFile = vi.fn();
+      detectFileType = vi.fn().mockReturnValue('uzyte_bele');
+      sanitizeFilename = vi.fn((f) => f);
+      validateImportCanBeProcessed = vi.fn().mockImplementation(async (id) => ({
+        id,
+        fileType: 'uzyte_bele',
+        status: 'pending',
+      }));
+    },
+  };
+});
 
-vi.mock('./importTransactionService.js', () => ({
-  ImportTransactionService: vi.fn().mockImplementation(() => ({
-    markAsProcessing: vi.fn().mockResolvedValue(undefined),
-    markAsCompleted: vi.fn().mockResolvedValue(undefined),
-    markAsError: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+vi.mock('./importTransactionService.js', () => {
+  return {
+    ImportTransactionService: class MockImportTransactionService {
+      markAsProcessing = vi.fn().mockResolvedValue(undefined);
+      markAsCompleted = vi.fn().mockResolvedValue(undefined);
+      markAsError = vi.fn().mockResolvedValue(undefined);
+    },
+  };
+});
 
-vi.mock('./importConflictService.js', () => ({
-  ImportConflictService: vi.fn().mockImplementation(() => ({})),
-}));
+vi.mock('./importConflictService.js', () => {
+  return {
+    ImportConflictService: class MockImportConflictService {},
+  };
+});
 
-vi.mock('./UzyteBeleProcessor.js', () => ({
-  UzyteBeleProcessor: vi.fn().mockImplementation(() => ({
-    getUzyteBelePreview: vi.fn().mockResolvedValue({
-      data: [],
-      summary: { totalRecords: 0, validRecords: 0, invalidRecords: 0 },
-    }),
-    processUzyteBeleImport: vi.fn().mockResolvedValue({ orderId: 1 }),
-    processUzyteBeleWithResolution: vi.fn().mockResolvedValue({ success: true, result: {} }),
-    performFolderImport: vi.fn().mockResolvedValue({ imported: 0, failed: 0, errors: [] }),
-    scanFolder: vi.fn().mockResolvedValue({ csvFiles: [] }),
-  })),
-}));
+vi.mock('./UzyteBeleProcessor.js', () => {
+  return {
+    UzyteBeleProcessor: class MockUzyteBeleProcessor {
+      getUzyteBelePreview = vi.fn().mockResolvedValue({
+        data: [],
+        summary: { totalRecords: 0, validRecords: 0, invalidRecords: 0 },
+      });
+      processUzyteBeleImport = vi.fn().mockResolvedValue({ orderId: 1 });
+      processUzyteBeleWithResolution = vi.fn().mockResolvedValue({ success: true, result: {} });
+      performFolderImport = vi.fn().mockResolvedValue({ imported: 0, failed: 0, errors: [] });
+      scanFolder = vi.fn().mockResolvedValue({ csvFiles: [] });
+    },
+  };
+});
 
-vi.mock('./CenyProcessor.js', () => ({
-  CenyProcessor: vi.fn().mockImplementation(() => ({
-    autoImportPdf: vi.fn().mockResolvedValue({ fileImport: {}, autoImportStatus: 'success' }),
-    getPdfPreview: vi.fn().mockResolvedValue({
-      data: [],
-      summary: { totalRecords: 0, validRecords: 0, invalidRecords: 0 },
-    }),
-    processPdfApproval: vi.fn().mockResolvedValue({ success: true }),
-  })),
-}));
+vi.mock('./CenyProcessor.js', () => {
+  return {
+    CenyProcessor: class MockCenyProcessor {
+      autoImportPdf = vi.fn().mockResolvedValue({ fileImport: {}, autoImportStatus: 'success' });
+      getPdfPreview = vi.fn().mockResolvedValue({
+        data: [],
+        summary: { totalRecords: 0, validRecords: 0, invalidRecords: 0 },
+      });
+      processPdfApproval = vi.fn().mockResolvedValue({ success: true });
+    },
+  };
+});
 
 describe('ImportOrchestrator', () => {
   let orchestrator: ImportOrchestrator;
@@ -186,7 +203,7 @@ describe('ImportOrchestrator', () => {
   describe('listFolders', () => {
     it('should return error when base path does not exist', async () => {
       const { importFileSystemService } = await import('./importFileSystemService.js');
-      (importFileSystemService.exists as any).mockReturnValueOnce(false);
+      (importFileSystemService.exists).mockReturnValueOnce(false);
 
       const result = await orchestrator.listFolders();
 

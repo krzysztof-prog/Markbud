@@ -358,30 +358,9 @@ describe('DeliveryRepository', () => {
       });
     });
 
-    describe('getHolidays', () => {
-      it('returns Polish holidays for year', async () => {
-        const result = await repository.getHolidays(2024);
-
-        expect(result.length).toBeGreaterThan(0);
-        // Check for some fixed holidays
-        expect(result.some((h) => h.name === 'Nowy Rok')).toBe(true);
-        expect(result.some((h) => h.name === 'Boze Narodzenie' || h.name === 'Boże Narodzenie')).toBe(true);
-      });
-
-      it('calculates Easter and movable holidays', async () => {
-        const result = await repository.getHolidays(2024);
-
-        expect(result.some((h) => h.name === 'Niedziela Wielkanocna')).toBe(true);
-        expect(result.some((h) => h.name.includes('Wielkanocny') || h.name === 'Poniedziałek Wielkanocny')).toBe(true);
-      });
-
-      it('returns correct number of holidays', async () => {
-        const result = await repository.getHolidays(2024);
-
-        // 9 fixed + 4 movable (Easter Sunday, Easter Monday, Pentecost, Corpus Christi)
-        expect(result.length).toBe(13);
-      });
-    });
+    // Uwaga: Testy getHolidays() przeniesione do CalendarService.test.ts
+    // Metoda getHolidays() została wydzielona z DeliveryRepository do CalendarService
+    // w ramach refaktoryzacji P1-5 (HolidayService)
   });
 
   describe('Order management', () => {
@@ -514,7 +493,8 @@ describe('DeliveryRepository', () => {
       it('throws on reorder failure', async () => {
         mockPrisma.$transaction.mockRejectedValue(new Error('Update failed'));
 
-        await expect(repository.reorderDeliveryOrders(1, [1, 2, 3])).rejects.toThrow('Failed to reorder delivery orders');
+        // Repository rzuca oryginalny błąd z transakcji (nie opakowuje)
+        await expect(repository.reorderDeliveryOrders(1, [1, 2, 3])).rejects.toThrow('Update failed');
       });
     });
 
@@ -817,18 +797,8 @@ describe('DeliveryRepository', () => {
       expect(mockPrisma.delivery.findMany).toHaveBeenCalled();
     });
 
-    it('calculates Easter correctly for different years', async () => {
-      const holidays2024 = await repository.getHolidays(2024);
-      const holidays2025 = await repository.getHolidays(2025);
-
-      const easter2024 = holidays2024.find((h) => h.name === 'Niedziela Wielkanocna');
-      const easter2025 = holidays2025.find((h) => h.name === 'Niedziela Wielkanocna');
-
-      expect(easter2024).toBeDefined();
-      expect(easter2025).toBeDefined();
-      // Easter dates should be different
-      expect(easter2024?.date.getTime()).not.toBe(easter2025?.date.getTime());
-    });
+    // Uwaga: Test "calculates Easter correctly for different years" przeniesiony do CalendarService.test.ts
+    // w ramach refaktoryzacji P1-5 (HolidayService)
   });
 
   describe('Pagination', () => {
