@@ -96,6 +96,8 @@ export class SchucoParser {
         })
         .on('error', (error) => {
           logger.error('[SchucoParser] CSV parsing error:', error);
+          // Zamknij stream aby zwolnić zasoby i zapobiec memory leak
+          stream.destroy();
           reject(error);
         });
     });

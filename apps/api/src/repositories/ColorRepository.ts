@@ -74,52 +74,62 @@ export class ColorRepository {
   }
 
   async createProfileColorLinks(colorId: number, profileIds: number[]): Promise<void> {
-    // SQLite nie wspiera skipDuplicates - sprawdzamy ręcznie
-    for (const profileId of profileIds) {
-      const existing = await this.prisma.profileColor.findUnique({
-        where: {
-          profileId_colorId: {
-            profileId,
-            colorId,
-          },
-        },
-      });
+    if (profileIds.length === 0) return;
 
-      if (!existing) {
-        await this.prisma.profileColor.create({
-          data: {
-            profileId,
-            colorId,
-            isVisible: true,
-          },
-        });
-      }
-    }
+    // Pobierz istniejące powiązania w jednym zapytaniu
+    const existingLinks = await this.prisma.profileColor.findMany({
+      where: {
+        colorId,
+        profileId: { in: profileIds },
+      },
+      select: { profileId: true },
+    });
+
+    const existingProfileIds = new Set(existingLinks.map((link) => link.profileId));
+
+    // Filtruj tylko nowe profile (te które nie istnieją)
+    const newProfileIds = profileIds.filter((id) => !existingProfileIds.has(id));
+
+    if (newProfileIds.length === 0) return;
+
+    // Batch insert - jedno zapytanie zamiast N
+    await this.prisma.profileColor.createMany({
+      data: newProfileIds.map((profileId) => ({
+        profileId,
+        colorId,
+        isVisible: true,
+      })),
+    });
   }
 
   async createWarehouseStockEntries(colorId: number, profileIds: number[]): Promise<void> {
-    // SQLite nie wspiera skipDuplicates - sprawdzamy ręcznie
-    for (const profileId of profileIds) {
-      const existing = await this.prisma.warehouseStock.findUnique({
-        where: {
-          profileId_colorId: {
-            profileId,
-            colorId,
-          },
-        },
-      });
+    if (profileIds.length === 0) return;
 
-      if (!existing) {
-        await this.prisma.warehouseStock.create({
-          data: {
-            profileId,
-            colorId,
-            currentStockBeams: 0,
-            updatedById: 1, // System user ID
-          },
-        });
-      }
-    }
+    // Pobierz istniejące wpisy w jednym zapytaniu
+    const existingStocks = await this.prisma.warehouseStock.findMany({
+      where: {
+        colorId,
+        profileId: { in: profileIds },
+      },
+      select: { profileId: true },
+    });
+
+    const existingProfileIds = new Set(existingStocks.map((stock) => stock.profileId));
+
+    // Filtruj tylko nowe profile
+    const newProfileIds = profileIds.filter((id) => !existingProfileIds.has(id));
+
+    if (newProfileIds.length === 0) return;
+
+    // Batch insert - jedno zapytanie zamiast N
+    await this.prisma.warehouseStock.createMany({
+      data: newProfileIds.map((profileId) => ({
+        profileId,
+        colorId,
+        currentStockBeams: 0,
+        updatedById: 1, // System user ID
+      })),
+    });
   }
 
   async updateProfileColorVisibility(profileId: number, colorId: number, isVisible: boolean) {

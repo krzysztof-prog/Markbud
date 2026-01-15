@@ -51,16 +51,16 @@ export function useSchucoData({
     useQuery<SchucoDeliveriesResponse>({
       queryKey: [...SCHUCO_QUERY_KEYS.deliveries, currentPage],
       queryFn: () => schucoApi.getDeliveries(currentPage, pageSize),
-      staleTime: 0, // Zawsze pobieraj świeże dane
+      staleTime: 5 * 60 * 1000, // 5 minut cache - dane Schuco nie zmieniają się często
       refetchOnMount: true,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false, // Wyłączone - niepotrzebne częste odświeżanie
     });
 
   // Pobierz status ostatniego pobrania
   const { data: status } = useQuery<SchucoFetchLog>({
     queryKey: SCHUCO_QUERY_KEYS.status,
     queryFn: () => schucoApi.getStatus(),
-    staleTime: 0,
+    staleTime: 2 * 60 * 1000, // 2 minuty cache dla statusu
     refetchOnMount: true,
   });
 
@@ -68,7 +68,7 @@ export function useSchucoData({
   const { data: statistics } = useQuery<SchucoStatistics>({
     queryKey: SCHUCO_QUERY_KEYS.statistics,
     queryFn: () => schucoApi.getStatistics(),
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000, // 5 minut cache dla statystyk
     refetchOnMount: true,
   });
 
@@ -83,7 +83,7 @@ export function useSchucoData({
   const { data: byWeekData, isLoading: isLoadingByWeek } = useQuery<ByWeekResponse>({
     queryKey: SCHUCO_QUERY_KEYS.byWeek,
     queryFn: () => schucoApi.getByWeek(),
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000, // 5 minut cache
     refetchOnMount: true,
   });
 

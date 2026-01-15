@@ -8,6 +8,7 @@
  */
 
 import { DeliveryRepository } from '../../repositories/DeliveryRepository.js';
+import { CalendarService } from '../calendar/CalendarService.js';
 
 export interface CalendarMonth {
   month: number;
@@ -22,7 +23,10 @@ export interface CalendarDataResult {
 }
 
 export class DeliveryCalendarService {
-  constructor(private repository: DeliveryRepository) {}
+  constructor(
+    private repository: DeliveryRepository,
+    private calendarService: CalendarService
+  ) {}
 
   /**
    * Get calendar data for a specific month/year
@@ -81,11 +85,11 @@ export class DeliveryCalendarService {
 
   /**
    * Fetch holidays for all unique years in the month list
+   * Używa CalendarService do pobierania świąt (logika biznesowa, nie DB)
    */
-  private async fetchHolidaysForYears(months: CalendarMonth[]): Promise<unknown[]> {
+  private fetchHolidaysForYears(months: CalendarMonth[]): unknown[] {
     const uniqueYears = Array.from(new Set(months.map((m) => m.year)));
-    const holidaysPromises = uniqueYears.map((year) => this.repository.getHolidays(year));
-    const holidaysResults = await Promise.all(holidaysPromises);
-    return holidaysResults.flat();
+    const allHolidays = uniqueYears.flatMap((year) => this.calendarService.getHolidays(year));
+    return allHolidays;
   }
 }

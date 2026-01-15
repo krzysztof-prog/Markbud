@@ -99,6 +99,9 @@ model ProfileColor {
   profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@unique([profileId, colorId])
+  // Dodane 2026-01-15 - audyt wydajności: indeksy FK
+  @@index([profileId])
+  @@index([colorId])
   @@map("profile_colors")
 }
 
@@ -164,6 +167,10 @@ model Order {
   @@index([glassOrderStatus, archivedAt])
   @@index([deliveryDate, status])
   @@index([okucDemandStatus])
+  // Dodane 2026-01-15 - audyt bazy danych
+  @@index([productionDate])
+  @@index([completedAt])
+  @@index([documentAuthorUserId, archivedAt])
   @@map("orders")
 }
 
@@ -237,6 +244,8 @@ model WarehouseStock {
 
   @@unique([profileId, colorId])
   @@index([deletedAt])
+  // Dodane 2026-01-15 - audyt wydajności: indeks FK
+  @@index([updatedById])
   @@map("warehouse_stock")
 }
 
@@ -318,6 +327,8 @@ model DeliveryOrder {
 
   @@unique([deliveryId, orderId])
   @@index([deliveryId, position])
+  // Dodane 2026-01-15 - audyt: reverse lookup (order → deliveries)
+  @@index([orderId])
   @@map("delivery_orders")
 }
 
@@ -442,6 +453,9 @@ model Note {
   createdBy   User?    @relation(fields: [createdById], references: [id])
   order       Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  // Dodane 2026-01-15 - audyt wydajności: indeksy FK
+  @@index([orderId])
+  @@index([createdById])
   @@map("notes")
 }
 
@@ -455,6 +469,8 @@ model WorkingDay {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  // Dodane 2026-01-15 - audyt: liczenie dni roboczych w zakresie dat
+  @@index([isWorking, date])
   @@map("working_days")
 }
 

@@ -30,6 +30,7 @@ export function useGlassDeliveries(filters?: GlassDeliveryFilters) {
   return useQuery({
     queryKey: glassDeliveryKeys.list(filters),
     queryFn: () => glassDeliveriesApi.getAll(filters),
+    staleTime: 2 * 60 * 1000, // 2 minuty cache
   });
 }
 
@@ -38,6 +39,7 @@ export function useGlassDeliveryDetail(id: number) {
     queryKey: glassDeliveryKeys.detail(id),
     queryFn: () => glassDeliveriesApi.getById(id),
     enabled: id > 0,
+    staleTime: 2 * 60 * 1000, // 2 minuty cache
   });
 }
 
@@ -96,6 +98,7 @@ export function useValidationDashboard() {
   return useQuery({
     queryKey: validationKeys.dashboard(),
     queryFn: () => glassValidationsApi.getDashboard(),
+    staleTime: 2 * 60 * 1000, // 2 minuty cache
   });
 }
 
@@ -111,6 +114,7 @@ export function useLooseGlasses() {
   return useQuery({
     queryKey: categorizedGlassKeys.loose,
     queryFn: () => glassDeliveriesApi.getLooseGlasses(),
+    staleTime: 2 * 60 * 1000, // 2 minuty cache
   });
 }
 
@@ -118,6 +122,7 @@ export function useAluminumGlasses() {
   return useQuery({
     queryKey: categorizedGlassKeys.aluminum,
     queryFn: () => glassDeliveriesApi.getAluminumGlasses(),
+    staleTime: 2 * 60 * 1000, // 2 minuty cache
   });
 }
 
@@ -125,6 +130,7 @@ export function useAluminumGlassesSummary() {
   return useQuery({
     queryKey: categorizedGlassKeys.aluminumSummary,
     queryFn: () => glassDeliveriesApi.getAluminumGlassesSummary(),
+    staleTime: 2 * 60 * 1000, // 2 minuty cache
   });
 }
 
@@ -132,5 +138,6 @@ export function useReclamationGlasses() {
   return useQuery({
     queryKey: categorizedGlassKeys.reclamation,
     queryFn: () => glassDeliveriesApi.getReclamationGlasses(),
+    staleTime: 2 * 60 * 1000, // 2 minuty cache
   });
 }

@@ -127,60 +127,68 @@ export class ProfileRepository {
 
   /**
    * Tworzy powiązania ProfileColor dla danego profilu ze wszystkimi kolorami
-   * Pomija kombinacje które już istnieją (SQLite nie wspiera skipDuplicates)
+   * Używa batch operations zamiast N+1 queries
    */
   async createProfileColorLinks(profileId: number, colorIds: number[]): Promise<void> {
-    for (const colorId of colorIds) {
-      // Sprawdź czy kombinacja już istnieje
-      const existing = await this.prisma.profileColor.findUnique({
-        where: {
-          profileId_colorId: {
-            profileId,
-            colorId,
-          },
-        },
-      });
+    if (colorIds.length === 0) return;
 
-      // Twórz tylko jeśli nie istnieje
-      if (!existing) {
-        await this.prisma.profileColor.create({
-          data: {
-            profileId,
-            colorId,
-            isVisible: true,
-          },
-        });
-      }
-    }
+    // Pobierz istniejące powiązania w jednym zapytaniu
+    const existingLinks = await this.prisma.profileColor.findMany({
+      where: {
+        profileId,
+        colorId: { in: colorIds },
+      },
+      select: { colorId: true },
+    });
+
+    const existingColorIds = new Set(existingLinks.map((link) => link.colorId));
+
+    // Filtruj tylko nowe kolory
+    const newColorIds = colorIds.filter((id) => !existingColorIds.has(id));
+
+    if (newColorIds.length === 0) return;
+
+    // Batch insert - jedno zapytanie zamiast N
+    await this.prisma.profileColor.createMany({
+      data: newColorIds.map((colorId) => ({
+        profileId,
+        colorId,
+        isVisible: true,
+      })),
+    });
   }
 
   /**
    * Tworzy wpisy WarehouseStock dla danego profilu ze wszystkimi kolorami
-   * Pomija kombinacje które już istnieją (SQLite nie wspiera skipDuplicates)
+   * Używa batch operations zamiast N+1 queries
    */
   async createWarehouseStockEntries(profileId: number, colorIds: number[]): Promise<void> {
-    for (const colorId of colorIds) {
-      // Sprawdź czy kombinacja już istnieje
-      const existing = await this.prisma.warehouseStock.findUnique({
-        where: {
-          profileId_colorId: {
-            profileId,
-            colorId,
-          },
-        },
-      });
+    if (colorIds.length === 0) return;
 
-      // Twórz tylko jeśli nie istnieje
-      if (!existing) {
-        await this.prisma.warehouseStock.create({
-          data: {
-            profileId,
-            colorId,
-            currentStockBeams: 0,
-            updatedById: 1, // System user ID
-          },
-        });
-      }
-    }
+    // Pobierz istniejące wpisy w jednym zapytaniu
+    const existingStocks = await this.prisma.warehouseStock.findMany({
+      where: {
+        profileId,
+        colorId: { in: colorIds },
+      },
+      select: { colorId: true },
+    });
+
+    const existingColorIds = new Set(existingStocks.map((stock) => stock.colorId));
+
+    // Filtruj tylko nowe kolory
+    const newColorIds = colorIds.filter((id) => !existingColorIds.has(id));
+
+    if (newColorIds.length === 0) return;
+
+    // Batch insert - jedno zapytanie zamiast N
+    await this.prisma.warehouseStock.createMany({
+      data: newColorIds.map((colorId) => ({
+        profileId,
+        colorId,
+        currentStockBeams: 0,
+        updatedById: 1, // System user ID
+      })),
+    });
   }
 }
