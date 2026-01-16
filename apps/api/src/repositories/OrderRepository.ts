@@ -109,8 +109,9 @@ export class OrderRepository {
           },
         },
         orderBy: { createdAt: 'desc' },
-        skip: pagination?.skip ?? 0,
-        take: pagination?.take ?? 50,
+        // Paginacja tylko gdy jawnie przekazana - domyślnie zwracamy wszystkie zlecenia
+        ...(pagination?.skip !== undefined && { skip: pagination.skip }),
+        ...(pagination?.take !== undefined && { take: pagination.take }),
       }),
     ]);
 
@@ -125,7 +126,7 @@ export class OrderRepository {
       data,
       total,
       skip: pagination?.skip ?? 0,
-      take: pagination?.take ?? 50,
+      take: pagination?.take ?? data.length,
     };
   }
 

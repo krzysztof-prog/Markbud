@@ -87,7 +87,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="rounded border overflow-x-auto max-h-[600px] overflow-y-auto">
+        <div className="rounded border overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 sticky top-0 z-10">
               <OrderTableHeader visibleColumns={visibleColumns} />
