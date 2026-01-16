@@ -101,9 +101,9 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
   const [columnFilters, setColumnFilters] = useState<Record<ColumnId, string>>({} as Record<ColumnId, string>);
   const debouncedColumnFilters = useDebounce(columnFilters, 300);
 
-  // Stan sortowania
+  // Stan sortowania - domyślnie malejąco (najwyższy nr zlecenia na górze)
   const [sortField, setSortField] = useState<ColumnId>('orderNumber');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   // Stan kolumn
   const [columns, setColumns] = useState<Column[]>(DEFAULT_COLUMNS);
