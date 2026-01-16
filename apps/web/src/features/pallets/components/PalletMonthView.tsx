@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   TrendingUp,
   TrendingDown,
+  CalendarDays,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,6 +44,8 @@ const MONTH_NAMES = [
 interface PalletMonthViewProps {
   initialYear?: number;
   initialMonth?: number;
+  /** Callback gdy użytkownik chce przejść do widoku dziennego */
+  onDayClick?: (date?: string) => void;
 }
 
 /**
@@ -52,6 +55,7 @@ interface PalletMonthViewProps {
 export const PalletMonthView: React.FC<PalletMonthViewProps> = ({
   initialYear,
   initialMonth,
+  onDayClick,
 }) => {
   const now = new Date();
   const [year, setYear] = useState(initialYear ?? now.getFullYear());
@@ -153,11 +157,23 @@ export const PalletMonthView: React.FC<PalletMonthViewProps> = ({
             </CardTitle>
           </div>
 
-          {/* Przycisk bieżącego miesiąca i badge */}
+          {/* Przycisk bieżącego miesiąca, widok dzienny i badge */}
           <div className="flex items-center gap-2">
             {!isCurrentMonth && (
               <Button variant="outline" size="sm" onClick={handleCurrentMonth}>
                 Bieżący miesiąc
+              </Button>
+            )}
+
+            {onDayClick && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onDayClick()}
+                className="gap-1"
+              >
+                <CalendarDays className="h-4 w-4" />
+                <span className="hidden sm:inline">Widok dzienny</span>
               </Button>
             )}
 

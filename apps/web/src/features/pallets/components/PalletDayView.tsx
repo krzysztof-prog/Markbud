@@ -10,6 +10,7 @@ import {
   Settings,
   Info,
   ChevronDown,
+  Calendar,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -61,6 +62,8 @@ const isToday = (dateString: string): boolean => {
 
 interface PalletDayViewProps {
   initialDate?: string;
+  /** Callback do przełączenia na widok miesięczny */
+  onShowMonthView?: () => void;
 }
 
 /**
@@ -74,6 +77,7 @@ interface PalletDayViewProps {
  */
 export const PalletDayView: React.FC<PalletDayViewProps> = ({
   initialDate,
+  onShowMonthView,
 }) => {
   const { toast } = useToast();
 
@@ -329,6 +333,18 @@ export const PalletDayView: React.FC<PalletDayViewProps> = ({
                 <Settings className="h-4 w-4" />
                 <span className="hidden sm:inline">Progi alertów</span>
               </Button>
+
+              {onShowMonthView && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onShowMonthView}
+                  className="gap-1"
+                >
+                  <Calendar className="h-4 w-4" />
+                  <span className="hidden sm:inline">Podsumowanie miesiąca</span>
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
