@@ -116,33 +116,43 @@ export const isAkrobudOrder = (client: string | null | undefined): boolean => {
  * Formatuje nazwę klienta zgodnie z zasadami:
  * - "AKROBUD SOKOŁOWSKI SPÓŁKA KOMANDYTOWA" -> "AKROBUD"
  * - Imię i nazwisko -> tylko nazwisko
+ * - Maksymalna długość: 15 znaków (z "..." jeśli obcięte)
  */
-export const formatClientName = (client: string | null | undefined): string => {
+export const formatClientName = (client: string | null | undefined, maxLength = 15): string => {
   if (!client) return '';
+
+  let result: string;
 
   // Skróć AKROBUD do samej nazwy firmy
   if (client.toUpperCase().includes('AKROBUD')) {
-    return 'AKROBUD';
+    result = 'AKROBUD';
+  } else {
+    // Sprawdź czy to firma (zawiera sufiks firmowy w dowolnym miejscu)
+    const hasCompanySuffix = /(SP\.?|SPÓŁKA|S\.A\.|LTD|LLC|GMBH|FIRMA|COMPANY|CO\.|INC|CORP|O\.O\.|Z\s+O\.O\.)/i.test(
+      client
+    );
+
+    // Jeśli to firma, użyj pełnej nazwy
+    if (hasCompanySuffix) {
+      result = client;
+    } else {
+      // Dla klientów z imieniem i nazwiskiem - zwróć tylko ostatnie słowo (nazwisko)
+      const words = client.trim().split(/\s+/);
+      if (words.length >= 2) {
+        result = words[words.length - 1]; // Zwróć samo nazwisko
+      } else {
+        // Pojedyncze słowo - zwróć je
+        result = client;
+      }
+    }
   }
 
-  // Sprawdź czy to firma (zawiera sufiks firmowy w dowolnym miejscu)
-  const hasCompanySuffix = /(SP\.?|SPÓŁKA|S\.A\.|LTD|LLC|GMBH|FIRMA|COMPANY|CO\.|INC|CORP|O\.O\.|Z\s+O\.O\.)/i.test(
-    client
-  );
-
-  // Jeśli to firma, zwróć pełną nazwę
-  if (hasCompanySuffix) {
-    return client;
+  // Skróć do maksymalnej długości
+  if (result.length > maxLength) {
+    return result.substring(0, maxLength - 3) + '...';
   }
 
-  // Dla klientów z imieniem i nazwiskiem - zwróć tylko ostatnie słowo (nazwisko)
-  const words = client.trim().split(/\s+/);
-  if (words.length >= 2) {
-    return words[words.length - 1]; // Zwróć samo nazwisko
-  }
-
-  // Pojedyncze słowo - zwróć je
-  return client;
+  return result;
 };
 
 // ================================

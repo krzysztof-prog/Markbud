@@ -489,7 +489,11 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
 
         case 'client':
           return (
-            <td key={column.id} className={`px-4 py-3 text-muted-foreground ${alignClass}`}>
+            <td
+              key={column.id}
+              className={`px-4 py-3 text-muted-foreground ${alignClass} whitespace-nowrap`}
+              title={order.client || undefined}
+            >
               {formatClientName(order.client) || '-'}
             </td>
           );
