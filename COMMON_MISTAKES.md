@@ -3,7 +3,7 @@
 > **Claude:** Przeczytaj ten plik PRZED każdym kodowaniem!
 > Ta lista rośnie z każdym błędem - jeśli popełnisz nowy, **dodaj go tutaj**.
 
-**Ostatnia aktualizacja:** 2026-01-15
+**Ostatnia aktualizacja:** 2026-01-16
 **Źródło:** Audyt kodu + doświadczenie projektu
 
 ---
@@ -254,19 +254,29 @@ return (
 
 ## 🚀 Dynamic Imports - Next.js 15
 
-### ❌ DON'T - Implicit default import
+### ❌ DON'T - next/dynamic z ssr:false dla komponentów na każdej stronie
 ```typescript
-// ❌ ŹLE - runtime error w Next.js 15
-const HeavyComponent = dynamic(() => import('./Heavy'));
+// ❌ ŹLE - crash "Cannot read properties of undefined (reading 'call')"
+const Sidebar = dynamic(
+  () => import('./sidebar').then((mod) => mod.Sidebar),
+  { ssr: false }
+);
 ```
 
-**Błąd:** `Error: Element type is invalid: expected a string... but got: object`
+**Błąd:** `Cannot read properties of undefined (reading 'call')` w `<Lazy>` component
 
-### ✅ DO - Explicit default export
+### ✅ DO - Bezpośredni import dla Sidebar, Header, Layout
 ```typescript
-// ✅ POPRAWNIE
-const HeavyComponent = dynamic(
-  () => import('./Heavy').then((mod) => mod.default), // ← KLUCZOWE!
+// ✅ POPRAWNIE - dla komponentów używanych na każdej stronie
+import { Sidebar } from './sidebar';
+import { Header } from './header';
+```
+
+### ✅ DO - next/dynamic TYLKO dla ciężkich, rzadko używanych komponentów
+```typescript
+// ✅ POPRAWNIE - dla DataGrid, Charts, PDF viewers
+const HeavyChart = dynamic(
+  () => import('./HeavyChart').then((mod) => mod.default), // ← explicit default!
   {
     loading: () => <Skeleton />,
     ssr: false
@@ -274,7 +284,16 @@ const HeavyComponent = dynamic(
 );
 ```
 
-**Gdzie:** WSZYSTKIE lazy-loaded komponenty (Calendars, Charts, DataTables, Dialogs)
+**Kiedy używać next/dynamic:**
+- ✅ Wykresy (Recharts, Chart.js)
+- ✅ DataGrid/DataTable z dużą ilością danych
+- ✅ PDF viewers
+- ✅ Rich text editors
+
+**Kiedy NIE używać next/dynamic:**
+- ❌ Sidebar, Header, Footer - używane na każdej stronie
+- ❌ Layout components
+- ❌ Małe komponenty UI
 
 ---
 
@@ -320,6 +339,48 @@ await prisma.$transaction(async (tx) => {
 ```
 
 **Gdzie sprawdzić:** [docs/guides/transactions.md](docs/guides/transactions.md)
+
+---
+
+## 🌐 API - Kompresja gzip
+
+### ❌ DON'T - Włączaj kompresję gzip z CORS
+```typescript
+// ❌ ŹLE - powoduje puste odpowiedzi w przeglądarce!
+import compress from '@fastify/compress';
+
+await fastify.register(compress, {
+  global: true,
+  threshold: 1024,
+  encodings: ['gzip', 'deflate'],
+});
+```
+
+**Błąd:** JSON parse error "Unexpected end of JSON input" - przeglądarka otrzymuje `content-length: 0`
+
+**Dlaczego:** Kompresja gzip w połączeniu z CORS powoduje że przeglądarka otrzymuje pustą odpowiedź mimo statusu 200. curl działa poprawnie, ale przeglądarka nie.
+
+### ✅ DO - Nie używaj kompresji dla małych odpowiedzi API
+```typescript
+// ✅ POPRAWNIE - dla 5-10 użytkowników kompresja nie jest potrzebna
+// Odpowiedzi API są małe (kilka-kilkadziesiąt KB), sieć lokalna jest szybka
+
+// Albo zwiększ threshold do bardzo dużych wartości:
+await fastify.register(compress, {
+  global: true,
+  threshold: 1024000, // 1MB - praktycznie wyłącza dla JSON API
+});
+```
+
+**Kiedy kompresja ma sens:**
+- ✅ Duże pliki statyczne (JS bundles, CSS)
+- ✅ Eksport dużych plików (CSV, PDF)
+- ✅ Aplikacje z tysiącami użytkowników przez internet
+
+**Kiedy kompresja NIE ma sensu:**
+- ❌ API zwracające JSON (zazwyczaj <100KB)
+- ❌ Aplikacje na lokalnej sieci (5-10 użytkowników)
+- ❌ Gdy masz problemy z pustymi odpowiedziami
 
 ---
 
@@ -697,6 +758,101 @@ Claude: "Zanim zacznę, aktywuję skill backend-dev-guidelines..."
    Found in: [gdzie znalazłeś błąd]
    Impact: [jakie konsekwencje]
    ```
+
+---
+
+## 🛤️ Routing - Backend i Frontend
+
+### ❌ DON'T - Rejestruj route `/:id` przed stałymi ścieżkami
+```typescript
+// ❌ ŹLE - kolejność ma znaczenie!
+fastify.get('/:id', handler.getById);        // ← łapie WSZYSTKO
+fastify.get('/calendar', handler.getCalendar); // ← NIGDY nie zostanie wywołany!
+```
+
+**Konsekwencja:** Request do `/deliveries/calendar` zostanie potraktowany jako `id=calendar`.
+
+### ✅ DO - Stałe ścieżki PRZED dynamicznymi
+```typescript
+// ✅ POPRAWNIE
+fastify.get('/calendar', handler.getCalendar);      // ← konkretna ścieżka
+fastify.get('/calendar-batch', handler.getBatch);   // ← konkretna ścieżka
+fastify.get('/stats/windows', handler.getStats);    // ← konkretna ścieżka
+fastify.get('/:id', handler.getById);               // ← dynamiczna NA KOŃCU
+```
+
+**Gdzie sprawdzić:** [apps/api/src/routes/deliveries.ts](apps/api/src/routes/deliveries.ts)
+
+---
+
+### ❌ DON'T - Duplikuj API client w różnych miejscach
+```typescript
+// ❌ ŹLE - dwa pliki z tym samym ordersApi
+// apps/web/src/lib/api/orders.ts (18 metod)
+// apps/web/src/features/orders/api/ordersApi.ts (10 metod) ← DUPLIKAT
+```
+
+**Konsekwencja:** Chaos, niespójność, brakujące metody, trudniejsze utrzymanie.
+
+### ✅ DO - Jeden centralny API client
+```typescript
+// ✅ POPRAWNIE - JEDNO miejsce
+// apps/web/src/lib/api/orders.ts - MASTER COPY
+
+// Import zawsze z lib/api:
+import { ordersApi } from '@/lib/api/orders';
+```
+
+---
+
+### ❌ DON'T - Rejestruj route z aliasami bez /api prefix
+```typescript
+// ❌ ŹLE - może kolidować z Next.js App Router
+await fastify.register(mojaPracaRoutes, { prefix: '/api/moja-praca' });
+await fastify.register(mojaPracaRoutes, { prefix: '/moja-praca' }); // ← ALIAS BEZ /api!
+```
+
+**Konsekwencja:** Konflikty z Next.js routing - `/moja-praca` to ścieżka strony frontend!
+
+### ✅ DO - Wszystkie API routes z prefixem /api
+```typescript
+// ✅ POPRAWNIE
+await fastify.register(mojaPracaRoutes, { prefix: '/api/moja-praca' });
+// Frontend używa: fetch('/api/moja-praca/...')
+```
+
+---
+
+## 🔐 Middleware - Protected Routes
+
+### ❌ DON'T - Zapominaj o ochronie stron w middleware
+```typescript
+// ❌ ŹLE - tylko kilka stron chronionych
+const PROTECTED_ROUTES = {
+  '/admin': [OWNER, ADMIN],
+  '/kierownik': [OWNER, ADMIN, KIEROWNIK],
+  // Brakuje: /dostawy, /magazyn, /moja-praca itd.
+};
+```
+
+**Konsekwencja:** Każdy zalogowany użytkownik ma dostęp do wszystkich stron!
+
+### ✅ DO - Chrońcie WSZYSTKIE strony wymagające autoryzacji
+```typescript
+// ✅ POPRAWNIE - kompletna mapa ról
+const PROTECTED_ROUTES = {
+  '/admin': [OWNER, ADMIN],
+  '/kierownik': [OWNER, ADMIN, KIEROWNIK],
+  '/importy': [OWNER, ADMIN],
+  '/dostawy': [OWNER, ADMIN, KIEROWNIK],
+  '/magazyn': [OWNER, ADMIN, KIEROWNIK, MAGAZYNIER],
+  '/moja-praca': [OWNER, ADMIN, KIEROWNIK, OPERATOR],
+  '/operator': [OWNER, ADMIN, KIEROWNIK, OPERATOR],
+  // ... wszystkie strony!
+};
+```
+
+**Gdzie sprawdzić:** [apps/web/src/middleware.ts](apps/web/src/middleware.ts)
 
 ---
 

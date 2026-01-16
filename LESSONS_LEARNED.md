@@ -15,6 +15,85 @@
 
 ---
 
+## 2026-01-16 - Kompresja gzip i next/dynamic powodują puste odpowiedzi i błędy hydration
+
+**Co się stało:**
+Dashboard Operatora nie wyświetlał danych. Dwa różne błędy:
+1. **JSON parse error:** "Unexpected end of JSON input" przy przełączaniu filtra "Tylko moje zlecenia"
+2. **Hydration error:** "Cannot read properties of undefined (reading 'call')" w komponencie `<Lazy>`
+
+**Root cause:**
+1. **Kompresja gzip (`@fastify/compress`)** - zwracała puste odpowiedzi (`content-length: 0`) w przeglądarce przy większych payloadach JSON w połączeniu z CORS. Request z curl działał, ale przeglądarka otrzymywała pustą odpowiedź.
+2. **next/dynamic z ssr:false** - w Next.js 15.5.7 powoduje crash "Cannot read properties of undefined (reading 'call')" dla komponentów używanych na każdej stronie (Sidebar).
+
+**Impact:**
+- **Krytyczny:** Dashboard Operatora całkowicie niedziałający
+- Błąd JSON parse przy każdym przełączeniu filtra
+- Crash aplikacji przy wchodzeniu na stronę
+
+**Fix:**
+1. **Wyłączono kompresję gzip** w `apps/api/src/index.ts`:
+   ```typescript
+   // import compress from '@fastify/compress'; // DISABLED - causes empty responses
+   // await fastify.register(compress, { ... });
+   ```
+2. **Usunięto next/dynamic** z `client-sidebar.tsx` i `dashboard-wrapper.tsx`:
+   ```typescript
+   // PRZED: const Sidebar = dynamic(() => import('./sidebar'), { ssr: false });
+   // PO: import { Sidebar } from './sidebar';
+   ```
+
+**Prevention:**
+1. ✅ **NIE używaj @fastify/compress z CORS** - powoduje puste odpowiedzi w przeglądarce
+2. ✅ **NIE używaj next/dynamic z ssr:false dla komponentów na każdej stronie** - Sidebar, Header, Layout
+3. ✅ **Lazy loading tylko dla ciężkich komponentów używanych rzadko** - DataGrid, wykresy, PDF viewer
+4. ✅ **Testuj zmiany w przeglądarce, nie tylko curl** - gzip działa inaczej w curl vs przeglądarka
+5. ✅ **Sprawdź content-length w Network tab** - `content-length: 0` przy 200 OK = problem z kompresją
+
+**Lekcja:**
+- Kompresja gzip na lokalnej sieci (5-10 użytkowników) nie jest potrzebna i może powodować problemy
+- next/dynamic jest problematyczny w Next.js 15.x - używaj bezpośrednich importów gdzie to możliwe
+- Testuj w przeglądarce, nie tylko terminalem - zachowanie może się różnić
+
+---
+
+## 2026-01-16 - Audyt routingów - duplikaty, aliasy i brakujące zabezpieczenia
+
+**Co się stało:**
+Podczas audytu routingów w aplikacji znaleziono kilka problemów:
+1. **Duplikat ordersApi** - dwa pliki z API clientem dla zleceń
+2. **Alias /moja-praca bez /api prefix** - zduplikowana rejestracja routów
+3. **Brakujące PROTECTED_ROUTES** - wiele stron bez ochrony ról
+
+**Root cause:**
+1. **ordersApi duplikat**: Stworzony podczas refaktoryzacji do features/, ale nigdy nie użyty - zapomniano usunąć `lib/api/orders.ts` lub odwrotnie
+2. **Alias bez /api**: Dodany "dla kompatybilności wstecznej" ale nigdy nieużywany przez frontend
+3. **PROTECTED_ROUTES**: Middleware dodano ale nie zaktualizowano o wszystkie strony
+
+**Impact:**
+- **Niski** (duplikat): Dead code, mylące dla deweloperów
+- **Niski** (alias): Potencjalny konflikt z Next.js routing (nigdy nie wystąpił)
+- **Średni** (PROTECTED_ROUTES): Każdy zalogowany użytkownik mógł wejść na strony typu /dostawy, /magazyn bez sprawdzenia roli
+
+**Fix:**
+1. Usunięto `apps/web/src/features/orders/api/ordersApi.ts`
+2. Usunięto alias `/moja-praca` z `apps/api/src/index.ts`
+3. PROTECTED_ROUTES - **DO ZROBIENIA** (wymaga decyzji o mapie ról)
+
+**Prevention:**
+1. ✅ **Jeden API client** - zawsze `@/lib/api/[nazwa].ts`, nie duplikuj w features/
+2. ✅ **Wszystkie API routes z /api prefix** - nie twórz aliasów bez /api
+3. ✅ **Kolejność routów** - stałe ścieżki (`/calendar`) PRZED dynamicznymi (`/:id`)
+4. ✅ **Audyt middleware** - przy dodawaniu nowej strony → dodaj do PROTECTED_ROUTES
+5. ✅ **Grep na duplikaty** - `git grep "ordersApi\|deliveriesApi"` znajdzie duplikaty
+
+**Lekcja:**
+- Regularny audyt routingów zapobiega narastaniu "martwego kodu"
+- Aliasy "dla kompatybilności" często nie są potrzebne i mylą
+- Middleware PROTECTED_ROUTES musi być aktualizowane przy każdej nowej stronie
+
+---
+
 ## 2026-01-15 - API Client nie wysyłał tokenu autoryzacji + niezgodność kluczy tokena
 
 **Co się stało:**
