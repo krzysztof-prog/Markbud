@@ -50,6 +50,7 @@ interface OrderTableRowProps {
   // Modal callbacks
   onOrderClick: (id: number, orderNumber: string) => void;
   onSchucoStatusClick: (orderNumber: string, schucoLinks: SchucoDeliveryLink[]) => void;
+  onGlassDiscrepancyClick?: (orderNumber: string) => void;
 }
 
 // ================================
@@ -89,6 +90,7 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
   saveEdit,
   onOrderClick,
   onSchucoStatusClick,
+  onGlassDiscrepancyClick,
 }) => {
   const isEditing = editingCell?.orderId === order.id;
 
@@ -145,48 +147,90 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
         case 'glassDeliveryDate': {
           const ordered = order.orderedGlassCount ?? 0;
           const delivered = order.deliveredGlassCount ?? 0;
+          const deadline = order.deadline ? new Date(order.deadline) : null;
+          const now = new Date();
+          const twoWeeksFromNow = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
           let content: string;
           let colorClass: string;
-          let tooltipDate: string | null = null;
+          let tooltipContent: string | null = null;
+          let isClickable = false;
+
+          // Priorytet statusów:
+          // 1. Brak zamówienia (ordered = 0) + sprawdź czy zbliża się deadline
+          // 2. Dostarczone (delivered >= ordered)
+          // 3. Rozbieżność (częściowo/nadwyżka) - klikalny
+          // 4. Zamówione ale nie dostarczone
+          // 5. Brak danych
 
           if (ordered === 0) {
+            // Sprawdź czy deadline jest w ciągu 2 tygodni
+            if (deadline && deadline <= twoWeeksFromNow && deadline > now) {
+              content = 'ZAMÓW';
+              colorClass = 'bg-red-100 text-red-700 font-semibold';
+              tooltipContent = `Termin realizacji: ${formatDate(order.deadline)}\nZbliża się termin - zamów szyby!`;
+            } else if (deadline && deadline <= now) {
+              content = 'ZAMÓW';
+              colorClass = 'bg-red-200 text-red-800 font-semibold animate-pulse';
+              tooltipContent = `Termin realizacji: ${formatDate(order.deadline)}\nTermin minął - pilnie zamów szyby!`;
+            } else {
+              content = '-';
+              colorClass = 'text-slate-400';
+            }
+          } else if (delivered >= ordered && delivered > 0) {
+            // Dostarczone (lub nadwyżka)
+            content = 'Dostarczone';
+            colorClass = 'bg-green-100 text-green-700';
+            const deliveryDate = order.glassDeliveryDate ? formatDate(order.glassDeliveryDate) : null;
+            tooltipContent = `Data dostawy: ${deliveryDate || 'brak'}\nZamówiono: ${ordered} szt.\nDostarczone: ${delivered} szt.`;
+
+            // Nadwyżka - pokaż jako klikalny
+            if (delivered > ordered) {
+              content = 'Nadwyżka';
+              colorClass = 'bg-orange-100 text-orange-700 cursor-pointer hover:bg-orange-200';
+              isClickable = true;
+              tooltipContent = `Nadwyżka szyb!\nZamówiono: ${ordered} szt.\nDostarczone: ${delivered} szt.\nKliknij aby zobaczyć szczegóły`;
+            }
+          } else if (delivered > 0 && delivered < ordered) {
+            // Częściowo dostarczone - klikalny
+            content = `Częściowo`;
+            colorClass = 'bg-yellow-100 text-yellow-700 cursor-pointer hover:bg-yellow-200';
+            isClickable = true;
+            tooltipContent = `Częściowa dostawa\nZamówiono: ${ordered} szt.\nDostarczone: ${delivered} szt.\nBrakuje: ${ordered - delivered} szt.\nKliknij aby zobaczyć szczegóły`;
+          } else if (ordered > 0 && delivered === 0) {
+            // Zamówione ale nie dostarczone - pokaż datę oczekiwanej dostawy w formacie DD.MM
+            const expectedDeliveryShort = order.glassDeliveryDate ? formatDateShort(order.glassDeliveryDate) : null;
+            const expectedDeliveryFull = order.glassDeliveryDate ? formatDate(order.glassDeliveryDate) : null;
+            content = expectedDeliveryShort || 'Zamówione';
+            colorClass = 'bg-blue-100 text-blue-700';
+            tooltipContent = expectedDeliveryFull
+              ? `Szyby zamówione\nIlość: ${ordered} szt.\nOczekiwana dostawa: ${expectedDeliveryFull}`
+              : `Szyby zamówione\nIlość: ${ordered} szt.\nOczekiwanie na dostawę`;
+          } else {
             content = '-';
             colorClass = 'text-slate-400';
-          } else if (delivered >= ordered) {
-            content = 'Dostarczono';
-            colorClass = 'bg-green-100 text-green-700';
-            if (order.glassDeliveryDate) {
-              const formattedDate = formatDate(order.glassDeliveryDate);
-              if (formattedDate) {
-                tooltipDate = formattedDate;
-              }
-            }
-          } else if (delivered > 0) {
-            content = `Częściowo: ${delivered}/${ordered}`;
-            colorClass = 'bg-yellow-100 text-yellow-700';
-          } else if (order.glassDeliveryDate) {
-            const deliveryDate = new Date(order.glassDeliveryDate);
-            const isOverdue = deliveryDate < new Date() && delivered === 0;
-            content = formatDateShort(order.glassDeliveryDate);
-            colorClass = isOverdue ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700';
-          } else {
-            content = 'Brak daty';
-            colorClass = 'bg-slate-100 text-slate-600';
           }
 
-          if (tooltipDate) {
+          // Renderowanie z tooltipem
+          const cellContent = (
+            <span
+              className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${colorClass}`}
+              onClick={isClickable ? () => onGlassDiscrepancyClick?.(order.orderNumber) : undefined}
+            >
+              {content}
+            </span>
+          );
+
+          if (tooltipContent) {
             return (
               <td key={column.id} className="px-4 py-3 text-center">
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium cursor-help ${colorClass}`}>
-                        {content}
-                      </span>
+                      {cellContent}
                     </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Data dostawy: {tooltipDate}</p>
+                    <TooltipContent className="whitespace-pre-line">
+                      {tooltipContent}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -196,9 +240,7 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
 
           return (
             <td key={column.id} className="px-4 py-3 text-center">
-              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${colorClass}`}>
-                {content}
-              </span>
+              {cellContent}
             </td>
           );
         }
@@ -519,7 +561,7 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           );
       }
     },
-    [order, isEditing, editingCell, editValue, setEditValue, startEdit, cancelEdit, saveEdit, eurRate, onOrderClick, onSchucoStatusClick]
+    [order, isEditing, editingCell, editValue, setEditValue, startEdit, cancelEdit, saveEdit, eurRate, onOrderClick, onSchucoStatusClick, onGlassDiscrepancyClick]
   );
 
   return (

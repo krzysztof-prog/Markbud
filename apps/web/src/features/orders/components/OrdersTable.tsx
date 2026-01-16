@@ -40,6 +40,7 @@ interface OrdersTableProps {
   // Modal callbacks
   onOrderClick: (id: number, orderNumber: string) => void;
   onSchucoStatusClick: (orderNumber: string, schucoLinks: SchucoDeliveryLink[]) => void;
+  onGlassDiscrepancyClick?: (orderNumber: string) => void;
 
   // Grouping
   getGroupLabel: (key: string) => string;
@@ -67,6 +68,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   saveEdit,
   onOrderClick,
   onSchucoStatusClick,
+  onGlassDiscrepancyClick,
   getGroupLabel,
 }) => {
   return (
@@ -113,6 +115,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                   saveEdit={saveEdit}
                   onOrderClick={onOrderClick}
                   onSchucoStatusClick={onSchucoStatusClick}
+                  onGlassDiscrepancyClick={onGlassDiscrepancyClick}
                 />
               ))}
             </tbody>

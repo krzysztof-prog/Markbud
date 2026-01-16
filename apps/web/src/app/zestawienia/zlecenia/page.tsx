@@ -23,6 +23,7 @@ import {
   OrderDetailModal,
   OrdersStatsModal,
   SchucoDeliveriesModal,
+  GlassDiscrepancyModal,
   getCellValueForExport,
   // Hooks
   useOrderFilters,
@@ -48,6 +49,7 @@ export default function ZestawienieZlecenPage() {
     orderNumber: string;
     schucoLinks: SchucoDeliveryLink[];
   } | null>(null);
+  const [glassDiscrepancyOrderNumber, setGlassDiscrepancyOrderNumber] = useState<string | null>(null);
 
   // ================================
   // Data fetching
@@ -136,6 +138,10 @@ export default function ZestawienieZlecenPage() {
     setSelectedSchucoOrder({ orderNumber, schucoLinks });
   }, []);
 
+  const handleGlassDiscrepancyClick = useCallback((orderNumber: string) => {
+    setGlassDiscrepancyOrderNumber(orderNumber);
+  }, []);
+
   const handleExportCSV = useCallback(() => {
     const headers = visibleColumns.map(col => col.label);
     const rows = filteredOrders.map((order: ExtendedOrder) =>
@@ -221,6 +227,7 @@ export default function ZestawienieZlecenPage() {
               saveEdit={saveEdit}
               onOrderClick={handleOrderClick}
               onSchucoStatusClick={handleSchucoStatusClick}
+              onGlassDiscrepancyClick={handleGlassDiscrepancyClick}
               getGroupLabel={getGroupLabel}
             />
           ))
@@ -255,6 +262,14 @@ export default function ZestawienieZlecenPage() {
           schucoLinks={selectedSchucoOrder.schucoLinks}
         />
       )}
+
+      <GlassDiscrepancyModal
+        open={!!glassDiscrepancyOrderNumber}
+        onOpenChange={(open) => {
+          if (!open) setGlassDiscrepancyOrderNumber(null);
+        }}
+        orderNumber={glassDiscrepancyOrderNumber}
+      />
     </div>
   );
 }

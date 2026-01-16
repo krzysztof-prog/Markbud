@@ -60,11 +60,27 @@ export const getCellValueForExport = (order: ExtendedOrder, columnId: ColumnId):
     case 'glassDeliveryDate': {
       const orderedCsv = order.orderedGlassCount ?? 0;
       const deliveredCsv = order.deliveredGlassCount ?? 0;
-      if (orderedCsv === 0) return '';
-      if (deliveredCsv >= orderedCsv) return 'Dostarczono';
+      const deadlineCsv = order.deadline ? new Date(order.deadline) : null;
+      const nowCsv = new Date();
+      const twoWeeksFromNowCsv = new Date(nowCsv.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+      if (orderedCsv === 0) {
+        // Sprawdź czy zbliża się deadline
+        if (deadlineCsv && deadlineCsv <= twoWeeksFromNowCsv) {
+          return 'ZAMÓW';
+        }
+        return '';
+      }
+      if (deliveredCsv >= orderedCsv && deliveredCsv > 0) {
+        if (deliveredCsv > orderedCsv) return 'Nadwyżka';
+        return 'Dostarczone';
+      }
       if (deliveredCsv > 0) return `Częściowo: ${deliveredCsv}/${orderedCsv}`;
-      if (order.glassDeliveryDate) return formatDateShort(order.glassDeliveryDate);
-      return 'Brak daty';
+      if (orderedCsv > 0 && deliveredCsv === 0) {
+        // Pokaż datę oczekiwanej dostawy w formacie DD.MM zamiast "Zamówione"
+        return order.glassDeliveryDate ? formatDateShort(order.glassDeliveryDate) : 'Zamówione';
+      }
+      return '';
     }
     case 'okucDemandStatus': {
       const statusCsv = order.okucDemandStatus || 'none';
