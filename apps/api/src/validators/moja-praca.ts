@@ -40,6 +40,15 @@ export const conflictResolutionSchema = z.object({
   notes: z.string().max(500, 'Notatka może mieć max 500 znaków').optional(),
 });
 
+// Body dla zbiorczego rozwiązania konfliktów
+export const bulkConflictResolutionSchema = z.object({
+  ids: z.array(z.number()).min(1, 'Wymagane co najmniej jedno ID'),
+  action: z.enum(['replace_base', 'replace_variant', 'keep_both', 'cancel'], {
+    required_error: 'Akcja jest wymagana',
+    invalid_type_error: 'Nieprawidłowa akcja',
+  }),
+});
+
 // ============================================
 // Response types
 // ============================================
@@ -90,6 +99,7 @@ export type ConflictsQuery = z.infer<typeof conflictsQuerySchema>;
 export type DateQuery = z.infer<typeof dateQuerySchema>;
 export type ConflictIdParams = z.infer<typeof conflictIdParamsSchema>;
 export type ConflictResolutionInput = z.infer<typeof conflictResolutionSchema>;
+export type BulkConflictResolutionInput = z.infer<typeof bulkConflictResolutionSchema>;
 export type ConflictListItem = z.infer<typeof conflictListItemSchema>;
 export type ConflictDetail = z.infer<typeof conflictDetailSchema>;
 export type ConflictsCount = z.infer<typeof conflictsCountSchema>;

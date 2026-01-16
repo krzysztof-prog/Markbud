@@ -35,6 +35,13 @@ export const mojaPracaRoutes: FastifyPluginAsync = async (fastify) => {
     preHandler: verifyAuth,
   }, mojaPracaHandler.resolveConflict);
 
+  // POST /moja-praca/conflicts/bulk-resolve - Rozwiąż wiele konfliktów naraz
+  fastify.post<{
+    Body: { ids: number[]; action: string };
+  }>('/conflicts/bulk-resolve', {
+    preHandler: verifyAuth,
+  }, mojaPracaHandler.bulkResolveConflicts);
+
   // ============================================
   // ORDERS ROUTES - Zlecenia użytkownika
   // ============================================

@@ -35,10 +35,15 @@ export class MojaPracaRepository {
 
   /**
    * Pobiera listę konfliktów dla użytkownika
+   * Pokazuje konflikty przypisane do użytkownika ORAZ konflikty bez właściciela (authorUserId = null)
    */
   async getConflicts(userId: number, status: 'pending' | 'resolved' | 'all' = 'pending') {
     const where: Prisma.PendingImportConflictWhereInput = {
-      authorUserId: userId,
+      // Pokaż konflikty użytkownika LUB konflikty bez właściciela
+      OR: [
+        { authorUserId: userId },
+        { authorUserId: null },
+      ],
     };
 
     if (status !== 'all') {
@@ -97,14 +102,22 @@ export class MojaPracaRepository {
 
   /**
    * Zlicza konflikty dla użytkownika
+   * Liczy konflikty przypisane do użytkownika ORAZ konflikty bez właściciela (authorUserId = null)
    */
   async countConflicts(userId: number): Promise<{ pending: number; total: number }> {
+    const userOrUnassignedFilter = {
+      OR: [
+        { authorUserId: userId },
+        { authorUserId: null },
+      ],
+    };
+
     const [pending, total] = await Promise.all([
       this.prisma.pendingImportConflict.count({
-        where: { authorUserId: userId, status: 'pending' },
+        where: { ...userOrUnassignedFilter, status: 'pending' },
       }),
       this.prisma.pendingImportConflict.count({
-        where: { authorUserId: userId },
+        where: userOrUnassignedFilter,
       }),
     ]);
 

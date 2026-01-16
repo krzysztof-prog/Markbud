@@ -71,6 +71,25 @@ export interface ResolveConflictResult {
   orderNumber?: string;
 }
 
+// Input dla zbiorczego rozwiązania konfliktów
+export interface BulkResolveConflictsInput {
+  ids: number[];
+  action: ConflictAction;
+}
+
+// Wynik zbiorczego rozwiązania konfliktów
+export interface BulkResolveConflictsResult {
+  success: boolean;
+  successCount: number;
+  failedCount: number;
+  results: Array<{
+    id: number;
+    orderNumber: string;
+    success: boolean;
+    message: string;
+  }>;
+}
+
 // Zlecenie użytkownika
 export interface UserOrder {
   id: number;

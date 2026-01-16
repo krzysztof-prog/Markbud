@@ -5,6 +5,7 @@ import {
   conflictsQuerySchema,
   conflictIdParamsSchema,
   conflictResolutionSchema,
+  bulkConflictResolutionSchema,
   dateQuerySchema,
 } from '../validators/moja-praca.js';
 import { NotFoundError, ValidationError, ForbiddenError } from '../utils/errors.js';
@@ -115,6 +116,21 @@ export const mojaPracaHandler = {
         error: result.message,
       });
     }
+
+    return reply.send(result);
+  },
+
+  /**
+   * POST /api/moja-praca/conflicts/bulk-resolve
+   * Rozwiąż wiele konfliktów naraz
+   */
+  async bulkResolveConflicts(request: AuthenticatedRequest, reply: FastifyReply) {
+    const userId = getUserId(request);
+
+    const body = bulkConflictResolutionSchema.parse(request.body);
+
+    const service = new MojaPracaService(prisma);
+    const result = await service.bulkResolveConflicts(userId, body.ids, body.action);
 
     return reply.send(result);
   },

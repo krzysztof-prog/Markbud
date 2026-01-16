@@ -41,6 +41,19 @@ export interface ResolveConflictResult {
   orderNumber?: string;
 }
 
+// Typ dla zbiorczego rozwiązania konfliktów
+export interface BulkResolveResult {
+  success: boolean;
+  successCount: number;
+  failedCount: number;
+  results: Array<{
+    id: number;
+    orderNumber: string;
+    success: boolean;
+    message: string;
+  }>;
+}
+
 export class MojaPracaService {
   private repository: MojaPracaRepository;
   private prisma: PrismaClient;
@@ -68,6 +81,7 @@ export class MojaPracaService {
 
   /**
    * Pobiera szczegóły konfliktu
+   * Użytkownik może zobaczyć konflikty przypisane do siebie ORAZ konflikty bez właściciela
    */
   async getConflictDetail(conflictId: number, userId: number): Promise<ConflictWithDetails | null> {
     const conflict = await this.repository.getConflictById(conflictId);
@@ -76,8 +90,11 @@ export class MojaPracaService {
       return null;
     }
 
-    // Sprawdź czy konflikt należy do użytkownika
-    if (conflict.authorUserId !== userId) {
+    // Sprawdź czy konflikt należy do użytkownika LUB jest bez właściciela
+    const isOwner = conflict.authorUserId === userId;
+    const isUnassigned = conflict.authorUserId === null;
+
+    if (!isOwner && !isUnassigned) {
       logger.warn(`User ${userId} tried to access conflict ${conflictId} owned by ${conflict.authorUserId}`);
       return null;
     }
@@ -146,6 +163,91 @@ export class MojaPracaService {
           message: 'Nieznana akcja',
         };
     }
+  }
+
+  /**
+   * Rozwiązuje wiele konfliktów naraz (bulk)
+   * Wykonuje sekwencyjnie, zbierając wyniki
+   */
+  async bulkResolveConflicts(
+    userId: number,
+    conflictIds: number[],
+    action: 'replace_base' | 'replace_variant' | 'keep_both' | 'cancel'
+  ): Promise<BulkResolveResult> {
+    const results: BulkResolveResult['results'] = [];
+    let successCount = 0;
+    let failedCount = 0;
+
+    // Pobierz wszystkie konflikty aby mieć numery zleceń do raportowania
+    const conflicts = await this.prisma.pendingImportConflict.findMany({
+      where: {
+        id: { in: conflictIds },
+        status: 'pending',
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        authorUserId: true,
+      },
+    });
+
+    // Mapuj id -> orderNumber
+    const conflictMap = new Map(conflicts.map((c) => [c.id, c]));
+
+    for (const conflictId of conflictIds) {
+      const conflict = conflictMap.get(conflictId);
+
+      // Konflikt nie istnieje lub nie jest pending
+      if (!conflict) {
+        results.push({
+          id: conflictId,
+          orderNumber: 'nieznany',
+          success: false,
+          message: 'Konflikt nie istnieje lub został już rozwiązany',
+        });
+        failedCount++;
+        continue;
+      }
+
+      // Sprawdź uprawnienia
+      if (conflict.authorUserId !== userId && conflict.authorUserId !== null) {
+        results.push({
+          id: conflictId,
+          orderNumber: conflict.orderNumber,
+          success: false,
+          message: 'Brak uprawnień',
+        });
+        failedCount++;
+        continue;
+      }
+
+      // Rozwiąż konflikt
+      const result = await this.resolveConflict(conflictId, userId, { action });
+
+      results.push({
+        id: conflictId,
+        orderNumber: conflict.orderNumber,
+        success: result.success,
+        message: result.message,
+      });
+
+      if (result.success) {
+        successCount++;
+      } else {
+        failedCount++;
+      }
+    }
+
+    logger.info(
+      `Bulk resolve conflicts by user ${userId}: ${successCount} success, ${failedCount} failed`
+    );
+
+    return {
+      success: failedCount === 0,
+      successCount,
+      failedCount,
+      results,
+    };
   }
 
   /**

@@ -113,6 +113,53 @@ export function NewOperatorDashboard() {
   const { filterByUser, setFilterByUser, canToggle } = useOperatorDashboardFilter();
   const { data, isLoading, error } = useOperatorDashboard({ filterByUser });
 
+  // WSZYSTKIE HOOKI MUSZĄ BYĆ PRZED WARUNKOWYMI RETURN - Rules of Hooks!
+  // Memoizowane obliczenia - unikamy przeliczania przy kazdym renderze
+  const completenessPercent = useMemo(() => calculateCompletenessPercent(data), [data]);
+  const problemsCount = useMemo(() => countProblems(data), [data]);
+
+  // Rozdziel alerty na krytyczne i pozostale (memoizowane)
+  const { criticalAlerts, otherAlerts } = useMemo(() => {
+    if (!data) return { criticalAlerts: [], otherAlerts: [] };
+    return {
+      criticalAlerts: data.alerts.filter((a) => a.priority === 'critical'),
+      otherAlerts: data.alerts.filter((a) => a.priority !== 'critical'),
+    };
+  }, [data]);
+
+  // Oblicz procenty i brakujace (memoizowane)
+  const computedStats = useMemo(() => {
+    if (!data) {
+      return {
+        filesPercent: 0,
+        glassPercent: 0,
+        hardwarePercent: 0,
+        missingFiles: 0,
+        missingGlass: 0,
+        missingHardware: 0,
+      };
+    }
+    const { stats } = data;
+    const filesPercent =
+      stats.totalOrders > 0 ? Math.round((stats.withFiles / stats.totalOrders) * 100) : 0;
+    const glassPercent =
+      stats.totalOrders > 0 ? Math.round((stats.withGlass / stats.totalOrders) * 100) : 0;
+    const hardwarePercent =
+      stats.totalOrders > 0 ? Math.round((stats.withHardware / stats.totalOrders) * 100) : 0;
+
+    return {
+      filesPercent,
+      glassPercent,
+      hardwarePercent,
+      missingFiles: stats.totalOrders - stats.withFiles,
+      missingGlass: stats.totalOrders - stats.withGlass,
+      missingHardware: stats.totalOrders - stats.withHardware,
+    };
+  }, [data]);
+
+  const { filesPercent, glassPercent, hardwarePercent, missingFiles, missingGlass, missingHardware } = computedStats;
+
+  // Warunkowe return DOPIERO PO wszystkich hookach
   if (isLoading) {
     return <DashboardSkeleton />;
   }
@@ -136,37 +183,6 @@ export function NewOperatorDashboard() {
   }
 
   const { user, stats, alerts, recentActivity, pendingConflictsCount } = data;
-
-  // Memoizowane obliczenia - unikamy przeliczania przy kazdym renderze
-  const completenessPercent = useMemo(() => calculateCompletenessPercent(data), [data]);
-  const problemsCount = useMemo(() => countProblems(data), [data]);
-
-  // Rozdziel alerty na krytyczne i pozostale (memoizowane)
-  const { criticalAlerts, otherAlerts } = useMemo(() => ({
-    criticalAlerts: alerts.filter((a) => a.priority === 'critical'),
-    otherAlerts: alerts.filter((a) => a.priority !== 'critical'),
-  }), [alerts]);
-
-  // Oblicz procenty i brakujace (memoizowane)
-  const computedStats = useMemo(() => {
-    const filesPercent =
-      stats.totalOrders > 0 ? Math.round((stats.withFiles / stats.totalOrders) * 100) : 0;
-    const glassPercent =
-      stats.totalOrders > 0 ? Math.round((stats.withGlass / stats.totalOrders) * 100) : 0;
-    const hardwarePercent =
-      stats.totalOrders > 0 ? Math.round((stats.withHardware / stats.totalOrders) * 100) : 0;
-
-    return {
-      filesPercent,
-      glassPercent,
-      hardwarePercent,
-      missingFiles: stats.totalOrders - stats.withFiles,
-      missingGlass: stats.totalOrders - stats.withGlass,
-      missingHardware: stats.totalOrders - stats.withHardware,
-    };
-  }, [stats]);
-
-  const { filesPercent, glassPercent, hardwarePercent, missingFiles, missingGlass, missingHardware } = computedStats;
 
   return (
     <div className="p-6 space-y-6">

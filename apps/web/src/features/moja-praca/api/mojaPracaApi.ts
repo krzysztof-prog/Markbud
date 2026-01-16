@@ -6,6 +6,8 @@ import type {
   ConflictsCount,
   ResolveConflictInput,
   ResolveConflictResult,
+  BulkResolveConflictsInput,
+  BulkResolveConflictsResult,
   UserOrder,
   UserDelivery,
   UserGlassOrder,
@@ -42,6 +44,14 @@ const mojaPracaApi = {
 
   resolveConflict: async (id: number, input: ResolveConflictInput): Promise<ResolveConflictResult> => {
     return fetchApi<ResolveConflictResult>(`/api/moja-praca/conflicts/${id}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+  },
+
+  bulkResolveConflicts: async (input: BulkResolveConflictsInput): Promise<BulkResolveConflictsResult> => {
+    return fetchApi<BulkResolveConflictsResult>('/api/moja-praca/conflicts/bulk-resolve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -104,6 +114,20 @@ export function useResolveConflict() {
   return useMutation({
     mutationFn: ({ id, input }: { id: number; input: ResolveConflictInput }) =>
       mojaPracaApi.resolveConflict(id, input),
+    onSuccess: () => {
+      // Invalidate wszystkie query związane z konfliktami
+      queryClient.invalidateQueries({ queryKey: mojaPracaKeys.conflicts() });
+    },
+  });
+}
+
+// Rozwiąż wiele konfliktów naraz (bulk)
+export function useBulkResolveConflicts() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: BulkResolveConflictsInput) =>
+      mojaPracaApi.bulkResolveConflicts(input),
     onSuccess: () => {
       // Invalidate wszystkie query związane z konfliktami
       queryClient.invalidateQueries({ queryKey: mojaPracaKeys.conflicts() });
