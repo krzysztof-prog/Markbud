@@ -1,18 +1,8 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-
-// Dynamiczny import z wyłączonym SSR aby uniknąć hydration mismatch
-// Sidebar używa useState i useEffect, co powoduje różnice między SSR a klientem
-const Sidebar = dynamic(
-  () => import('./sidebar').then((mod) => mod.Sidebar),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="hidden md:flex h-full w-64 flex-col bg-slate-900" />
-    ),
-  }
-);
+// Bezposredni import - next/dynamic powoduje blad "Cannot read properties of undefined (reading 'call')"
+// w Next.js 15.5.7. Sidebar jest uzywany na kazdej stronie wiec lazy loading nie daje korzysci.
+import { Sidebar } from './sidebar';
 
 export function ClientSidebar() {
   return <Sidebar />;

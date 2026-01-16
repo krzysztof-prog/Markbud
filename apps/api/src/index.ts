@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import './types/fastify.js';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
-import compress from '@fastify/compress';
+// import compress from '@fastify/compress'; // DISABLED - causes empty responses
 import rateLimit from '@fastify/rate-limit';
 import { config as dotenvConfig } from 'dotenv';
 import { prisma, initializeSQLiteOptimizations } from './utils/prisma.js';
@@ -96,14 +96,10 @@ await fastify.register(multipart, {
   throwFileSizeLimit: true, // Throw error if file too large
 });
 
-// Compression (gzip/deflate) - reduces payload size by ~70%
-await fastify.register(compress, {
-  global: true,
-  threshold: 1024, // Only compress responses > 1KB
-  encodings: ['gzip', 'deflate'],
-  // Don't compress already compressed formats
-  customTypes: /^text\/|application\/json|application\/javascript|application\/xml/,
-});
+// Compression DISABLED - causes empty responses in browsers with CORS
+// The gzip compression was returning content-length: 0 for API responses
+// For 5-10 users on local network, compression is not critical
+// await fastify.register(compress, { ... });
 
 // Rate Limiting - protect from abuse
 await fastify.register(rateLimit, {
@@ -197,8 +193,6 @@ await fastify.register(bugReportRoutes, { prefix: '/api/bug-reports' });
 
 // Moja Praca Routes (Konflikty importu, zlecenia użytkownika)
 await fastify.register(mojaPracaRoutes, { prefix: '/api/moja-praca' });
-// Alias dla kompatybilności wstecznej (niektóre requesty przychodzą bez /api prefix)
-await fastify.register(mojaPracaRoutes, { prefix: '/moja-praca' });
 
 // Production Planning Routes (Planowanie produkcji)
 await fastify.register(productionPlanningRoutes, { prefix: '/api/production-planning' });
