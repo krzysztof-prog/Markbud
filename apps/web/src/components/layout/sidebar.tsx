@@ -79,24 +79,11 @@ const navigation: NavigationItem[] = [
     requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK]
   },
   {
-    name: 'Zestawienia',
-    href: '/zestawienia',
-    icon: BarChart3,
-    requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.KSIEGOWA],
-    subItems: [
-      {
-        name: 'Zestawienie zleceń',
-        href: '/zestawienia/zlecenia',
-        icon: FileText,
-        requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK]
-      },
-      {
-        name: 'Raport miesięczny',
-        href: '/zestawienia/miesieczne',
-        icon: Calendar
-        // Dostępne dla wszystkich którzy mają dostęp do "Zestawienia" (księgowa też)
-      },
-    ]
+    name: 'Zestawienie zleceń',
+    href: '/zestawienia/zlecenia',
+    icon: FileText,
+    // Dostęp dla wszystkich OPRÓCZ księgowej (raport miesięczny jest w Panelu Kierownika)
+    requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.USER]
   },
   {
     name: 'Akrobud',
@@ -206,15 +193,7 @@ export function Sidebar() {
 
     return true;
   }).map((item) => {
-    // Dla księgowej: filtruj subItems w "Zestawienia" (pokazuj TYLKO "Raport miesięczny")
-    if (user?.role === UserRole.KSIEGOWA && item.name === 'Zestawienia' && item.subItems) {
-      return {
-        ...item,
-        subItems: item.subItems.filter((sub) => sub.href === '/zestawienia/miesieczne')
-      };
-    }
-
-    // Dla innych: filtruj subItems według requiredRoles
+    // Filtruj subItems według requiredRoles
     if (item.subItems) {
       return {
         ...item,
@@ -377,10 +356,7 @@ export function Sidebar() {
         aria-label="Menu główne"
       >
         {filteredNavigation.map((item) => {
-          // Dla "/zestawienia" tylko dokładne dopasowanie, aby nie podświetlać przy podstronach
-          const isActive = item.href === '/zestawienia'
-            ? pathname === item.href
-            : pathname === item.href || (pathname?.startsWith(`${item.href}/`) ?? false);
+          const isActive = pathname === item.href || (pathname?.startsWith(`${item.href}/`) ?? false);
 
           const isExpanded = expandedItems.includes(item.href);
           const hasSubItems = 'subItems' in item && item.subItems;
