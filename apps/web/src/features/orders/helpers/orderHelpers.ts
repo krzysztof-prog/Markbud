@@ -229,6 +229,56 @@ export const getColumnValue = (order: ExtendedOrder, columnId: ColumnId): string
 };
 
 // ================================
+// Missing order numbers helpers
+// ================================
+
+/**
+ * Parsuje numer zlecenia na liczbę
+ * Obsługuje formaty: "53255", "2024/0001", itp.
+ */
+export const parseOrderNumber = (orderNumber: string | null | undefined): number | null => {
+  if (!orderNumber) return null;
+
+  // Wyciągnij tylko cyfry z numeru
+  const numericPart = orderNumber.replace(/\D/g, '');
+  if (!numericPart) return null;
+
+  return parseInt(numericPart, 10);
+};
+
+/**
+ * Znajduje brakujące numery zleceń w sekwencji
+ * @param orders - lista zleceń
+ * @returns lista brakujących numerów jako stringi
+ */
+export const findMissingOrderNumbers = (orders: { orderNumber?: string | null }[]): string[] => {
+  // Zbierz wszystkie numery i parsuj do liczb
+  const numbers = orders
+    .map(o => parseOrderNumber(o.orderNumber))
+    .filter((n): n is number => n !== null);
+
+  if (numbers.length < 2) return [];
+
+  // Posortuj rosnąco
+  const sorted = [...numbers].sort((a, b) => a - b);
+
+  const missing: string[] = [];
+
+  // Znajdź luki między kolejnymi numerami
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const current = sorted[i];
+    const next = sorted[i + 1];
+
+    // Jeśli różnica > 1, mamy lukę
+    for (let num = current + 1; num < next; num++) {
+      missing.push(String(num));
+    }
+  }
+
+  return missing;
+};
+
+// ================================
 // CSV Export helpers
 // ================================
 

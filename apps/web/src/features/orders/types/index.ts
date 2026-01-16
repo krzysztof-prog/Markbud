@@ -114,6 +114,15 @@ export interface FilterState {
   clientFilter: ClientFilter;
   hideProduced: boolean;
   dateFrom: string; // format YYYY-MM-DD
+  showOnlyMissing: boolean; // pokazuj tylko brakujące numery zleceń
+}
+
+/**
+ * Reprezentuje brakujący numer zlecenia (luka w sekwencji)
+ */
+export interface MissingOrderNumber {
+  orderNumber: string;
+  isMissing: true;
 }
 
 // ================================

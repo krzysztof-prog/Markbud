@@ -101,6 +101,7 @@ export default function ZestawienieZlecenPage() {
     toggleColumnVisibility,
     resetColumnOrder,
     filteredOrders,
+    missingOrderNumbers,
     hasActiveFilter,
   } = useOrderFilters({ allOrders });
 
@@ -206,6 +207,31 @@ export default function ZestawienieZlecenPage() {
         {/* Tabela zleceń lub stany ładowania/pusty */}
         {isLoading ? (
           <OrdersLoadingState />
+        ) : filters.showOnlyMissing ? (
+          // Tryb "tylko brakujące" - pokazuj jedną tabelę z brakującymi numerami
+          <OrdersTable
+            groupKey="missing"
+            orders={[]}
+            visibleColumns={visibleColumns}
+            groupBy="none"
+            searchQuery=""
+            filteredOrdersCount={missingOrderNumbers.length}
+            columnFilters={columnFilters}
+            setColumnFilters={setColumnFilters}
+            eurRate={eurRate}
+            editingCell={editingCell}
+            editValue={editValue}
+            setEditValue={setEditValue}
+            startEdit={startEdit}
+            cancelEdit={cancelEdit}
+            saveEdit={saveEdit}
+            onOrderClick={handleOrderClick}
+            onSchucoStatusClick={handleSchucoStatusClick}
+            onGlassDiscrepancyClick={handleGlassDiscrepancyClick}
+            getGroupLabel={getGroupLabel}
+            missingOrderNumbers={missingOrderNumbers}
+            showOnlyMissing={true}
+          />
         ) : filteredOrders.length > 0 ? (
           Object.entries(groupedOrders).map(([groupKey, orders]) => (
             <OrdersTable
@@ -229,6 +255,8 @@ export default function ZestawienieZlecenPage() {
               onSchucoStatusClick={handleSchucoStatusClick}
               onGlassDiscrepancyClick={handleGlassDiscrepancyClick}
               getGroupLabel={getGroupLabel}
+              missingOrderNumbers={missingOrderNumbers}
+              showOnlyMissing={false}
             />
           ))
         ) : (

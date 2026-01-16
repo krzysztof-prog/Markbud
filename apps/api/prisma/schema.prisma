@@ -656,7 +656,9 @@ model GlassOrderItem {
   // Validation warnings are created via GlassOrderValidation table
   glassOrder   GlassOrder @relation(fields: [glassOrderId], references: [id], onDelete: Cascade)
 
-  @@unique([glassOrderId, position])
+  // Usunięto @@unique([glassOrderId, position]) - wiele szyb może być na tej samej pozycji
+  // (np. pakiet szybowy z dwoma skrzydłami HST ma 2+ szyby na poz.1)
+  @@index([glassOrderId, orderNumber, position])
   @@index([widthMm, heightMm])
   @@index([orderNumber, orderSuffix])
   @@index([orderNumber])

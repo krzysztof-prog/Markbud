@@ -44,6 +44,10 @@ interface OrdersTableProps {
 
   // Grouping
   getGroupLabel: (key: string) => string;
+
+  // Missing order numbers
+  missingOrderNumbers?: string[];
+  showOnlyMissing?: boolean;
 }
 
 // ================================
@@ -70,7 +74,102 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   onSchucoStatusClick,
   onGlassDiscrepancyClick,
   getGroupLabel,
+  missingOrderNumbers = [],
+  showOnlyMissing = false,
 }) => {
+  // Jeśli tryb "tylko brakujące" - renderuj tylko brakujące numery
+  if (showOnlyMissing) {
+    // Posortuj brakujące numery malejąco (najwyższy na górze)
+    const sortedMissing = [...missingOrderNumbers].sort((a, b) => parseInt(b) - parseInt(a));
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            Brakujące numery zleceń
+            <span className="ml-2 text-sm font-normal text-orange-600">
+              ({missingOrderNumbers.length} {missingOrderNumbers.length === 1 ? 'brakujący numer' : 'brakujących numerów'})
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {missingOrderNumbers.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Brak luk w numeracji zleceń
+            </div>
+          ) : (
+            <div className="rounded border overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 sticky top-0 z-10">
+                  <OrderTableHeader visibleColumns={visibleColumns} />
+                </thead>
+                <tbody>
+                  {sortedMissing.map((orderNumber, index) => (
+                    <tr
+                      key={orderNumber}
+                      className="bg-slate-100 text-slate-400 italic"
+                    >
+                      {visibleColumns.map((column) => (
+                        <td
+                          key={column.id}
+                          className={`px-4 py-3 whitespace-nowrap border-b ${
+                            column.align === 'center' ? 'text-center' :
+                            column.align === 'right' ? 'text-right' : 'text-left'
+                          }`}
+                        >
+                          {column.id === 'orderNumber' ? orderNumber : '-'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Normalny tryb - połącz zlecenia z brakującymi numerami i posortuj
+  // Parsuj numery zleceń do liczb dla sortowania
+  const parseNum = (num: string | undefined | null): number => {
+    if (!num) return 0;
+    const match = num.replace(/\D/g, '');
+    return match ? parseInt(match, 10) : 0;
+  };
+
+  // Utwórz połączoną listę: zlecenia + brakujące numery
+  type TableItem = { type: 'order'; data: ExtendedOrder } | { type: 'missing'; orderNumber: string };
+
+  const combinedItems: TableItem[] = React.useMemo(() => {
+    const items: TableItem[] = orders.map(order => ({ type: 'order' as const, data: order }));
+
+    // Dodaj brakujące numery tylko jeśli mieszczą się w zakresie wyświetlanych zleceń
+    if (missingOrderNumbers.length > 0 && orders.length > 0) {
+      const orderNumbers = orders.map(o => parseNum(o.orderNumber));
+      const minOrder = Math.min(...orderNumbers);
+      const maxOrder = Math.max(...orderNumbers);
+
+      missingOrderNumbers.forEach(num => {
+        const numParsed = parseInt(num, 10);
+        // Dodaj tylko brakujące numery które są w zakresie wyświetlanych
+        if (numParsed >= minOrder && numParsed <= maxOrder) {
+          items.push({ type: 'missing', orderNumber: num });
+        }
+      });
+    }
+
+    // Sortuj malejąco po numerze
+    items.sort((a, b) => {
+      const numA = a.type === 'order' ? parseNum(a.data.orderNumber) : parseInt(a.orderNumber, 10);
+      const numB = b.type === 'order' ? parseNum(b.data.orderNumber) : parseInt(b.orderNumber, 10);
+      return numB - numA; // malejąco
+    });
+
+    return items;
+  }, [orders, missingOrderNumbers]);
+
   return (
     <Card>
       <CardHeader>
@@ -100,24 +199,49 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
               />
             </thead>
             <tbody>
-              {orders.map((order: ExtendedOrder, index: number) => (
-                <OrderTableRow
-                  key={order.id}
-                  order={order}
-                  visibleColumns={visibleColumns}
-                  index={index}
-                  eurRate={eurRate}
-                  editingCell={editingCell}
-                  editValue={editValue}
-                  setEditValue={setEditValue}
-                  startEdit={startEdit}
-                  cancelEdit={cancelEdit}
-                  saveEdit={saveEdit}
-                  onOrderClick={onOrderClick}
-                  onSchucoStatusClick={onSchucoStatusClick}
-                  onGlassDiscrepancyClick={onGlassDiscrepancyClick}
-                />
-              ))}
+              {combinedItems.map((item, index) => {
+                if (item.type === 'missing') {
+                  // Wiersz dla brakującego numeru
+                  return (
+                    <tr
+                      key={`missing-${item.orderNumber}`}
+                      className="bg-slate-100 text-slate-400 italic"
+                    >
+                      {visibleColumns.map((column) => (
+                        <td
+                          key={column.id}
+                          className={`px-4 py-3 whitespace-nowrap border-b ${
+                            column.align === 'center' ? 'text-center' :
+                            column.align === 'right' ? 'text-right' : 'text-left'
+                          }`}
+                        >
+                          {column.id === 'orderNumber' ? item.orderNumber : '-'}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                }
+
+                // Normalny wiersz zlecenia
+                return (
+                  <OrderTableRow
+                    key={item.data.id}
+                    order={item.data}
+                    visibleColumns={visibleColumns}
+                    index={index}
+                    eurRate={eurRate}
+                    editingCell={editingCell}
+                    editValue={editValue}
+                    setEditValue={setEditValue}
+                    startEdit={startEdit}
+                    cancelEdit={cancelEdit}
+                    saveEdit={saveEdit}
+                    onOrderClick={onOrderClick}
+                    onSchucoStatusClick={onSchucoStatusClick}
+                    onGlassDiscrepancyClick={onGlassDiscrepancyClick}
+                  />
+                );
+              })}
             </tbody>
           </table>
         </div>

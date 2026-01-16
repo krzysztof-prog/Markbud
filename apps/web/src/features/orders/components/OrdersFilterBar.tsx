@@ -112,6 +112,22 @@ export const OrdersFilterBar: React.FC<OrdersFilterBarProps> = ({
             Ukryj wyprodukowane
           </Label>
         </div>
+
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="filter-only-missing"
+            checked={filters.showOnlyMissing}
+            onCheckedChange={(checked) => {
+              setFilters(prev => ({
+                ...prev,
+                showOnlyMissing: !!checked
+              }));
+            }}
+          />
+          <Label htmlFor="filter-only-missing" className="text-sm cursor-pointer text-orange-600 font-medium">
+            Tylko brakujące
+          </Label>
+        </div>
       </div>
 
       {/* Data od */}

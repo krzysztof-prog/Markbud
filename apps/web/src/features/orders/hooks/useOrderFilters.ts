@@ -21,6 +21,7 @@ import {
   getAkrobudDeliveryDate,
   isAkrobudOrder,
   getColumnValue,
+  findMissingOrderNumbers,
 } from '../helpers/orderHelpers';
 
 // ================================
@@ -40,6 +41,7 @@ const DEFAULT_FILTERS: FilterState = {
   clientFilter: 'all',
   hideProduced: true, // domyślnie ukryj wyprodukowane
   dateFrom: getDefaultDateFrom(),
+  showOnlyMissing: false, // domyślnie pokazuj wszystkie zlecenia
 };
 
 // ================================
@@ -90,6 +92,7 @@ interface UseOrderFiltersReturn {
 
   // Dane wyjściowe
   filteredOrders: ExtendedOrder[];
+  missingOrderNumbers: string[];
   hasActiveFilter: boolean;
 }
 
@@ -123,6 +126,7 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
           clientFilter: parsed.clientFilter || 'all',
           hideProduced: typeof parsed.hideProduced === 'boolean' ? parsed.hideProduced : true,
           dateFrom: parsed.dateFrom || getDefaultDateFrom(),
+          showOnlyMissing: typeof parsed.showOnlyMissing === 'boolean' ? parsed.showOnlyMissing : false,
         });
       } catch (e) {
         console.error('Error loading filters:', e);
@@ -413,8 +417,13 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
     return result;
   }, [allOrders, debouncedSearchQuery, sortField, sortDirection, debouncedColumnFilters, filters]);
 
+  // Znajdź brakujące numery zleceń (bazując na WSZYSTKICH zleceniach, nie filtrowanych)
+  const missingOrderNumbers = useMemo(() => {
+    return findMissingOrderNumbers(allOrders);
+  }, [allOrders]);
+
   // Sprawdź czy jakikolwiek filtr jest aktywny
-  const hasActiveFilter = filters.clientFilter !== 'all' || filters.hideProduced || filters.dateFrom !== '';
+  const hasActiveFilter = filters.clientFilter !== 'all' || filters.hideProduced || filters.dateFrom !== '' || filters.showOnlyMissing;
 
   return {
     // Filtry główne
@@ -456,6 +465,7 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
 
     // Dane wyjściowe
     filteredOrders,
+    missingOrderNumbers,
     hasActiveFilter,
   };
 }
