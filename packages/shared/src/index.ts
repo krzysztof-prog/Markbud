@@ -7,3 +7,6 @@ export * from './types/deliveries';
 export * from './types/settings';
 export * from './types/user-roles';
 export * from './constants';
+
+// Eksport utils
+export * from './utils/money';
