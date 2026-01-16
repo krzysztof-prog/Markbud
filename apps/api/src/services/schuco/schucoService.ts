@@ -319,24 +319,14 @@ export class SchucoService {
 
   /**
    * Create order links for a Schuco delivery
-   * Also updates order value from Schuco delivery if available
    * Uses batch operations to avoid N+1 queries
+   *
+   * UWAGA: Wartości EUR/PLN zleceń NIE są aktualizowane z danych Schuco.
+   * Ceny powinny pochodzić TYLKO z importu plików cen (folder 'ceny').
    */
   private async createOrderLinks(schucoDeliveryId: number, orderNumbers: string[]): Promise<number> {
     if (orderNumbers.length === 0) {
       return 0;
-    }
-
-    // Get Schuco delivery with totalAmount
-    const schucoDelivery = await this.prisma.schucoDelivery.findUnique({
-      where: { id: schucoDeliveryId },
-      select: { totalAmount: true },
-    });
-
-    // Parse EUR amount from Schuco if available
-    let eurValue: number | null = null;
-    if (schucoDelivery?.totalAmount) {
-      eurValue = this.parser.parseEurAmount(schucoDelivery.totalAmount);
     }
 
     // Batch lookup: find all matching orders at once
@@ -346,7 +336,7 @@ export class SchucoService {
           in: orderNumbers,
         },
       },
-      select: { id: true, orderNumber: true, valueEur: true },
+      select: { id: true, orderNumber: true },
     });
 
     if (orders.length === 0) {
@@ -376,23 +366,6 @@ export class SchucoService {
           linkedBy: 'auto',
         })),
       });
-    }
-
-    // Batch update: update EUR values for orders that don't have them
-    if (eurValue !== null) {
-      const ordersNeedingEurUpdate = orders.filter((o) => o.valueEur === null);
-      if (ordersNeedingEurUpdate.length > 0) {
-        await this.prisma.order.updateMany({
-          where: {
-            id: { in: ordersNeedingEurUpdate.map((o) => o.id) },
-            valueEur: null, // Double-check to prevent race conditions
-          },
-          data: { valueEur: eurValue },
-        });
-        logger.info(
-          `[SchucoService] Updated ${ordersNeedingEurUpdate.length} orders with EUR value: ${eurValue}`
-        );
-      }
     }
 
     return ordersNeedingLinks.length;
