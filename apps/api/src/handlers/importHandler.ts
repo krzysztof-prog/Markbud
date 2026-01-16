@@ -154,9 +154,9 @@ export class ImportHandler {
     reply: FastifyReply
   ) {
     const validated = folderImportSchema.parse(request.body);
-    // Use provided userId or default to 1 (system user)
-    // TODO: Replace with actual authenticated user ID when auth is implemented
-    const userId = validated.userId || 1;
+    // Use authenticated user ID or provided userId or default to 1 (system user)
+    const rawUserId = request.user?.userId || validated.userId || 1;
+    const userId = typeof rawUserId === 'string' ? parseInt(rawUserId, 10) : rawUserId;
     const result = await this.service.importFromFolder(validated.folderPath, validated.deliveryNumber, userId);
     return reply.status(200).send({ success: true, ...result });
   }

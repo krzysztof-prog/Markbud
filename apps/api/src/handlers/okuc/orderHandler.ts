@@ -75,8 +75,9 @@ export const okucOrderHandler = {
   async create(request: FastifyRequest, reply: FastifyReply) {
     const data = createOkucOrderSchema.parse(request.body);
 
-    // TODO: Get userId from auth middleware when implemented
-    const userId = 1; // Placeholder
+    // Get userId from authenticated user or fallback to system user
+    const rawUserId = request.user?.userId || 1;
+    const userId = typeof rawUserId === 'string' ? parseInt(rawUserId, 10) : rawUserId;
 
     // Generate order number (format: OKUC-YYYY-NNNN)
     const now = new Date();
@@ -112,8 +113,9 @@ export const okucOrderHandler = {
 
     const data = updateOkucOrderSchema.parse(request.body);
 
-    // TODO: Get userId from auth middleware when implemented
-    const userId = 1; // Placeholder
+    // Get userId from authenticated user or fallback to system user
+    const rawUserId = request.user?.userId || 1;
+    const userId = typeof rawUserId === 'string' ? parseInt(rawUserId, 10) : rawUserId;
 
     const order = await repository.update(id, {
       ...data,
@@ -142,8 +144,9 @@ export const okucOrderHandler = {
 
     const data = receiveOrderSchema.parse(request.body);
 
-    // TODO: Get userId from auth middleware when implemented
-    const userId = 1; // Placeholder
+    // Get userId from authenticated user or fallback to system user
+    const rawUserId = request.user?.userId || 1;
+    const userId = typeof rawUserId === 'string' ? parseInt(rawUserId, 10) : rawUserId;
 
     const order = await repository.receiveOrder(id, {
       ...data,

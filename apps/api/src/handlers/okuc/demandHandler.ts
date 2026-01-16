@@ -115,8 +115,9 @@ export const okucDemandHandler = {
 
     const data = updateDemandSchema.parse(request.body);
 
-    // TODO: Get userId from auth middleware when implemented
-    const userId = 1; // Placeholder
+    // Get userId from authenticated user or fallback to system user
+    const rawUserId = request.user?.userId || 1;
+    const userId = typeof rawUserId === 'string' ? parseInt(rawUserId, 10) : rawUserId;
 
     const demand = await repository.update(id, {
       ...data,
