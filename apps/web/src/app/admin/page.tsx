@@ -1,8 +1,5 @@
 'use client';
 
-// Wymuszenie dynamicznego renderowania - strona używa AuthContext
-export const dynamic = 'force-dynamic';
-
 /**
  * Admin Dashboard
  * Główna strona panelu administracyjnego

@@ -1,8 +1,5 @@
 'use client';
 
-// Wymuszenie dynamicznego renderowania - strona używa AuthContext
-export const dynamic = 'force-dynamic';
-
 import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/header';

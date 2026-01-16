@@ -6,9 +6,6 @@
 
 'use client';
 
-// Wymuszenie dynamicznego renderowania - strona używa AuthContext
-export const dynamic = 'force-dynamic';
-
 import React, { Suspense } from 'react';
 import { Header } from '@/components/layout/header';
 import { UsersList } from '@/features/admin';

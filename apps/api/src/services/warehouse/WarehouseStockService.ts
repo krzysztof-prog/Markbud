@@ -20,41 +20,59 @@ export class WarehouseStockService {
    * @throws NotFoundError if color does not exist
    */
   async getColorWarehouseData(colorId: number) {
-    // Fetch stocks for this color
-    const stocks = await prisma.warehouseStock.findMany({
-      where: { colorId },
-      select: {
-        id: true,
-        profileId: true,
-        colorId: true,
-        currentStockBeams: true,
-        initialStockBeams: true,
-        updatedAt: true,
-        profile: {
-          select: { id: true, number: true },
+    // Wykonaj wszystkie zapytania rownolegle dla lepszej wydajnosci
+    const [stocks, demands, allWarehouseOrders, lowThreshold, color] = await Promise.all([
+      // 1. Stany magazynowe dla koloru
+      prisma.warehouseStock.findMany({
+        where: { colorId },
+        select: {
+          id: true,
+          profileId: true,
+          colorId: true,
+          currentStockBeams: true,
+          initialStockBeams: true,
+          updatedAt: true,
+          profile: {
+            select: { id: true, number: true },
+          },
         },
-        color: {
-          select: { id: true, code: true },
+        orderBy: { profile: { number: 'asc' } },
+      }),
+      // 2. Zapotrzebowanie z aktywnych zlecen
+      prisma.orderRequirement.groupBy({
+        by: ['profileId'],
+        where: {
+          colorId,
+          order: {
+            archivedAt: null,
+            status: { notIn: ['archived', 'completed'] },
+          },
         },
-      },
-      orderBy: { profile: { number: 'asc' } },
-    });
+        _sum: {
+          beamsCount: true,
+          meters: true,
+        },
+      }),
+      // 3. Zamowienia magazynowe (pending i received)
+      prisma.warehouseOrder.findMany({
+        where: {
+          colorId,
+          status: { in: ['pending', 'received'] },
+        },
+        orderBy: { expectedDeliveryDate: 'asc' },
+      }),
+      // 4. Prog niskiego stanu
+      this.getLowStockThreshold(),
+      // 5. Dane koloru
+      prisma.color.findUnique({
+        where: { id: colorId },
+        select: { id: true, code: true, name: true, hexColor: true, type: true },
+      }),
+    ]);
 
-    // Fetch demands from active orders
-    const demands = await prisma.orderRequirement.groupBy({
-      by: ['profileId'],
-      where: {
-        colorId,
-        order: {
-          archivedAt: null,
-          status: { notIn: ['archived', 'completed'] },
-        },
-      },
-      _sum: {
-        beamsCount: true,
-        meters: true,
-      },
-    });
+    if (!color) {
+      throw new NotFoundError('Color');
+    }
 
     // Build demand map
     const demandMap = new Map(
@@ -67,15 +85,6 @@ export class WarehouseStockService {
       ])
     );
 
-    // Fetch warehouse orders (pending and received)
-    const allWarehouseOrders = await prisma.warehouseOrder.findMany({
-      where: {
-        colorId,
-        status: { in: ['pending', 'received'] },
-      },
-      orderBy: { expectedDeliveryDate: 'asc' },
-    });
-
     // Separate pending and received orders
     const pendingOrders = allWarehouseOrders.filter((o) => o.status === 'pending');
     const receivedOrders = allWarehouseOrders.filter((o) => o.status === 'received');
@@ -83,19 +92,6 @@ export class WarehouseStockService {
     // Group orders by profileId
     const pendingOrdersMap = groupBy(pendingOrders, (order) => order.profileId);
     const receivedOrdersMap = groupBy(receivedOrders, (order) => order.profileId);
-
-    // Get low stock threshold
-    const lowThreshold = await this.getLowStockThreshold();
-
-    // Fetch color info
-    const color = await prisma.color.findUnique({
-      where: { id: colorId },
-      select: { id: true, code: true, name: true, hexColor: true, type: true },
-    });
-
-    if (!color) {
-      throw new NotFoundError('Color');
-    }
 
     // Transform to table data
     const tableData: WarehouseRow[] = stocks.map((stock) => {

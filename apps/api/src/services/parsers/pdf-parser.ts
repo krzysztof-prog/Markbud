@@ -62,8 +62,7 @@ export class PdfParser {
     const data = await pdf(dataBuffer);
     const text = data.text;
 
-    // Debug - wypisz tekst
-    console.log('📄 PDF text:', text.substring(0, 1000));
+    // Debug: tekst PDF jest dostepny w zmiennej 'text' do debugowania
 
     // Wyciągnij numer zlecenia (5-cyfrowy numer na początku, zwykle po "SUMA:")
     const orderNumberMatch = text.match(/SUMA:.*?(\d{5})/s) || text.match(/(\d{5})\s*ZAMÓWIENIE/);

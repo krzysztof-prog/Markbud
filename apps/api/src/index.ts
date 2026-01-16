@@ -5,7 +5,7 @@ import multipart from '@fastify/multipart';
 import compress from '@fastify/compress';
 import rateLimit from '@fastify/rate-limit';
 import { config as dotenvConfig } from 'dotenv';
-import { prisma } from './utils/prisma.js';
+import { prisma, initializeSQLiteOptimizations } from './utils/prisma.js';
 
 // Routes
 import { authRoutes } from './routes/auth.js';
@@ -292,6 +292,9 @@ process.on('SIGTERM', () => closeGracefully('SIGTERM'));
 // Start serwera
 const start = async () => {
   try {
+    // Inicjalizacja SQLite WAL mode + optymalizacje (przed wszystkim innym)
+    await initializeSQLiteOptimizations();
+
     // Seed domyślnych pracowników (przed startem serwera HTTP)
     await seedDefaultWorkers(prisma);
 

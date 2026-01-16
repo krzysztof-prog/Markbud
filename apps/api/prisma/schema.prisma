@@ -250,6 +250,7 @@ model WarehouseStock {
 
   @@unique([profileId, colorId])
   @@index([deletedAt])
+  @@index([colorId]) // Dodane 2026-01-16 - czeste filtrowanie po kolorze
   // Dodane 2026-01-15 - audyt wydajności: indeks FK
   @@index([updatedById])
   @@map("warehouse_stock")
@@ -272,6 +273,7 @@ model WarehouseOrder {
   @@unique([profileId, colorId, expectedDeliveryDate])
   @@index([status])
   @@index([expectedDeliveryDate])
+  @@index([colorId, status]) // Dodane 2026-01-16 - filtrowanie zamowien po kolorze i statusie
   @@map("warehouse_orders")
 }
 

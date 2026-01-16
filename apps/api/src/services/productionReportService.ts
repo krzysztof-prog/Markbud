@@ -12,7 +12,7 @@
  */
 
 import { productionReportRepository, ProductionReportRepository } from '../repositories/ProductionReportRepository.js';
-import { groszeToPln, type Grosze } from '../utils/money.js';
+import { groszeToPln, centyToEur, type Grosze, type Centy } from '../utils/money.js';
 import { ValidationError, NotFoundError, ConflictError } from '../utils/errors.js';
 
 // ============================================================================
@@ -174,7 +174,7 @@ export class ProductionReportService {
 
       // Wartość EUR w centach - konwersja na EUR (używaj override jeśli istnieje)
       const valueEurCenty = override?.overrideValueEur ?? order.valueEur ?? null;
-      const valueEur = valueEurCenty !== null ? valueEurCenty / 100 : null;
+      const valueEur = valueEurCenty !== null ? centyToEur(valueEurCenty as Centy) : null;
 
       // Czy ma override
       const hasOverride = !!(
@@ -188,8 +188,8 @@ export class ProductionReportService {
       // Średnia jednostka
       const avgUnitValue = units > 0 ? (valuePln / units).toFixed(2) : '—';
 
-      // Oryginalna wartość EUR z Order (w EUR, nie centach)
-      const originalValueEur = order.valueEur !== null ? order.valueEur / 100 : null;
+      // Oryginalna wartość EUR z Order (w centach -> EUR)
+      const originalValueEur = order.valueEur !== null ? centyToEur(order.valueEur as Centy) : null;
 
       return {
         orderId: order.id,

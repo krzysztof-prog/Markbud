@@ -47,11 +47,17 @@ interface ImportResult {
  * - Pliki CSV z zapotrzebowaniem na okucia
  * - Automatyczne przypisanie do zlecenia (nr zlecenia w nazwie pliku)
  * - Wykrywanie nietypowych okuć (orderClass = 'atypical')
+ *
+ * Używa kolejki do sekwencyjnego przetwarzania - SQLite nie radzi sobie z równoległymi transakcjami
  */
 export class OkucZapotrzebowaWatcher implements IFileWatcher {
   private prisma: PrismaClient;
   private watchers: FSWatcher[] = [];
   private config: WatcherConfig;
+
+  // Kolejka do sekwencyjnego przetwarzania (SQLite limitation)
+  private queue: string[] = [];
+  private isProcessing = false;
 
   constructor(prisma: PrismaClient, config: WatcherConfig = DEFAULT_WATCHER_CONFIG) {
     this.prisma = prisma;
@@ -79,6 +85,47 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
   }
 
   /**
+   * Dodaje plik do kolejki i uruchamia przetwarzanie
+   * Zapewnia sekwencyjne przetwarzanie - SQLite nie radzi sobie z równoległymi transakcjami
+   */
+  private enqueue(filePath: string): void {
+    this.queue.push(filePath);
+    if (!this.isProcessing) {
+      this.processQueue();
+    }
+  }
+
+  /**
+   * Przetwarza kolejkę sekwencyjnie - jeden plik na raz
+   */
+  private async processQueue(): Promise<void> {
+    if (this.isProcessing || this.queue.length === 0) {
+      return;
+    }
+
+    this.isProcessing = true;
+
+    while (this.queue.length > 0) {
+      const filePath = this.queue.shift()!;
+
+      try {
+        await this.processOkucZapCsv(filePath);
+      } catch (error) {
+        logger.error(`Blad przetwarzania kolejki okuc: ${error instanceof Error ? error.message : 'Unknown'}`);
+      }
+
+      // Mały delay między plikami żeby SQLite miał czas na commit
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    this.isProcessing = false;
+
+    if (this.queue.length > 0) {
+      this.processQueue();
+    }
+  }
+
+  /**
    * Obserwuj folder zapotrzebowania okuc (.csv)
    * UWAGA: Na udziałach sieciowych Windows (UNC paths) glob patterns nie działają
    * Dlatego obserwujemy cały folder i filtrujemy pliki po rozszerzeniu
@@ -100,13 +147,14 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
     });
 
     watcher
-      .on('add', async (filePath) => {
+      .on('add', (filePath) => {
         // Filtruj tylko pliki CSV
         const lowerName = path.basename(filePath).toLowerCase();
         if (!lowerName.endsWith('.csv')) {
           return;
         }
-        await this.handleNewOkucZapCsv(filePath);
+        // Dodaj do kolejki zamiast przetwarzać bezpośrednio (SQLite limitation)
+        this.enqueue(filePath);
       })
       .on('error', (error) => {
         logger.error(`Blad File Watcher dla okuc zapotrzebowania ${basePath}: ${error}`);
@@ -150,9 +198,9 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
   }
 
   /**
-   * Obsluga nowego pliku CSV z zapotrzebowaniem okuc
+   * Przetwarza plik CSV z zapotrzebowaniem okuc
    */
-  private async handleNewOkucZapCsv(filePath: string): Promise<void> {
+  private async processOkucZapCsv(filePath: string): Promise<void> {
     const filename = path.basename(filePath);
 
     try {
