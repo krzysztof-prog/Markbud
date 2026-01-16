@@ -3,7 +3,7 @@ import path from 'path';
 import type { PrismaClient } from '@prisma/client';
 import type { FSWatcher } from 'chokidar';
 import { logger } from '../../utils/logger.js';
-import { archiveFile } from './utils.js';
+import { archiveFile, moveToSkipped } from './utils.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
 import { DEFAULT_WATCHER_CONFIG } from './types.js';
 import { PdfParser } from '../parsers/pdf-parser.js';
@@ -12,12 +12,18 @@ import { PdfParser } from '../parsers/pdf-parser.js';
  * Watcher odpowiedzialny za monitorowanie folderu cen:
  * - Pliki PDF z cenami zleceń
  * - Automatyczny import i aktualizacja Order.valuePln/valueEur
+ *
+ * Używa kolejki do sekwencyjnego przetwarzania - SQLite nie radzi sobie z równoległymi transakcjami
  */
 export class CenyWatcher implements IFileWatcher {
   private prisma: PrismaClient;
   private watchers: FSWatcher[] = [];
   private config: WatcherConfig;
   private pdfParser: PdfParser;
+
+  // Kolejka do sekwencyjnego przetwarzania (SQLite limitation)
+  private queue: string[] = [];
+  private isProcessing = false;
 
   constructor(prisma: PrismaClient, config: WatcherConfig = DEFAULT_WATCHER_CONFIG) {
     this.prisma = prisma;
@@ -46,6 +52,46 @@ export class CenyWatcher implements IFileWatcher {
   }
 
   /**
+   * Dodaje plik do kolejki i uruchamia przetwarzanie
+   */
+  private enqueue(filePath: string): void {
+    this.queue.push(filePath);
+    if (!this.isProcessing) {
+      this.processQueue();
+    }
+  }
+
+  /**
+   * Przetwarza kolejkę sekwencyjnie - jeden plik na raz
+   */
+  private async processQueue(): Promise<void> {
+    if (this.isProcessing || this.queue.length === 0) {
+      return;
+    }
+
+    this.isProcessing = true;
+
+    while (this.queue.length > 0) {
+      const filePath = this.queue.shift()!;
+
+      try {
+        await this.processCenyPdf(filePath);
+      } catch (error) {
+        logger.error(`Blad przetwarzania kolejki cen: ${error instanceof Error ? error.message : 'Unknown'}`);
+      }
+
+      // Mały delay między plikami żeby SQLite miał czas na commit
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    this.isProcessing = false;
+
+    if (this.queue.length > 0) {
+      this.processQueue();
+    }
+  }
+
+  /**
    * Obserwuj folder cen (PDF)
    * UWAGA: Na udziałach sieciowych Windows (UNC paths) glob patterns nie działają
    * Dlatego obserwujemy cały folder i filtrujemy pliki po rozszerzeniu
@@ -67,13 +113,14 @@ export class CenyWatcher implements IFileWatcher {
     });
 
     watcher
-      .on('add', async (filePath) => {
+      .on('add', (filePath) => {
         // Filtruj tylko pliki PDF
         const filename = path.basename(filePath).toLowerCase();
         if (!filename.endsWith('.pdf')) {
           return;
         }
-        await this.handleNewCenyPdf(filePath);
+        // Dodaj do kolejki zamiast przetwarzać bezpośrednio (SQLite limitation)
+        this.enqueue(filePath);
       })
       .on('error', (error) => {
         logger.error(`Błąd File Watcher dla cen ${basePath}: ${error}`);
@@ -84,9 +131,9 @@ export class CenyWatcher implements IFileWatcher {
   }
 
   /**
-   * Obsługa nowego pliku PDF z ceną
+   * Przetwarza plik PDF z ceną
    */
-  private async handleNewCenyPdf(filePath: string): Promise<void> {
+  private async processCenyPdf(filePath: string): Promise<void> {
     const filename = path.basename(filePath);
 
     try {
@@ -100,6 +147,8 @@ export class CenyWatcher implements IFileWatcher {
 
       if (existing) {
         logger.info(`   ⏭️ Plik PDF już zarejestrowany: ${filename}`);
+        // Przenies do folderu pominiete aby nie pokazywal sie ponownie
+        await moveToSkipped(filePath);
         return;
       }
 
