@@ -17,9 +17,12 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { ArrowLeft, Truck, Calendar, Clock } from 'lucide-react';
+import { ArrowLeft, Truck, Calendar, Clock, RefreshCw, Download, Timer } from 'lucide-react';
 
 // Import z modułu Schuco
 import {
@@ -35,6 +38,77 @@ import {
 } from '@/features/schuco';
 
 const PAGE_SIZE = 100;
+
+/**
+ * Karta początkowa - wyświetlana gdy brak danych Schuco
+ * Pozwala użytkownikowi pobrać dane po raz pierwszy
+ */
+interface InitialFetchCardProps {
+  isRefreshing: boolean;
+  showBrowser: boolean;
+  onShowBrowserChange: (show: boolean) => void;
+  onRefresh: () => void;
+}
+
+function InitialFetchCard({
+  isRefreshing,
+  showBrowser,
+  onShowBrowserChange,
+  onRefresh,
+}: InitialFetchCardProps) {
+  return (
+    <Card className="mb-6">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Download className="h-5 w-5 text-blue-600" />
+            Pobierz dane z Schuco
+          </CardTitle>
+          <div className="flex items-center gap-4">
+            {/* Checkbox pokazywania przeglądarki */}
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-browser-initial"
+                checked={showBrowser}
+                onCheckedChange={(checked: boolean | 'indeterminate') =>
+                  onShowBrowserChange(!!checked)
+                }
+              />
+              <Label htmlFor="show-browser-initial" className="text-sm cursor-pointer">
+                Pokaż przeglądarkę
+              </Label>
+            </div>
+
+            {/* Przycisk odświeżania */}
+            <Button
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              size="sm"
+              className="gap-2"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
+              />
+              {isRefreshing ? 'Pobieram...' : 'Odśwież dane'}
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <p className="text-slate-600 mb-4">
+          Kliknij przycisk &quot;Odśwież dane&quot; aby pobrać aktualne dane o dostawach ze strony Schuco.
+          Proces może potrwać kilka minut.
+        </p>
+
+        {/* Info o harmonogramie */}
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+          <Timer className="h-4 w-4 inline mr-2" />
+          Automatyczne pobieranie: <strong>8:00, 12:00, 15:00</strong> (codziennie)
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 /**
  * Główny komponent strony dostaw Schuco
@@ -130,11 +204,18 @@ export default function DostawySchucoPageContent() {
             />
           )}
 
-          {/* Karta statusu */}
-          {status && (
+          {/* Karta statusu - zawsze wyświetlana */}
+          {status ? (
             <StatusCard
               status={status}
               statistics={statistics}
+              isRefreshing={isRefreshing}
+              showBrowser={showBrowser}
+              onShowBrowserChange={setShowBrowser}
+              onRefresh={handleRefreshWithBrowser}
+            />
+          ) : (
+            <InitialFetchCard
               isRefreshing={isRefreshing}
               showBrowser={showBrowser}
               onShowBrowserChange={setShowBrowser}
