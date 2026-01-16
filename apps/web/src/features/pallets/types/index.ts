@@ -85,3 +85,18 @@ export interface CorrectMorningStockInput {
   morningStock: number;
   note: string;
 }
+
+// Kalendarz - status dnia
+export type CalendarDayStatus = 'empty' | 'open' | 'closed';
+
+export interface PalletCalendarDay {
+  date: string;
+  status: CalendarDayStatus;
+  hasAlerts: boolean;
+}
+
+export interface PalletCalendarSummary {
+  year: number;
+  month: number;
+  days: PalletCalendarDay[];
+}

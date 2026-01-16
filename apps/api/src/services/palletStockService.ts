@@ -50,6 +50,21 @@ export interface MonthSummary {
   totalDays: number;
 }
 
+// Typ statusu dnia dla kalendarza
+export type CalendarDayStatus = 'empty' | 'open' | 'closed';
+
+export interface CalendarDay {
+  date: string;
+  status: CalendarDayStatus;
+  hasAlerts: boolean;
+}
+
+export interface CalendarSummary {
+  year: number;
+  month: number;
+  days: CalendarDay[];
+}
+
 export interface Alert {
   type: PalletType;
   currentStock: number; // Stan poranny (morningStock)
@@ -394,6 +409,103 @@ export async function closeDay(date: Date): Promise<PalletStockDay> {
   });
 
   return closedDay;
+}
+
+/**
+ * Pobiera kalendarz miesiąca ze statusami dni.
+ * Używane przez widok kalendarza w UI.
+ */
+export async function getCalendar(
+  year: number,
+  month: number
+): Promise<CalendarSummary> {
+  // Walidacja
+  if (month < 1 || month > 12) {
+    throw new ValidationError('Miesiąc musi być w zakresie 1-12');
+  }
+  if (year < 2020 || year > 2100) {
+    throw new ValidationError('Rok musi być w zakresie 2020-2100');
+  }
+
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0); // Ostatni dzień miesiąca
+  const daysInMonth = endDate.getDate();
+
+  logger.debug('Pobieranie kalendarza miesiąca', {
+    year,
+    month,
+    daysInMonth,
+  });
+
+  // Pobierz wszystkie dni w miesiącu z bazy
+  const existingDays = await prisma.palletStockDay.findMany({
+    where: {
+      date: {
+        gte: startDate,
+        lte: new Date(year, month, 0, 23, 59, 59, 999),
+      },
+    },
+    include: { entries: true },
+    orderBy: { date: 'asc' },
+  });
+
+  // Stwórz mapę dni z bazy
+  const dayMap = new Map<string, PalletStockDay & { entries: PalletStockEntry[] }>();
+  for (const day of existingDays) {
+    const dateStr = day.date.toISOString().split('T')[0];
+    dayMap.set(dateStr, day);
+  }
+
+  // Pobierz progi alertów
+  const alertConfigs = await getAlertConfig();
+  const thresholds: Record<string, number> = {};
+  for (const config of alertConfigs) {
+    thresholds[config.type] = config.criticalThreshold;
+  }
+
+  // Generuj kalendarz dla każdego dnia miesiąca
+  const days: CalendarDay[] = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, month - 1, d);
+    const dateStr = date.toISOString().split('T')[0];
+    const existingDay = dayMap.get(dateStr);
+
+    let status: CalendarDayStatus = 'empty';
+    let hasAlerts = false;
+
+    if (existingDay) {
+      status = existingDay.status === 'CLOSED' ? 'closed' : 'open';
+
+      // Sprawdź czy dzień ma alerty (morningStock < threshold)
+      for (const entry of existingDay.entries) {
+        const threshold = thresholds[entry.type] ?? 10;
+        if (entry.morningStock < threshold) {
+          hasAlerts = true;
+          break;
+        }
+      }
+    }
+
+    days.push({
+      date: dateStr,
+      status,
+      hasAlerts,
+    });
+  }
+
+  logger.debug('Kalendarz miesiąca gotowy', {
+    year,
+    month,
+    totalDays: days.length,
+    existingDays: existingDays.length,
+    closedDays: days.filter((d) => d.status === 'closed').length,
+  });
+
+  return {
+    year,
+    month,
+    days,
+  };
 }
 
 /**
@@ -819,6 +931,13 @@ export class PalletStockService {
    */
   async getMonthSummary(year: number, month: number): Promise<MonthSummary> {
     return getMonthSummary(year, month);
+  }
+
+  /**
+   * Pobiera kalendarz miesiąca ze statusami dni
+   */
+  async getCalendar(year: number, month: number): Promise<CalendarSummary> {
+    return getCalendar(year, month);
   }
 
   /**

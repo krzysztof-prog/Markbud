@@ -132,6 +132,17 @@ export function usePalletMonth(year: number, month: number, enabled = true) {
   });
 }
 
+/**
+ * Pobierz kalendarz miesiąca ze statusami dni
+ */
+export function usePalletCalendar(year: number, month: number, enabled = true) {
+  return useQuery({
+    queryKey: ['palletStock', 'calendar', { year, month }],
+    queryFn: () => palletStockApi.month.getCalendar(year, month),
+    enabled: enabled && year > 0 && month > 0 && month <= 12,
+  });
+}
+
 // ============================================
 // ALERT CONFIG HOOKS
 // ============================================

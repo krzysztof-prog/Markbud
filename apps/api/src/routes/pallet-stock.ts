@@ -42,13 +42,18 @@ export const palletStockRoutes: FastifyPluginAsync = async (fastify) => {
   }, handler.correctMorningStock.bind(handler));
 
   // ============================================
-  // MONTH ROUTES
+  // MONTH & CALENDAR ROUTES
   // ============================================
 
   // GET /pallet-stock/month/:year/:month - Pobierz podsumowanie miesiaca
   fastify.get<{ Params: { year: string; month: string } }>('/month/:year/:month', {
     preHandler: verifyAuth,
   }, handler.getMonthSummary.bind(handler));
+
+  // GET /pallet-stock/calendar/:year/:month - Pobierz kalendarz miesiaca
+  fastify.get<{ Params: { year: string; month: string } }>('/calendar/:year/:month', {
+    preHandler: verifyAuth,
+  }, handler.getCalendar.bind(handler));
 
   // ============================================
   // ALERT CONFIG ROUTES

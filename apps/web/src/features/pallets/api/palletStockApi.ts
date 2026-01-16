@@ -10,6 +10,7 @@ import type {
   UpdatePalletDayEntry,
   CorrectMorningStockInput,
   ProductionPalletType,
+  PalletCalendarSummary,
 } from '../types/index';
 
 const BASE_URL = '/api/pallet-stock';
@@ -68,6 +69,12 @@ export const palletMonthApi = {
    */
   getMonthSummary: (year: number, month: number) =>
     fetchApi<PalletMonthSummary>(`${BASE_URL}/month/${year}/${month}`),
+
+  /**
+   * Pobierz kalendarz miesiąca ze statusami dni
+   */
+  getCalendar: (year: number, month: number) =>
+    fetchApi<PalletCalendarSummary>(`${BASE_URL}/calendar/${year}/${month}`),
 };
 
 // ============================================

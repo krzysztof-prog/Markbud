@@ -88,7 +88,7 @@ export class PalletStockHandler {
   }
 
   // ============================================
-  // MONTH SUMMARY
+  // MONTH SUMMARY & CALENDAR
   // ============================================
 
   /**
@@ -102,6 +102,19 @@ export class PalletStockHandler {
     const { year, month } = GetPalletMonthParamsSchema.parse(request.params);
     const summary = await this.service.getMonthSummary(year, month);
     return reply.send(summary);
+  }
+
+  /**
+   * GET /api/pallet-stock/calendar/:year/:month
+   * Pobiera kalendarz miesiaca ze statusami dni (empty/open/closed + hasAlerts)
+   */
+  async getCalendar(
+    request: FastifyRequest<{ Params: { year: string; month: string } }>,
+    reply: FastifyReply
+  ) {
+    const { year, month } = GetPalletMonthParamsSchema.parse(request.params);
+    const calendar = await this.service.getCalendar(year, month);
+    return reply.send(calendar);
   }
 
   // ============================================
