@@ -11,7 +11,7 @@ import {
   BarChart3,
   Package,
   Truck,
-  Calendar,
+  FileText,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -29,12 +29,14 @@ const formatDate = (dateStr: string): string => {
   });
 };
 
-// Grupowanie zamówień po dacie dostawy
-interface DateStats {
-  date: string;
-  orderedCount: number;
-  deliveredCount: number;
-  orders: GlassOrder[];
+// Statystyki per zamówienie do szklarni (GlassOrder)
+interface OrderStats {
+  glassOrderNumber: string;
+  orderDate: string;
+  orderedCount: number;       // suma quantity z GlassOrderItem
+  deliveredCount: number;     // suma quantity z matched GlassDeliveryItem
+  status: 'pending' | 'partial' | 'complete' | 'excess';
+  order: GlassOrder;
 }
 
 export default function GlassStatisticsPage() {
@@ -49,6 +51,19 @@ export default function GlassStatisticsPage() {
     queryKey: ['glass-deliveries'],
     queryFn: () => glassDeliveriesApi.getAll(),
   });
+
+  // Policz dostarczono na podstawie matchStatus z GlassDeliveryItem
+  // matchStatus = 'matched' oznacza że szyba została dopasowana do zamówienia
+  const matchedDeliveryCount = useMemo(() => {
+    if (!glassDeliveries) return 0;
+    return glassDeliveries.reduce((sum, delivery) => {
+      // Suma quantity z items gdzie matchStatus = 'matched'
+      const matchedQuantity = delivery.items?.reduce((itemSum, item) => {
+        return item.matchStatus === 'matched' ? itemSum + item.quantity : itemSum;
+      }, 0) || 0;
+      return sum + matchedQuantity;
+    }, 0);
+  }, [glassDeliveries]);
 
   // Statystyki ogólne
   const stats = useMemo(() => {
@@ -75,8 +90,8 @@ export default function GlassStatisticsPage() {
     const partialOrders = glassOrders.filter(o => o.status === 'partially_delivered').length;
     const completedOrders = glassOrders.filter(o => o.status === 'delivered').length;
 
-    // Policz dostarczone szyby z dostaw
-    const deliveredGlasses = glassDeliveries?.reduce((sum, delivery) => sum + (delivery._count?.items || 0), 0) || 0;
+    // Dostarczono = suma quantity z matched items (nie wszystkich dostaw!)
+    const deliveredGlasses = matchedDeliveryCount;
 
     return {
       totalOrders,
@@ -86,96 +101,110 @@ export default function GlassStatisticsPage() {
       partialOrders,
       completedOrders,
     };
-  }, [glassOrders, glassDeliveries]);
+  }, [glassOrders, matchedDeliveryCount]);
 
-  // Grupowanie zamówień wg daty oczekiwanej dostawy
-  const ordersByDate = useMemo<DateStats[]>(() => {
+  // Statystyki per zamówienie do szklarni - liczymy dostarczono z matched items
+  const orderStats = useMemo<OrderStats[]>(() => {
     if (!glassOrders) return [];
 
-    const dateMap = new Map<string, DateStats>();
+    // Mapa: orderNumber -> suma matched quantity z dostaw
+    const deliveredByOrderNumber = new Map<string, number>();
+    if (glassDeliveries) {
+      for (const delivery of glassDeliveries) {
+        for (const item of delivery.items || []) {
+          if (item.matchStatus === 'matched') {
+            const current = deliveredByOrderNumber.get(item.orderNumber) || 0;
+            deliveredByOrderNumber.set(item.orderNumber, current + item.quantity);
+          }
+        }
+      }
+    }
 
-    glassOrders.forEach(order => {
-      // Użyj oczekiwanej daty dostawy lub daty zamówienia
-      const dateKey = order.expectedDeliveryDate
-        ? order.expectedDeliveryDate.split('T')[0]
-        : order.orderDate.split('T')[0];
+    return glassOrders.map(order => {
+      // Suma quantity z GlassOrderItem
+      const orderedCount = order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
 
-      if (!dateMap.has(dateKey)) {
-        dateMap.set(dateKey, {
-          date: dateKey,
-          orderedCount: 0,
-          deliveredCount: 0,
-          orders: [],
-        });
+      // Suma matched quantity z dostaw dla numerów zleceń w tym zamówieniu
+      let deliveredCount = 0;
+      if (order.items) {
+        const orderNumbers = new Set(order.items.map(item => item.orderNumber));
+        for (const orderNum of orderNumbers) {
+          deliveredCount += deliveredByOrderNumber.get(orderNum) || 0;
+        }
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- dateKey was just set in the map above, guaranteed to exist
-      const stats = dateMap.get(dateKey)!;
-      // Suma quantity z items (nie liczba pozycji)
-      const orderQuantity = order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
-      stats.orderedCount += orderQuantity;
-      stats.orders.push(order);
-
-      // Jeśli zamówienie jest dostarczone lub częściowo dostarczone
-      if (order.status === 'delivered') {
-        stats.deliveredCount += orderQuantity;
-      } else if (order.status === 'partially_delivered') {
-        // Częściowo - zakładamy 50% jako przybliżenie
-        stats.deliveredCount += Math.floor(orderQuantity / 2);
+      // Określ status na podstawie porównania
+      let status: 'pending' | 'partial' | 'complete' | 'excess';
+      if (deliveredCount === 0) {
+        status = 'pending';
+      } else if (deliveredCount < orderedCount) {
+        status = 'partial';
+      } else if (deliveredCount === orderedCount) {
+        status = 'complete';
+      } else {
+        status = 'excess'; // Dostarczono więcej niż zamówiono
       }
-    });
 
-    // Sortuj od najnowszej daty
-    return Array.from(dateMap.values()).sort((a, b) => b.date.localeCompare(a.date));
-  }, [glassOrders]);
+      return {
+        glassOrderNumber: order.glassOrderNumber,
+        orderDate: order.orderDate,
+        orderedCount,
+        deliveredCount,
+        status,
+        order,
+      };
+    }).sort((a, b) => b.orderDate.localeCompare(a.orderDate)); // Najnowsze pierwsze
+  }, [glassOrders, glassDeliveries]);
 
   const isLoading = isLoadingOrders || isLoadingDeliveries;
 
-  // Stan rozwijania sekcji dat (domyślnie wszystkie zwinięte)
-  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+  // Stan rozwijania sekcji zamówień (domyślnie wszystkie zwinięte)
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
-  const toggleDateExpanded = useCallback((date: string) => {
-    setExpandedDates(prev => {
+  const toggleOrderExpanded = useCallback((glassOrderNumber: string) => {
+    setExpandedOrders(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(date)) {
-        newSet.delete(date);
+      if (newSet.has(glassOrderNumber)) {
+        newSet.delete(glassOrderNumber);
       } else {
-        newSet.add(date);
+        newSet.add(glassOrderNumber);
       }
       return newSet;
     });
   }, []);
 
-  // Funkcja do określenia statusu wizualnego
-  const getStatusIcon = (order: GlassOrder) => {
-    switch (order.status) {
-      case 'delivered':
+  // Funkcja do określenia statusu wizualnego na podstawie obliczonego statusu
+  const getOrderStatusIcon = (status: OrderStats['status']) => {
+    switch (status) {
+      case 'complete':
         return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-      case 'partially_delivered':
+      case 'partial':
         return <Clock className="h-4 w-4 text-yellow-500" />;
-      case 'ordered':
+      case 'pending':
         return <AlertCircle className="h-4 w-4 text-blue-500" />;
+      case 'excess':
+        return <AlertCircle className="h-4 w-4 text-orange-500" />;
       default:
         return <Clock className="h-4 w-4 text-slate-400" />;
     }
   };
 
-  const getStatusLabel = (status: string) => {
+  const getOrderStatusLabel = (status: OrderStats['status']) => {
     switch (status) {
-      case 'delivered': return 'Dostarczone';
-      case 'partially_delivered': return 'Częściowo';
-      case 'ordered': return 'Zamówione';
-      case 'cancelled': return 'Anulowane';
+      case 'complete': return 'Kompletne';
+      case 'partial': return 'Częściowe';
+      case 'pending': return 'Oczekuje';
+      case 'excess': return 'Nadmiar';
       default: return status;
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getOrderStatusColor = (status: OrderStats['status']) => {
     switch (status) {
-      case 'delivered': return 'bg-green-100 text-green-700';
-      case 'partially_delivered': return 'bg-yellow-100 text-yellow-700';
-      case 'ordered': return 'bg-blue-100 text-blue-700';
-      case 'cancelled': return 'bg-red-100 text-red-700';
+      case 'complete': return 'bg-green-100 text-green-700';
+      case 'partial': return 'bg-yellow-100 text-yellow-700';
+      case 'pending': return 'bg-blue-100 text-blue-700';
+      case 'excess': return 'bg-orange-100 text-orange-700';
       default: return 'bg-slate-100 text-slate-600';
     }
   };
@@ -225,24 +254,27 @@ export default function GlassStatisticsPage() {
               />
             </div>
 
-            {/* Tabela zamówień wg daty */}
+            {/* Tabela zamówień do szklarni - pogrupowane */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Zamówienia szyb wg daty dostawy
+                  <FileText className="h-5 w-5" />
+                  Zamówienia do szklarni - status realizacji
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {ordersByDate.length > 0 ? (
+                {orderStats.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {ordersByDate.map((dateStats) => {
-                      const isExpanded = expandedDates.has(dateStats.date);
+                    {orderStats.map((orderStat) => {
+                      const isExpanded = expandedOrders.has(orderStat.glassOrderNumber);
+                      const progressPercent = orderStat.orderedCount > 0
+                        ? Math.min((orderStat.deliveredCount / orderStat.orderedCount) * 100, 100)
+                        : 0;
                       return (
-                        <div key={dateStats.date} className="border rounded-lg overflow-hidden">
+                        <div key={orderStat.glassOrderNumber} className="border rounded-lg overflow-hidden">
                           {/* Nagłówek - klikalny */}
                           <button
-                            onClick={() => toggleDateExpanded(dateStats.date)}
+                            onClick={() => toggleOrderExpanded(orderStat.glassOrderNumber)}
                             className="w-full p-3 bg-slate-50 hover:bg-slate-100 transition-colors flex items-center justify-between text-left"
                           >
                             <div className="flex items-center gap-2">
@@ -251,57 +283,69 @@ export default function GlassStatisticsPage() {
                               ) : (
                                 <ChevronRight className="h-4 w-4 text-slate-500" />
                               )}
-                              <span className="font-medium">
-                                {formatDate(dateStats.date)}
-                              </span>
+                              <div>
+                                <span className="font-medium font-mono text-sm">
+                                  {orderStat.glassOrderNumber}
+                                </span>
+                                <span className="text-xs text-slate-500 ml-2">
+                                  ({formatDate(orderStat.orderDate)})
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3 text-xs">
-                              <span className="text-blue-600">
-                                Zamówiono: {dateStats.orderedCount}
-                              </span>
-                              <span className="text-green-600">
-                                Dostarczono: {dateStats.deliveredCount}
-                              </span>
-                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getOrderStatusColor(orderStat.status)}`}>
+                              {getOrderStatusLabel(orderStat.status)}
+                            </span>
                           </button>
 
                           {/* Pasek postępu - zawsze widoczny */}
                           <div className="w-full h-1.5 bg-slate-200">
                             <div
-                              className="h-full bg-green-500 transition-all"
-                              style={{
-                                width: `${dateStats.orderedCount > 0
-                                  ? (dateStats.deliveredCount / dateStats.orderedCount * 100)
-                                  : 0}%`
-                              }}
+                              className={`h-full transition-all ${
+                                orderStat.status === 'excess' ? 'bg-orange-500' :
+                                orderStat.status === 'complete' ? 'bg-green-500' :
+                                'bg-blue-500'
+                              }`}
+                              style={{ width: `${progressPercent}%` }}
                             />
                           </div>
 
-                          {/* Lista zamówień - tylko gdy rozwinięte */}
-                          {isExpanded && (
-                            <div className="p-3 space-y-1.5">
-                              {dateStats.orders.map((order) => {
-                                const orderQuantity = order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
-                                return (
-                                  <div
-                                    key={order.id}
-                                    className="flex items-center justify-between p-2 bg-slate-50 rounded text-sm"
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      {getStatusIcon(order)}
-                                      <span className="font-mono text-xs">{order.glassOrderNumber}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-slate-500 text-xs">
-                                        {orderQuantity} szt.
-                                      </span>
-                                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                                        {getStatusLabel(order.status)}
-                                      </span>
-                                    </div>
+                          {/* Statystyki zamówienia - zawsze widoczne */}
+                          <div className="px-3 py-2 flex items-center justify-between text-xs border-t border-slate-100">
+                            <span className="text-blue-600">
+                              Zamówiono: <strong>{orderStat.orderedCount}</strong>
+                            </span>
+                            <span className="text-green-600">
+                              Dopasowano: <strong>{orderStat.deliveredCount}</strong>
+                            </span>
+                          </div>
+
+                          {/* Lista pozycji zamówienia - tylko gdy rozwinięte */}
+                          {isExpanded && orderStat.order.items && (
+                            <div className="p-3 space-y-1.5 border-t border-slate-100">
+                              <div className="text-xs text-slate-500 mb-2">Pozycje w zamówieniu:</div>
+                              {orderStat.order.items.map((item, idx) => (
+                                <div
+                                  key={item.id || idx}
+                                  className="flex items-center justify-between p-2 bg-slate-50 rounded text-sm"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-xs text-slate-600">
+                                      {item.orderNumber}
+                                    </span>
+                                    <span className="text-xs text-slate-400">
+                                      poz. {item.position}
+                                    </span>
                                   </div>
-                                );
-                              })}
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-slate-500">
+                                      {item.widthMm}x{item.heightMm}
+                                    </span>
+                                    <span className="text-xs font-medium">
+                                      {item.quantity} szt.
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
