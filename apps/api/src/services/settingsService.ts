@@ -111,4 +111,21 @@ export class SettingsService {
   async updateGlobalFolderPath(importsBasePath: string) {
     return this.repository.upsertGlobalFolderSettings(importsBasePath);
   }
+
+  // Document Author Mappings
+  async getAllDocumentAuthorMappings() {
+    return this.repository.findAllDocumentAuthorMappings();
+  }
+
+  async createDocumentAuthorMapping(data: { authorName: string; userId: number }) {
+    return this.repository.createDocumentAuthorMapping(data);
+  }
+
+  async updateDocumentAuthorMapping(id: number, data: { authorName?: string; userId?: number }) {
+    return this.repository.updateDocumentAuthorMapping(id, data);
+  }
+
+  async deleteDocumentAuthorMapping(id: number) {
+    return this.repository.deleteDocumentAuthorMapping(id);
+  }
 }

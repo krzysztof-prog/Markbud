@@ -41,6 +41,21 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     '/user-folder-path',
     handler.updateUserFolderPath.bind(handler)
   );
+
+  // Document Author Mappings routes
+  fastify.get('/document-author-mappings', handler.getAllDocumentAuthorMappings.bind(handler));
+  fastify.post<{ Body: { authorName: string; userId: number } }>(
+    '/document-author-mappings',
+    handler.createDocumentAuthorMapping.bind(handler)
+  );
+  fastify.put<{ Params: { id: string }; Body: { authorName?: string; userId?: number } }>(
+    '/document-author-mappings/:id',
+    handler.updateDocumentAuthorMapping.bind(handler)
+  );
+  fastify.delete<{ Params: { id: string } }>(
+    '/document-author-mappings/:id',
+    handler.deleteDocumentAuthorMapping.bind(handler)
+  );
   // GET /api/settings/browse-folders - przeglądaj foldery Windows
   fastify.get<{
     Querystring: { path?: string };

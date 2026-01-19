@@ -153,4 +153,50 @@ export class SettingsHandler {
     const settings = await this.service.updateUserFolderPath(Number(userId), importsBasePath);
     return reply.send(settings);
   }
+
+  // Document Author Mappings
+  async getAllDocumentAuthorMappings(_request: FastifyRequest, reply: FastifyReply) {
+    const mappings = await this.service.getAllDocumentAuthorMappings();
+    return reply.send(mappings);
+  }
+
+  async createDocumentAuthorMapping(
+    request: FastifyRequest<{ Body: { authorName: string; userId: number } }>,
+    reply: FastifyReply
+  ) {
+    const { authorName, userId } = request.body;
+
+    if (!authorName || !userId) {
+      throw new ValidationError('authorName i userId są wymagane');
+    }
+
+    const mapping = await this.service.createDocumentAuthorMapping({ authorName, userId });
+    return reply.status(201).send(mapping);
+  }
+
+  async updateDocumentAuthorMapping(
+    request: FastifyRequest<{ Params: { id: string }; Body: { authorName?: string; userId?: number } }>,
+    reply: FastifyReply
+  ) {
+    const id = parseInt(request.params.id, 10);
+    if (isNaN(id)) {
+      throw new ValidationError('Invalid document author mapping ID');
+    }
+
+    const mapping = await this.service.updateDocumentAuthorMapping(id, request.body);
+    return reply.send(mapping);
+  }
+
+  async deleteDocumentAuthorMapping(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const id = parseInt(request.params.id, 10);
+    if (isNaN(id)) {
+      throw new ValidationError('Invalid document author mapping ID');
+    }
+
+    await this.service.deleteDocumentAuthorMapping(id);
+    return reply.status(204).send();
+  }
 }

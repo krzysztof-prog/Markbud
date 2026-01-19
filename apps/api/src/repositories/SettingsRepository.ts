@@ -129,4 +129,57 @@ export class SettingsRepository {
       data: { userId: null, importsBasePath, isActive: true },
     });
   }
+
+  // Document Author Mappings
+  async findAllDocumentAuthorMappings() {
+    return this.prisma.documentAuthorMapping.findMany({
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: { authorName: 'asc' },
+    });
+  }
+
+  async createDocumentAuthorMapping(data: { authorName: string; userId: number }) {
+    return this.prisma.documentAuthorMapping.create({
+      data,
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
+      },
+    });
+  }
+
+  async updateDocumentAuthorMapping(id: number, data: { authorName?: string; userId?: number }) {
+    return this.prisma.documentAuthorMapping.update({
+      where: { id },
+      data,
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
+      },
+    });
+  }
+
+  async deleteDocumentAuthorMapping(id: number) {
+    await this.prisma.documentAuthorMapping.delete({
+      where: { id },
+    });
+  }
 }
