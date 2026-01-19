@@ -223,6 +223,9 @@ export class UzyteBeleWatcher implements IFileWatcher {
           `   ⚠️ Konflikt: ${originalFilename} → zlecenie ${preview.orderNumber} (bazowe ${preview.conflict?.baseOrderNumber} ISTNIEJE)`
         );
         logger.info(`   ⏸️ Konflikt utworzony - oczekuje na decyzję użytkownika w "Moja Praca"`);
+
+        // Archiwizuj plik źródłowy żeby nie był importowany ponownie
+        await this.archiveSingleFile(csvFile);
         return 'skipped';
       }
 

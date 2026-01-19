@@ -125,9 +125,37 @@ export class MojaPracaRepository {
   }
 
   /**
-   * Tworzy nowy konflikt
+   * Tworzy nowy konflikt lub aktualizuje istniejący jeśli już jest pending dla tego zlecenia
+   * Zapobiega tworzeniu duplikatów konfliktów
    */
   async createConflict(data: CreateConflictData) {
+    // Sprawdź czy już istnieje pending konflikt dla tego zlecenia
+    const existingConflict = await this.prisma.pendingImportConflict.findFirst({
+      where: {
+        orderNumber: data.orderNumber,
+        baseOrderNumber: data.baseOrderNumber,
+        status: 'pending',
+      },
+    });
+
+    if (existingConflict) {
+      // Konflikt już istnieje - zaktualizuj dane z najnowszego pliku
+      return this.prisma.pendingImportConflict.update({
+        where: { id: existingConflict.id },
+        data: {
+          filepath: data.filepath,
+          filename: data.filename,
+          parsedData: data.parsedData,
+          existingWindowsCount: data.existingWindowsCount,
+          existingGlassCount: data.existingGlassCount,
+          newWindowsCount: data.newWindowsCount,
+          newGlassCount: data.newGlassCount,
+          systemSuggestion: data.systemSuggestion,
+        },
+      });
+    }
+
+    // Brak istniejącego konfliktu - utwórz nowy
     return this.prisma.pendingImportConflict.create({
       data: {
         orderNumber: data.orderNumber,

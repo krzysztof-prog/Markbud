@@ -201,6 +201,9 @@ export class UzyteBelePrywatneWatcher implements IFileWatcher {
         logger.warn(
           `   ⚠️ Konflikt: ${originalFilename} → zlecenie ${preview.orderNumber}`
         );
+
+        // Archiwizuj plik źródłowy żeby nie był importowany ponownie
+        await this.archiveFile(csvFile);
         return 'skipped';
       }
 
