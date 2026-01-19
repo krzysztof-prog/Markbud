@@ -223,7 +223,7 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
     localStorage.removeItem(STORAGE_KEY_COLUMNS_VISIBILITY);
   }, []);
 
-  // Kolumna "project" widoczna tylko gdy filtr "Tylko Akrobud" jest włączony
+  // Widoczność kolumn zależna od filtra klienta
   const visibleColumns = useMemo(() => {
     return columns.filter(col => {
       // Ukryj kolumnę jeśli jest oznaczona jako niewidoczna
@@ -232,6 +232,20 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
       // Kolumna "project" widoczna tylko dla filtra "akrobud"
       if (col.id === 'project' && filters.clientFilter !== 'akrobud') {
         return false;
+      }
+
+      // Dla filtra "Tylko Akrobud" - ukryj valuePln i deadline
+      if (filters.clientFilter === 'akrobud') {
+        if (col.id === 'valuePln' || col.id === 'deadline') {
+          return false;
+        }
+      }
+
+      // Dla filtra "Tylko Prywatne" - ukryj valueEur i akrobudDeliveryDate
+      if (filters.clientFilter === 'private') {
+        if (col.id === 'valueEur' || col.id === 'akrobudDeliveryDate') {
+          return false;
+        }
       }
 
       return true;
