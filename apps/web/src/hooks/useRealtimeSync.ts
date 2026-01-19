@@ -20,6 +20,15 @@ interface WebSocketMessage {
   shouldRetry?: boolean;
 }
 
+// Kody błędów które powinny zatrzymać reconnect
+const NON_RETRYABLE_ERROR_CODES = [
+  'TOKEN_EXPIRED',
+  'TOKEN_INVALID',
+  'NO_TOKEN',
+  'MAX_USER_CONNECTIONS', // Limit połączeń per user - nie ma sensu retry
+  'MAX_CONNECTIONS', // Globalny limit - nie ma sensu retry
+] as const;
+
 const WS_URL = process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') || 'ws://localhost:3001';
 const RECONNECT_INTERVAL = 3000;
 const MAX_RECONNECT_ATTEMPTS = 10;
@@ -43,34 +52,48 @@ export function useRealtimeSync({ enabled = true }: UseRealtimeSyncOptions = {})
   const handlePingRef = useRef<(() => void) | undefined>(undefined);
   const resetHeartbeatTimeoutRef = useRef<(() => void) | undefined>(undefined);
   const handleDataChangeRef = useRef<((event: DataChangeEvent) => void) | undefined>(undefined);
-  const handleAuthErrorRef = useRef<((message: WebSocketMessage) => void) | undefined>(undefined);
+  const handleNonRetryableErrorRef = useRef<((message: WebSocketMessage) => void) | undefined>(undefined);
 
-  // Funkcja do obsługi błędów autoryzacji (token expired/invalid)
-  const handleAuthError = useCallback((message: WebSocketMessage) => {
-    wsLogger.warn('WebSocket auth error:', message.code, message.message);
-    authErrorRef.current = true;
+  // Funkcja do obsługi błędów które nie powinny triggerować reconnect
+  const handleNonRetryableError = useCallback((message: WebSocketMessage) => {
+    wsLogger.warn('WebSocket non-retryable error:', message.code, message.message);
+    authErrorRef.current = true; // Używamy tej samej flagi do zatrzymania reconnect
 
-    // Wyczyść stary token - przy następnym połączeniu spróbuje pobrać nowy
-    clearAuthToken();
+    // Dla błędów auth - wyczyść token
+    if (message.code === 'TOKEN_EXPIRED' || message.code === 'TOKEN_INVALID' || message.code === 'NO_TOKEN') {
+      clearAuthToken();
+    }
 
     // Pokaż toast tylko raz
     if (!authErrorToastShownRef.current) {
       authErrorToastShownRef.current = true;
 
-      if (message.code === 'TOKEN_EXPIRED') {
-        showErrorToast(
-          'Sesja wygasła',
-          'Odśwież stronę aby wznowić synchronizację w czasie rzeczywistym'
-        );
-      } else {
-        showErrorToast(
-          'Błąd autoryzacji',
-          'Synchronizacja w czasie rzeczywistym niedostępna'
-        );
+      switch (message.code) {
+        case 'TOKEN_EXPIRED':
+          showErrorToast(
+            'Sesja wygasła',
+            'Odśwież stronę aby wznowić synchronizację w czasie rzeczywistym'
+          );
+          break;
+        case 'MAX_USER_CONNECTIONS':
+          // Nie pokazuj błędu - to normalna sytuacja gdy user ma otwartych kilka zakładek
+          wsLogger.info('Max user connections reached - WebSocket disabled for this tab');
+          break;
+        case 'MAX_CONNECTIONS':
+          showErrorToast(
+            'Serwer przeciążony',
+            'Synchronizacja w czasie rzeczywistym tymczasowo niedostępna'
+          );
+          break;
+        default:
+          showErrorToast(
+            'Błąd autoryzacji',
+            'Synchronizacja w czasie rzeczywistym niedostępna'
+          );
       }
     }
   }, []);
-  handleAuthErrorRef.current = handleAuthError;
+  handleNonRetryableErrorRef.current = handleNonRetryableError;
 
   // Funkcja do obsługi zmian danych - przechowujemy aktualną wersję w ref
   const handleDataChange = useCallback(
@@ -87,6 +110,8 @@ export function useRealtimeSync({ enabled = true }: UseRealtimeSyncOptions = {})
         'order:deleted': ['orders', 'deliveries-calendar-continuous', 'deliveries-calendar-batch'],
         'warehouse:stock_updated': ['warehouse'],
         'warehouse:stock_changed': ['warehouse'],
+        'price:imported': ['pending-prices', 'orders'],
+        'price:pending': ['pending-prices'],
       };
 
       const keysToInvalidate = queryKeyMap[event.type] || [];
@@ -105,7 +130,8 @@ export function useRealtimeSync({ enabled = true }: UseRealtimeSyncOptions = {})
       if (
         event.type.includes('created') ||
         event.type.includes('deleted') ||
-        (event.type.includes('updated') && event.type.includes('stock'))
+        (event.type.includes('updated') && event.type.includes('stock')) ||
+        event.type.startsWith('price:')
       ) {
         const messages: Record<string, string> = {
           'delivery:created': 'Nowa dostawa',
@@ -113,6 +139,8 @@ export function useRealtimeSync({ enabled = true }: UseRealtimeSyncOptions = {})
           'order:created': 'Nowe zlecenie',
           'order:deleted': 'Zlecenie usunięte',
           'warehouse:stock_changed': 'Stan magazynu zmienił się',
+          'price:imported': `Cena przypisana do zlecenia ${event.data?.orderNumber || ''}`,
+          'price:pending': `Cena zapisana dla zlecenia ${event.data?.orderNumber || ''} (oczekuje na import zlecenia)`,
         };
 
         const message = messages[event.type];
@@ -174,9 +202,12 @@ export function useRealtimeSync({ enabled = true }: UseRealtimeSyncOptions = {})
         resetHeartbeatTimeoutRef.current?.();
         handleDataChangeRef.current?.(message.event);
       } else if (message.type === 'error') {
-        // Obsługa błędów autoryzacji - zatrzymaj reconnect
-        if (message.code === 'TOKEN_EXPIRED' || message.code === 'TOKEN_INVALID' || message.code === 'NO_TOKEN') {
-          handleAuthErrorRef.current?.(message);
+        // Sprawdź czy to błąd który powinien zatrzymać reconnect
+        const isNonRetryable = message.code &&
+          NON_RETRYABLE_ERROR_CODES.includes(message.code as typeof NON_RETRYABLE_ERROR_CODES[number]);
+
+        if (isNonRetryable) {
+          handleNonRetryableErrorRef.current?.(message);
         } else {
           wsLogger.warn('WebSocket error:', message.message);
         }

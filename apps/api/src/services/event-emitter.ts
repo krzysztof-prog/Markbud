@@ -121,3 +121,16 @@ export const emitOkucStockUpdated = (data: EventData) => eventEmitter.emitDataCh
   data,
   timestamp: new Date(),
 });
+
+// Price import events
+export const emitPriceImported = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'price:imported',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitPricePending = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'price:pending',
+  data,
+  timestamp: new Date(),
+});

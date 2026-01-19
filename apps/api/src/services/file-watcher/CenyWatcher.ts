@@ -6,7 +6,11 @@ import { logger } from '../../utils/logger.js';
 import { archiveFile, moveToSkipped, shouldSkipImport } from './utils.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
 import { DEFAULT_WATCHER_CONFIG } from './types.js';
-import { PdfParser } from '../parsers/pdf-parser.js';
+import { ImportRepository } from '../../repositories/ImportRepository.js';
+import { ImportValidationService } from '../import/importValidationService.js';
+import { ImportTransactionService } from '../import/importTransactionService.js';
+import { CenyProcessor } from '../import/CenyProcessor.js';
+import { emitPriceImported, emitPricePending } from '../event-emitter.js';
 
 /**
  * Watcher odpowiedzialny za monitorowanie folderu cen:
@@ -19,7 +23,7 @@ export class CenyWatcher implements IFileWatcher {
   private prisma: PrismaClient;
   private watchers: FSWatcher[] = [];
   private config: WatcherConfig;
-  private pdfParser: PdfParser;
+  private cenyProcessor: CenyProcessor;
 
   // Kolejka do sekwencyjnego przetwarzania (SQLite limitation)
   private queue: string[] = [];
@@ -28,7 +32,12 @@ export class CenyWatcher implements IFileWatcher {
   constructor(prisma: PrismaClient, config: WatcherConfig = DEFAULT_WATCHER_CONFIG) {
     this.prisma = prisma;
     this.config = config;
-    this.pdfParser = new PdfParser();
+
+    // Inicjalizacja CenyProcessor z wymaganymi zależnościami
+    const repository = new ImportRepository(prisma);
+    const validationService = new ImportValidationService(prisma, repository);
+    const transactionService = new ImportTransactionService(prisma, repository);
+    this.cenyProcessor = new CenyProcessor(prisma, repository, validationService, transactionService);
   }
 
   /**
@@ -132,6 +141,9 @@ export class CenyWatcher implements IFileWatcher {
 
   /**
    * Przetwarza plik PDF z ceną
+   * Używa CenyProcessor który obsługuje:
+   * - Zlecenie istnieje -> aktualizuje cenę
+   * - Zlecenie NIE istnieje -> zapisuje do PendingOrderPrice
    */
   private async processCenyPdf(filePath: string): Promise<void> {
     const filename = path.basename(filePath);
@@ -159,32 +171,57 @@ export class CenyWatcher implements IFileWatcher {
         },
       });
 
-      // Parsuj PDF i zaktualizuj zlecenie
-      const result = await this.pdfParser.processCenyPdf(filePath);
+      // Użyj CenyProcessor do przetworzenia PDF
+      // Obsługuje zarówno istniejące zlecenia jak i pending prices
+      const result = await this.cenyProcessor.autoImportPdf(fileImport.id, filePath, filename);
 
-      // Zaktualizuj status importu
-      await this.prisma.fileImport.update({
-        where: { id: fileImport.id },
-        data: {
-          status: 'completed',
-          processedAt: new Date(),
-          metadata: JSON.stringify({
-            orderId: result.orderId,
-            updated: result.updated,
-          }),
-        },
-      });
+      // Wyciągnij orderNumber z metadata jeśli dostępne
+      const metadata = result.fileImport?.metadata ? JSON.parse(result.fileImport.metadata as string) : {};
+      const orderNumber = metadata?.parsed?.orderNumber || metadata?.orderNumber || '';
 
-      logger.info(`   ✅ Zaimportowano cenę z PDF (Order ID: ${result.orderId})`);
+      // Loguj wynik w zależności od statusu i emituj eventy
+      switch (result.autoImportStatus) {
+        case 'success':
+          logger.info(`   ✅ Zaimportowano cenę z PDF - przypisano do zlecenia ${orderNumber}`);
+          await archiveFile(filePath);
+          // Emituj event o przypisanej cenie
+          emitPriceImported({
+            filename,
+            orderNumber,
+            message: result.autoImportMessage || 'Cena przypisana do zlecenia',
+          });
+          break;
 
-      // Archiwizuj plik po pomyślnym imporcie
-      await archiveFile(filePath);
+        case 'pending_order':
+          logger.info(`   ⏳ Cena zapisana jako oczekująca - zlecenie ${orderNumber} nie istnieje jeszcze`);
+          await archiveFile(filePath);
+          // Emituj event o oczekującej cenie
+          emitPricePending({
+            filename,
+            orderNumber,
+            message: result.autoImportMessage || 'Cena oczekuje na zlecenie',
+          });
+          break;
+
+        case 'warning':
+          logger.warn(`   ⚠️ ${result.autoImportError || 'Ostrzeżenie podczas importu'}`);
+          // Nie archiwizuj - wymaga ręcznej interwencji
+          break;
+
+        case 'error':
+          logger.error(`   ❌ Błąd importu PDF: ${result.autoImportError}`);
+          // Nie archiwizuj - błąd
+          break;
+
+        default:
+          logger.warn(`   ⚠️ Nieznany status importu: ${result.autoImportStatus}`);
+      }
     } catch (error) {
       logger.error(
         `   ❌ Błąd importu PDF ${filename}: ${error instanceof Error ? error.message : 'Unknown'}`
       );
 
-      // Znajdź istniejący import lub utwórz nowy
+      // Znajdź istniejący import lub utwórz nowy ze statusem failed
       const existingImport = await this.prisma.fileImport.findFirst({
         where: { filepath: filePath },
       });
