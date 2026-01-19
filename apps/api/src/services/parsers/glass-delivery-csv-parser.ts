@@ -1,4 +1,5 @@
 import { stripBOM } from '../../utils/string-utils.js';
+import iconv from 'iconv-lite';
 
 // Typ kategorii szyb
 export type GlassCategory = 'standard' | 'loose' | 'aluminum' | 'reclamation';
@@ -34,6 +35,10 @@ export interface ParsedGlassDeliveryCsv {
     // Nowe pola dla kategoryzacji
     category: GlassCategory;
     categoryClientName?: string;
+    // Numer zamówienia klienta z wiersza CSV (może się różnić od metadata)
+    customerOrderNumber: string;
+    // Numer stojaka z wiersza CSV (może się różnić od metadata)
+    rackNumber: string;
   }>;
   summary: {
     totalItems: number;
@@ -53,7 +58,7 @@ export interface ParsedGlassDeliveryCsv {
  *
  * Priorytet (zgodnie z ustaleniami):
  * 1. reclamation - zawiera "R/"
- * 2. aluminum - zawiera "AL."
+ * 2. aluminum - zawiera "AL." lub "ALxx" (gdzie xx to dokładnie 2 cyfry, np. AL25, AL12)
  * 3. loose - 9-11 cyfr (np. 20251205431) lub nie zawiera długiego numeru
  * 4. standard - wszystko inne (normalne szyby produkcyjne)
  */
@@ -71,8 +76,9 @@ function detectGlassCategory(customerOrderNumber: string): {
     };
   }
 
-  // 2. Aluminiowe - zawiera "AL."
-  if (trimmed.includes('AL.')) {
+  // 2. Aluminiowe - zawiera "AL." lub "ALxx" (gdzie xx to dokładnie 2 cyfry)
+  // Wzorzec AL\d{2} dopasuje AL25, AL12 itp. (AL + dokładnie 2 cyfry)
+  if (trimmed.includes('AL.') || /AL\d{2}/.test(trimmed)) {
     return {
       category: 'aluminum',
       clientName: extractClientName(customerOrderNumber)
@@ -110,27 +116,26 @@ function detectGlassCategory(customerOrderNumber: string): {
 
 /**
  * Wyciąga nazwę klienta z numeru zamówienia
- * Obsługuje różne formaty:
- * - "R/12345;KLIENT" -> "KLIENT"
- * - "AL.12345 FIRMA" -> "FIRMA"
+ * Szuka wzorca V + 6 cyfr (np. V250918, V251202)
+ *
+ * Przykłady:
+ * - "1059D AL.25 V250918 (5, 6)" -> "V250918"
+ * - "1169D AL.24 V251202 -ZS" -> "V251202"
+ * - "1042B AL.25 V250728 ZS" -> "V250728"
+ * - "R/12345;KLIENT" -> "KLIENT" (fallback na średnik)
  */
 function extractClientName(customerOrderNumber: string): string | null {
-  // Szukaj średnika
+  // Priorytet 1: Szukaj wzorca V + 6 cyfr (np. V250918)
+  const vPattern = customerOrderNumber.match(/V(\d{6})/i);
+  if (vPattern) {
+    return `V${vPattern[1]}`;
+  }
+
+  // Fallback: Szukaj średnika (dla starszych formatów)
   const semicolonIndex = customerOrderNumber.indexOf(';');
   if (semicolonIndex !== -1) {
     const after = customerOrderNumber.substring(semicolonIndex + 1).trim();
     if (after) return after;
-  }
-
-  // Szukaj po spacji (po numerach)
-  const parts = customerOrderNumber.split(/\s+/);
-  if (parts.length > 1) {
-    // Zwróć ostatnią część która nie wygląda jak numer
-    for (let i = parts.length - 1; i >= 0; i--) {
-      if (!/^\d+$/.test(parts[i]) && parts[i].length > 2) {
-        return parts[i];
-      }
-    }
   }
 
   return null;
@@ -168,7 +173,24 @@ function parseOrderReference(reference: string): {
   throw new Error(`Nie można sparsować referencji zlecenia: ${reference}`);
 }
 
-export function parseGlassDeliveryCsv(fileContent: string): ParsedGlassDeliveryCsv {
+/**
+ * Konwertuje Buffer z CP1250 (Windows-1250) na string UTF-8
+ * Pliki CSV z systemu Schuco są w kodowaniu Windows-1250
+ */
+function decodeFromCP1250(buffer: Buffer): string {
+  return iconv.decode(buffer, 'win1250');
+}
+
+/**
+ * Parsuje plik CSV dostawy szyb
+ * @param fileContentOrBuffer - zawartość pliku jako string (UTF-8) lub Buffer (CP1250)
+ */
+export function parseGlassDeliveryCsv(fileContentOrBuffer: string | Buffer): ParsedGlassDeliveryCsv {
+  // Konwertuj Buffer z CP1250 na string UTF-8
+  const fileContent = Buffer.isBuffer(fileContentOrBuffer)
+    ? decodeFromCP1250(fileContentOrBuffer)
+    : fileContentOrBuffer;
+
   // Usuń BOM jeśli istnieje (pliki eksportowane z Excela często mają BOM)
   const cleanContent = stripBOM(fileContent);
   const lines = cleanContent.split(/\r?\n/).filter((line) => line.trim());
@@ -254,6 +276,11 @@ export function parseGlassDeliveryCsv(fileContent: string): ParsedGlassDeliveryC
         ? values[indices.customerOrderNumber] || customerOrderNumber
         : customerOrderNumber;
 
+      // Pobierz numer stojaka dla tego wiersza
+      const rowRackNumber = indices.rackNumber >= 0
+        ? values[indices.rackNumber] || rackNumber
+        : rackNumber;
+
       // Wykryj kategorię szyby
       const { category, clientName } = detectGlassCategory(rowCustomerOrderNumber);
 
@@ -274,7 +301,9 @@ export function parseGlassDeliveryCsv(fileContent: string): ParsedGlassDeliveryC
         serialNumber: indices.serialNumber >= 0 ? values[indices.serialNumber] || '' : '',
         clientCode: indices.clientCode >= 0 ? values[indices.clientCode] || '' : '',
         category,
-        categoryClientName: clientName || undefined
+        categoryClientName: clientName || undefined,
+        customerOrderNumber: rowCustomerOrderNumber,
+        rackNumber: rowRackNumber
       };
 
       items.push(item);
