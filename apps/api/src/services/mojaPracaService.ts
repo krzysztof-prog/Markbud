@@ -1,8 +1,11 @@
 import type { PrismaClient } from '@prisma/client';
 import { MojaPracaRepository } from '../repositories/MojaPracaRepository.js';
-import { CsvImportService } from './import/parsers/csvImportService.js';
+import { CsvParser } from './parsers/csv-parser.js';
 import { logger } from '../utils/logger.js';
 import type { ConflictResolutionInput } from '../validators/moja-praca.js';
+
+// Role które mogą rozwiązywać konflikty wszystkich użytkowników
+const ADMIN_ROLES = ['owner', 'admin', 'kierownik'];
 
 // Typ dla konfliktu z dodanymi danymi
 export interface ConflictWithDetails {
@@ -127,8 +130,16 @@ export class MojaPracaService {
       };
     }
 
-    // Sprawdź czy konflikt należy do użytkownika
-    if (conflict.authorUserId !== userId) {
+    // Pobierz rolę użytkownika aby sprawdzić czy jest adminem
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
+    const isAdmin = user && ADMIN_ROLES.includes(user.role);
+
+    // Sprawdź czy konflikt należy do użytkownika LUB użytkownik jest adminem
+    if (conflict.authorUserId !== userId && !isAdmin) {
       return {
         success: false,
         message: 'Nie masz uprawnień do tego konfliktu',
@@ -178,6 +189,13 @@ export class MojaPracaService {
     let successCount = 0;
     let failedCount = 0;
 
+    // Pobierz rolę użytkownika aby sprawdzić czy jest adminem
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    const isAdmin = user && ADMIN_ROLES.includes(user.role);
+
     // Pobierz wszystkie konflikty aby mieć numery zleceń do raportowania
     const conflicts = await this.prisma.pendingImportConflict.findMany({
       where: {
@@ -209,8 +227,8 @@ export class MojaPracaService {
         continue;
       }
 
-      // Sprawdź uprawnienia
-      if (conflict.authorUserId !== userId && conflict.authorUserId !== null) {
+      // Sprawdź uprawnienia - admin może rozwiązywać wszystkie konflikty
+      if (conflict.authorUserId !== userId && conflict.authorUserId !== null && !isAdmin) {
         results.push({
           id: conflictId,
           orderNumber: conflict.orderNumber,
@@ -279,11 +297,13 @@ export class MojaPracaService {
     conflict: Awaited<ReturnType<MojaPracaRepository['getConflictById']>>,
     userId: number
   ): Promise<ResolveConflictResult> {
-    const csvService = new CsvImportService({ prisma: this.prisma });
+    // Używamy CsvParser który deleguje do UzyteBeleParser
+    // UzyteBeleParser poprawnie rozróżnia sekcje okien i szyb
+    const csvParser = new CsvParser();
 
     try {
       // Importuj plik jako nowy wariant (nie zastępuj bazowego)
-      const result = await csvService.processUzyteBele(conflict!.filepath, 'add_new', false);
+      const result = await csvParser.processUzyteBele(conflict!.filepath, 'add_new', false);
 
       // Oznacz konflikt jako rozwiązany
       await this.repository.resolveConflict(conflict!.id, {
@@ -317,11 +337,13 @@ export class MojaPracaService {
     conflict: Awaited<ReturnType<MojaPracaRepository['getConflictById']>>,
     userId: number
   ): Promise<ResolveConflictResult> {
-    const csvService = new CsvImportService({ prisma: this.prisma });
+    // Używamy CsvParser który deleguje do UzyteBeleParser
+    // UzyteBeleParser poprawnie rozróżnia sekcje okien i szyb
+    const csvParser = new CsvParser();
 
     try {
       // Importuj plik, zastępując bazowe zlecenie
-      const result = await csvService.processUzyteBele(conflict!.filepath, 'overwrite', true);
+      const result = await csvParser.processUzyteBele(conflict!.filepath, 'overwrite', true);
 
       // Oznacz konflikt jako rozwiązany
       await this.repository.resolveConflict(conflict!.id, {
@@ -367,10 +389,11 @@ export class MojaPracaService {
 
     // Na razie używamy tej samej logiki co replace_base
     // W przyszłości można rozbudować o wybór konkretnego wariantu
-    const csvService = new CsvImportService({ prisma: this.prisma });
+    // Używamy CsvParser który deleguje do UzyteBeleParser
+    const csvParser = new CsvParser();
 
     try {
-      const result = await csvService.processUzyteBele(conflict!.filepath, 'overwrite', true);
+      const result = await csvParser.processUzyteBele(conflict!.filepath, 'overwrite', true);
 
       await this.repository.resolveConflict(conflict!.id, {
         status: 'resolved',
