@@ -3,7 +3,7 @@ import path from 'path';
 import type { PrismaClient } from '@prisma/client';
 import type { FSWatcher } from 'chokidar';
 import { logger } from '../../utils/logger.js';
-import { archiveFile, moveToSkipped } from './utils.js';
+import { archiveFile, moveToSkipped, shouldSkipImport } from './utils.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
 import { DEFAULT_WATCHER_CONFIG } from './types.js';
 import { PdfParser } from '../parsers/pdf-parser.js';
@@ -137,17 +137,12 @@ export class CenyWatcher implements IFileWatcher {
     const filename = path.basename(filePath);
 
     try {
-      // Sprawdź czy plik już był importowany
-      const existing = await this.prisma.fileImport.findFirst({
-        where: {
-          filepath: filePath,
-          status: { in: ['pending', 'completed', 'processing'] },
-        },
-      });
+      // Sprawdź czy plik powinien być pominięty
+      // (był importowany I nadal istnieje w archiwum)
+      const shouldSkip = await shouldSkipImport(this.prisma, filename, filePath);
 
-      if (existing) {
-        logger.info(`   ⏭️ Plik PDF już zarejestrowany: ${filename}`);
-        // Przenies do folderu pominiete aby nie pokazywal sie ponownie
+      if (shouldSkip) {
+        // Plik jest w archiwum - przenieś do pominięte
         await moveToSkipped(filePath);
         return;
       }

@@ -4,7 +4,7 @@ import { readFile } from 'fs/promises';
 import type { PrismaClient } from '@prisma/client';
 import type { FSWatcher } from 'chokidar';
 import { logger } from '../../utils/logger.js';
-import { archiveFile, moveToSkipped } from './utils.js';
+import { archiveFile, moveToSkipped, shouldSkipImport } from './utils.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
 import { DEFAULT_WATCHER_CONFIG } from './types.js';
 import { parse } from 'csv-parse/sync';
@@ -204,17 +204,11 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
     const filename = path.basename(filePath);
 
     try {
-      // Sprawdz czy plik juz byl importowany
-      const existing = await this.prisma.fileImport.findFirst({
-        where: {
-          filepath: filePath,
-          status: { in: ['pending', 'completed', 'processing'] },
-        },
-      });
+      // Sprawdz czy plik powinien byc pominiety
+      // (byl importowany I nadal istnieje w archiwum)
+      const shouldSkip = await shouldSkipImport(this.prisma, filename, filePath);
 
-      if (existing) {
-        logger.info(`   ⏭️ Plik okuc zapotrzebowania juz zarejestrowany: ${filename}`);
-        // Przenies do folderu pominiete aby nie pokazywal sie ponownie
+      if (shouldSkip) {
         await moveToSkipped(filePath);
         return;
       }

@@ -41,10 +41,14 @@ export class PdfParser {
     }
 
     // Zaktualizuj zlecenie o dane z PDF
+    // WAŻNE: Wartości w bazie są przechowywane w groszach/centach
+    // parsed.valueNetto to wartość w EUR/PLN (np. 590.00), trzeba pomnożyć przez 100
+    const valueInSmallestUnit = Math.round(parsed.valueNetto * 100);
+
     await prisma.order.update({
       where: { id: order.id },
       data: {
-        ...(parsed.currency === 'EUR' ? { valueEur: parsed.valueNetto } : { valuePln: parsed.valueNetto }),
+        ...(parsed.currency === 'EUR' ? { valueEur: valueInSmallestUnit } : { valuePln: valueInSmallestUnit }),
       },
     });
 

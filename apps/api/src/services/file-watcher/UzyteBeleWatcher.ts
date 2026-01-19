@@ -16,6 +16,7 @@ import {
   archiveFolder,
   ensureDirectoryExists,
   generateSafeFilename,
+  shouldSkipImport,
 } from './utils.js';
 import { MojaPracaRepository } from '../../repositories/MojaPracaRepository.js';
 
@@ -196,16 +197,11 @@ export class UzyteBeleWatcher implements IFileWatcher {
     try {
       const originalFilename = path.basename(csvFile);
 
-      // Sprawdź czy ten plik (po nazwie oryginalnej) był już importowany
-      const alreadyImported = await this.prisma.fileImport.findFirst({
-        where: {
-          filename: { contains: originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_') },
-          status: { in: ['completed', 'processing'] },
-        },
-      });
+      // Sprawdź czy plik powinien być pominięty
+      // (był importowany I nadal istnieje w archiwum)
+      const shouldSkip = await shouldSkipImport(this.prisma, originalFilename, csvFile);
 
-      if (alreadyImported) {
-        logger.info(`   ⏭️ Plik ${originalFilename} już był zaimportowany, pomijam`);
+      if (shouldSkip) {
         await this.moveToSkipped(csvFile);
         return 'skipped';
       }
@@ -566,16 +562,11 @@ export class UzyteBeleWatcher implements IFileWatcher {
     try {
       const originalFilename = path.basename(csvFile);
 
-      // Sprawdź czy ten plik (po nazwie oryginalnej) był już importowany
-      const alreadyImported = await this.prisma.fileImport.findFirst({
-        where: {
-          filename: { contains: originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_') },
-          status: { in: ['completed', 'processing'] },
-        },
-      });
+      // Sprawdź czy plik powinien być pominięty
+      // (był importowany I nadal istnieje w archiwum)
+      const shouldSkip = await shouldSkipImport(this.prisma, originalFilename, csvFile);
 
-      if (alreadyImported) {
-        logger.info(`   ⏭️ Plik ${originalFilename} już był zaimportowany, pomijam`);
+      if (shouldSkip) {
         return 'skipped';
       }
 

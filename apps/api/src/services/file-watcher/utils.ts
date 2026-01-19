@@ -138,6 +138,64 @@ export function generateSafeFilename(originalFilename: string): string {
 }
 
 /**
+ * Sprawdza czy plik był już zaimportowany I nadal istnieje w archiwum/pominiętych
+ * Jeśli plik był zaimportowany ale został usunięty z archiwum - pozwala na ponowny import
+ *
+ * @returns true jeśli plik powinien być pominięty, false jeśli można importować
+ */
+export async function shouldSkipImport(
+  prisma: PrismaClient,
+  filename: string,
+  filePath: string
+): Promise<boolean> {
+  // Znajdź poprzedni import tego pliku (po nazwie pliku, nie pełnej ścieżce)
+  const existingImport = await prisma.fileImport.findFirst({
+    where: {
+      filename: filename,
+      status: { in: ['completed', 'processing'] },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!existingImport) {
+    // Plik nigdy nie był importowany - można importować
+    return false;
+  }
+
+  // Sprawdź czy zarchiwizowany plik nadal istnieje
+  const directory = path.dirname(filePath);
+  const archivePath = path.join(directory, '_archiwum', filename);
+  const skippedPath = path.join(directory, '_pominiete', filename);
+
+  const archivedExists = existsSync(archivePath);
+  const skippedExists = existsSync(skippedPath);
+
+  if (archivedExists || skippedExists) {
+    // Plik jest w archiwum lub pominięte - pomiń import
+    logger.info(`   ⏭️ Plik ${filename} już istnieje w archiwum/pominiętych - pomijam`);
+    return true;
+  }
+
+  // Plik był importowany ale został usunięty z archiwum - pozwól na ponowny import
+  logger.info(`   🔄 Plik ${filename} był wcześniej importowany, ale usunięty z archiwum - importuję ponownie`);
+
+  // Oznacz poprzedni import jako "reprocessed" żeby zachować historię
+  await prisma.fileImport.update({
+    where: { id: existingImport.id },
+    data: {
+      status: 'reprocessed',
+      metadata: JSON.stringify({
+        ...JSON.parse(existingImport.metadata || '{}'),
+        reprocessedAt: new Date().toISOString(),
+        reprocessReason: 'file_deleted_from_archive'
+      })
+    },
+  });
+
+  return false;
+}
+
+/**
  * Przenosi plik do folderu _pominiete (dla plikow juz zarejestrowanych)
  */
 export async function moveToSkipped(filePath: string): Promise<void> {

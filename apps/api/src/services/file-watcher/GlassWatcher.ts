@@ -4,7 +4,7 @@ import { readFile } from 'fs/promises';
 import type { PrismaClient } from '@prisma/client';
 import type { FSWatcher } from 'chokidar';
 import { logger } from '../../utils/logger.js';
-import { archiveFile, moveToSkipped } from './utils.js';
+import { archiveFile, moveToSkipped, shouldSkipImport } from './utils.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
 import { DEFAULT_WATCHER_CONFIG } from './types.js';
 
@@ -285,17 +285,11 @@ export class GlassWatcher implements IFileWatcher {
     const filename = path.basename(filePath);
 
     try {
-      // Sprawdź czy plik już był importowany
-      const existing = await this.prisma.fileImport.findFirst({
-        where: {
-          filepath: filePath,
-          status: { in: ['pending', 'completed', 'processing'] },
-        },
-      });
+      // Sprawdź czy plik powinien być pominięty
+      // (był importowany I nadal istnieje w archiwum)
+      const shouldSkip = await shouldSkipImport(this.prisma, filename, filePath);
 
-      if (existing) {
-        logger.info(`   ⏭️ Zamowienie szyb juz zarejestrowane: ${filename}`);
-        // Przenies do folderu pominiete aby nie pokazywal sie ponownie
+      if (shouldSkip) {
         await moveToSkipped(filePath);
         return;
       }
@@ -347,17 +341,11 @@ export class GlassWatcher implements IFileWatcher {
     const filename = path.basename(filePath);
 
     try {
-      // Sprawdź czy plik już był importowany
-      const existing = await this.prisma.fileImport.findFirst({
-        where: {
-          filepath: filePath,
-          status: { in: ['pending', 'completed', 'processing'] },
-        },
-      });
+      // Sprawdź czy plik powinien być pominięty
+      // (był importowany I nadal istnieje w archiwum)
+      const shouldSkip = await shouldSkipImport(this.prisma, filename, filePath);
 
-      if (existing) {
-        logger.info(`   ⏭️ Dostawa szyb juz zarejestrowana: ${filename}`);
-        // Przenies do folderu pominiete aby nie pokazywal sie ponownie
+      if (shouldSkip) {
         await moveToSkipped(filePath);
         return;
       }
@@ -367,9 +355,10 @@ export class GlassWatcher implements IFileWatcher {
       // Dynamiczny import - unikamy cyklicznych zależności
       const { GlassDeliveryService } = await import('../glass-delivery/index.js');
 
-      const content = await readFile(filePath, 'utf-8');
+      // Czytaj jako Buffer - parser sam skonwertuje z CP1250 na UTF-8
+      const buffer = await readFile(filePath);
       const glassDeliveryService = new GlassDeliveryService(this.prisma);
-      const delivery = await glassDeliveryService.importFromCsv(content, filename);
+      const delivery = await glassDeliveryService.importFromCsv(buffer, filename);
 
       logger.info(`   Zaimportowano dostawe (ID: ${delivery.id})`);
 

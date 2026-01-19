@@ -7,7 +7,7 @@ import { CsvParser } from '../parsers/csv-parser.js';
 import { logger } from '../../utils/logger.js';
 import { emitOrderUpdated } from '../event-emitter.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
-import { ensureDirectoryExists, generateSafeFilename } from './utils.js';
+import { ensureDirectoryExists, generateSafeFilename, shouldSkipImport } from './utils.js';
 
 /**
  * Domyślna konfiguracja watchera
@@ -160,16 +160,11 @@ export class UzyteBelePrywatneWatcher implements IFileWatcher {
     try {
       const originalFilename = path.basename(csvFile);
 
-      // Sprawdź czy plik był już importowany
-      const alreadyImported = await this.prisma.fileImport.findFirst({
-        where: {
-          filename: { contains: originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_') },
-          status: { in: ['completed', 'processing'] },
-        },
-      });
+      // Sprawdź czy plik powinien być pominięty
+      // (był importowany I nadal istnieje w archiwum)
+      const shouldSkip = await shouldSkipImport(this.prisma, originalFilename, csvFile);
 
-      if (alreadyImported) {
-        logger.info(`   ⏭️ Plik ${originalFilename} już był zaimportowany, pomijam`);
+      if (shouldSkip) {
         await this.moveToSkipped(csvFile);
         return 'skipped';
       }
