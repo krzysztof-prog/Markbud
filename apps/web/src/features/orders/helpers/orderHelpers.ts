@@ -16,16 +16,22 @@ import type { SchucoDeliveryLink } from '@/types';
 
 /**
  * Agreguje status Schuco (zwraca "najgorszy" status)
+ * Skraca długie nazwy statusów dla lepszej czytelności
  */
 export const aggregateSchucoStatus = (links: SchucoDeliveryLink[] | undefined): string => {
   if (!links || links.length === 0) return '';
 
   const statuses = links.map(l => l.schucoDelivery.shippingStatus.toLowerCase());
 
-  // Priorytet: otwarte (najgorszy) > wysłane > dostarczone (najlepszy)
-  if (statuses.some(s => s.includes('otwart'))) return 'Otwarte';
-  if (statuses.some(s => s.includes('wysłan') || s.includes('wyslan'))) return 'Wysłane';
+  // Priorytet: otwarte/new (najgorszy) > częściowo > wysłane > potwierdzone > dostarczone (najlepszy)
+  if (statuses.some(s => s === 'new' || s === 'nowe')) return 'new';
+  if (statuses.some(s => s.includes('otwart') || s.includes('w realizacji'))) return 'Otwarte';
+  if (statuses.some(s => s.includes('częściowo'))) return 'Częściowo';
+  if (statuses.some(s => s.includes('wysłan') || s.includes('wyslan') || s.includes('w drodze'))) return 'Wysłane';
+  if (statuses.some(s => s.includes('potwierdzon'))) return 'Potwierdzone';
+  if (statuses.some(s => s.includes('całkowicie dostarczon'))) return 'Dostarczone';
   if (statuses.some(s => s.includes('dostarcz'))) return 'Dostarczone';
+  if (statuses.some(s => s.includes('anulowa'))) return 'Anulowane';
 
   // Zwróć pierwszy status jeśli nie pasuje do znanych
   return links[0].schucoDelivery.shippingStatus;
@@ -60,12 +66,54 @@ export const formatDeliveryWeek = (week: string | null): string => {
 
 /**
  * Określa kolor statusu Schuco
+ * Statusy z systemu Schuco:
+ * - Całkowicie dostarczone / Dostarczone - zielony
+ * - Potwierdzone - niebieski
+ * - Wysłane / W drodze - fioletowy
+ * - Częściowo dostarczono - pomarańczowy
+ * - Otwarte / W realizacji / Nowe - żółty
+ * - Anulowane - czerwony
+ * - new (niezweryfikowane) - szary
  */
 export const getSchucoStatusColor = (status: string): string => {
   const lowerStatus = status.toLowerCase();
-  if (lowerStatus.includes('dostarcz')) return 'bg-green-100 text-green-700';
-  if (lowerStatus.includes('wysłan') || lowerStatus.includes('wyslan')) return 'bg-blue-100 text-blue-700';
-  if (lowerStatus.includes('otwart')) return 'bg-yellow-100 text-yellow-700';
+
+  // Dostarczone - zielony
+  if (lowerStatus.includes('całkowicie dostarczon') || lowerStatus === 'dostarczone') {
+    return 'bg-green-100 text-green-700';
+  }
+
+  // Potwierdzone - niebieski (zmiana z "Potwierdzona dostawa" na "Potwierdzone")
+  if (lowerStatus.includes('potwierdzon')) {
+    return 'bg-blue-100 text-blue-700';
+  }
+
+  // Wysłane / W drodze - fioletowy
+  if (lowerStatus.includes('wysłan') || lowerStatus.includes('wyslan') || lowerStatus.includes('w drodze')) {
+    return 'bg-purple-100 text-purple-700';
+  }
+
+  // Częściowo dostarczono - pomarańczowy
+  if (lowerStatus.includes('częściowo')) {
+    return 'bg-orange-100 text-orange-700';
+  }
+
+  // Otwarte / W realizacji - żółty
+  if (lowerStatus.includes('otwart') || lowerStatus.includes('w realizacji')) {
+    return 'bg-yellow-100 text-yellow-700';
+  }
+
+  // Anulowane - czerwony
+  if (lowerStatus.includes('anulowa')) {
+    return 'bg-red-100 text-red-700';
+  }
+
+  // new (nowe zamówienie, niezweryfikowane) - szary
+  if (lowerStatus === 'new' || lowerStatus === 'nowe' || lowerStatus === 'nowy') {
+    return 'bg-slate-200 text-slate-600';
+  }
+
+  // Default - szary
   return 'bg-slate-100 text-slate-600';
 };
 
