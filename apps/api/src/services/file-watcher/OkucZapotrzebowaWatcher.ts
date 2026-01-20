@@ -245,6 +245,21 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
         throw new Error('Plik CSV jest pusty lub ma nieprawidlowy format');
       }
 
+      // Jeśli zlecenie istnieje, sprawdź czy już ma zapotrzebowanie okuć
+      // i usuń je przed importem nowego (reimport = zastąpienie)
+      if (order?.id) {
+        const existingDemandCount = await this.prisma.okucDemand.count({
+          where: { orderId: order.id },
+        });
+
+        if (existingDemandCount > 0) {
+          await this.prisma.okucDemand.deleteMany({
+            where: { orderId: order.id },
+          });
+          logger.info(`   🔄 Usunięto ${existingDemandCount} starych pozycji zapotrzebowania dla zlecenia ${orderNumber} (reimport)`);
+        }
+      }
+
       // Importuj zapotrzebowanie
       const result = await this.importOkucDemand(rows, order?.id ?? null, orderNumber);
 

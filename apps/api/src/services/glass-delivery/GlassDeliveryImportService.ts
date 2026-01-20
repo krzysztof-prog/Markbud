@@ -17,6 +17,35 @@ export class GlassDeliveryImportService {
   }
 
   /**
+   * Deduplikuje items z CSV - usuwa duplikaty (ten sam orderNumber, position, wymiary, quantity)
+   * Pliki CSV często mają zduplikowane wiersze
+   */
+  private deduplicateItems<T extends {
+    orderNumber: string;
+    position: number;
+    widthMm: number;
+    heightMm: number;
+    quantity: number;
+  }>(items: T[]): T[] {
+    const seen = new Set<string>();
+    const unique: T[] = [];
+
+    for (const item of items) {
+      const key = `${item.orderNumber}|${item.position}|${item.widthMm}|${item.heightMm}|${item.quantity}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(item);
+      }
+    }
+
+    if (unique.length < items.length) {
+      console.log(`[GlassDeliveryImportService] Usunięto ${items.length - unique.length} duplikatów z CSV`);
+    }
+
+    return unique;
+  }
+
+  /**
    * Import glass delivery from CSV file content
    * Akceptuje string (UTF-8) lub Buffer (CP1250 - automatycznie konwertowany)
    * @throws Error jeśli dostawa z tym samym rackNumber już istnieje
@@ -49,6 +78,9 @@ export class GlassDeliveryImportService {
         // Create GlassDelivery with items (tylko standardowe szyby)
         const standardItems = parsed.items.filter(item => item.category === 'standard');
 
+        // Deduplikacja - usuń duplikaty z CSV (ten sam orderNumber, position, wymiary, quantity)
+        const uniqueItems = this.deduplicateItems(standardItems);
+
         const glassDelivery = await tx.glassDelivery.create({
           data: {
             rackNumber: parsed.metadata.rackNumber || filename,
@@ -56,7 +88,7 @@ export class GlassDeliveryImportService {
             supplierOrderNumber: parsed.metadata.supplierOrderNumber || null,
             deliveryDate: deliveryDate || new Date(),
             items: {
-              create: standardItems.map((item) => ({
+              create: uniqueItems.map((item) => ({
                 orderNumber: item.orderNumber,
                 orderSuffix: item.orderSuffix || null,
                 position: String(item.position),
@@ -109,6 +141,34 @@ export class GlassDeliveryImportService {
   }
 
   /**
+   * Deduplikuje kategoryzowane szyby (loose/aluminum/reclamation)
+   * Klucz: orderNumber + wymiary + quantity
+   */
+  private deduplicateCategorizedItems<T extends {
+    orderNumber: string;
+    widthMm: number;
+    heightMm: number;
+    quantity: number;
+  }>(items: T[], categoryName: string): T[] {
+    const seen = new Set<string>();
+    const unique: T[] = [];
+
+    for (const item of items) {
+      const key = `${item.orderNumber}|${item.widthMm}|${item.heightMm}|${item.quantity}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(item);
+      }
+    }
+
+    if (unique.length < items.length) {
+      console.log(`[GlassDeliveryImportService] Usunięto ${items.length - unique.length} duplikatów ${categoryName}`);
+    }
+
+    return unique;
+  }
+
+  /**
    * Zapisuje skategoryzowane szyby do odpowiednich tabel
    */
   private async saveCategorizedGlasses(
@@ -144,10 +204,15 @@ export class GlassDeliveryImportService {
       }>;
     }
   ): Promise<void> {
+    // Deduplikacja przed zapisem
+    const uniqueLoose = this.deduplicateCategorizedItems(categorized.loose, 'loose');
+    const uniqueAluminum = this.deduplicateCategorizedItems(categorized.aluminum, 'aluminum');
+    const uniqueReclamation = this.deduplicateCategorizedItems(categorized.reclamation, 'reclamation');
+
     // Szyby luzem
-    if (categorized.loose.length > 0) {
+    if (uniqueLoose.length > 0) {
       await tx.looseGlass.createMany({
-        data: categorized.loose.map(item => ({
+        data: uniqueLoose.map(item => ({
           glassDeliveryId,
           customerOrderNumber: item.customerOrderNumber,
           clientName: item.clientName,
@@ -161,9 +226,9 @@ export class GlassDeliveryImportService {
     }
 
     // Szyby aluminiowe
-    if (categorized.aluminum.length > 0) {
+    if (uniqueAluminum.length > 0) {
       await tx.aluminumGlass.createMany({
-        data: categorized.aluminum.map(item => ({
+        data: uniqueAluminum.map(item => ({
           glassDeliveryId,
           customerOrderNumber: item.customerOrderNumber,
           clientName: item.clientName,
@@ -177,9 +242,9 @@ export class GlassDeliveryImportService {
     }
 
     // Szyby reklamacyjne
-    if (categorized.reclamation.length > 0) {
+    if (uniqueReclamation.length > 0) {
       await tx.reclamationGlass.createMany({
-        data: categorized.reclamation.map(item => ({
+        data: uniqueReclamation.map(item => ({
           glassDeliveryId,
           customerOrderNumber: item.customerOrderNumber,
           clientName: item.clientName,

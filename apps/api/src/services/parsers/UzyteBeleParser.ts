@@ -19,6 +19,8 @@ import type {
   ParseError,
   UzyteBeleWindow,
   UzyteBeleGlass,
+  UzytebeleMaterial,
+  MaterialCategory,
 } from './types.js';
 
 /**
@@ -33,6 +35,81 @@ export class UzyteBeleParser {
     this.orderNumberParser = new OrderNumberParser();
     this.articleNumberParser = new ArticleNumberParser();
     this.beamCalculator = new BeamCalculator();
+  }
+
+  /**
+   * Konwertuje wartość z pliku CSV (np. "406,8") na grosze (40680)
+   * Używamy groszy dla zgodności z money.ts
+   */
+  private parseAmountToGrosze(value: string | undefined): number {
+    if (!value || value.trim() === '') return 0;
+
+    // Zamień przecinek na kropkę i parsuj jako float
+    const cleaned = value.replace(',', '.').trim();
+    const amount = parseFloat(cleaned);
+
+    if (isNaN(amount)) return 0;
+
+    // Konwertuj na grosze (zaokrąglamy do pełnych groszy)
+    return Math.round(amount * 100);
+  }
+
+  /**
+   * Parsuje wartość numeryczną (bez konwersji na grosze)
+   */
+  private parseNumericValue(value: string | undefined): number {
+    if (!value || value.trim() === '') return 0;
+
+    const cleaned = value.replace(',', '.').trim();
+    const amount = parseFloat(cleaned);
+
+    return isNaN(amount) ? 0 : amount;
+  }
+
+  /**
+   * Określa kategorię pozycji materiałówki
+   * @param position - numer pozycji
+   * @param windowCount - liczba okien (niezerowych)
+   * @param material - wartość materiału w groszach
+   * @param netValue - wartość netto w groszach
+   * @param assemblyValueAfterDiscount - wartość montażu po rabacie w groszach
+   * @param glazing - szklenia w groszach
+   * @param fittings - okucia w groszach
+   * @param parts - części w groszach
+   */
+  private categorizeMaterial(
+    position: number,
+    windowCount: number,
+    material: number,
+    netValue: number,
+    assemblyValueAfterDiscount: number,
+    glazing: number,
+    fittings: number,
+    parts: number
+  ): MaterialCategory {
+    // Jeśli pozycja > liczba okien = dodatki
+    if (position > windowCount) {
+      return 'dodatki';
+    }
+
+    // Jeśli TYLKO wartość montażu po rabacie ma wartość > 0 (reszta = 0)
+    const hasOnlyAssembly = assemblyValueAfterDiscount > 0 &&
+      glazing === 0 &&
+      fittings === 0 &&
+      parts === 0 &&
+      material === 0;
+
+    if (hasOnlyAssembly) {
+      return 'montaz';
+    }
+
+    // Jeśli material = 0 ale wartość netto > 0 = inne
+    if (material === 0 && netValue > 0) {
+      return 'inne';
+    }
+
+    // Normalna pozycja przypisana do okna
+    return 'okno';
   }
 
   /**
@@ -201,7 +278,7 @@ export class UzyteBeleParser {
     filepath: string,
     action: 'overwrite' | 'add_new',
     replaceBase?: boolean
-  ): Promise<{ orderId: number; requirementsCount: number; windowsCount: number; glassesCount: number }> {
+  ): Promise<{ orderId: number; requirementsCount: number; windowsCount: number; glassesCount: number; materialsCount: number }> {
     const parsed = await this.parseUzyteBeleFile(filepath);
 
     // Parsuj numer zlecenia (przed transakcją)
@@ -228,7 +305,19 @@ export class UzyteBeleParser {
       });
 
       if (order && action === 'overwrite') {
-        // Atomowo usuń istniejące requirements, windows i glasses
+        // Sprawdź czy nowy numer zlecenia (z pliku) już istnieje jako osobne zlecenie
+        // Dotyczy przypadku gdy zastępujemy bazowe (53815) danymi z wariantu (53815-a)
+        const newOrderNumber = parsed.orderNumber;
+        if (replaceBase && newOrderNumber !== targetOrderNumber) {
+          const existingNewOrder = await tx.order.findUnique({
+            where: { orderNumber: newOrderNumber },
+          });
+          if (existingNewOrder) {
+            throw new Error(`Zlecenie ${newOrderNumber} już istnieje w systemie. Nie można zastąpić zlecenia ${targetOrderNumber} - usuń najpierw istniejące ${newOrderNumber}.`);
+          }
+        }
+
+        // Atomowo usuń istniejące requirements, windows, glasses, materials i zapotrzebowanie okuć
         await tx.orderRequirement.deleteMany({
           where: { orderId: order.id },
         });
@@ -238,10 +327,21 @@ export class UzyteBeleParser {
         await tx.orderGlass.deleteMany({
           where: { orderId: order.id },
         });
+        await tx.orderMaterial.deleteMany({
+          where: { orderId: order.id },
+        });
+        // Usuń zapotrzebowanie okuć - przy zastępowaniu zlecenia stare zapotrzebowanie nie jest aktualne
+        await tx.okucDemand.deleteMany({
+          where: { orderId: order.id },
+        });
+        logger.info(`Usunięto zapotrzebowanie okuć dla zlecenia ${order.orderNumber} (zastąpione)`);
+
         // Zaktualizuj zlecenie o nowe dane z CSV
+        // Przy replaceBase zmieniamy też numer zlecenia na nowy (z sufiksem)
         order = await tx.order.update({
           where: { id: order.id },
           data: {
+            orderNumber: replaceBase ? newOrderNumber : undefined,
             client: parsed.client || undefined,
             project: parsed.project || undefined,
             system: parsed.system || undefined,
@@ -254,6 +354,10 @@ export class UzyteBeleParser {
             documentAuthorUserId: documentAuthorUserId || undefined,
           },
         });
+
+        if (replaceBase && newOrderNumber !== targetOrderNumber) {
+          logger.info(`Zmieniono numer zlecenia: ${targetOrderNumber} → ${newOrderNumber}`);
+        }
       } else if (!order) {
         // Try to get EUR value from linked Schuco delivery if available
         const schucoLink = await tx.orderSchucoLink.findFirst({
@@ -349,6 +453,71 @@ export class UzyteBeleParser {
 
       // Dodaj requirements (w tej samej transakcji)
       for (const req of parsed.requirements) {
+        // Sprawdź czy to stal (numery artykułów zaczynające się od 201 lub 202)
+        if (this.articleNumberParser.isSteel(req.articleNumber)) {
+          const steelNumber = this.articleNumberParser.parseSteelNumber(req.articleNumber);
+
+          // Znajdź lub utwórz stal
+          let steel = await tx.steel.findUnique({
+            where: { number: steelNumber },
+          });
+
+          if (!steel) {
+            // Spróbuj znaleźć po numerze artykułu
+            steel = await tx.steel.findUnique({
+              where: { articleNumber: req.articleNumber },
+            });
+
+            if (!steel) {
+              // Utwórz nową stal jeśli nie istnieje
+              steel = await tx.steel.create({
+                data: {
+                  number: steelNumber,
+                  name: `Wzmocnienie ${steelNumber}`,
+                  articleNumber: req.articleNumber,
+                  sortOrder: 0,
+                },
+              });
+
+              // Utwórz też rekord stanu magazynowego
+              await tx.steelStock.create({
+                data: {
+                  steelId: steel.id,
+                  currentStockBeams: 0,
+                  initialStockBeams: 0,
+                },
+              });
+
+              console.log(`Utworzona nowa stal ${steelNumber} z numerem artykułu ${req.articleNumber}`);
+            }
+          }
+
+          // Utwórz lub zaktualizuj zapotrzebowanie na stal
+          await tx.orderSteelRequirement.upsert({
+            where: {
+              orderId_steelId: {
+                orderId: order.id,
+                steelId: steel.id,
+              },
+            },
+            update: {
+              beamsCount: req.calculatedBeams,
+              meters: req.calculatedMeters,
+              restMm: req.originalRest,
+            },
+            create: {
+              orderId: order.id,
+              steelId: steel.id,
+              beamsCount: req.calculatedBeams,
+              meters: req.calculatedMeters,
+              restMm: req.originalRest,
+            },
+          });
+
+          // Pomiń logikę profili - stal nie ma koloru
+          continue;
+        }
+
         // Znajdź lub utwórz profil z articleNumber
         let profile = await tx.profile.findUnique({
           where: { number: req.profileNumber },
@@ -414,11 +583,13 @@ export class UzyteBeleParser {
         });
       }
 
-      // Dodaj windows (w tej samej transakcji)
+      // Dodaj windows (w tej samej transakcji) i zachowaj mapowanie position -> id
+      const windowPositionToIdMap = new Map<number, number>();
       for (const win of parsed.windows) {
-        await tx.orderWindow.create({
+        const createdWindow = await tx.orderWindow.create({
           data: {
             orderId: order.id,
+            position: win.lp, // Zapisujemy numer pozycji (Lp.)
             widthMm: win.szer,
             heightMm: win.wys,
             profileType: win.typProfilu,
@@ -426,6 +597,8 @@ export class UzyteBeleParser {
             reference: win.referencja,
           },
         });
+        // Zapisz mapowanie: numer pozycji -> id okna w bazie
+        windowPositionToIdMap.set(win.lp, createdWindow.id);
       }
 
       // Dodaj glasses (szyby) (w tej samej transakcji)
@@ -444,11 +617,81 @@ export class UzyteBeleParser {
         });
       }
 
+      // Dodaj materials (materiałówka) (w tej samej transakcji)
+      // Jednocześnie oblicz sumy dla każdej kategorii
+      let windowsNetValue = 0;
+      let windowsMaterial = 0;
+      let assemblyValue = 0;
+      let extrasValue = 0;
+      let otherValue = 0;
+
+      for (const mat of parsed.materials) {
+        // Dla kategorii 'okno' - powiąż z odpowiednim oknem
+        let orderWindowId: number | null = null;
+        if (mat.category === 'okno') {
+          orderWindowId = windowPositionToIdMap.get(mat.position) ?? null;
+        }
+
+        await tx.orderMaterial.create({
+          data: {
+            orderId: order.id,
+            orderWindowId, // Powiązanie z oknem (tylko dla kategorii 'okno')
+            position: mat.position,
+            category: mat.category,
+            glazing: mat.glazing,
+            fittings: mat.fittings,
+            parts: mat.parts,
+            glassQuantity: mat.glassQuantity,
+            material: mat.material,
+            assemblyValueBeforeDiscount: mat.assemblyValueBeforeDiscount,
+            assemblyValueAfterDiscount: mat.assemblyValueAfterDiscount,
+            netValue: mat.netValue,
+            totalNet: mat.totalNet,
+            quantity: mat.quantity,
+            coefficient: mat.coefficient,
+            unit: mat.unit,
+          },
+        });
+
+        // Oblicz sumy dla każdej kategorii (totalNet * quantity)
+        const valueWithQuantity = mat.totalNet * mat.quantity;
+        const materialWithQuantity = mat.material * mat.quantity;
+
+        switch (mat.category) {
+          case 'okno':
+            windowsNetValue += valueWithQuantity;
+            windowsMaterial += materialWithQuantity;
+            break;
+          case 'montaz':
+            assemblyValue += valueWithQuantity;
+            break;
+          case 'dodatki':
+            extrasValue += valueWithQuantity;
+            break;
+          case 'inne':
+            otherValue += valueWithQuantity;
+            break;
+        }
+      }
+
+      // Zapisz sumy do zlecenia
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          windowsNetValue: windowsNetValue > 0 ? windowsNetValue : null,
+          windowsMaterial: windowsMaterial > 0 ? windowsMaterial : null,
+          assemblyValue: assemblyValue > 0 ? assemblyValue : null,
+          extrasValue: extrasValue > 0 ? extrasValue : null,
+          otherValue: otherValue > 0 ? otherValue : null,
+        },
+      });
+
       return {
         orderId: order.id,
         requirementsCount: parsed.requirements.length,
         windowsCount: parsed.windows.length,
         glassesCount: parsed.glasses.length,
+        materialsCount: parsed.materials.length,
       };
     }, {
       timeout: 30000, // 30s dla dużych importów
@@ -509,6 +752,7 @@ export class UzyteBeleParser {
     const requirements: ParsedUzyteBele['requirements'] = [];
     const windows: UzyteBeleWindow[] = [];
     const glasses: UzyteBeleGlass[] = [];
+    const materials: UzytebeleMaterial[] = [];
     const totals = { windows: 0, sashes: 0, glasses: 0 };
 
     let orderNumber = 'UNKNOWN';
@@ -518,10 +762,11 @@ export class UzyteBeleParser {
     let deadline: string | undefined;
     let pvcDeliveryDate: string | undefined;
     let documentAuthor: string | undefined;
-    let currentSection = 'requirements'; // 'requirements', 'windows' lub 'glasses'
+    let currentSection = 'requirements'; // 'requirements', 'windows', 'glasses' lub 'materials'
     let requirementsHeaderSkipped = false;
     let windowsHeaderSkipped = false;
     let glassesHeaderSkipped = false;
+    let materialsHeaderSkipped = false;
     let glassLpCounter = 0;
 
     for (const line of lines) {
@@ -567,6 +812,13 @@ export class UzyteBeleParser {
         currentSection = 'glasses';
         glassesHeaderSkipped = false;
         glassLpCounter = 0;
+        continue;
+      }
+
+      // Wykryj przejście do sekcji materiałówka
+      if (lineLower.includes('materialowka') || lineLower.includes('materiałówka')) {
+        currentSection = 'materials';
+        materialsHeaderSkipped = false;
         continue;
       }
 
@@ -678,24 +930,98 @@ export class UzyteBeleParser {
             areaSqm: Math.round(areaSqm * 10000) / 10000, // Zaokrąglenie do 4 miejsc po przecinku
           });
         }
+      } else if (currentSection === 'materials') {
+        // Pomiń nagłówek materiałówki
+        // Format nagłówka: "Dokument;Pozycja;Szklenia;Okucia;Czesci;Ilosc szkle;Material;Wartosc n;Wartosc n;Wartosc n;Suma nett;Sztuk;wspolczyn;jednostka"
+        if (!materialsHeaderSkipped && (parts[0]?.toLowerCase().includes('dokument') || parts[1]?.toLowerCase().includes('pozycja'))) {
+          materialsHeaderSkipped = true;
+          continue;
+        }
+
+        // Parsuj wiersz materiałówki
+        // Format: 6146;1;406,8;275,69;662,04;4;1344,53;2427,7;0;0;2427,7;2;1,81;1,64
+        // Kolumny: Dokument(0), Pozycja(1), Szklenia(2), Okucia(3), Czesci(4), Ilosc szkle(5),
+        //          Material(6), Wartosc n montazu przed rabatem(7), Wartosc n montazu po rabacie(8),
+        //          Wartosc n(9), Suma nett(10), Sztuk(11), wspolczyn(12), jednostka(13)
+        if (parts.length >= 10) {
+          const positionStr = parts[1];
+          // Pozycja może być pusta lub mieć liczbę
+          const position = parseInt(positionStr) || 0;
+
+          // Pomijamy wiersz jeśli pozycja = 0 lub wygląda jak podsumowanie
+          if (position === 0) {
+            continue;
+          }
+
+          // Parsuj wartości - konwertuj na grosze
+          const glazing = this.parseAmountToGrosze(parts[2]);
+          const fittings = this.parseAmountToGrosze(parts[3]);
+          const partsValue = this.parseAmountToGrosze(parts[4]);
+          const glassQuantity = parseInt(parts[5]) || 0;
+          const material = this.parseAmountToGrosze(parts[6]);
+          const assemblyValueBeforeDiscount = this.parseAmountToGrosze(parts[7]);
+          const assemblyValueAfterDiscount = this.parseAmountToGrosze(parts[8]);
+          const netValue = this.parseAmountToGrosze(parts[9]);
+          const totalNet = this.parseAmountToGrosze(parts[10]);
+          const quantity = parseInt(parts[11]) || 1;
+          const coefficient = parts[12] ? this.parseNumericValue(parts[12]) : null;
+          const unit = parts[13] ? this.parseNumericValue(parts[13]) : null;
+
+          // Kategoria zostanie określona później, gdy będziemy znać liczbę niezerowych okien
+          materials.push({
+            position,
+            category: 'okno', // Tymczasowa kategoria - zostanie przeliczona później
+            glazing,
+            fittings,
+            parts: partsValue,
+            glassQuantity,
+            material,
+            assemblyValueBeforeDiscount,
+            assemblyValueAfterDiscount,
+            netValue,
+            totalNet,
+            quantity,
+            coefficient,
+            unit,
+          });
+        }
       }
     }
+
+    // Filtruj zerowe okna (szerokość=0 i wysokość=0 to nie są okna)
+    const filteredWindows = windows.filter(w => w.szer > 0 || w.wys > 0);
+    const nonZeroWindowCount = filteredWindows.length;
+
+    // Określ kategorie dla pozycji materiałówki
+    const categorizedMaterials = materials.map(m => ({
+      ...m,
+      category: this.categorizeMaterial(
+        m.position,
+        nonZeroWindowCount,
+        m.material,
+        m.netValue,
+        m.assemblyValueAfterDiscount,
+        m.glazing,
+        m.fittings,
+        m.parts
+      ),
+    }));
 
     // Auto-fill project i system z danych okien jeśli nie zostały sparsowane z metadanych
     let finalProject = project;
     let finalSystem = system;
 
-    if ((!finalProject || finalProject.trim() === '') && windows.length > 0) {
+    if ((!finalProject || finalProject.trim() === '') && filteredWindows.length > 0) {
       // Pobierz unikalne referencje z okien
-      const references = [...new Set(windows.map(w => w.referencja).filter(Boolean))];
+      const references = [...new Set(filteredWindows.map(w => w.referencja).filter(Boolean))];
       if (references.length > 0) {
         finalProject = references.join(', ');
       }
     }
 
-    if ((!finalSystem || finalSystem.trim() === '') && windows.length > 0) {
+    if ((!finalSystem || finalSystem.trim() === '') && filteredWindows.length > 0) {
       // Pobierz unikalne typy profili z okien
-      const profileTypes = [...new Set(windows.map(w => w.typProfilu).filter(Boolean))];
+      const profileTypes = [...new Set(filteredWindows.map(w => w.typProfilu).filter(Boolean))];
       if (profileTypes.length > 0) {
         finalSystem = profileTypes.join(', ');
       }
@@ -710,8 +1036,9 @@ export class UzyteBeleParser {
       pvcDeliveryDate,
       documentAuthor,
       requirements,
-      windows,
+      windows: filteredWindows, // Zwracamy tylko niezerowe okna
       glasses,
+      materials: categorizedMaterials,
       totals,
     };
   }
