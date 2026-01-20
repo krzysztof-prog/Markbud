@@ -109,4 +109,26 @@ export const ordersApi = {
     }),
   // P1-R4: Get production readiness checklist (System Brain)
   getReadiness: (id: number) => fetchApi<ReadinessResult>(`/api/orders/${id}/readiness`),
+
+  // ==========================================
+  // Archive endpoints
+  // ==========================================
+
+  // Pobierz dostępne lata w archiwum ze statystykami
+  getArchiveYears: () => fetchApi<Array<{ year: number; count: number }>>('/api/orders/archive/years'),
+
+  // Pobierz zlecenia z archiwum dla danego roku
+  getArchivedByYear: (year: number, params?: { limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.offset) query.set('offset', params.offset.toString());
+    const queryStr = query.toString();
+    return fetchApi<{ orders: Order[]; total: number }>(`/api/orders/archive/${year}${queryStr ? `?${queryStr}` : ''}`);
+  },
+
+  // Ręczne uruchomienie archiwizacji (admin)
+  triggerArchive: () => fetchApi<{ success: boolean; archivedCount: number; archivedOrderNumbers: string[] }>(
+    '/api/orders/archive/trigger',
+    { method: 'POST', body: JSON.stringify({}) }
+  ),
 };

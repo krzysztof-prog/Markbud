@@ -38,12 +38,14 @@ import { bugReportRoutes } from './routes/bug-reports.js';
 import { healthRoutes } from './routes/health.js';
 import { mojaPracaRoutes } from './routes/moja-praca.js';
 import { productionPlanningRoutes } from './routes/production-planning.js';
+import { steelRoutes } from './routes/steel.js';
 
 // Services
 import { FileWatcherService } from './services/file-watcher/index.js';
 import { startSchucoScheduler, stopSchucoScheduler } from './services/schuco/schucoScheduler.js';
 import { startPendingPriceCleanupScheduler, stopPendingPriceCleanupScheduler } from './services/pendingOrderPriceCleanupScheduler.js';
 import { startImportLockCleanupScheduler, stopImportLockCleanupScheduler } from './services/importLockCleanupScheduler.js';
+import { startOrderArchiveScheduler, stopOrderArchiveScheduler } from './services/orderArchiveScheduler.js';
 import { setupWebSocket } from './plugins/websocket.js';
 import { seedDefaultWorkers } from './services/seedDefaultWorkers.js';
 
@@ -197,6 +199,9 @@ await fastify.register(mojaPracaRoutes, { prefix: '/api/moja-praca' });
 // Production Planning Routes (Planowanie produkcji)
 await fastify.register(productionPlanningRoutes, { prefix: '/api/production-planning' });
 
+// Steel Routes (Wzmocnienia stalowe - magazyn stali)
+await fastify.register(steelRoutes, { prefix: '/api/steel' });
+
 // Health checks (basic - must be before extended health routes)
 fastify.get('/api/health', {
   schema: {
@@ -275,6 +280,7 @@ const closeGracefully = async (signal: string) => {
   stopSchucoScheduler();
   stopPendingPriceCleanupScheduler();
   stopImportLockCleanupScheduler();
+  stopOrderArchiveScheduler();
   await fastify.close();
   await prisma.$disconnect();
   process.exit(0);
@@ -311,6 +317,9 @@ const start = async () => {
 
     // Uruchom Import Lock Cleanup Scheduler (czyszczenie co godzinę)
     startImportLockCleanupScheduler(prisma);
+
+    // Uruchom Order Archive Scheduler (archiwizacja zleceń codziennie o 2:30)
+    startOrderArchiveScheduler(prisma);
 
   } catch (err) {
     logger.error('Failed to start server', err);

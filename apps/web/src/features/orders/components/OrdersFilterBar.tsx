@@ -5,11 +5,12 @@
  */
 
 import React from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Download, Search, TrendingUp, Settings } from 'lucide-react';
+import { Archive, Download, Search, TrendingUp, Settings } from 'lucide-react';
 import type { FilterState, GroupBy } from '../types';
 
 // ================================
@@ -163,6 +164,12 @@ export const OrdersFilterBar: React.FC<OrdersFilterBarProps> = ({
 
       {/* Przyciski akcji */}
       <div className="flex gap-2 ml-auto">
+        <Link href="/zestawienia/archiwum">
+          <Button variant="outline">
+            <Archive className="h-4 w-4 mr-2" />
+            Archiwum
+          </Button>
+        </Link>
         <Button
           variant="outline"
           onClick={onColumnSettingsClick}

@@ -3,6 +3,7 @@ import { prisma } from '../index.js';
 import { OrderRepository } from '../repositories/OrderRepository.js';
 import { OrderService } from '../services/orderService.js';
 import { OrderHandler } from '../handlers/orderHandler.js';
+import { OrderArchiveService } from '../services/orderArchiveService.js';
 import { verifyAuth } from '../middleware/auth.js';
 import type { BulkUpdateStatusInput, ForProductionQuery, MonthlyProductionQuery } from '../validators/order.js';
 
@@ -230,4 +231,79 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
   }, handler.setVariantType.bind(handler));
+
+  // ==========================================
+  // Archive endpoints
+  // ==========================================
+
+  const archiveService = new OrderArchiveService(prisma);
+
+  // GET /api/orders/archive/years - Pobierz dostępne lata w archiwum
+  fastify.get('/archive/years', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get available years in archive with order counts',
+      tags: ['orders', 'archive'],
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              year: { type: 'number' },
+              count: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+  }, async (_request, reply) => {
+    const stats = await archiveService.getArchiveYearStats();
+    return reply.send(stats);
+  });
+
+  // GET /api/orders/archive/:year - Pobierz zlecenia z archiwum dla danego roku
+  fastify.get<{
+    Params: { year: string };
+    Querystring: { limit?: string; offset?: string };
+  }>('/archive/:year', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get archived orders for a specific year (by completedAt year)',
+      tags: ['orders', 'archive'],
+      params: {
+        type: 'object',
+        required: ['year'],
+        properties: {
+          year: { type: 'string', pattern: '^\\d{4}$', description: 'Year (YYYY format)' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          limit: { type: 'string', default: '50' },
+          offset: { type: 'string', default: '0' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const year = parseInt(request.params.year, 10);
+    const limit = parseInt(request.query.limit || '50', 10);
+    const offset = parseInt(request.query.offset || '0', 10);
+
+    const result = await archiveService.getArchivedOrdersByYear(year, { limit, offset });
+    return reply.send(result);
+  });
+
+  // POST /api/orders/archive/trigger - Ręczne uruchomienie archiwizacji (admin)
+  fastify.post('/archive/trigger', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Manually trigger archive process (archives orders completed 60+ days ago)',
+      tags: ['orders', 'archive'],
+    },
+  }, async (_request, reply) => {
+    const result = await archiveService.archiveOldCompletedOrders();
+    return reply.send(result);
+  });
 };
