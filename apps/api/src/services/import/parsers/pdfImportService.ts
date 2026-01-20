@@ -176,29 +176,46 @@ export class PdfImportService implements IPdfImportService {
    * Extract netto sum from PDF text
    */
   private extractSumaNetto(text: string): number {
-    // PDF summary format:
-    // "575,64\n468,00107,64\n23%" - brutto on top, then netto+VAT glued without space
-
-    // Pattern 1: Look for glued netto+VAT after brutto (format: "575,64\n468,00107,64")
-    const sklejoneMatch = text.match(/(\d+[,.]\d{2})[\s\n\r]+(\d+[,.]\d{2})(\d+[,.]\d{2})/);
-    if (sklejoneMatch) {
-      // sklejoneMatch[2] is netto (468,00)
-      return this.parseNumber(sklejoneMatch[2]);
+    // Pattern 1: "Towar" row - format: "Towar14 733,43    1 178,67\n15 912,10"
+    // where netto and VAT are glued with "Towar", brutto is on next line
+    // Works for PLN PDFs
+    const towarMatch = text.match(/Towar\s*([\d\s]+[,.]\d{2})\s+([\d\s]+[,.]\d{2})/i);
+    if (towarMatch) {
+      // towarMatch[1] is netto
+      return this.parseNumber(towarMatch[1]);
     }
 
-    // Pattern 2: "Suma netto" directly
-    const nettoMatch = text.match(/suma\s*netto[:\s]*([\d,.]+)/i);
+    // Pattern 2: EUR summary format - "1 399,74\n1 138,00261,74\n23%"
+    // where brutto is before glued netto+VAT, and VAT percentage at end
+    // Numbers can have spaces as thousands separator (e.g., "1 399,74")
+    const eurPodsumowanieMatch = text.match(/\n(\d[\d ]*[,.]\d{2})\n(\d[\d ]*[,.]\d{2})(\d[\d ]*[,.]\d{2})\n\d+%/);
+    if (eurPodsumowanieMatch) {
+      // eurPodsumowanieMatch[2] is netto (first of the glued ones)
+      return this.parseNumber(eurPodsumowanieMatch[2]);
+    }
+
+    // Pattern 3: EUR format - "Suma    1 147,00    263,81    1 410,81"
+    // Table: netto, VAT, brutto separated by spaces/tabs
+    const sumaEurMatch = text.match(/\bSuma\s+([\d\s]+[,.]\d{2})\s+([\d\s]+[,.]\d{2})\s+([\d\s]+[,.]\d{2})/i);
+    if (sumaEurMatch) {
+      // sumaEurMatch[1] is netto
+      return this.parseNumber(sumaEurMatch[1]);
+    }
+
+    // Pattern 4: "Suma netto" directly with value (e.g., in column header)
+    // This pattern is less accurate, used as fallback
+    const nettoMatch = text.match(/suma\s*netto[:\s]*([\d\s,.]+)/i);
     if (nettoMatch) {
       return this.parseNumber(nettoMatch[1]);
     }
 
-    // Pattern 3: "Suma" with values in table (with spaces)
-    const sumaMatch = text.match(/Suma\s+([\d\s,.]+)\s+([\d\s,.]+)\s+([\d\s,.]+)/i);
-    if (sumaMatch) {
-      return this.parseNumber(sumaMatch[1]);
+    // Pattern 5: Glued values - "575,64\n468,00107,64" (brutto\nnetto+vat)
+    const sklejoneMatch = text.match(/(\d+[,.]\d{2})[\s\n\r]+(\d+[,.]\d{2})(\d+[,.]\d{2})/);
+    if (sklejoneMatch) {
+      return this.parseNumber(sklejoneMatch[2]);
     }
 
-    // Pattern 4: "468,00 107,64 575,64" - netto, VAT, brutto with spaces
+    // Pattern 6: Three numbers in a row - "468,00 107,64 575,64"
     const tripleMatch = text.match(/([\d]+[,.][\d]{2})\s+([\d]+[,.][\d]{2})\s+([\d]+[,.][\d]{2})/);
     if (tripleMatch) {
       return this.parseNumber(tripleMatch[1]);
@@ -211,22 +228,38 @@ export class PdfImportService implements IPdfImportService {
    * Extract brutto sum from PDF text
    */
   private extractSumaBrutto(text: string): number {
-    // PDF format: "575,64\n468,00107,64" - brutto on top, then netto+VAT glued
+    // Pattern 1: "Towar" row with brutto on next line
+    // Format: "Towar14 733,43    1 178,67\n15 912,10"
+    const towarMatch = text.match(/Towar\s*[\d\s]+[,.]\d{2}\s+[\d\s]+[,.]\d{2}\s*\n\s*([\d\s]+[,.]\d{2})/i);
+    if (towarMatch) {
+      // towarMatch[1] is brutto (from next line)
+      return this.parseNumber(towarMatch[1]);
+    }
 
-    // Pattern 1: brutto before glued netto+VAT
+    // Pattern 2: EUR summary format - "1 399,74\n1 138,00261,74\n23%"
+    // where brutto is before glued netto+VAT
+    const eurPodsumowanieMatch = text.match(/\n(\d[\d ]*[,.]\d{2})\n(\d[\d ]*[,.]\d{2})(\d[\d ]*[,.]\d{2})\n\d+%/);
+    if (eurPodsumowanieMatch) {
+      // eurPodsumowanieMatch[1] is brutto
+      return this.parseNumber(eurPodsumowanieMatch[1]);
+    }
+
+    // Pattern 3: EUR format - "Suma    1 147,00    263,81    1 410,81"
+    // Table: netto, VAT, brutto (third value)
+    const sumaEurMatch = text.match(/\bSuma\s+([\d\s]+[,.]\d{2})\s+([\d\s]+[,.]\d{2})\s+([\d\s]+[,.]\d{2})/i);
+    if (sumaEurMatch) {
+      // sumaEurMatch[3] is brutto
+      return this.parseNumber(sumaEurMatch[3]);
+    }
+
+    // Pattern 4: Glued values - "575,64\n468,00107,64" (brutto\nnetto+vat)
     const sklejoneMatch = text.match(/(\d+[,.]\d{2})[\s\n\r]+(\d+[,.]\d{2})(\d+[,.]\d{2})/);
     if (sklejoneMatch) {
-      // sklejoneMatch[1] is brutto (575,64)
       return this.parseNumber(sklejoneMatch[1]);
     }
 
-    // Pattern 2: "Suma" with values in table
-    const sumaMatch = text.match(/Suma\s+([\d\s,.]+)\s+([\d\s,.]+)\s+([\d\s,.]+)/i);
-    if (sumaMatch) {
-      return this.parseNumber(sumaMatch[3]);
-    }
-
-    const bruttoMatch = text.match(/brutto[:\s]*([\d,.]+)/i);
+    // Pattern 5: "brutto" with value
+    const bruttoMatch = text.match(/brutto[:\s]*([\d\s,.]+)/i);
     if (bruttoMatch) {
       return this.parseNumber(bruttoMatch[1]);
     }

@@ -142,30 +142,48 @@ export class PdfParser {
    * Wyciąga sumę netto z tekstu PDF
    */
   private extractSumaNetto(text: string): number {
-    // Format PDF z podsumowania:
-    // "575,64\n468,00107,64\n23%" - brutto na górze, potem netto+VAT sklejone bez spacji
-
-    // Wzorzec 1: Szukaj sklejonego netto+VAT po brutto (format: "575,64\n468,00107,64")
-    // brutto\nnetto+vat - gdzie netto i vat są sklejone
-    const sklejoneMatch = text.match(/(\d+[,.]\d{2})[\s\n\r]+(\d+[,.]\d{2})(\d+[,.]\d{2})/);
-    if (sklejoneMatch) {
-      // sklejoneMatch[2] to netto (468,00)
-      return this.parseNumber(sklejoneMatch[2]);
+    // Wzorzec 1: Wiersz "Towar" - format: "Towar14 733,43    1 178,67\n15 912,10"
+    // gdzie netto i VAT są sklejone z "Towar", a brutto jest w następnej linii
+    // Działa dla PDF-ów PLN
+    const towarMatch = text.match(/Towar\s*([\d\s]+[,.]\d{2})\s+([\d\s]+[,.]\d{2})/i);
+    if (towarMatch) {
+      // towarMatch[1] to netto
+      return this.parseNumber(towarMatch[1]);
     }
 
-    // Wzorzec 2: "Suma netto" bezpośrednio
-    const nettoMatch = text.match(/suma\s*netto[:\s]*([\d,.]+)/i);
+    // Wzorzec 2: Format EUR z Podsumowania - "1 399,74\n1 138,00261,74\n23%"
+    // gdzie brutto jest przed sklejonym netto+VAT, a na końcu procent VAT
+    // Wzorzec wymaga że liczba zaczyna się od cyfry i może mieć spacje wewnątrz
+    // (ale nie newline - użyj [^\S\n] zamiast \s dla spacji bez newline)
+    // Format: \nliczba_brutto\nliczba_netto+liczba_vat\nprocent%
+    const eurPodsumowanieMatch = text.match(/\n(\d[\d ]*[,.]\d{2})\n(\d[\d ]*[,.]\d{2})(\d[\d ]*[,.]\d{2})\n\d+%/);
+    if (eurPodsumowanieMatch) {
+      // eurPodsumowanieMatch[2] to netto (pierwszy z sklejonych)
+      return this.parseNumber(eurPodsumowanieMatch[2]);
+    }
+
+    // Wzorzec 3: Format z EUR - "Suma    1 147,00    263,81    1 410,81"
+    // Tabela: netto, VAT, brutto oddzielone spacjami/tabulatorami
+    const sumaEurMatch = text.match(/\bSuma\s+([\d\s]+[,.]\d{2})\s+([\d\s]+[,.]\d{2})\s+([\d\s]+[,.]\d{2})/i);
+    if (sumaEurMatch) {
+      // sumaEurMatch[1] to netto
+      return this.parseNumber(sumaEurMatch[1]);
+    }
+
+    // Wzorzec 4: "Suma netto" bezpośrednio z wartością (np. w nagłówku kolumny)
+    // Ten wzorzec jest mniej dokładny, używamy jako fallback
+    const nettoMatch = text.match(/suma\s*netto[:\s]*([\d\s,.]+)/i);
     if (nettoMatch) {
       return this.parseNumber(nettoMatch[1]);
     }
 
-    // Wzorzec 3: "Suma" z wartościami w tabeli (ze spacjami)
-    const sumaMatch = text.match(/Suma\s+([\d\s,.]+)\s+([\d\s,.]+)\s+([\d\s,.]+)/i);
-    if (sumaMatch) {
-      return this.parseNumber(sumaMatch[1]);
+    // Wzorzec 5: Sklejone wartości - "575,64\n468,00107,64" (brutto\nnetto+vat)
+    const sklejoneMatch = text.match(/(\d+[,.]\d{2})[\s\n\r]+(\d+[,.]\d{2})(\d+[,.]\d{2})/);
+    if (sklejoneMatch) {
+      return this.parseNumber(sklejoneMatch[2]);
     }
 
-    // Wzorzec 4: "468,00 107,64 575,64" - netto, VAT, brutto ze spacjami
+    // Wzorzec 6: Trzy liczby w wierszu - "468,00 107,64 575,64"
     const tripleMatch = text.match(/([\d]+[,.][\d]{2})\s+([\d]+[,.][\d]{2})\s+([\d]+[,.][\d]{2})/);
     if (tripleMatch) {
       return this.parseNumber(tripleMatch[1]);
@@ -178,22 +196,38 @@ export class PdfParser {
    * Wyciąga sumę brutto z tekstu PDF
    */
   private extractSumaBrutto(text: string): number {
-    // Format PDF: "575,64\n468,00107,64" - brutto na górze, potem netto+VAT sklejone
+    // Wzorzec 1: Wiersz "Towar" z brutto w następnej linii
+    // Format: "Towar14 733,43    1 178,67\n15 912,10"
+    const towarMatch = text.match(/Towar\s*[\d\s]+[,.]\d{2}\s+[\d\s]+[,.]\d{2}\s*\n\s*([\d\s]+[,.]\d{2})/i);
+    if (towarMatch) {
+      // towarMatch[1] to brutto (z następnej linii)
+      return this.parseNumber(towarMatch[1]);
+    }
 
-    // Wzorzec 1: brutto przed sklejonym netto+VAT
+    // Wzorzec 2: Format EUR z Podsumowania - "1 399,74\n1 138,00261,74\n23%"
+    // gdzie brutto jest przed sklejonym netto+VAT
+    const eurPodsumowanieMatch = text.match(/\n(\d[\d ]*[,.]\d{2})\n(\d[\d ]*[,.]\d{2})(\d[\d ]*[,.]\d{2})\n\d+%/);
+    if (eurPodsumowanieMatch) {
+      // eurPodsumowanieMatch[1] to brutto
+      return this.parseNumber(eurPodsumowanieMatch[1]);
+    }
+
+    // Wzorzec 3: Format z EUR - "Suma    1 147,00    263,81    1 410,81"
+    // Tabela: netto, VAT, brutto (trzecia wartość)
+    const sumaEurMatch = text.match(/\bSuma\s+([\d\s]+[,.]\d{2})\s+([\d\s]+[,.]\d{2})\s+([\d\s]+[,.]\d{2})/i);
+    if (sumaEurMatch) {
+      // sumaEurMatch[3] to brutto
+      return this.parseNumber(sumaEurMatch[3]);
+    }
+
+    // Wzorzec 4: Sklejone wartości - "575,64\n468,00107,64" (brutto\nnetto+vat)
     const sklejoneMatch = text.match(/(\d+[,.]\d{2})[\s\n\r]+(\d+[,.]\d{2})(\d+[,.]\d{2})/);
     if (sklejoneMatch) {
-      // sklejoneMatch[1] to brutto (575,64)
       return this.parseNumber(sklejoneMatch[1]);
     }
 
-    // Wzorzec 2: "Suma" z wartościami w tabeli
-    const sumaMatch = text.match(/Suma\s+([\d\s,.]+)\s+([\d\s,.]+)\s+([\d\s,.]+)/i);
-    if (sumaMatch) {
-      return this.parseNumber(sumaMatch[3]);
-    }
-
-    const bruttoMatch = text.match(/brutto[:\s]*([\d,.]+)/i);
+    // Wzorzec 5: "brutto" z wartością
+    const bruttoMatch = text.match(/brutto[:\s]*([\d\s,.]+)/i);
     if (bruttoMatch) {
       return this.parseNumber(bruttoMatch[1]);
     }
