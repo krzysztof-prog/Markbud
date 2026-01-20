@@ -18,7 +18,7 @@ export interface Import {
   id: ID;
   filename: string;
   fileName?: string; // Alias dla kompatybilności
-  fileType: 'uzyte_bele' | 'ceny_pdf' | 'order_pdf' | 'other';
+  fileType: 'uzyte_bele' | 'uzyte_bele_prywatne' | 'ceny_pdf' | 'order_pdf' | 'other';
   status: 'pending' | 'processing' | 'completed' | 'error' | 'rejected';
   createdAt: Timestamp;
   uploadedAt?: Timestamp;

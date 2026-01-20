@@ -136,7 +136,10 @@ export default function ImportyPage() {
   const { archiveFolderMutation, deleteFolderMutation } = useFolderManagementMutations();
 
   // Filter imports by type - with error handling
-  const csvImports = imports?.filter((i: Import) => i.fileType === 'uzyte_bele') || [];
+  // CSV includes both uzyte_bele and uzyte_bele_prywatne
+  const csvImports = imports?.filter((i: Import) =>
+    i.fileType === 'uzyte_bele' || i.fileType === 'uzyte_bele_prywatne'
+  ) || [];
   const pdfImports = imports?.filter((i: Import) => i.fileType === 'ceny_pdf') || [];
 
   const pendingCsvImports = csvImports.filter((i: Import) => i.status === 'pending');

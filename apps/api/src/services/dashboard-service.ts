@@ -100,9 +100,9 @@ export class DashboardService {
     let alertIdCounter = 1;
 
     // Execute parallel queries
-    const [shortagesData, pendingImportsCount, todayDeliveriesCount] = await Promise.all([
+    const [shortagesData, pendingImportsByType, todayDeliveriesCount] = await Promise.all([
       this.repository.getShortages(),
-      this.repository.countPendingImports(),
+      this.repository.countPendingImportsByType(),
       this.repository.countTodayDeliveries(...this.getTodayRange()),
     ]);
 
@@ -120,14 +120,26 @@ export class DashboardService {
       });
     }
 
-    // Add pending imports alert
-    if (pendingImportsCount > 0) {
+    // Add pending CSV imports alert (uzyte_bele)
+    if (pendingImportsByType.csv > 0) {
       alerts.push({
         id: alertIdCounter++,
         type: 'import',
         priority: 'medium',
-        message: `${pendingImportsCount} plik(ów) oczekuje na import`,
-        details: 'Sprawdź zakładkę importów',
+        message: `${pendingImportsByType.csv} plik(ów) CSV oczekuje na import`,
+        details: 'Sprawdź zakładkę importów - sekcja CSV',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // Add pending PDF imports alert (ceny_pdf)
+    if (pendingImportsByType.pdf > 0) {
+      alerts.push({
+        id: alertIdCounter++,
+        type: 'import',
+        priority: 'low',
+        message: `${pendingImportsByType.pdf} cennik(ów) PDF oczekuje na import`,
+        details: 'Sprawdź zakładkę importów - sekcja PDF',
         timestamp: new Date().toISOString(),
       });
     }

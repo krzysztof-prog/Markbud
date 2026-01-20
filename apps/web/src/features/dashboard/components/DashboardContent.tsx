@@ -141,7 +141,7 @@ export function DashboardContent() {
                           </p>
                         </div>
                       </div>
-                      <Link href={`/importy/${imp.id}`}>
+                      <Link href="/importy">
                         <Button size="sm">Podgląd</Button>
                       </Link>
                     </div>

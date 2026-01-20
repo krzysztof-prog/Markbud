@@ -78,6 +78,25 @@ export class DashboardRepository {
   }
 
   /**
+   * Count pending imports by type (CSV vs PDF)
+   * Returns separate counts for CSV types (uzyte_bele, uzyte_bele_prywatne) and PDF (ceny_pdf)
+   */
+  async countPendingImportsByType(): Promise<{ csv: number; pdf: number }> {
+    const [csvCount, pdfCount] = await Promise.all([
+      this.prisma.fileImport.count({
+        where: {
+          status: 'pending',
+          fileType: { in: ['uzyte_bele', 'uzyte_bele_prywatne'] },
+        },
+      }),
+      this.prisma.fileImport.count({
+        where: { status: 'pending', fileType: 'ceny_pdf' },
+      }),
+    ]);
+    return { csv: csvCount, pdf: pdfCount };
+  }
+
+  /**
    * Get recent orders (not archived, ordered by creation date)
    * @param limit - Maximum number of orders to return (default: 5)
    */
