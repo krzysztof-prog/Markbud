@@ -299,11 +299,31 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/archive/trigger', {
     preHandler: verifyAuth,
     schema: {
-      description: 'Manually trigger archive process (archives orders completed 60+ days ago)',
+      description: 'Manually trigger archive process (archives orders completed X days ago)',
       tags: ['orders', 'archive'],
     },
   }, async (_request, reply) => {
     const result = await archiveService.archiveOldCompletedOrders();
     return reply.send(result);
+  });
+
+  // GET /api/orders/archive/settings - Pobierz ustawienia archiwizacji
+  fastify.get('/archive/settings', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get archive settings (archiveAfterDays)',
+      tags: ['orders', 'archive'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            archiveAfterDays: { type: 'number', description: 'Number of days after completion to archive' },
+          },
+        },
+      },
+    },
+  }, async (_request, reply) => {
+    const archiveAfterDays = await archiveService.getArchiveAfterDays();
+    return reply.send({ archiveAfterDays });
   });
 };

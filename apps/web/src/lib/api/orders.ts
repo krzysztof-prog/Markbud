@@ -131,4 +131,7 @@ export const ordersApi = {
     '/api/orders/archive/trigger',
     { method: 'POST', body: JSON.stringify({}) }
   ),
+
+  // Pobierz ustawienia archiwizacji (archiveAfterDays)
+  getArchiveSettings: () => fetchApi<{ archiveAfterDays: number }>('/api/orders/archive/settings'),
 };

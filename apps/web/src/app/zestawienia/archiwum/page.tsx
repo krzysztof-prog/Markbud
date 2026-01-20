@@ -53,6 +53,14 @@ export default function ArchiwumPage() {
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [unarchiveOrderId, setUnarchiveOrderId] = useState<number | null>(null);
 
+  // Pobierz ustawienia archiwizacji (archiveAfterDays)
+  const { data: archiveSettings } = useQuery({
+    queryKey: ['archive-settings'],
+    queryFn: ordersApi.getArchiveSettings,
+  });
+
+  const archiveAfterDays = archiveSettings?.archiveAfterDays ?? 40;
+
   // Pobierz dostępne lata
   const { data: yearsData, isLoading: isLoadingYears } = useQuery({
     queryKey: ['archive-years'],
@@ -141,7 +149,7 @@ export default function ArchiwumPage() {
             <div>
               <h1 className="text-2xl font-bold">Archiwum zleceń</h1>
               <p className="text-sm text-muted-foreground">
-                Zlecenia zarchiwizowane automatycznie 60 dni po wyprodukiwaniu
+                Zlecenia zarchiwizowane automatycznie {archiveAfterDays} dni po wyprodukiwaniu
               </p>
             </div>
           </div>

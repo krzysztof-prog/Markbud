@@ -1,15 +1,16 @@
 /**
  * Order Archive Service
  *
- * Automatycznie archiwizuje zlecenia 60 dni po wyprodukiwaniu (completedAt)
+ * Automatycznie archiwizuje zlecenia X dni po wyprodukiwaniu (completedAt)
+ * Liczba dni konfigurowana w ustawieniach (klucz: archiveAfterDays)
  * Umożliwia też ręczne archiwizowanie i odarchiwizowanie zleceń
  */
 
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger.js';
 
-// 60 dni w milisekundach
-const ARCHIVE_AFTER_DAYS = 60;
+// Domyślna wartość jeśli nie ma w bazie
+const DEFAULT_ARCHIVE_AFTER_DAYS = 40;
 
 export interface ArchiveResult {
   success: boolean;
@@ -31,7 +32,26 @@ export class OrderArchiveService {
   }
 
   /**
-   * Archiwizuje zlecenia wyprodukowane ponad 60 dni temu
+   * Pobiera liczbę dni do archiwizacji z ustawień
+   */
+  async getArchiveAfterDays(): Promise<number> {
+    const setting = await this.prisma.setting.findUnique({
+      where: { key: 'archiveAfterDays' },
+    });
+
+    if (setting?.value) {
+      const days = parseInt(setting.value, 10);
+      if (!isNaN(days) && days > 0) {
+        return days;
+      }
+    }
+
+    return DEFAULT_ARCHIVE_AFTER_DAYS;
+  }
+
+  /**
+   * Archiwizuje zlecenia wyprodukowane ponad X dni temu
+   * Liczba dni pobierana z ustawień (klucz: archiveAfterDays)
    * Uruchamiane automatycznie przez scheduler
    */
   async archiveOldCompletedOrders(): Promise<ArchiveResult> {
@@ -43,15 +63,18 @@ export class OrderArchiveService {
     };
 
     try {
-      // Data graniczna: 60 dni temu
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - ARCHIVE_AFTER_DAYS);
+      // Pobierz liczbę dni z ustawień
+      const archiveAfterDays = await this.getArchiveAfterDays();
 
-      logger.info(`[OrderArchiveService] Szukam zleceń wyprodukowanych przed ${cutoffDate.toISOString()}`);
+      // Data graniczna: X dni temu
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - archiveAfterDays);
+
+      logger.info(`[OrderArchiveService] Szukam zleceń wyprodukowanych przed ${cutoffDate.toISOString()} (${archiveAfterDays} dni)`);
 
       // Znajdź zlecenia do archiwizacji:
       // - completedAt ustawione (wyprodukowane)
-      // - completedAt starsze niż 60 dni
+      // - completedAt starsze niż X dni (z ustawień)
       // - NIE zarchiwizowane (archivedAt = null)
       const ordersToArchive = await this.prisma.order.findMany({
         where: {
