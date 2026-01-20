@@ -163,21 +163,21 @@ export interface FilteredSummary {
 export const DEFAULT_COLUMNS: Column[] = [
   { id: 'orderNumber', label: 'Nr zlecenia', sortable: false, align: 'left', visible: true },
   { id: 'client', label: 'Klient', sortable: false, align: 'left', visible: true },
-  { id: 'project', label: 'Projekt', sortable: false, align: 'left', visible: true },
   { id: 'system', label: 'System', sortable: false, align: 'left', visible: true },
-  { id: 'documentAuthor', label: 'Autor', sortable: false, align: 'left', visible: true },
   { id: 'totalWindows', label: 'Okna', sortable: false, align: 'center', visible: true },
   { id: 'totalSashes', label: 'Skrzydeł', sortable: false, align: 'center', visible: true },
   { id: 'glasses', label: 'Szkleń', sortable: false, align: 'center', visible: true },
   { id: 'glassDeliveryDate', label: 'Data szyb', sortable: false, align: 'center', visible: true },
   { id: 'okucDemandStatus', label: 'Okucia', sortable: false, align: 'center', visible: true },
-  { id: 'valuePln', label: 'Wartość PLN', sortable: false, align: 'right', visible: true },
-  { id: 'valueEur', label: 'Wartość EUR', sortable: false, align: 'right', visible: true },
   { id: 'orderStatus', label: 'Status Schuco', sortable: false, align: 'center', visible: true },
   { id: 'pvcDelivery', label: 'Dostawa PVC', sortable: false, align: 'left', visible: true },
   { id: 'deadline', label: 'Termin realizacji', sortable: false, align: 'left', visible: true },
   { id: 'akrobudDeliveryDate', label: 'Dostawa AKR', sortable: false, align: 'left', visible: true },
-  { id: 'archived', label: 'Status', sortable: false, align: 'center', visible: true },
+  { id: 'valuePln', label: 'Wartość PLN', sortable: false, align: 'right', visible: true },
+  { id: 'valueEur', label: 'Wartość EUR', sortable: false, align: 'right', visible: true },
+  { id: 'documentAuthor', label: 'Autor', sortable: false, align: 'left', visible: true },
+  { id: 'archived', label: 'Status', sortable: false, align: 'center', visible: false },
+  { id: 'project', label: 'Projekt', sortable: false, align: 'left', visible: false },
 ];
 
 export const STORAGE_KEY_COLUMNS_ORDER = 'zestawienie-zlecen-columns-order';

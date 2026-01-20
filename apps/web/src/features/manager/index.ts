@@ -6,6 +6,7 @@ export { PalletsTab } from './components/PalletsTab';
 export { BZTab } from './components/BZTab';
 export { OrderCheckbox } from './components/OrderCheckbox';
 export { DeliveryCheckbox } from './components/DeliveryCheckbox';
+export { CollapsibleSection } from './components/CollapsibleSection';
 
 // API
 export { managerApi } from './api/managerApi';

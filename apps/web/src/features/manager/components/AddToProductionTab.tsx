@@ -2,7 +2,6 @@
 
 import React, { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
 import { DeliveryCheckbox } from './DeliveryCheckbox';
 import { OrderCheckbox } from './OrderCheckbox';
+import { CollapsibleSection } from './CollapsibleSection';
 import { managerApi } from '../api/managerApi';
 import { useProductionSelection } from '../hooks/useProductionSelection';
 import { getTodayISOString } from '../helpers/dateHelpers';
@@ -169,118 +169,101 @@ export const AddToProductionTab: React.FC = () => {
       ) : (
         <>
           {/* Sekcja 1: Najbliższe dostawy AKROBUD */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Package className="h-5 w-5 text-blue-600" />
-                <CardTitle>Najbliższe dostawy AKROBUD</CardTitle>
-                <Badge variant="outline">{data?.upcomingDeliveries.length || 0} dostaw</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {!data?.upcomingDeliveries.length ? (
-                <p className="text-gray-500 text-center py-4">Brak zaplanowanych dostaw</p>
-              ) : (
-                <div className="space-y-3">
-                  {data.upcomingDeliveries.map((delivery) => (
-                    <DeliveryCheckbox
-                      key={delivery.id}
-                      delivery={delivery}
-                      checked={selectedDeliveryIds.has(delivery.id)}
-                      onChange={handleDeliveryToggleWithData}
-                      onOrderToggle={handleOrderToggle}
-                      selectedOrderIds={selectedOrderIds}
-                    />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <CollapsibleSection
+            title="Najbliższe dostawy AKROBUD"
+            icon={Package}
+            iconColor="text-blue-600"
+            count={data?.upcomingDeliveries.length || 0}
+            countLabel="dostaw"
+            badgeVariant="outline"
+            emptyMessage="Brak zaplanowanych dostaw"
+            isEmpty={!data?.upcomingDeliveries.length}
+          >
+            <div className="space-y-3">
+              {data?.upcomingDeliveries.map((delivery) => (
+                <DeliveryCheckbox
+                  key={delivery.id}
+                  delivery={delivery}
+                  checked={selectedDeliveryIds.has(delivery.id)}
+                  onChange={handleDeliveryToggleWithData}
+                  onOrderToggle={handleOrderToggle}
+                  selectedOrderIds={selectedOrderIds}
+                />
+              ))}
+            </div>
+          </CollapsibleSection>
 
           {/* Sekcja 2: Zlecenia przeterminowane */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-red-600" />
-                <CardTitle className="text-red-700">Zlecenia przeterminowane</CardTitle>
-                <Badge variant="destructive">{data?.overdueOrders.length || 0} zleceń</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {!data?.overdueOrders.length ? (
-                <p className="text-gray-500 text-center py-4">Brak przeterminowanych zleceń</p>
-              ) : (
-                <div className="space-y-2">
-                  {data.overdueOrders.map((order) => (
-                    <OrderCheckbox
-                      key={order.id}
-                      order={order}
-                      checked={selectedOrderIds.has(order.id)}
-                      onChange={handleOrderToggle}
-                    />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <CollapsibleSection
+            title="Zlecenia przeterminowane"
+            icon={AlertCircle}
+            iconColor="text-red-600"
+            titleColor="text-red-700"
+            count={data?.overdueOrders.length || 0}
+            countLabel="zleceń"
+            badgeVariant="destructive"
+            emptyMessage="Brak przeterminowanych zleceń"
+            isEmpty={!data?.overdueOrders.length}
+          >
+            <div className="space-y-2">
+              {data?.overdueOrders.map((order) => (
+                <OrderCheckbox
+                  key={order.id}
+                  order={order}
+                  checked={selectedOrderIds.has(order.id)}
+                  onChange={handleOrderToggle}
+                />
+              ))}
+            </div>
+          </CollapsibleSection>
 
           {/* Sekcja 3: Zlecenia na najbliższe 2 tygodnie */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-orange-600" />
-                <CardTitle>{UPCOMING_ORDERS_LABEL}</CardTitle>
-                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-                  {data?.upcomingOrders.length || 0} zleceń
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {!data?.upcomingOrders.length ? (
-                <p className="text-gray-500 text-center py-4">Brak zleceń w najbliższym czasie</p>
-              ) : (
-                <div className="space-y-2">
-                  {data.upcomingOrders.map((order) => (
-                    <OrderCheckbox
-                      key={order.id}
-                      order={order}
-                      checked={selectedOrderIds.has(order.id)}
-                      onChange={handleOrderToggle}
-                    />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <CollapsibleSection
+            title={UPCOMING_ORDERS_LABEL}
+            icon={Calendar}
+            iconColor="text-orange-600"
+            count={data?.upcomingOrders.length || 0}
+            countLabel="zleceń"
+            badgeVariant="outline"
+            badgeClassName="bg-orange-50 text-orange-700 border-orange-200"
+            emptyMessage="Brak zleceń w najbliższym czasie"
+            isEmpty={!data?.upcomingOrders.length}
+          >
+            <div className="space-y-2">
+              {data?.upcomingOrders.map((order) => (
+                <OrderCheckbox
+                  key={order.id}
+                  order={order}
+                  checked={selectedOrderIds.has(order.id)}
+                  onChange={handleOrderToggle}
+                />
+              ))}
+            </div>
+          </CollapsibleSection>
 
           {/* Sekcja 4: Zlecenia prywatne */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-purple-600" />
-                <CardTitle>Zlecenia prywatne</CardTitle>
-                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                  {data?.privateOrders.length || 0} zleceń
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {!data?.privateOrders.length ? (
-                <p className="text-gray-500 text-center py-4">Brak zleceń prywatnych</p>
-              ) : (
-                <div className="space-y-2">
-                  {data.privateOrders.map((order) => (
-                    <OrderCheckbox
-                      key={order.id}
-                      order={order}
-                      checked={selectedOrderIds.has(order.id)}
-                      onChange={handleOrderToggle}
-                    />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <CollapsibleSection
+            title="Zlecenia prywatne"
+            icon={Clock}
+            iconColor="text-purple-600"
+            count={data?.privateOrders.length || 0}
+            countLabel="zleceń"
+            badgeVariant="outline"
+            badgeClassName="bg-purple-50 text-purple-700 border-purple-200"
+            emptyMessage="Brak zleceń prywatnych"
+            isEmpty={!data?.privateOrders.length}
+          >
+            <div className="space-y-2">
+              {data?.privateOrders.map((order) => (
+                <OrderCheckbox
+                  key={order.id}
+                  order={order}
+                  checked={selectedOrderIds.has(order.id)}
+                  onChange={handleOrderToggle}
+                />
+              ))}
+            </div>
+          </CollapsibleSection>
         </>
       )}
     </div>

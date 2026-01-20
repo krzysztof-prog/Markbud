@@ -258,6 +258,7 @@ export class OrderService {
         deadline: { lt: today },
         status: 'new',
         archivedAt: null,
+        ...excludeDeliveryOrders,
       }),
 
       // Upcoming orders: deadline between today and upcoming date, status = new, NOT AKROBUD
@@ -265,13 +266,16 @@ export class OrderService {
         deadline: { gte: today, lte: upcomingDate },
         status: 'new',
         archivedAt: null,
+        ...excludeDeliveryOrders,
       }),
 
-      // Private orders (all non-AKROBUD): status = new (waiting to be added to production)
-      this.repository.findPrivateOrders({
+      // Private orders: status = new, NOT in overdue (deadline < today) and NOT in upcoming (deadline <= upcomingDate)
+      // Czyli: brak deadline LUB deadline > upcomingDate
+      this.repository.findPrivateOrdersExcludingDeadline({
         status: 'new',
         archivedAt: null,
-      }),
+        ...excludeDeliveryOrders,
+      }, upcomingDate),
     ]);
 
     return {

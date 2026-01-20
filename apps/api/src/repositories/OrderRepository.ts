@@ -428,6 +428,49 @@ export class OrderRepository {
     });
   }
 
+  /**
+   * Znajdź zlecenia prywatne wykluczając te z deadline <= excludeBeforeDate
+   * Używane w panelu kierownika dla sekcji "Zlecenia prywatne" - wykluczamy przeterminowane i na najbliższe 2 tyg.
+   */
+  async findPrivateOrdersExcludingDeadline(where: Prisma.OrderWhereInput, excludeBeforeDate: Date) {
+    return this.prisma.order.findMany({
+      where: {
+        ...where,
+        // Zlecenia prywatne = klient różny od AKROBUD
+        client: {
+          notIn: [
+            'AKROBUD SOKOŁOWSKI SPÓŁKA KOMANDYTOWA',
+            'AKROBUD SOKOŁOWSKI SPÓŁKA KOMANDYTOWA', // UTF-8 version
+          ],
+        },
+        NOT: {
+          client: {
+            contains: 'AKROBUD',
+          },
+        },
+        // Wykluczamy zlecenia z deadline <= excludeBeforeDate (przeterminowane + upcoming)
+        // Zostawiamy tylko: brak deadline LUB deadline > excludeBeforeDate
+        OR: [
+          { deadline: null },
+          { deadline: { gt: excludeBeforeDate } },
+        ],
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        client: true,
+        project: true,
+        deadline: true,
+        valuePln: true,
+        valueEur: true,
+        totalWindows: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async findUpcomingDeliveries(params: {
     deliveryDate: Prisma.DateTimeFilter;
     status: Prisma.StringFilter;
