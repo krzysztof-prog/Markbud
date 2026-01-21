@@ -460,24 +460,36 @@ export class DeliveryRepository {
         archivedAt: null,
         status: { notIn: ['archived'] },
         // Wyklucz zlecenia wstrzymane (on_hold) z kalendarza dostaw
-        // Używamy NOT + equals bo chcemy wykluczyć tylko 'on_hold' a null jest OK
-        NOT: { manualStatus: 'on_hold' },
-        OR: [
-          // Zlecenia bez żadnych powiązań
+        // UWAGA: NOT: { manualStatus: 'on_hold' } wyklucza też null w Prisma!
+        // Dlatego używamy AND z dwoma warunkami OR
+        AND: [
+          // Warunek 1: manualStatus nie jest 'on_hold' (null jest OK)
           {
-            deliveryOrders: {
-              none: {},
-            },
+            OR: [
+              { manualStatus: null },
+              { manualStatus: { not: 'on_hold' } },
+            ],
           },
-          // Zlecenia przypisane tylko do soft-deleted dostaw
+          // Warunek 2: brak aktywnej dostawy
           {
-            deliveryOrders: {
-              every: {
-                delivery: {
-                  deletedAt: { not: null },
+            OR: [
+              // Zlecenia bez żadnych powiązań
+              {
+                deliveryOrders: {
+                  none: {},
                 },
               },
-            },
+              // Zlecenia przypisane tylko do soft-deleted dostaw
+              {
+                deliveryOrders: {
+                  every: {
+                    delivery: {
+                      deletedAt: { not: null },
+                    },
+                  },
+                },
+              },
+            ],
           },
         ],
       },
