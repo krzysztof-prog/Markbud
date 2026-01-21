@@ -10,6 +10,7 @@ interface SchucoScraperConfig {
   headless: boolean;
   downloadPath: string;
   timeout: number;
+  filterDays: number; // Liczba dni wstecz dla filtra daty zamówienia
 }
 
 export class SchucoScraper {
@@ -36,6 +37,7 @@ export class SchucoScraper {
       headless: process.env.SCHUCO_HEADLESS === 'true' || false,
       downloadPath: process.env.SCHUCO_DOWNLOAD_PATH || path.join(process.cwd(), 'downloads', 'schuco'),
       timeout: 120000, // Increased from 60s to 120s - Schuco pages are slow
+      filterDays: 90, // Domyślnie 90 dni wstecz
       ...config,
     };
 
@@ -227,7 +229,7 @@ export class SchucoScraper {
 
     logger.info('[SchucoScraper] Navigating to login page...');
     await this.page.goto(this.config.baseUrl, {
-      waitUntil: 'networkidle2', // Like Python - wait for page to fully load
+      waitUntil: 'domcontentloaded', // Zmienione z networkidle2 - szybsze i bardziej niezawodne
       timeout: this.config.timeout,
     });
 
@@ -298,7 +300,7 @@ export class SchucoScraper {
 
     // Click and wait for navigation
     await Promise.all([
-      this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: this.config.timeout }),
+      this.page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: this.config.timeout }),
       submitButton.click(),
     ]);
 
@@ -328,7 +330,7 @@ export class SchucoScraper {
   }
 
   /**
-   * Navigate to orders page with date filter (6 months back) and retry logic
+   * Navigate to orders page with date filter and retry logic
    */
   private async navigateToOrders(): Promise<void> {
     if (!this.page) throw new Error('Browser not initialized');
@@ -342,19 +344,39 @@ export class SchucoScraper {
         logger.info(`[SchucoScraper] Orders URL: ${ordersUrl}`);
 
         await this.page.goto(ordersUrl, {
-          waitUntil: 'networkidle2',
+          waitUntil: 'domcontentloaded', // Szybsze niż networkidle2
           timeout: this.config.timeout,
         });
 
+        // Czekaj na załadowanie strony SPA - strona Schuco jest dynamiczna
+        // Próbuj kilku selektorów które mogą wskazywać że strona się załadowała
+        logger.info('[SchucoScraper] Waiting for page content to load (SPA)...');
+
+        try {
+          // Czekaj na jakikolwiek element tabeli lub głównego kontenera
+          await this.page.waitForSelector('table, [class*="orders"], [class*="table"], .ag-root, .MuiTable', {
+            timeout: 30000,
+            visible: true,
+          });
+          logger.info('[SchucoScraper] Found table/orders element');
+        } catch {
+          // Jeśli nie znaleziono tabeli, poczekaj na ogólne załadowanie
+          logger.info('[SchucoScraper] Table not found, waiting additional 5s for SPA to load...');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+
         // Verify we're on the orders page
         const pageContent = await this.page.content();
-        if (pageContent.includes('Zamówienia') || pageContent.includes('purchaseOrders')) {
+        if (pageContent.includes('Zamówienia') || pageContent.includes('purchaseOrders') || pageContent.includes('orders')) {
           logger.info('[SchucoScraper] Orders page loaded successfully');
 
           // Take screenshot for debugging
           await this.page.screenshot({
             path: path.join(this.config.downloadPath, 'orders-page.png'),
           });
+
+          // Ustaw filtr daty (domyślnie 90 dni wstecz)
+          await this.setDateFilter();
 
           return; // Success
         }
@@ -371,6 +393,220 @@ export class SchucoScraper {
         }
       }
     }
+  }
+
+  /**
+   * Set date filter to limit data and speed up loading
+   * Interakcja z filtrem "Data zamówienia" na stronie Schuco
+   * Używa wartości filterDays z konfiguracji (domyślnie 90 dni)
+   *
+   * Struktura filtra na stronie Schuco (custom dropdown, nie natywny select):
+   * - Dropdown "w dniu" z opcjami: "w dniu", "pomiędzy", "nie w dniu", "przed", "w dniu lub przed", "po"
+   * - Input daty w formacie YYYY-MM-DD
+   * - Filtr stosuje się automatycznie po zmianie
+   */
+  private async setDateFilter(): Promise<void> {
+    if (!this.page) throw new Error('Browser not initialized');
+
+    try {
+      const filterDays = this.config.filterDays;
+      logger.info(`[SchucoScraper] Setting date filter to last ${filterDays} days...`);
+
+      // Oblicz datę X dni temu
+      const filterDate = new Date();
+      filterDate.setDate(filterDate.getDate() - filterDays);
+
+      // Format daty - Schuco używa YYYY-MM-DD
+      const year = filterDate.getFullYear();
+      const month = String(filterDate.getMonth() + 1).padStart(2, '0');
+      const day = String(filterDate.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+
+      logger.info(`[SchucoScraper] Filter date: ${dateStr} (${filterDays} days back)`);
+
+      // Czekaj na załadowanie formularza filtrów
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Pobierz aktualną liczbę pozycji przed filtrowaniem
+      const initialCount = await this.getRecordCount();
+      logger.info(`[SchucoScraper] Initial record count: ${initialCount}`);
+
+      // KROK 1: Znajdź dropdown "Data zamówienia" i kliknij aby otworzyć
+      // Dropdown wyświetla "w dniu" i jest pierwszym dropdownem w sekcji filtrów
+      // Szukamy elementu z tekstem "w dniu" który jest klikalny
+
+      logger.info('[SchucoScraper] Looking for date filter dropdown...');
+
+      // Znajdź dropdown z tekstem "w dniu" - to jest custom dropdown
+      const dropdownClicked = await this.page.evaluate(() => {
+        // Szukaj wszystkich elementów które mogą być dropdownem
+        const elements = Array.from(document.querySelectorAll('div, span, button'));
+        for (const el of elements) {
+          const text = el.textContent?.trim();
+          // Dropdown z "w dniu" w sekcji "Data zamówienia"
+          if (text === 'w dniu' && el.closest('[class*="filter"], [class*="header"], [class*="column"]')) {
+            (el as HTMLElement).click();
+            return true;
+          }
+        }
+        // Fallback - szukaj select elementu
+        const select = document.querySelector('select');
+        if (select) {
+          select.click();
+          return true;
+        }
+        return false;
+      });
+
+      if (dropdownClicked) {
+        logger.info('[SchucoScraper] Clicked dropdown to open options');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // KROK 2: Kliknij opcję "po" z rozwiniętej listy
+        const optionClicked = await this.page.evaluate(() => {
+          // Szukaj opcji "po" w otwartej liście
+          const options = Array.from(document.querySelectorAll('li, div[role="option"], span, div'));
+          for (const opt of options) {
+            const text = opt.textContent?.trim().toLowerCase();
+            if (text === 'po') {
+              (opt as HTMLElement).click();
+              return 'po';
+            }
+          }
+          // Zwróć dostępne opcje dla debugowania
+          const visibleOptions: string[] = [];
+          document.querySelectorAll('li, div[role="option"]').forEach(el => {
+            const t = el.textContent?.trim();
+            if (t && t.length < 30) visibleOptions.push(t);
+          });
+          return visibleOptions.join(', ') || 'no options found';
+        });
+
+        if (optionClicked === 'po') {
+          logger.info('[SchucoScraper] Selected option "po" from dropdown');
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        } else {
+          logger.warn(`[SchucoScraper] Could not select "po". Available: ${optionClicked}`);
+        }
+      } else {
+        logger.warn('[SchucoScraper] Could not find/click dropdown');
+      }
+
+      // Screenshot po wyborze z dropdown
+      await this.page.screenshot({
+        path: path.join(this.config.downloadPath, 'after-dropdown-select.png'),
+      });
+
+      // KROK 3: Znajdź i wypełnij pole daty
+      logger.info('[SchucoScraper] Looking for date input...');
+
+      // Znajdź input daty - szukaj po placeholder lub po położeniu obok dropdown
+      const dateInputFound = await this.page.evaluate((dateValue: string) => {
+        // Szukaj inputa z placeholderem zawierającym "dat" lub "Wybierz"
+        const inputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'));
+        for (const input of inputs) {
+          const inp = input as HTMLInputElement;
+          const placeholder = inp.placeholder?.toLowerCase() || '';
+          const value = inp.value || '';
+
+          // Input daty ma placeholder "Wybierz datę..." lub już zawiera datę
+          if (placeholder.includes('dat') ||
+              placeholder.includes('wybierz') ||
+              /^\d{4}-\d{2}-\d{2}$/.test(value) ||
+              /^\d{2}\.\d{2}\.\d{4}$/.test(value)) {
+            // Wyczyść i wpisz nową datę
+            inp.focus();
+            inp.select();
+            document.execCommand('selectAll');
+            document.execCommand('insertText', false, dateValue);
+            return true;
+          }
+        }
+        return false;
+      }, dateStr);
+
+      if (dateInputFound) {
+        logger.info(`[SchucoScraper] Date entered: ${dateStr}`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Wciśnij Enter aby zatwierdzić
+        await this.page.keyboard.press('Enter');
+        logger.info('[SchucoScraper] Pressed Enter to apply filter');
+      } else {
+        logger.warn('[SchucoScraper] Date input not found');
+      }
+
+      // KROK 4: Czekaj na załadowanie przefiltrowanych danych
+      logger.info('[SchucoScraper] Waiting for filtered data to load...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Czekaj na zniknięcie loadera jeśli jest
+      try {
+        await this.page.waitForFunction(
+          () => !document.body.innerText.includes('Ładowanie danych'),
+          { timeout: 60000 }
+        );
+      } catch {
+        logger.info('[SchucoScraper] No loading indicator or timeout');
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Sprawdź nową liczbę rekordów
+      const filteredCount = await this.getRecordCount();
+      logger.info(`[SchucoScraper] Record count after filter: ${initialCount} -> ${filteredCount}`);
+
+      if (filteredCount > 0 && filteredCount < initialCount) {
+        logger.info(`[SchucoScraper] Filter applied successfully! Reduced from ${initialCount} to ${filteredCount}`);
+      } else if (filteredCount === initialCount) {
+        logger.warn('[SchucoScraper] Record count unchanged - filter may not have been applied');
+      }
+
+      // Screenshot po ustawieniu filtra
+      await this.page.screenshot({
+        path: path.join(this.config.downloadPath, 'after-date-filter.png'),
+      });
+
+    } catch (error) {
+      logger.warn(`[SchucoScraper] Failed to set date filter: ${(error as Error).message}`);
+      logger.info('[SchucoScraper] Proceeding without date filter...');
+
+      try {
+        await this.page?.screenshot({
+          path: path.join(this.config.downloadPath, 'date-filter-error.png'),
+        });
+      } catch {
+        // Ignoruj błąd screenshota
+      }
+    }
+  }
+
+  /**
+   * Pobierz aktualną liczbę rekordów z tabeli
+   * Na stronie Schuco jest tekst "1734 poz." pokazujący liczbę
+   */
+  private async getRecordCount(): Promise<number> {
+    if (!this.page) return 0;
+
+    try {
+      const countText = await this.page.evaluate(() => {
+        // Szukaj tekstu z liczbą pozycji, np. "1734 poz."
+        const bodyText = document.body.innerText;
+        const match = bodyText.match(/(\d+)\s*poz\./);
+        return match ? match[1] : null;
+      });
+
+      if (countText) {
+        const count = parseInt(countText, 10);
+        if (!isNaN(count)) {
+          return count;
+        }
+      }
+    } catch (error) {
+      logger.warn(`[SchucoScraper] Could not get record count: ${(error as Error).message}`);
+    }
+
+    return 0;
   }
 
   /**
@@ -530,14 +766,15 @@ export class SchucoScraper {
       logger.error(`[SchucoScraper] ❌ Scrape failed after ${duration}ms:`, error);
       throw error;
     } finally {
-      await this.cleanup();
+      await this.close();
     }
   }
 
   /**
    * Clean up browser resources with timeout
+   * Public method to allow external cancellation
    */
-  private async cleanup(): Promise<void> {
+  async close(): Promise<void> {
     if (this.browser) {
       logger.info('[SchucoScraper] Closing browser...');
       try {

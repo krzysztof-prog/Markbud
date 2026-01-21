@@ -454,10 +454,14 @@ export class DeliveryRepository {
 
     // Pobierz zlecenia bez aktywnej dostawy
     // (wykluczamy zlecenia przypisane do soft-deleted dostaw)
+    // UWAGA: Wykluczamy zlecenia ze statusem "on_hold" (Wstrzymane) - nie powinny być widoczne w kalendarzu
     const unassignedOrders = await this.prisma.order.findMany({
       where: {
         archivedAt: null,
         status: { notIn: ['archived'] },
+        // Wyklucz zlecenia wstrzymane (on_hold) z kalendarza dostaw
+        // Używamy NOT + equals bo chcemy wykluczyć tylko 'on_hold' a null jest OK
+        NOT: { manualStatus: 'on_hold' },
         OR: [
           // Zlecenia bez żadnych powiązań
           {

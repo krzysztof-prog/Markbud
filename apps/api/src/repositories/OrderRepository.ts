@@ -66,6 +66,8 @@ export class OrderRepository {
           deliveredGlassCount: true,
           glassOrderStatus: true,
           okucDemandStatus: true,
+          manualStatus: true,
+          manualStatusSetAt: true,
           createdAt: true,
           archivedAt: true,
           productionDate: true,

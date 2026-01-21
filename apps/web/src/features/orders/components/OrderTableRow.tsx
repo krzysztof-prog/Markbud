@@ -13,7 +13,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Check, X, Pencil } from 'lucide-react';
+import { Check, X, Pencil, MoreVertical, Ban, Clock, XCircle, CircleOff } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { formatGrosze, formatCenty, centyToEur, type Grosze, type Centy } from '@/lib/money';
 import type { SchucoDeliveryLink } from '@/types';
@@ -51,6 +58,9 @@ interface OrderTableRowProps {
   onOrderClick: (id: number, orderNumber: string) => void;
   onSchucoStatusClick: (orderNumber: string, schucoLinks: SchucoDeliveryLink[]) => void;
   onGlassDiscrepancyClick?: (orderNumber: string) => void;
+
+  // Manual status callback
+  onManualStatusChange?: (orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => void;
 }
 
 // ================================
@@ -91,6 +101,7 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
   onOrderClick,
   onSchucoStatusClick,
   onGlassDiscrepancyClick,
+  onManualStatusChange,
 }) => {
   const isEditing = editingCell?.orderId === order.id;
 
@@ -101,17 +112,139 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
       const alignClass = align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left';
 
       switch (column.id) {
-        case 'orderNumber':
+        case 'status': {
+          // Status ręczny ma priorytet nad statusem systemowym
+          let statusLabel = '';
+          let statusColorClass = '';
+
+          // Najpierw sprawdź status ręczny
+          if (order.manualStatus) {
+            switch (order.manualStatus) {
+              case 'do_not_cut':
+                statusLabel = 'NIE CIĄĆ';
+                statusColorClass = 'bg-yellow-200 text-yellow-800 font-semibold';
+                break;
+              case 'cancelled':
+                statusLabel = 'Anulowane';
+                statusColorClass = 'bg-red-200 text-red-800 font-semibold';
+                break;
+              case 'on_hold':
+                statusLabel = 'Wstrzymane';
+                statusColorClass = 'bg-orange-200 text-orange-800 font-semibold';
+                break;
+            }
+          } else {
+            // Standardowy status systemowy
+            const orderStatus = order.status || 'new';
+            switch (orderStatus) {
+              case 'new':
+                statusLabel = 'Nowe';
+                statusColorClass = 'bg-slate-100 text-slate-600';
+                break;
+              case 'in_progress':
+                statusLabel = 'W realizacji';
+                statusColorClass = 'bg-blue-100 text-blue-700';
+                break;
+              case 'completed':
+                statusLabel = 'Zakończone';
+                statusColorClass = 'bg-green-100 text-green-700';
+                break;
+              case 'archived':
+                statusLabel = 'Archiwum';
+                statusColorClass = 'bg-gray-200 text-gray-600';
+                break;
+              default:
+                statusLabel = orderStatus;
+                statusColorClass = 'bg-slate-100 text-slate-600';
+            }
+          }
+
           return (
-            <td key={column.id} className={`px-4 py-3 font-mono font-medium ${alignClass}`}>
-              <button
-                onClick={() => onOrderClick(order.id, order.orderNumber)}
-                className="text-blue-600 hover:text-blue-800 hover:underline"
-              >
-                {order.orderNumber}
-              </button>
+            <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
+              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${statusColorClass}`}>
+                {statusLabel}
+              </span>
             </td>
           );
+        }
+
+        case 'orderNumber': {
+          // Ikona statusu manualnego przy numerze zlecenia
+          const getManualStatusIcon = () => {
+            switch (order.manualStatus) {
+              case 'do_not_cut':
+                return <Ban className="h-4 w-4 text-yellow-600" />;
+              case 'cancelled':
+                return <XCircle className="h-4 w-4 text-red-600" />;
+              case 'on_hold':
+                return <Clock className="h-4 w-4 text-orange-600" />;
+              default:
+                return null;
+            }
+          };
+
+          const manualStatusIcon = getManualStatusIcon();
+
+          return (
+            <td key={column.id} className={`px-4 py-3 font-mono font-medium ${alignClass}`}>
+              <div className="flex items-center gap-1">
+                {/* Dropdown menu dla statusu manualnego */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="p-1 hover:bg-slate-100 rounded transition-colors"
+                      title="Zmień status"
+                    >
+                      {manualStatusIcon || <MoreVertical className="h-4 w-4 text-slate-400" />}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48">
+                    <DropdownMenuItem
+                      onClick={() => onManualStatusChange?.(order.id, 'do_not_cut')}
+                      className={order.manualStatus === 'do_not_cut' ? 'bg-yellow-50' : ''}
+                    >
+                      <Ban className="h-4 w-4 mr-2 text-yellow-600" />
+                      <span>NIE CIĄĆ</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => onManualStatusChange?.(order.id, 'cancelled')}
+                      className={order.manualStatus === 'cancelled' ? 'bg-red-50' : ''}
+                    >
+                      <XCircle className="h-4 w-4 mr-2 text-red-600" />
+                      <span>Anulowane</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => onManualStatusChange?.(order.id, 'on_hold')}
+                      className={order.manualStatus === 'on_hold' ? 'bg-orange-50' : ''}
+                    >
+                      <Clock className="h-4 w-4 mr-2 text-orange-600" />
+                      <span>Wstrzymane</span>
+                    </DropdownMenuItem>
+                    {order.manualStatus && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => onManualStatusChange?.(order.id, null)}
+                        >
+                          <CircleOff className="h-4 w-4 mr-2 text-slate-400" />
+                          <span>Usuń status</span>
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Numer zlecenia - klikalny */}
+                <button
+                  onClick={() => onOrderClick(order.id, order.orderNumber)}
+                  className="text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  {order.orderNumber}
+                </button>
+              </div>
+            </td>
+          );
+        }
 
         case 'pvcDelivery': {
           const schucoDeliveryWeek = getEarliestSchucoDelivery(order.schucoLinks);
@@ -447,27 +580,23 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
             </td>
           );
 
-        case 'orderStatus': {
+        case 'schucoStatus': {
+          // Status dostawy profili Schuco (z systemu Schuco)
           const schucoStatus = aggregateSchucoStatus(order.schucoLinks);
-          const displayStatus = schucoStatus || order.status || '-';
-          const hasStatusLinks = schucoStatus !== '';
+          const hasSchucoLinks = schucoStatus !== '';
 
           return (
             <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
-              {displayStatus !== '-' ? (
+              {hasSchucoLinks ? (
                 <span
-                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                    hasStatusLinks
-                      ? `${getSchucoStatusColor(schucoStatus)} cursor-pointer hover:opacity-80`
-                      : 'bg-slate-100 text-slate-600'
-                  }`}
+                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getSchucoStatusColor(schucoStatus)} cursor-pointer hover:opacity-80`}
                   onClick={() => {
-                    if (hasStatusLinks && order.schucoLinks) {
+                    if (order.schucoLinks) {
                       onSchucoStatusClick(order.orderNumber, order.schucoLinks);
                     }
                   }}
                 >
-                  {displayStatus}
+                  {schucoStatus}
                 </span>
               ) : (
                 <span className="text-slate-400">-</span>
@@ -561,11 +690,36 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           );
       }
     },
-    [order, isEditing, editingCell, editValue, setEditValue, startEdit, cancelEdit, saveEdit, eurRate, onOrderClick, onSchucoStatusClick, onGlassDiscrepancyClick]
+    [order, isEditing, editingCell, editValue, setEditValue, startEdit, cancelEdit, saveEdit, eurRate, onOrderClick, onSchucoStatusClick, onGlassDiscrepancyClick, onManualStatusChange]
   );
 
+  // Wyróżnienie wiersza w zależności od statusu
+  // Priorytet: manualStatus > completed > standardowy
+  const getRowBgClass = () => {
+    // Statusy manualne mają najwyższy priorytet
+    switch (order.manualStatus) {
+      case 'do_not_cut':
+        // NIE CIĄĆ - żółte tło
+        return 'bg-yellow-100 hover:bg-yellow-200';
+      case 'cancelled':
+        // Anulowane - czerwone tło
+        return 'bg-red-100 hover:bg-red-200';
+      case 'on_hold':
+        // Wstrzymane - pomarańczowe tło
+        return 'bg-orange-100 hover:bg-orange-200';
+      default:
+        // Standardowe kolorowanie
+        if (order.status === 'completed') {
+          return 'bg-green-50 hover:bg-green-100';
+        }
+        return index % 2 === 0
+          ? 'bg-white hover:bg-slate-100'
+          : 'bg-slate-50 hover:bg-slate-100';
+    }
+  };
+
   return (
-    <tr className={`border-t hover:bg-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
+    <tr className={`border-t ${getRowBgClass()}`}>
       {visibleColumns.map((column) => renderCell(column))}
     </tr>
   );
