@@ -181,9 +181,16 @@ export class CenyWatcher implements IFileWatcher {
 
       // Loguj wynik w zależności od statusu i emituj eventy
       switch (result.autoImportStatus) {
-        case 'success':
+        case 'success': {
           logger.info(`   ✅ Zaimportowano cenę z PDF - przypisano do zlecenia ${orderNumber}`);
-          await archiveFile(filePath);
+          const archivedPath = await archiveFile(filePath);
+          // Zaktualizuj filepath w bazie na nową lokalizację w archiwum
+          if (archivedPath) {
+            await this.prisma.fileImport.update({
+              where: { id: fileImport.id },
+              data: { filepath: archivedPath },
+            });
+          }
           // Emituj event o przypisanej cenie
           emitPriceImported({
             filename,
@@ -191,10 +198,18 @@ export class CenyWatcher implements IFileWatcher {
             message: result.autoImportMessage || 'Cena przypisana do zlecenia',
           });
           break;
+        }
 
-        case 'pending_order':
+        case 'pending_order': {
           logger.info(`   ⏳ Cena zapisana jako oczekująca - zlecenie ${orderNumber} nie istnieje jeszcze`);
-          await archiveFile(filePath);
+          const archivedPathPending = await archiveFile(filePath);
+          // Zaktualizuj filepath w bazie na nową lokalizację w archiwum
+          if (archivedPathPending) {
+            await this.prisma.fileImport.update({
+              where: { id: fileImport.id },
+              data: { filepath: archivedPathPending },
+            });
+          }
           // Emituj event o oczekującej cenie
           emitPricePending({
             filename,
@@ -202,6 +217,7 @@ export class CenyWatcher implements IFileWatcher {
             message: result.autoImportMessage || 'Cena oczekuje na zlecenie',
           });
           break;
+        }
 
         case 'warning':
           logger.warn(`   ⚠️ ${result.autoImportError || 'Ostrzeżenie podczas importu'}`);

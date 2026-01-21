@@ -58,8 +58,9 @@ export function formatDeliveryNumber(date: Date, deliveryNumber: DeliveryNumber)
 
 /**
  * Archiwizuje pojedynczy plik (przenosi do _archiwum w tym samym folderze)
+ * @returns Nowa ścieżka do pliku w archiwum lub null jeśli archiwizacja się nie powiodła
  */
-export async function archiveFile(filePath: string): Promise<void> {
+export async function archiveFile(filePath: string): Promise<string | null> {
   try {
     const directory = path.dirname(filePath);
     const filename = path.basename(filePath);
@@ -76,10 +77,12 @@ export async function archiveFile(filePath: string): Promise<void> {
     // Przenieś plik do archiwum
     await rename(filePath, archiveDestination);
     logger.info(`   Zarchiwizowano plik: ${filename} → _archiwum/`);
+    return archiveDestination;
   } catch (error) {
     logger.warn(
       `   Nie udało się zarchiwizować pliku ${filePath}: ${error instanceof Error ? error.message : 'Nieznany błąd'}`
     );
+    return null;
   }
 }
 

@@ -298,6 +298,7 @@ export class OkucStockService {
 
   /**
    * Importuj stany magazynowe z rozwiazywaniem konfliktow
+   * Cala operacja wykonywana w transakcji dla unikniecia race conditions
    */
   async importStock(
     items: ImportStockItem[],
@@ -315,97 +316,102 @@ export class OkucStockService {
       errors: [],
     };
 
-    for (const item of items) {
-      try {
-        // Walidacja wymaganych pol
-        if (!item.articleId || !item.warehouseType || item.currentQuantity === undefined) {
-          results.errors.push({
-            articleId: item.articleId || 'UNKNOWN',
-            error: 'Brak numeru artykulu, typu magazynu lub stanu',
-          });
-          continue;
-        }
-
-        // Znajdz artykul
-        const article = await prisma.okucArticle.findFirst({
-          where: { articleId: item.articleId, deletedAt: null },
-        });
-
-        if (!article) {
-          results.errors.push({
-            articleId: item.articleId,
-            error: 'Artykul nie istnieje',
-          });
-          continue;
-        }
-
-        // Sprawdz czy stan istnieje
-        const existingStock = await prisma.okucStock.findFirst({
-          where: {
-            articleId: article.id,
-            warehouseType: item.warehouseType,
-            subWarehouse: item.subWarehouse || null,
-          },
-        });
-
-        if (existingStock) {
-          // Obsluz konflikt
-          if (conflictResolution === 'skip') {
-            results.skipped++;
+    // Wykonaj caly import w transakcji aby uniknac race conditions
+    await prisma.$transaction(async (tx) => {
+      for (const item of items) {
+        try {
+          // Walidacja wymaganych pol
+          if (!item.articleId || !item.warehouseType || item.currentQuantity === undefined) {
+            results.errors.push({
+              articleId: item.articleId || 'UNKNOWN',
+              error: 'Brak numeru artykulu, typu magazynu lub stanu',
+            });
             continue;
-          } else if (conflictResolution === 'selective') {
-            // Sprawdz czy ten konflikt zostal wybrany
-            const isSelected = selectedConflicts.some(
-              (c) =>
-                c.articleId === item.articleId &&
-                c.warehouseType === item.warehouseType &&
-                (c.subWarehouse || null) === (item.subWarehouse || null)
-            );
-            if (!isSelected) {
-              results.skipped++;
-              continue;
-            }
           }
-          // conflictResolution === 'overwrite' lub selective z wyborem -> aktualizuj
 
-          await prisma.okucStock.update({
-            where: { id: existingStock.id },
-            data: {
-              currentQuantity: item.currentQuantity,
-              minStock: item.minStock ?? existingStock.minStock,
-              maxStock: item.maxStock ?? existingStock.maxStock,
-              version: { increment: 1 },
-              updatedById: userId,
-            },
+          // Znajdz artykul
+          const article = await tx.okucArticle.findFirst({
+            where: { articleId: item.articleId, deletedAt: null },
           });
 
-          results.imported++;
-        } else {
-          // Stworz nowa pozycje stanu
-          await prisma.okucStock.create({
-            data: {
+          if (!article) {
+            results.errors.push({
+              articleId: item.articleId,
+              error: 'Artykul nie istnieje',
+            });
+            continue;
+          }
+
+          // Uzyj upsert zamiast check-then-update dla unikniecia race condition
+          const existingStock = await tx.okucStock.findFirst({
+            where: {
               articleId: article.id,
               warehouseType: item.warehouseType,
               subWarehouse: item.subWarehouse || null,
-              currentQuantity: item.currentQuantity,
-              reservedQty: 0,
-              minStock: item.minStock || null,
-              maxStock: item.maxStock || null,
-              version: 0,
-              updatedById: userId,
             },
           });
 
-          results.imported++;
+          if (existingStock) {
+            // Obsluz konflikt
+            if (conflictResolution === 'skip') {
+              results.skipped++;
+              continue;
+            } else if (conflictResolution === 'selective') {
+              // Sprawdz czy ten konflikt zostal wybrany
+              const isSelected = selectedConflicts.some(
+                (c) =>
+                  c.articleId === item.articleId &&
+                  c.warehouseType === item.warehouseType &&
+                  (c.subWarehouse || null) === (item.subWarehouse || null)
+              );
+              if (!isSelected) {
+                results.skipped++;
+                continue;
+              }
+            }
+            // conflictResolution === 'overwrite' lub selective z wyborem -> aktualizuj
+
+            await tx.okucStock.update({
+              where: { id: existingStock.id },
+              data: {
+                currentQuantity: item.currentQuantity,
+                minStock: item.minStock ?? existingStock.minStock,
+                maxStock: item.maxStock ?? existingStock.maxStock,
+                version: { increment: 1 },
+                updatedById: userId,
+              },
+            });
+
+            results.imported++;
+          } else {
+            // Stworz nowa pozycje stanu
+            await tx.okucStock.create({
+              data: {
+                articleId: article.id,
+                warehouseType: item.warehouseType,
+                subWarehouse: item.subWarehouse || null,
+                currentQuantity: item.currentQuantity,
+                reservedQty: 0,
+                minStock: item.minStock || null,
+                maxStock: item.maxStock || null,
+                version: 0,
+                updatedById: userId,
+              },
+            });
+
+            results.imported++;
+          }
+        } catch (error) {
+          results.errors.push({
+            articleId: item.articleId || 'UNKNOWN',
+            error: error instanceof Error ? error.message : 'Nieznany blad',
+          });
+          logger.warn('Failed to import stock item', { articleId: item.articleId, error });
         }
-      } catch (error) {
-        results.errors.push({
-          articleId: item.articleId || 'UNKNOWN',
-          error: error instanceof Error ? error.message : 'Nieznany blad',
-        });
-        logger.warn('Failed to import stock item', { articleId: item.articleId, error });
       }
-    }
+    }, {
+      timeout: 60000, // 60s timeout dla duzych importow
+    });
 
     logger.info('Stock import completed', { imported: results.imported, skipped: results.skipped, errors: results.errors.length });
     return results;
@@ -425,6 +431,9 @@ export class OkucStockService {
       'Typ magazynu',
       'Podmagazyn',
       'Stan aktualny',
+      'Stan poczatkowy',
+      'Zuzycie od remanentu',
+      'Ilosc niepewna',
       'Zarezerwowane',
       'Dostepne',
       'Stan minimalny',
@@ -434,9 +443,16 @@ export class OkucStockService {
 
     const rows = stocks.map((stock) => {
       const article = stock.article;
+      if (!article) {
+        return null; // Pomiń rekordy bez artykułu
+      }
       const location = (article as { location?: { name: string } | null }).location;
       const available = stock.currentQuantity - stock.reservedQty;
       const belowMinimum = stock.minStock !== null && stock.currentQuantity < stock.minStock;
+      // Zuzycie od remanentu = stan poczatkowy - stan aktualny (jesli stan poczatkowy jest ustawiony)
+      const consumedSinceInitial = stock.initialQuantity !== null
+        ? stock.initialQuantity - stock.currentQuantity
+        : null;
 
       return [
         article.articleId,
@@ -447,6 +463,9 @@ export class OkucStockService {
           stock.subWarehouse === 'buffer' ? 'Bufor' :
             stock.subWarehouse === 'gabaraty' ? 'Gabaraty' : '',
         stock.currentQuantity,
+        stock.initialQuantity ?? '',
+        consumedSinceInitial ?? '',
+        stock.isQuantityUncertain ? 'TAK' : 'NIE',
         stock.reservedQty,
         available,
         stock.minStock ?? '',
@@ -455,9 +474,11 @@ export class OkucStockService {
       ];
     });
 
+    const validRows = rows.filter((row): row is NonNullable<typeof row> => row !== null);
+
     const csv = [
       headers.join(';'),
-      ...rows.map((row) => row.join(';')),
+      ...validRows.map((row) => row.join(';')),
     ].join('\n');
 
     return csv;
