@@ -18,7 +18,9 @@ import {
   Plus,
   X,
   Package,
+  ScanLine,
 } from 'lucide-react';
+import { CheckLabelsButton } from '@/features/label-checks';
 import {
   DraggableOrderWithContextMenu,
   UnassignedOrdersDropzone,
@@ -92,6 +94,7 @@ export function DeliveryDetailsDialog({
                 <FileText className="h-4 w-4 mr-2" />
                 {isDownloading ? 'Generuje...' : 'Protokol odbioru'}
               </Button>
+              <CheckLabelsButton deliveryId={delivery.id} />
             </>
           )}
           <Button variant="destructive" size="sm" onClick={() => onDelete(delivery)}>
