@@ -91,9 +91,14 @@ interface BackendCategorySummary {
   valuePln: number;
 }
 
+// AKROBUD ma dodatkowe pole valueEur
+interface BackendAkrobudSummary extends BackendCategorySummary {
+  valueEur: number;
+}
+
 interface BackendReportSummary {
   typowe: BackendCategorySummary;
-  akrobud: BackendCategorySummary;
+  akrobud: BackendAkrobudSummary;
   reszta: BackendCategorySummary;
   atypical: BackendCategorySummary & { notes: string | null };
   razem: BackendCategorySummary;
@@ -112,6 +117,7 @@ function mapBackendReportToFrontend(backend: BackendFullReport): ProductionRepor
     client: item.client || '',
     totalWindows: item.windows,
     totalSashes: item.sashes,
+    totalGlasses: item.units, // Backend zwraca units jako liczbę szkleń (z totalGlasses)
     valuePln: Math.round(item.valuePln * 100),
     valueEur: item.originalValueEur !== null && item.originalValueEur !== undefined
       ? Math.round(item.originalValueEur * 100)
@@ -199,9 +205,15 @@ function mapBackendSummaryToFrontend(backend: BackendReportSummary): ProductionR
 
   const razem = mapCategory(backend.razem);
 
+  // AKROBUD ma dodatkowe pole valueEur
+  const akrobudSummary: CategorySummary = {
+    ...mapCategory(backend.akrobud),
+    valueEur: backend.akrobud.valueEur, // wartość już w EUR (nie w centach)
+  };
+
   return {
     typowe: mapCategory(backend.typowe),
-    akrobud: mapCategory(backend.akrobud),
+    akrobud: akrobudSummary,
     reszta: mapCategory(backend.reszta),
     nietypowki: mapCategory(backend.atypical),
     razem,

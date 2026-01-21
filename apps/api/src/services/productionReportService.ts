@@ -77,6 +77,7 @@ export interface ReportSummary {
     units: number;
     sashes: number;
     valuePln: number;
+    valueEur: number; // suma EUR dla zleceń AKROBUD
   };
 
   // RESZTA = TYPOWE - AKROBUD
@@ -581,14 +582,11 @@ export class ProductionReportService {
   }
 
   /**
-   * Oblicz liczbę jednostek dla zlecenia
-   * (suma quantity ze wszystkich okien)
+   * Oblicz liczbę szkleń dla zlecenia
+   * Używa totalGlasses z bazy danych
    */
-  private calculateUnits(order: { windows?: Array<{ quantity: number }> }): number {
-    if (!order.windows || order.windows.length === 0) {
-      return 0;
-    }
-    return order.windows.reduce((sum, w) => sum + w.quantity, 0);
+  private calculateUnits(order: { totalGlasses?: number | null }): number {
+    return order.totalGlasses ?? 0;
   }
 
   /**
@@ -626,6 +624,7 @@ export class ProductionReportService {
       units: 0,
       sashes: 0,
       valuePln: 0,
+      valueEur: 0,
     };
 
     for (const item of items) {
@@ -642,6 +641,7 @@ export class ProductionReportService {
         akrobud.units += item.units;
         akrobud.sashes += item.sashes;
         akrobud.valuePln += item.valuePln;
+        akrobud.valueEur += item.valueEur ?? 0;
       }
     }
 

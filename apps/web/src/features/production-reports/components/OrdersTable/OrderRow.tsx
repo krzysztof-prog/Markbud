@@ -14,6 +14,7 @@ interface OrderData {
   client: string;
   totalWindows: number;
   totalSashes: number;
+  totalGlasses: number | null; // Liczba szkleń
   valuePln: number | null; // w groszach
   valueEur: number | null; // w centach
   deliveryId: number | null;
@@ -51,10 +52,9 @@ export const OrderRow: React.FC<OrderRowProps> = ({
   const displayValuePln = item?.overrideValuePln ?? order.valuePln;
   const displayValueEur = item?.overrideValueEur ?? order.valueEur; // EUR może mieć override
 
-  // Oblicz jednostki z okien (jeśli nie ma override)
+  // Oblicz szkleń z totalGlasses (wartość domyślna gdy brak override)
   function calculateUnits(ord: OrderData): number {
-    // Domyślnie jednostki = okna (może być nadpisane)
-    return ord.totalWindows;
+    return ord.totalGlasses ?? 0;
   }
 
   return (
@@ -93,7 +93,7 @@ export const OrderRow: React.FC<OrderRowProps> = ({
         />
       </TableCell>
 
-      {/* Jednostki (edytowalne) */}
+      {/* Szkleń (edytowalne) */}
       <TableCell className="w-[60px]">
         <EditableCell
           value={displayUnits}

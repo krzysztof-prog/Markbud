@@ -23,6 +23,7 @@ interface OrderData {
   client: string;
   totalWindows: number;
   totalSashes: number;
+  totalGlasses: number | null; // Liczba szkleń
   valuePln: number | null;
   valueEur: number | null;
   deliveryId: number | null;
@@ -144,7 +145,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                 <TableHead className="text-left">Klient</TableHead>
                 <TableHead className="w-[80px] text-center">Data prod.</TableHead>
                 <TableHead className="w-[60px] text-center">Okna</TableHead>
-                <TableHead className="w-[60px] text-center">Jedn.</TableHead>
+                <TableHead className="w-[60px] text-center">Szkleń</TableHead>
                 <TableHead className="w-[60px] text-center">Skrzyd.</TableHead>
                 <TableHead className="w-[110px] text-right pr-2">PLN</TableHead>
                 <TableHead className="w-[110px] text-right pr-2">EUR</TableHead>

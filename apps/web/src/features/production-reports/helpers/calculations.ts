@@ -10,6 +10,7 @@ interface OrderData {
   client: string;
   totalWindows: number;
   totalSashes: number;
+  totalGlasses?: number | null; // Liczba szkleń
   valuePln: number | null;
   deliveryId: number | null;
 }
@@ -28,7 +29,7 @@ export function getEffectiveValues(
 } {
   return {
     windows: item?.overrideWindows ?? order.totalWindows,
-    units: item?.overrideUnits ?? order.totalWindows, // Domyślnie jednostki = okna
+    units: item?.overrideUnits ?? order.totalGlasses ?? 0, // Domyślnie szkleń z totalGlasses
     sashes: item?.overrideSashes ?? order.totalSashes,
     valuePln: item?.overrideValuePln ?? order.valuePln ?? 0,
   };

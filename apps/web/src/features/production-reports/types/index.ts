@@ -65,6 +65,7 @@ export interface OrderData {
   client: string;
   totalWindows: number;
   totalSashes: number;
+  totalGlasses: number | null; // Liczba szkleń
   valuePln: number | null; // w groszach
   valueEur: number | null; // w centach
   deliveryId: number | null;
@@ -107,6 +108,7 @@ export interface CategorySummary {
   units: number;
   sashes: number;
   valuePln: number;
+  valueEur?: number; // opcjonalne - używane dla AKROBUD
   averagePerUnit: number | null; // null gdy units = 0
 }
 
