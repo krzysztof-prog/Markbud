@@ -82,11 +82,9 @@ export async function bugReportRoutes(fastify: FastifyInstance) {
           type: 'object',
           properties: {
             limit: {
-              type: 'integer',
-              minimum: 1,
-              maximum: 100,
-              default: 50,
-              description: 'Liczba ostatnich zgłoszeń do pobrania',
+              type: 'string',
+              pattern: '^[0-9]+$',
+              description: 'Liczba ostatnich zgłoszeń do pobrania (1-100, domyślnie 50)',
             },
           },
         },

@@ -1,8 +1,9 @@
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, GlassDeliveryItem } from '@prisma/client';
 import type {
   GlassDeliveryFilters,
   GlassDeliveryWithItems,
   GlassDeliveryWithItemsAndCount,
+  GroupedGlassDelivery,
   ImportSummary,
 } from './types.js';
 
@@ -13,10 +14,73 @@ export class GlassDeliveryQueryService {
   constructor(private prisma: PrismaClient) {}
 
   /**
+   * Find all glass deliveries grouped by customerOrderNumber + rackNumber
+   * Każdy unikalny customerOrderNumber pokazuje się jako osobny wiersz w tabeli
+   */
+  async findAllGrouped(filters?: GlassDeliveryFilters): Promise<GroupedGlassDelivery[]> {
+    const deliveries = await this.prisma.glassDelivery.findMany({
+      where: {
+        deliveryDate: {
+          gte: filters?.dateFrom ? new Date(filters.dateFrom) : undefined,
+          lte: filters?.dateTo ? new Date(filters.dateTo) : undefined,
+        },
+      },
+      include: {
+        items: true,
+      },
+      orderBy: { deliveryDate: 'desc' },
+    });
+
+    // Grupuj items po customerOrderNumber + rackNumber
+    const grouped = new Map<string, {
+      customerOrderNumber: string;
+      rackNumber: string;
+      deliveryDate: Date;
+      glassDeliveryId: number;
+      items: GlassDeliveryItem[];
+    }>();
+
+    for (const delivery of deliveries) {
+      for (const item of delivery.items) {
+        // Użyj customerOrderNumber z item, fallback na parent delivery
+        const customerOrderNumber = item.customerOrderNumber || delivery.customerOrderNumber;
+        // Użyj rackNumber z item, fallback na parent delivery
+        const rackNumber = item.rackNumber || delivery.rackNumber;
+
+        const key = `${customerOrderNumber}|${rackNumber}`;
+
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            customerOrderNumber,
+            rackNumber,
+            deliveryDate: delivery.deliveryDate,
+            glassDeliveryId: delivery.id,
+            items: [],
+          });
+        }
+        grouped.get(key)!.items.push(item);
+      }
+    }
+
+    // Konwertuj na tablicę i oblicz totalQuantity
+    const result: GroupedGlassDelivery[] = Array.from(grouped.values()).map(group => ({
+      ...group,
+      totalQuantity: group.items.reduce((sum, item) => sum + item.quantity, 0),
+    }));
+
+    // Sortuj po dacie dostawy (najnowsze pierwsze)
+    result.sort((a, b) => b.deliveryDate.getTime() - a.deliveryDate.getTime());
+
+    return result;
+  }
+
+  /**
    * Find all glass deliveries with optional date filtering
+   * Oblicza sumę szyb (totalQuantity) dla każdej dostawy
+   * @deprecated Use findAllGrouped for proper grouping by customerOrderNumber
    */
   async findAll(filters?: GlassDeliveryFilters): Promise<GlassDeliveryWithItemsAndCount[]> {
-    return this.prisma.glassDelivery.findMany({
+    const deliveries = await this.prisma.glassDelivery.findMany({
       where: {
         deliveryDate: {
           gte: filters?.dateFrom ? new Date(filters.dateFrom) : undefined,
@@ -31,6 +95,12 @@ export class GlassDeliveryQueryService {
       },
       orderBy: { deliveryDate: 'desc' },
     });
+
+    // Dodaj totalQuantity - sumę wszystkich quantity z items
+    return deliveries.map((delivery) => ({
+      ...delivery,
+      totalQuantity: delivery.items.reduce((sum, item) => sum + item.quantity, 0),
+    }));
   }
 
   /**

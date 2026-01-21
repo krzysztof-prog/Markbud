@@ -8,6 +8,7 @@ import { prisma } from '../index.js';
 import { PalletStockService } from '../services/palletStockService.js';
 import { PalletStockHandler } from '../handlers/palletStockHandler.js';
 import { verifyAuth } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/role-check.js';
 
 export const palletStockRoutes: FastifyPluginAsync = async (fastify) => {
   // Initialize service and handler
@@ -68,4 +69,18 @@ export const palletStockRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.put<{ Body: unknown }>('/alerts/config', {
     preHandler: verifyAuth,
   }, handler.updateAlertConfig.bind(handler));
+
+  // ============================================
+  // INITIAL STOCK CONFIG ROUTES
+  // ============================================
+
+  // GET /pallet-stock/initial - Pobierz stany początkowe
+  fastify.get('/initial', {
+    preHandler: verifyAuth,
+  }, handler.getInitialStocks.bind(handler));
+
+  // PUT /pallet-stock/initial - Ustaw stany początkowe (admin only)
+  fastify.put<{ Body: unknown }>('/initial', {
+    preHandler: [verifyAuth, requireAdmin],
+  }, handler.setInitialStocks.bind(handler));
 };

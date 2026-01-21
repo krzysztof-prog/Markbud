@@ -6,6 +6,7 @@ import type {
   GlassDeliveryFilters,
   GlassDeliveryWithItems,
   GlassDeliveryWithItemsAndCount,
+  GroupedGlassDelivery,
   ImportSummary,
   RematchResult,
 } from './types.js';
@@ -40,9 +41,10 @@ export class GlassDeliveryService {
 
   /**
    * Import glass delivery from CSV file content
+   * Akceptuje string (UTF-8) lub Buffer (CP1250 - automatycznie konwertowany)
    */
   async importFromCsv(
-    fileContent: string,
+    fileContent: string | Buffer,
     filename: string,
     deliveryDate?: Date
   ): Promise<GlassDeliveryWithItems> {
@@ -68,9 +70,18 @@ export class GlassDeliveryService {
   // ========== Query Operations ==========
 
   /**
-   * Find all glass deliveries with optional date filtering
+   * Find all glass deliveries grouped by customerOrderNumber + rackNumber
+   * Każdy unikalny customerOrderNumber pokazuje się jako osobny wiersz w tabeli
    */
-  async findAll(filters?: GlassDeliveryFilters): Promise<GlassDeliveryWithItemsAndCount[]> {
+  async findAll(filters?: GlassDeliveryFilters): Promise<GroupedGlassDelivery[]> {
+    return this.queryService.findAllGrouped(filters);
+  }
+
+  /**
+   * Find all glass deliveries (legacy - not grouped)
+   * @deprecated Use findAll for proper grouping by customerOrderNumber
+   */
+  async findAllLegacy(filters?: GlassDeliveryFilters): Promise<GlassDeliveryWithItemsAndCount[]> {
     return this.queryService.findAll(filters);
   }
 

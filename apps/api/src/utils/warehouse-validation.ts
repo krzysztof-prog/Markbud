@@ -57,8 +57,12 @@ export async function validateSufficientStock(
   logger.info('Validating warehouse stock for order', { orderId });
 
   // Get order requirements (profile × color × beams)
+  // Pobieramy tylko requirements z colorId (kolory Akrobud), nie prywatne
   const requirements = await prisma.orderRequirement.findMany({
-    where: { orderId },
+    where: {
+      orderId,
+      colorId: { not: null }, // Tylko kolory Akrobud, nie prywatne
+    },
     select: {
       profileId: true,
       colorId: true,
@@ -77,10 +81,16 @@ export async function validateSufficientStock(
     return true; // No requirements = no validation needed
   }
 
+  // Filtrujemy requirements które mają colorId (już przefiltrowane w query, ale TS wymaga)
+  const validRequirements = requirements.filter(
+    (req): req is typeof req & { colorId: number; color: NonNullable<typeof req.color> } =>
+      req.colorId !== null && req.color !== null
+  );
+
   // Get current warehouse stock for required profiles/colors
   const stocks = await prisma.warehouseStock.findMany({
     where: {
-      OR: requirements.map((req) => ({
+      OR: validRequirements.map((req) => ({
         profileId: req.profileId,
         colorId: req.colorId,
       })),
@@ -89,12 +99,6 @@ export async function validateSufficientStock(
       profileId: true,
       colorId: true,
       currentStockBeams: true,
-      profile: {
-        select: { id: true, number: true },
-      },
-      color: {
-        select: { id: true, code: true },
-      },
     },
   });
 
@@ -102,45 +106,26 @@ export async function validateSufficientStock(
   const stockMap = new Map(
     stocks.map((stock) => [
       `${stock.profileId}_${stock.colorId}`,
-      {
-        available: stock.currentStockBeams,
-        profileNumber: stock.profile.number,
-        colorCode: stock.color.code,
-      },
+      stock.currentStockBeams,
     ])
   );
 
   // Check for shortages
   const shortages: MaterialShortage[] = [];
 
-  for (const req of requirements) {
+  for (const req of validRequirements) {
     const key = `${req.profileId}_${req.colorId}`;
-    const stock = stockMap.get(key);
+    const available = stockMap.get(key) ?? 0;
 
-    if (!stock) {
-      // Stock record doesn't exist - critical error
+    if (available < req.beamsCount) {
       shortages.push({
         profileId: req.profileId,
         profileNumber: req.profile.number,
         colorId: req.colorId,
         colorCode: req.color.code,
         required: req.beamsCount,
-        available: 0,
-        shortage: req.beamsCount,
-      });
-      continue;
-    }
-
-    // Check if stock is sufficient
-    if (stock.available < req.beamsCount) {
-      shortages.push({
-        profileId: req.profileId,
-        profileNumber: stock.profileNumber,
-        colorId: req.colorId,
-        colorCode: stock.colorCode,
-        required: req.beamsCount,
-        available: stock.available,
-        shortage: req.beamsCount - stock.available,
+        available,
+        shortage: req.beamsCount - available,
       });
     }
   }

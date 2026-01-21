@@ -5,6 +5,14 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { logger } from '../../utils/logger.js';
 
+export interface StockSummary {
+  warehouseType: string;
+  subWarehouse: string | null;
+  totalArticles: number;
+  totalQuantity: number;
+  belowMinCount: number;
+}
+
 export class OkucStockRepository {
   constructor(private prisma: PrismaClient) {}
 
@@ -175,7 +183,7 @@ export class OkucStockRepository {
         articleId_warehouseType_subWarehouse: {
           articleId,
           warehouseType,
-          subWarehouse: subWarehouse ?? null,
+          subWarehouse: (subWarehouse ?? null) as string,
         },
       },
       include: {
@@ -326,14 +334,6 @@ export class OkucStockRepository {
       },
     });
 
-    interface StockSummary {
-      warehouseType: string;
-      subWarehouse: string | null;
-      totalArticles: number;
-      totalQuantity: number;
-      belowMinCount: number;
-    }
-
     // Group by warehouse
     const summary = stocks.reduce((acc, stock) => {
       const key = `${stock.warehouseType}-${stock.subWarehouse || 'main'}`;
@@ -418,7 +418,7 @@ export class OkucStockRepository {
         articleId_warehouseType_subWarehouse: {
           articleId,
           warehouseType,
-          subWarehouse: subWarehouse ?? null,
+          subWarehouse: (subWarehouse ?? null) as string,
         },
       },
       create: {

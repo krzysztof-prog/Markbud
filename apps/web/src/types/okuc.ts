@@ -125,6 +125,12 @@ export interface OkucArticle {
   locationId?: ID | null;         // ID lokalizacji magazynowej
   location?: OkucLocation | null; // Powiązana lokalizacja
 
+  // Zastępstwa artykułów (wygaszanie)
+  isPhaseOut?: boolean;                           // Artykuł wygaszany - nie zamawiaj
+  replacedByArticleId?: ID | null;                // FK do artykułu zastępującego
+  replacedByArticle?: OkucArticleBasic | null;    // Powiązany artykuł zastępujący
+  demandTransferredAt?: Timestamp | null;         // Data przeniesienia zapotrzebowania
+
   // Audit
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -134,6 +140,13 @@ export interface OkucArticle {
   stocks?: OkucStock[];
   proportionsSource?: OkucProportion[];  // Proporcje gdzie ten artykuł jest źródłem
   proportionsTarget?: OkucProportion[];  // Proporcje gdzie ten artykuł jest celem
+}
+
+/** Podstawowe dane artykułu (dla relacji) */
+export interface OkucArticleBasic {
+  id: ID;
+  articleId: string;
+  name: string;
 }
 
 /** Alias artykułu - mapowanie starych numerów na nowe */
@@ -178,6 +191,8 @@ export interface OkucStock {
   warehouseType: WarehouseType;   // 'pvc' | 'alu'
   subWarehouse?: SubWarehouse;    // tylko dla PVC: 'production' | 'buffer' | 'gabaraty'
   currentQuantity: number;        // Aktualny stan
+  initialQuantity?: number;       // Stan początkowy (remanent)
+  isQuantityUncertain: boolean;   // Czy ilość jest niepewna (szare tło w raporcie)
   reservedQty: number;            // Zarezerwowana ilość
   minStock?: number;              // Minimalny stan
   maxStock?: number;              // Maksymalny stan
@@ -192,6 +207,7 @@ export interface OkucStock {
   // Pola wyliczane (frontend)
   availableQty?: number;          // currentQuantity - reservedQty
   isCritical?: boolean;           // currentQuantity < minStock
+  consumedSinceInitial?: number;  // initialQuantity - currentQuantity (zużyte od remanentu)
 }
 
 // ============================================================================
@@ -720,4 +736,92 @@ export interface OkucDashboard {
   upcomingDemands: WeeklyDemandSummary[];
   activeOrders: OrderSummary[];
   recentHistory: OkucHistory[];
+}
+
+// ============================================================================
+// IMPORT ZAMÓWIEŃ Z XLSX
+// ============================================================================
+
+/** Pozycja z importowanego pliku XLSX */
+export interface ImportOrderItem {
+  articleId: string;
+  description?: string;
+  quantity: number;
+  shippingDate: string;  // ISO date string
+  priceEur: number;      // W eurocentach
+}
+
+/** Brakujący artykuł do utworzenia */
+export interface MissingArticle {
+  articleId: string;
+  description?: string;
+}
+
+/** Odpowiedź z parsowania XLSX */
+export interface ParsedOrderImport {
+  items: ImportOrderItem[];
+  missingArticles: MissingArticle[];
+  duplicateArticles: string[];
+}
+
+/** Dane do tworzenia brakującego artykułu */
+export interface MissingArticleToCreate {
+  articleId: string;
+  name: string;
+}
+
+/** Dane do zatwierdzenia importu zamówienia */
+export interface ConfirmOrderImportInput {
+  items: Array<{
+    articleId: string;
+    quantity: number;
+    priceEur: number;
+  }>;
+  expectedDeliveryDate: string;  // ISO date string
+  createMissingArticles: boolean;
+  missingArticlesToCreate?: MissingArticleToCreate[];
+}
+
+/** Odpowiedź z zatwierdzenia importu zamówienia */
+export interface ConfirmOrderImportResult {
+  order: {
+    id: number;
+    orderNumber: string;
+    itemsCount: number;
+    expectedDeliveryDate: string;
+  };
+  articlesCreated: number;
+  pricesUpdated: number;
+}
+
+// ============================================================================
+// REPLACEMENT (Zastępstwa artykułów)
+// ============================================================================
+
+/** Mapowanie zastępstwa artykułu - odpowiedź z API */
+export interface ArticleReplacement {
+  oldArticle: {
+    id: ID;
+    articleId: string;
+    name: string;
+    currentStock: number;
+  };
+  newArticle: {
+    id: ID;
+    articleId: string;
+    name: string;
+  } | null;
+  demandTransferredAt: Timestamp | null;
+  pendingDemandCount: number;
+}
+
+/** Dane do ustawienia zastępstwa artykułu */
+export interface SetReplacementInput {
+  oldArticleId: number;
+  newArticleId: number | null;
+}
+
+/** Odpowiedź z przeniesienia zapotrzebowania */
+export interface TransferDemandResult {
+  transferred: number;
 }

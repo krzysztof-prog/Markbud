@@ -48,6 +48,17 @@ export const patchOrderSchema = z.object({
   status: z.string().nullable().optional(),
 });
 
+// Manual status schema - do ręcznego ustawiania statusu zlecenia przez użytkownika
+// 'do_not_cut' - NIE CIĄĆ (żółte tło, okucia nie w zapotrzebowaniu)
+// 'cancelled' - Anulowane (czerwone tło, archiwizacja po 30 dniach, cofnij okucia z zapotrzebowania)
+// 'on_hold' - Wstrzymane (pomarańczowe tło)
+// null - brak ręcznego statusu (usunięcie statusu)
+export const manualStatusSchema = z.object({
+  manualStatus: z.enum(['do_not_cut', 'cancelled', 'on_hold']).nullable(),
+});
+
+export type ManualStatusInput = z.infer<typeof manualStatusSchema>;
+
 export const orderParamsSchema = idParamsSchema('order');
 
 export const orderQuerySchema = paginationQuerySchema.extend({
@@ -65,7 +76,7 @@ export const bulkUpdateStatusSchema = z.object({
   }),
   productionDate: z
     .string()
-    .datetime({ message: 'Nieprawidłowy format daty' })
+    .regex(/^\d{4}-\d{2}-\d{2}(T.*)?$/, { message: 'Nieprawidłowy format daty (oczekiwano YYYY-MM-DD)' })
     .optional()
     .refine(
       (date) => {

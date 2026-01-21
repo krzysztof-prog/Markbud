@@ -5,7 +5,7 @@ import { OrderService } from '../services/orderService.js';
 import { OrderHandler } from '../handlers/orderHandler.js';
 import { OrderArchiveService } from '../services/orderArchiveService.js';
 import { verifyAuth } from '../middleware/auth.js';
-import type { BulkUpdateStatusInput, ForProductionQuery, MonthlyProductionQuery } from '../validators/order.js';
+import type { BulkUpdateStatusInput, ForProductionQuery, MonthlyProductionQuery, ManualStatusInput } from '../validators/order.js';
 
 
 export const orderRoutes: FastifyPluginAsync = async (fastify) => {
@@ -81,6 +81,33 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Params: { id: string } }>('/:id/unarchive', {
     preHandler: verifyAuth,
   }, handler.unarchive.bind(handler));
+
+  // PATCH /api/orders/:id/manual-status - Ręczna zmiana statusu (NIE CIĄĆ, Anulowane, Wstrzymane)
+  fastify.patch<{ Params: { id: string }; Body: ManualStatusInput }>('/:id/manual-status', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Update manual status of an order (do_not_cut, cancelled, on_hold, or null to clear)',
+      tags: ['orders'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string', description: 'Order ID' },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['manualStatus'],
+        properties: {
+          manualStatus: {
+            type: ['string', 'null'],
+            enum: ['do_not_cut', 'cancelled', 'on_hold', null],
+            description: 'Manual status: do_not_cut (NIE CIĄĆ), cancelled (Anulowane), on_hold (Wstrzymane), null (clear)',
+          },
+        },
+      },
+    },
+  }, handler.updateManualStatus.bind(handler));
 
   fastify.post<{ Body: BulkUpdateStatusInput }>('/bulk-update-status', {
     preHandler: verifyAuth,

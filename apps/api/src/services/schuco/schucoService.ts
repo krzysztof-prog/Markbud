@@ -3,6 +3,12 @@ import { SchucoScraper } from './schucoScraper.js';
 import { SchucoParser, SchucoDeliveryRow } from './schucoParser.js';
 import { SchucoOrderMatcher, extractOrderNumbers, isWarehouseItem } from './schucoOrderMatcher.js';
 import { logger } from '../../utils/logger.js';
+import {
+  emitSchucoFetchStarted,
+  emitSchucoFetchProgress,
+  emitSchucoFetchCompleted,
+  emitSchucoFetchFailed,
+} from '../event-emitter.js';
 
 // Fields to compare for change detection (excluding metadata fields)
 const COMPARABLE_FIELDS = [
@@ -36,10 +42,96 @@ export class SchucoService {
   private parser: SchucoParser;
   private orderMatcher: SchucoOrderMatcher;
 
+  // Aktywny scraper do możliwości anulowania
+  private activeScraper: SchucoScraper | null = null;
+  private activeLogId: number | null = null;
+  private isCancelling: boolean = false;
+
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
     this.parser = new SchucoParser();
     this.orderMatcher = new SchucoOrderMatcher(prisma);
+  }
+
+  /**
+   * Anuluj aktywne pobieranie danych
+   * Zamyka przeglądarkę i oznacza log jako error
+   */
+  async cancelFetch(): Promise<{ cancelled: boolean; message: string }> {
+    if (!this.activeScraper || !this.activeLogId) {
+      return { cancelled: false, message: 'Brak aktywnego importu do anulowania' };
+    }
+
+    if (this.isCancelling) {
+      return { cancelled: false, message: 'Anulowanie już w toku' };
+    }
+
+    try {
+      this.isCancelling = true;
+      logger.info('[SchucoService] Cancelling active fetch...');
+
+      // Zamknij przeglądarkę
+      await this.activeScraper.close();
+
+      // Oznacz log jako error z informacją o anulowaniu
+      await this.prisma.schucoFetchLog.update({
+        where: { id: this.activeLogId },
+        data: {
+          status: 'error',
+          errorMessage: 'Import anulowany przez użytkownika',
+          completedAt: new Date(),
+        },
+      });
+
+      // Emit event o anulowaniu
+      emitSchucoFetchFailed({
+        logId: this.activeLogId,
+        errorMessage: 'Import anulowany przez użytkownika',
+        durationMs: 0,
+        message: 'Import został anulowany',
+      });
+
+      logger.info('[SchucoService] Fetch cancelled successfully');
+
+      // Reset state
+      this.activeScraper = null;
+      this.activeLogId = null;
+      this.isCancelling = false;
+
+      return { cancelled: true, message: 'Import został anulowany' };
+    } catch (error) {
+      logger.error('[SchucoService] Error cancelling fetch:', error);
+      this.isCancelling = false;
+      return { cancelled: false, message: `Błąd anulowania: ${(error as Error).message}` };
+    }
+  }
+
+  /**
+   * Sprawdź czy jest aktywny import
+   */
+  isImportRunning(): boolean {
+    return this.activeScraper !== null && !this.isCancelling;
+  }
+
+  /**
+   * Pobierz ustawienie liczby dni dla filtra Schuco z bazy
+   * Domyślnie 90 dni
+   */
+  private async getFilterDaysSetting(): Promise<number> {
+    try {
+      const setting = await this.prisma.setting.findUnique({
+        where: { key: 'schuco_filter_days' },
+      });
+      if (setting?.value) {
+        const days = parseInt(setting.value, 10);
+        if (!isNaN(days) && days > 0) {
+          return days;
+        }
+      }
+    } catch (error) {
+      logger.warn('[SchucoService] Failed to get schuco_filter_days setting, using default');
+    }
+    return 90; // Domyślna wartość
   }
 
   /**
@@ -49,24 +141,69 @@ export class SchucoService {
     headless: boolean = true,
     triggerType: 'manual' | 'scheduled' = 'manual'
   ): Promise<FetchResult> {
+    // Sprawdź czy nie ma już aktywnego importu
+    if (this.isImportRunning()) {
+      return {
+        success: false,
+        recordsCount: 0,
+        errorMessage: 'Import już w toku. Anuluj poprzedni import lub poczekaj na jego zakończenie.',
+        durationMs: 0,
+      };
+    }
+
     const startTime = Date.now();
     const logId = await this.createFetchLog('pending', triggerType);
+    this.activeLogId = logId;
 
     try {
-      logger.info(`[SchucoService] Starting fetch process (trigger: ${triggerType}, headless: ${headless})...`);
+      // Pobierz ustawienie liczby dni z bazy
+      const filterDays = await this.getFilterDaysSetting();
+      logger.info(`[SchucoService] Starting fetch process (trigger: ${triggerType}, headless: ${headless}, filterDays: ${filterDays})...`);
+
+      // Emit start event - frontend może zaktualizować UI
+      emitSchucoFetchStarted({
+        logId,
+        triggerType,
+        filterDays,
+        step: 'started',
+        message: 'Rozpoczęto pobieranie danych Schuco',
+      });
 
       // Step 1: Clear old change markers (older than 24 hours)
       await this.clearOldChangeMarkers();
 
-      // Step 2: Scrape website and download CSV - create scraper with headless setting
-      const scraper = new SchucoScraper({ headless });
+      // Step 2: Scrape website and download CSV - create scraper with headless setting and filterDays
+      emitSchucoFetchProgress({
+        logId,
+        step: 'scraping',
+        message: 'Pobieranie danych ze strony Schuco...',
+        progress: 10,
+      });
+
+      const scraper = new SchucoScraper({ headless, filterDays });
+      this.activeScraper = scraper; // Zapisz referencję do możliwości anulowania
       const csvFilePath = await scraper.scrapeDeliveries();
 
       // Step 3: Parse CSV file
+      emitSchucoFetchProgress({
+        logId,
+        step: 'parsing',
+        message: 'Parsowanie pliku CSV...',
+        progress: 50,
+      });
+
       const deliveries = await this.parser.parseCSV(csvFilePath);
       logger.info(`[SchucoService] Parsed ${deliveries.length} deliveries`);
 
       // Step 4: Store in database with change tracking
+      emitSchucoFetchProgress({
+        logId,
+        step: 'storing',
+        message: `Zapisywanie ${deliveries.length} rekordów do bazy...`,
+        progress: 70,
+        recordsCount: deliveries.length,
+      });
+
       const changeStats = await this.storeDeliveriesWithChangeTracking(deliveries);
 
       // Step 5: Update log with stats
@@ -78,6 +215,21 @@ export class SchucoService {
           `New: ${changeStats.newRecords}, Updated: ${changeStats.updatedRecords}, ` +
           `Unchanged: ${changeStats.unchangedRecords}`
       );
+
+      // Emit completion event
+      emitSchucoFetchCompleted({
+        logId,
+        recordsCount: deliveries.length,
+        newRecords: changeStats.newRecords,
+        updatedRecords: changeStats.updatedRecords,
+        unchangedRecords: changeStats.unchangedRecords,
+        durationMs,
+        message: `Pobrano ${deliveries.length} rekordów (nowe: ${changeStats.newRecords}, zmienione: ${changeStats.updatedRecords})`,
+      });
+
+      // Reset state po zakończeniu
+      this.activeScraper = null;
+      this.activeLogId = null;
 
       return {
         success: true,
@@ -93,7 +245,19 @@ export class SchucoService {
 
       logger.error('[SchucoService] Fetch failed:', error);
 
+      // Emit failure event
+      emitSchucoFetchFailed({
+        logId,
+        errorMessage,
+        durationMs,
+        message: `Błąd pobierania: ${errorMessage}`,
+      });
+
       await this.updateFetchLog(logId, 'error', 0, errorMessage, durationMs);
+
+      // Reset state po błędzie
+      this.activeScraper = null;
+      this.activeLogId = null;
 
       return {
         success: false,
@@ -161,10 +325,12 @@ export class SchucoService {
   }
 
   /**
-   * Store deliveries with change tracking
+   * Store deliveries with change tracking - OPTIMIZED with batches
+   * Używa transakcji i batch operations dla znacznego przyspieszenia
    */
   private async storeDeliveriesWithChangeTracking(deliveries: SchucoDeliveryRow[]): Promise<ChangeStats> {
-    logger.info(`[SchucoService] Storing ${deliveries.length} deliveries with change tracking...`);
+    const totalCount = deliveries.length;
+    logger.info(`[SchucoService] Storing ${totalCount} deliveries with change tracking (batch mode)...`);
 
     const stats: ChangeStats = {
       newRecords: 0,
@@ -172,149 +338,287 @@ export class SchucoService {
       unchangedRecords: 0,
     };
 
-    // Get all existing deliveries by order number for comparison
+    // Step 1: Get all existing deliveries by order number for comparison
     const orderNumbers = deliveries.map((d) => d.orderNumber);
     const existingDeliveries = await this.prisma.schucoDelivery.findMany({
       where: {
-        orderNumber: {
-          in: orderNumbers,
-        },
+        orderNumber: { in: orderNumbers },
       },
     });
-
     const existingMap = new Map(existingDeliveries.map((d) => [d.orderNumber, d]));
+    logger.info(`[SchucoService] Found ${existingDeliveries.length} existing records to compare`);
+
     const now = new Date();
 
-    // Process each delivery
+    // Step 2: Categorize deliveries into new, updated, unchanged
+    interface ProcessedDelivery {
+      delivery: SchucoDeliveryRow;
+      orderDateParsed: Date | null;
+      extractedNums: string[];
+      isWarehouse: boolean;
+      existing?: typeof existingDeliveries[0];
+      changes?: { changedFields: string[]; previousValues: Record<string, string | null> } | null;
+      shouldKeepNewStatus?: boolean;
+    }
+
+    const newDeliveries: ProcessedDelivery[] = [];
+    const updatedDeliveries: ProcessedDelivery[] = [];
+    const unchangedDeliveries: ProcessedDelivery[] = [];
+
     for (const delivery of deliveries) {
       const existing = existingMap.get(delivery.orderNumber);
       const orderDateParsed = this.parser.parseDate(delivery.orderDate);
-
-      // Extract order numbers for linking
       const extractedNums = extractOrderNumbers(delivery.orderNumber);
       const isWarehouse = isWarehouseItem(delivery.orderNumber);
 
+      const processed: ProcessedDelivery = {
+        delivery,
+        orderDateParsed,
+        extractedNums,
+        isWarehouse,
+        existing,
+      };
+
       if (!existing) {
-        // New record - use upsert to handle race conditions with duplicate orderNumbers in CSV
-        const created = await this.prisma.schucoDelivery.upsert({
-          where: { orderNumber: delivery.orderNumber },
-          create: {
-            orderDate: delivery.orderDate,
-            orderDateParsed: orderDateParsed,
-            orderNumber: delivery.orderNumber,
-            projectNumber: delivery.projectNumber,
-            orderName: delivery.orderName,
-            shippingStatus: delivery.shippingStatus,
-            deliveryWeek: delivery.deliveryWeek || null,
-            deliveryType: delivery.deliveryType || null,
-            tracking: delivery.tracking || null,
-            complaint: delivery.complaint || null,
-            orderType: delivery.orderType || null,
-            totalAmount: delivery.totalAmount || null,
-            rawData: JSON.stringify(delivery.rawData),
-            changeType: 'new',
-            changedAt: now,
-            changedFields: null,
-            previousValues: null,
-            isWarehouseItem: isWarehouse,
-            extractedOrderNums: extractedNums.length > 0 ? JSON.stringify(extractedNums) : null,
-          },
-          update: {
-            // If record already exists (duplicate in CSV), keep it as 'new' (don't change to 'updated')
-            orderDate: delivery.orderDate,
-            orderDateParsed: orderDateParsed,
-            projectNumber: delivery.projectNumber,
-            orderName: delivery.orderName,
-            shippingStatus: delivery.shippingStatus,
-            deliveryWeek: delivery.deliveryWeek || null,
-            deliveryType: delivery.deliveryType || null,
-            tracking: delivery.tracking || null,
-            complaint: delivery.complaint || null,
-            orderType: delivery.orderType || null,
-            totalAmount: delivery.totalAmount || null,
-            rawData: JSON.stringify(delivery.rawData),
-            // Keep 'new' status - don't override to 'updated' for duplicates in same CSV
-            updatedAt: now,
-            isWarehouseItem: isWarehouse,
-            extractedOrderNums: extractedNums.length > 0 ? JSON.stringify(extractedNums) : null,
-          },
-        });
-
-        // Create order links for new deliveries
-        if (!isWarehouse && extractedNums.length > 0) {
-          await this.createOrderLinks(created.id, extractedNums);
-        }
-
-        stats.newRecords++;
+        newDeliveries.push(processed);
       } else {
-        // Check for changes
         const changes = this.compareDeliveries(existing, delivery);
+        processed.changes = changes;
+        processed.shouldKeepNewStatus = existing.changeType === 'new';
 
         if (changes) {
-          // Updated record - but preserve 'new' status if record is still marked as new
-          // (new records should stay 'new' until 72h passes, even if they have changes)
-          const shouldKeepNewStatus = existing.changeType === 'new';
-
-          await this.prisma.schucoDelivery.update({
-            where: { id: existing.id },
-            data: {
-              orderDate: delivery.orderDate,
-              orderDateParsed: orderDateParsed,
-              projectNumber: delivery.projectNumber,
-              orderName: delivery.orderName,
-              shippingStatus: delivery.shippingStatus,
-              deliveryWeek: delivery.deliveryWeek || null,
-              deliveryType: delivery.deliveryType || null,
-              tracking: delivery.tracking || null,
-              complaint: delivery.complaint || null,
-              orderType: delivery.orderType || null,
-              totalAmount: delivery.totalAmount || null,
-              rawData: JSON.stringify(delivery.rawData),
-              // Preserve 'new' status - only mark as 'updated' if it wasn't 'new' before
-              changeType: shouldKeepNewStatus ? 'new' : 'updated',
-              changedAt: shouldKeepNewStatus ? existing.changedAt : now,
-              changedFields: shouldKeepNewStatus ? existing.changedFields : JSON.stringify(changes.changedFields),
-              previousValues: shouldKeepNewStatus ? existing.previousValues : JSON.stringify(changes.previousValues),
-              updatedAt: now,
-              isWarehouseItem: isWarehouse,
-              extractedOrderNums: extractedNums.length > 0 ? JSON.stringify(extractedNums) : null,
-            },
-          });
-
-          // Update order links if needed
-          if (!isWarehouse && extractedNums.length > 0) {
-            await this.createOrderLinks(existing.id, extractedNums);
-          }
-
-          // Count based on actual status change
-          if (shouldKeepNewStatus) {
-            stats.newRecords++; // Still counts as new
-          } else {
-            stats.updatedRecords++;
-          }
+          updatedDeliveries.push(processed);
         } else {
-          // No changes - just update fetchedAt and ensure links exist
-          await this.prisma.schucoDelivery.update({
-            where: { id: existing.id },
-            data: {
-              fetchedAt: now,
-              isWarehouseItem: isWarehouse,
-              extractedOrderNums: extractedNums.length > 0 ? JSON.stringify(extractedNums) : null,
-            },
-          });
-
-          // Ensure order links exist
-          if (!isWarehouse && extractedNums.length > 0) {
-            await this.createOrderLinks(existing.id, extractedNums);
-          }
-
-          stats.unchangedRecords++;
+          unchangedDeliveries.push(processed);
         }
       }
     }
 
-    logger.info('[SchucoService] Deliveries stored with change tracking');
+    logger.info(`[SchucoService] Categorized: ${newDeliveries.length} new, ${updatedDeliveries.length} updated, ${unchangedDeliveries.length} unchanged`);
+
+    // Step 3: Process in batches using transaction
+    const BATCH_SIZE = 50; // SQLite works better with smaller batches
+
+    // Process NEW deliveries in batches
+    if (newDeliveries.length > 0) {
+      logger.info(`[SchucoService] Processing ${newDeliveries.length} new deliveries...`);
+
+      for (let i = 0; i < newDeliveries.length; i += BATCH_SIZE) {
+        const batch = newDeliveries.slice(i, i + BATCH_SIZE);
+
+        await this.prisma.$transaction(async (tx) => {
+          for (const item of batch) {
+            const { delivery, orderDateParsed, extractedNums, isWarehouse } = item;
+
+            const created = await tx.schucoDelivery.upsert({
+              where: { orderNumber: delivery.orderNumber },
+              create: {
+                orderDate: delivery.orderDate,
+                orderDateParsed: orderDateParsed,
+                orderNumber: delivery.orderNumber,
+                projectNumber: delivery.projectNumber,
+                orderName: delivery.orderName,
+                shippingStatus: delivery.shippingStatus,
+                deliveryWeek: delivery.deliveryWeek || null,
+                deliveryType: delivery.deliveryType || null,
+                tracking: delivery.tracking || null,
+                complaint: delivery.complaint || null,
+                orderType: delivery.orderType || null,
+                totalAmount: delivery.totalAmount || null,
+                rawData: JSON.stringify(delivery.rawData),
+                changeType: 'new',
+                changedAt: now,
+                changedFields: null,
+                previousValues: null,
+                isWarehouseItem: isWarehouse,
+                extractedOrderNums: extractedNums.length > 0 ? JSON.stringify(extractedNums) : null,
+              },
+              update: {
+                orderDate: delivery.orderDate,
+                orderDateParsed: orderDateParsed,
+                projectNumber: delivery.projectNumber,
+                orderName: delivery.orderName,
+                shippingStatus: delivery.shippingStatus,
+                deliveryWeek: delivery.deliveryWeek || null,
+                deliveryType: delivery.deliveryType || null,
+                tracking: delivery.tracking || null,
+                complaint: delivery.complaint || null,
+                orderType: delivery.orderType || null,
+                totalAmount: delivery.totalAmount || null,
+                rawData: JSON.stringify(delivery.rawData),
+                updatedAt: now,
+                isWarehouseItem: isWarehouse,
+                extractedOrderNums: extractedNums.length > 0 ? JSON.stringify(extractedNums) : null,
+              },
+            });
+
+            // Store ID for order links creation
+            item.existing = created as typeof existingDeliveries[0];
+          }
+        }, { timeout: 120000 }); // 120s timeout dla batch operacji (SQLite może być wolny)
+
+        // Log progress
+        const processed = Math.min(i + BATCH_SIZE, newDeliveries.length);
+        logger.info(`[SchucoService] New: ${processed}/${newDeliveries.length} (${Math.round(processed/newDeliveries.length*100)}%)`);
+      }
+      stats.newRecords = newDeliveries.length;
+    }
+
+    // Process UPDATED deliveries in batches
+    if (updatedDeliveries.length > 0) {
+      logger.info(`[SchucoService] Processing ${updatedDeliveries.length} updated deliveries...`);
+
+      for (let i = 0; i < updatedDeliveries.length; i += BATCH_SIZE) {
+        const batch = updatedDeliveries.slice(i, i + BATCH_SIZE);
+
+        await this.prisma.$transaction(async (tx) => {
+          for (const item of batch) {
+            const { delivery, orderDateParsed, extractedNums, isWarehouse, existing, changes, shouldKeepNewStatus } = item;
+
+            await tx.schucoDelivery.update({
+              where: { id: existing!.id },
+              data: {
+                orderDate: delivery.orderDate,
+                orderDateParsed: orderDateParsed,
+                projectNumber: delivery.projectNumber,
+                orderName: delivery.orderName,
+                shippingStatus: delivery.shippingStatus,
+                deliveryWeek: delivery.deliveryWeek || null,
+                deliveryType: delivery.deliveryType || null,
+                tracking: delivery.tracking || null,
+                complaint: delivery.complaint || null,
+                orderType: delivery.orderType || null,
+                totalAmount: delivery.totalAmount || null,
+                rawData: JSON.stringify(delivery.rawData),
+                changeType: shouldKeepNewStatus ? 'new' : 'updated',
+                changedAt: shouldKeepNewStatus ? existing!.changedAt : now,
+                changedFields: shouldKeepNewStatus ? existing!.changedFields : JSON.stringify(changes!.changedFields),
+                previousValues: shouldKeepNewStatus ? existing!.previousValues : JSON.stringify(changes!.previousValues),
+                updatedAt: now,
+                isWarehouseItem: isWarehouse,
+                extractedOrderNums: extractedNums.length > 0 ? JSON.stringify(extractedNums) : null,
+              },
+            });
+
+            if (shouldKeepNewStatus) {
+              stats.newRecords++;
+            } else {
+              stats.updatedRecords++;
+            }
+          }
+        }, { timeout: 120000 }); // 120s timeout dla batch operacji (SQLite może być wolny)
+
+        // Log progress
+        const processed = Math.min(i + BATCH_SIZE, updatedDeliveries.length);
+        logger.info(`[SchucoService] Updated: ${processed}/${updatedDeliveries.length} (${Math.round(processed/updatedDeliveries.length*100)}%)`);
+      }
+    }
+
+    // Process UNCHANGED deliveries in batches (just update fetchedAt)
+    if (unchangedDeliveries.length > 0) {
+      logger.info(`[SchucoService] Processing ${unchangedDeliveries.length} unchanged deliveries...`);
+
+      // For unchanged, we can use updateMany which is much faster
+      const unchangedIds = unchangedDeliveries.map(d => d.existing!.id);
+
+      // Update in batches of 100 for updateMany
+      for (let i = 0; i < unchangedIds.length; i += 100) {
+        const batchIds = unchangedIds.slice(i, i + 100);
+        await this.prisma.schucoDelivery.updateMany({
+          where: { id: { in: batchIds } },
+          data: { fetchedAt: now },
+        });
+      }
+
+      stats.unchangedRecords = unchangedDeliveries.length;
+      logger.info(`[SchucoService] Unchanged: ${unchangedDeliveries.length} records updated`);
+    }
+
+    // Step 4: Create order links in batch
+    logger.info('[SchucoService] Creating order links...');
+    await this.createOrderLinksBatch([...newDeliveries, ...updatedDeliveries, ...unchangedDeliveries]);
+
+    logger.info(`[SchucoService] Deliveries stored: new=${stats.newRecords}, updated=${stats.updatedRecords}, unchanged=${stats.unchangedRecords}`);
     return stats;
+  }
+
+  /**
+   * Create order links for multiple Schuco deliveries in batch
+   * Znacznie szybsze niż pojedyncze wywołania createOrderLinks
+   */
+  private async createOrderLinksBatch(items: Array<{
+    existing?: { id: number };
+    extractedNums: string[];
+    isWarehouse: boolean;
+  }>): Promise<void> {
+    // Collect all order numbers that need links
+    const allOrderNumbers = new Set<string>();
+    const deliveryOrderMap = new Map<number, string[]>(); // deliveryId -> orderNumbers
+
+    for (const item of items) {
+      if (!item.existing || item.isWarehouse || item.extractedNums.length === 0) continue;
+
+      deliveryOrderMap.set(item.existing.id, item.extractedNums);
+      item.extractedNums.forEach(num => allOrderNumbers.add(num));
+    }
+
+    if (allOrderNumbers.size === 0) return;
+
+    // Batch lookup: find all matching orders at once
+    const orders = await this.prisma.order.findMany({
+      where: {
+        orderNumber: { in: Array.from(allOrderNumbers) },
+      },
+      select: { id: true, orderNumber: true },
+    });
+
+    if (orders.length === 0) return;
+
+    const orderIdByNumber = new Map(orders.map(o => [o.orderNumber, o.id]));
+
+    // Get all existing links to avoid duplicates
+    const deliveryIds = Array.from(deliveryOrderMap.keys());
+    const existingLinks = await this.prisma.orderSchucoLink.findMany({
+      where: {
+        schucoDeliveryId: { in: deliveryIds },
+      },
+      select: { schucoDeliveryId: true, orderId: true },
+    });
+
+    const existingLinkSet = new Set(
+      existingLinks.map(l => `${l.schucoDeliveryId}-${l.orderId}`)
+    );
+
+    // Prepare new links to create
+    const newLinks: Array<{ orderId: number; schucoDeliveryId: number; linkedBy: string }> = [];
+
+    for (const [deliveryId, orderNums] of deliveryOrderMap) {
+      for (const orderNum of orderNums) {
+        const orderId = orderIdByNumber.get(orderNum);
+        if (!orderId) continue;
+
+        const linkKey = `${deliveryId}-${orderId}`;
+        if (existingLinkSet.has(linkKey)) continue;
+
+        newLinks.push({
+          orderId,
+          schucoDeliveryId: deliveryId,
+          linkedBy: 'auto',
+        });
+      }
+    }
+
+    // Create all new links in batches
+    if (newLinks.length > 0) {
+      const LINK_BATCH_SIZE = 100;
+      for (let i = 0; i < newLinks.length; i += LINK_BATCH_SIZE) {
+        const batch = newLinks.slice(i, i + LINK_BATCH_SIZE);
+        await this.prisma.orderSchucoLink.createMany({
+          data: batch,
+        });
+      }
+      logger.info(`[SchucoService] Created ${newLinks.length} new order links`);
+    }
   }
 
   /**
@@ -387,8 +691,12 @@ export class SchucoService {
 
     // Use Prisma findMany with manual sorting
     // Sort: new first, updated second, regular last, then by date
+    // Filtruj tylko niezarchiwizowane dostawy
     const [deliveries, total] = await Promise.all([
       this.prisma.schucoDelivery.findMany({
+        where: {
+          archivedAt: null, // Tylko niezarchiwizowane
+        },
         orderBy: [
           { orderDateParsed: 'desc' },
           { id: 'desc' },
@@ -396,7 +704,11 @@ export class SchucoService {
         skip,
         take: pageSize,
       }),
-      this.prisma.schucoDelivery.count(),
+      this.prisma.schucoDelivery.count({
+        where: {
+          archivedAt: null, // Tylko niezarchiwizowane
+        },
+      }),
     ]);
 
     // Sort deliveries in memory: new first, updated second, then by date
@@ -753,5 +1065,107 @@ export class SchucoService {
     }
 
     return result.count;
+  }
+
+  /**
+   * Archiwizuj zrealizowane zamówienia starsze niż 3 miesiące
+   * Zamówienia ze statusem "Potwierdzona dostawa" są przenoszone do archiwum
+   */
+  async archiveOldDeliveries(): Promise<{ archivedCount: number }> {
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+    logger.info(`[SchucoService] Archiving deliveries older than ${threeMonthsAgo.toISOString()}...`);
+
+    // Znajdź i zarchiwizuj zamówienia:
+    // - Status "Potwierdzona dostawa" (zrealizowane)
+    // - Data zamówienia starsza niż 3 miesiące
+    // - Jeszcze nie zarchiwizowane
+    const result = await this.prisma.schucoDelivery.updateMany({
+      where: {
+        shippingStatus: 'Potwierdzona dostawa',
+        archivedAt: null,
+        orderDateParsed: {
+          lt: threeMonthsAgo,
+        },
+      },
+      data: {
+        archivedAt: new Date(),
+      },
+    });
+
+    logger.info(`[SchucoService] Archived ${result.count} deliveries`);
+
+    return { archivedCount: result.count };
+  }
+
+  /**
+   * Pobierz zarchiwizowane dostawy z paginacją
+   */
+  async getArchivedDeliveries(page = 1, pageSize = 50): Promise<{
+    items: any[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  }> {
+    logger.info(`[SchucoService] Fetching archived deliveries (page: ${page}, pageSize: ${pageSize})...`);
+
+    const skip = (page - 1) * pageSize;
+
+    const [items, total] = await Promise.all([
+      this.prisma.schucoDelivery.findMany({
+        where: {
+          archivedAt: { not: null },
+        },
+        orderBy: { orderDateParsed: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.schucoDelivery.count({
+        where: {
+          archivedAt: { not: null },
+        },
+      }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  /**
+   * Pobierz statystyki archiwum
+   */
+  async getArchiveStats(): Promise<{
+    totalArchived: number;
+    oldestArchived: Date | null;
+    newestArchived: Date | null;
+  }> {
+    const [totalArchived, oldest, newest] = await Promise.all([
+      this.prisma.schucoDelivery.count({
+        where: { archivedAt: { not: null } },
+      }),
+      this.prisma.schucoDelivery.findFirst({
+        where: { archivedAt: { not: null } },
+        orderBy: { orderDateParsed: 'asc' },
+        select: { orderDateParsed: true },
+      }),
+      this.prisma.schucoDelivery.findFirst({
+        where: { archivedAt: { not: null } },
+        orderBy: { orderDateParsed: 'desc' },
+        select: { orderDateParsed: true },
+      }),
+    ]);
+
+    return {
+      totalArchived,
+      oldestArchived: oldest?.orderDateParsed || null,
+      newestArchived: newest?.orderDateParsed || null,
+    };
   }
 }

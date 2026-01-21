@@ -16,6 +16,13 @@ import {
   verificationListParamsSchema,
   verificationItemParamsSchema,
   verificationListQuerySchema,
+  // Nowe importy dla projektów i wersjonowania
+  parseMailContentSchema,
+  previewProjectsSchema,
+  createListVersionSchema,
+  compareVersionsSchema,
+  verifyProjectListSchema,
+  listVersionsQuerySchema,
 } from '../validators/akrobud-verification.js';
 
 export class AkrobudVerificationHandler {
@@ -249,6 +256,135 @@ export class AkrobudVerificationHandler {
       parseInt(id),
       validated.addMissing,
       validated.removeExcess
+    );
+
+    return reply.send(result);
+  }
+
+  // ===================
+  // Project-based Operations
+  // ===================
+
+  /**
+   * POST /api/akrobud-verification/parse-mail
+   * Parsuje treść maila i wykrywa datę + projekty (preview)
+   */
+  async parseMailContent(
+    request: FastifyRequest<{
+      Body: { rawInput: string };
+    }>,
+    reply: FastifyReply
+  ) {
+    const validated = parseMailContentSchema.parse(request.body);
+    const result = this.service.parseMailContentForProjects(validated.rawInput);
+    return reply.send(result);
+  }
+
+  /**
+   * POST /api/akrobud-verification/preview-projects
+   * Preview projektów - wyszukuje zlecenia dla każdego projektu
+   */
+  async previewProjects(
+    request: FastifyRequest<{
+      Body: { projects: string[] };
+    }>,
+    reply: FastifyReply
+  ) {
+    const validated = previewProjectsSchema.parse(request.body);
+    const result = await this.service.previewProjects(validated.projects);
+    return reply.send(result);
+  }
+
+  /**
+   * POST /api/akrobud-verification/versions
+   * Tworzy nową wersję listy opartej na projektach
+   */
+  async createListVersion(
+    request: FastifyRequest<{
+      Body: {
+        deliveryDate: string;
+        rawInput: string;
+        projects: string[];
+        parentId?: number;
+      };
+    }>,
+    reply: FastifyReply
+  ) {
+    const validated = createListVersionSchema.parse(request.body);
+    const result = await this.service.createListVersion(
+      new Date(validated.deliveryDate),
+      validated.rawInput,
+      validated.projects,
+      validated.parentId
+    );
+    return reply.status(201).send(result);
+  }
+
+  /**
+   * GET /api/akrobud-verification/versions
+   * Pobiera wszystkie wersje list dla danej daty dostawy
+   */
+  async getListVersions(
+    request: FastifyRequest<{
+      Querystring: { deliveryDate: string };
+    }>,
+    reply: FastifyReply
+  ) {
+    const validated = listVersionsQuerySchema.parse(request.query);
+    const result = await this.service.getListVersions(new Date(validated.deliveryDate));
+    return reply.send(result);
+  }
+
+  /**
+   * GET /api/akrobud-verification/:id/versions
+   * Pobiera historię wersji listy
+   */
+  async getListVersionHistory(
+    request: FastifyRequest<{
+      Params: { id: string };
+    }>,
+    reply: FastifyReply
+  ) {
+    const { id } = verificationListParamsSchema.parse(request.params);
+    const result = await this.service.getListVersionHistory(parseInt(id));
+    return reply.send(result);
+  }
+
+  /**
+   * POST /api/akrobud-verification/compare-versions
+   * Porównuje dwie wersje listy
+   */
+  async compareVersions(
+    request: FastifyRequest<{
+      Body: { listId1: number; listId2: number };
+    }>,
+    reply: FastifyReply
+  ) {
+    const validated = compareVersionsSchema.parse(request.body);
+    const result = await this.service.compareVersions(
+      validated.listId1,
+      validated.listId2
+    );
+    return reply.send(result);
+  }
+
+  /**
+   * POST /api/akrobud-verification/:id/verify-projects
+   * Weryfikuje listę opartą na projektach
+   */
+  async verifyProjectList(
+    request: FastifyRequest<{
+      Params: { id: string };
+      Body: { createDeliveryIfMissing?: boolean };
+    }>,
+    reply: FastifyReply
+  ) {
+    const { id } = verificationListParamsSchema.parse(request.params);
+    const validated = verifyProjectListSchema.parse(request.body ?? {});
+
+    const result = await this.service.verifyProjectList(
+      parseInt(id),
+      validated.createDeliveryIfMissing
     );
 
     return reply.send(result);

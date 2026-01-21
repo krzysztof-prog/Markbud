@@ -253,8 +253,8 @@ export class UzyteBelePrywatneWatcher implements IFileWatcher {
         },
       });
 
-      // Przetwórz plik
-      const result = await parser.processUzyteBele(destPath, 'add_new');
+      // Przetwórz plik (import prywatny - tworzy PrivateColor dla nieznanych kolorów)
+      const result = await parser.processUzyteBele(destPath, 'add_new', false, { isPrivateImport: true });
 
       // Jeśli mamy datę realizacji, zaktualizuj zlecenie
       if (deadline && result.orderId) {

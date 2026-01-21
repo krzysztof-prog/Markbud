@@ -12,6 +12,7 @@ import {
   CorrectMorningStockSchema,
   UpdateAlertConfigSchema,
   ProductionPalletTypeSchema,
+  SetInitialStocksSchema,
 } from '../validators/pallet-stock.js';
 
 export class PalletStockHandler {
@@ -143,6 +144,39 @@ export class PalletStockHandler {
   ) {
     const config = UpdateAlertConfigSchema.parse(request.body);
     const updated = await this.service.updateAlertConfig(config);
+    return reply.send(updated);
+  }
+
+  // ============================================
+  // INITIAL STOCK CONFIG
+  // ============================================
+
+  /**
+   * GET /api/pallet-stock/initial
+   * Pobiera stany początkowe palet
+   */
+  async getInitialStocks(
+    _request: FastifyRequest,
+    reply: FastifyReply
+  ) {
+    const stocks = await this.service.getInitialStocks();
+    return reply.send(stocks);
+  }
+
+  /**
+   * PUT /api/pallet-stock/initial
+   * Ustawia stany początkowe palet (tylko admin)
+   */
+  async setInitialStocks(
+    request: FastifyRequest<{ Body: unknown }>,
+    reply: FastifyReply
+  ) {
+    const { startDate, stocks } = SetInitialStocksSchema.parse(request.body);
+
+    // Pobierz userId z requestu (jeśli jest zalogowany)
+    const userId = (request as FastifyRequest & { userId?: number }).userId;
+
+    const updated = await this.service.setInitialStocks(startDate, stocks, userId);
     return reply.send(updated);
   }
 }

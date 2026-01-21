@@ -586,6 +586,7 @@ export class UzyteBeleParser {
             data: {
               code: req.colorCode,
               name: req.colorCode, // Domyślnie nazwa = kod, użytkownik może zmienić w ustawieniach
+              type: 'akrobud',
             },
           });
           console.log(`Utworzono nowy kolor Akrobud: ${req.colorCode}`);

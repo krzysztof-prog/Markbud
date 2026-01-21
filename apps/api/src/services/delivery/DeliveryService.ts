@@ -346,8 +346,9 @@ export class DeliveryService {
     }
 
     // Update each delivery
+    const deliveries = result.data as Array<{ id: number; deliveryDate: Date }>;
     const updates = await Promise.all(
-      result.data.map(async (delivery) => {
+      deliveries.map(async (delivery) => {
         const newDate = new Date(delivery.deliveryDate);
         newDate.setFullYear(newDate.getFullYear() + yearOffset);
 

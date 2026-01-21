@@ -272,6 +272,42 @@ export const importStockSchema = z.object({
   })).optional().default([]),
 });
 
+// ============ ORDER IMPORT VALIDATORS ============
+
+// Schema dla pojedynczej pozycji z XLSX
+export const importOrderItemSchema = z.object({
+  articleId: z.string().min(1),          // Kolumna B - numer artykułu
+  description: z.string().optional(),     // Kolumna C - opis (opcjonalny)
+  quantity: z.number().int().positive(),  // Kolumna D - ilość
+  shippingDate: z.coerce.date(),          // Kolumna D - data wysyłki
+  priceEur: z.number().nonnegative(),     // Kolumna E - cena w eurocentach
+});
+
+// Schema dla wyniku parsowania XLSX (przed zapisem)
+export const parsedOrderImportSchema = z.object({
+  items: z.array(importOrderItemSchema).min(1),
+  missingArticles: z.array(z.object({
+    articleId: z.string(),
+    description: z.string().optional(),
+  })),
+  duplicateArticles: z.array(z.string()), // Lista articleId które się powtarzają
+});
+
+// Schema dla zatwierdzenia importu (po akceptacji użytkownika)
+export const confirmOrderImportSchema = z.object({
+  items: z.array(z.object({
+    articleId: z.string().min(1),
+    quantity: z.number().int().positive(),
+    priceEur: z.number().nonnegative(),
+  })).min(1),
+  expectedDeliveryDate: z.coerce.date(),
+  createMissingArticles: z.boolean().default(false), // Czy utworzyć brakujące artykuły
+  missingArticlesToCreate: z.array(z.object({
+    articleId: z.string().min(1),
+    name: z.string().min(1),
+  })).optional(),
+});
+
 // ============ TYPE EXPORTS ============
 
 export type StockQueryFilters = z.infer<typeof stockQueryFiltersSchema>;
@@ -295,3 +331,20 @@ export type UpdateProportionInput = z.infer<typeof updateProportionSchema>;
 export type HistoryFilters = z.infer<typeof historyFiltersSchema>;
 export type ImportRwInput = z.infer<typeof importRwSchema>;
 export type ImportDemandInput = z.infer<typeof importDemandSchema>;
+export type ImportOrderItem = z.infer<typeof importOrderItemSchema>;
+export type ParsedOrderImport = z.infer<typeof parsedOrderImportSchema>;
+export type ConfirmOrderImportInput = z.infer<typeof confirmOrderImportSchema>;
+
+// ============ REPLACEMENT VALIDATORS (Zastępstwa artykułów) ============
+
+/**
+ * Schema dla ustawienia/zmiany mapowania zastępstwa
+ * - oldArticleId: ID artykułu który ma być wygaszany
+ * - newArticleId: ID artykułu zastępującego (null = usuń mapowanie)
+ */
+export const setReplacementSchema = z.object({
+  oldArticleId: z.number().int().positive({ message: 'ID starego artykułu musi być liczbą dodatnią' }),
+  newArticleId: z.number().int().positive({ message: 'ID nowego artykułu musi być liczbą dodatnią' }).nullable(),
+});
+
+export type SetReplacementInput = z.infer<typeof setReplacementSchema>;

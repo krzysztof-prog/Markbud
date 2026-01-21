@@ -42,6 +42,7 @@ import { productionPlanningRoutes } from './routes/production-planning.js';
 import { steelRoutes } from './routes/steel.js';
 import { labelCheckRoutes } from './routes/label-checks.js';
 import { attendanceRoutes } from './routes/attendance.js';
+import { logisticsRoutes } from './routes/logistics.js';
 
 // Services
 import { FileWatcherService } from './services/file-watcher/index.js';
@@ -213,6 +214,9 @@ await fastify.register(labelCheckRoutes, { prefix: '/api/label-checks' });
 
 // Attendance Routes (BZ - Bieżąca Zmiana - widok miesięczny obecności)
 await fastify.register(attendanceRoutes, { prefix: '/api/attendance' });
+
+// Logistics Routes (Parsowanie maili z listami dostaw)
+await fastify.register(logisticsRoutes, { prefix: '/api/logistics' });
 
 // Health checks (basic - must be before extended health routes)
 fastify.get('/api/health', {

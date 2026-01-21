@@ -105,6 +105,72 @@ export const verificationListQuerySchema = z.object({
   status: z.enum(['draft', 'verified', 'applied']).optional(),
 });
 
+// ===================
+// Project-based Schemas (NEW)
+// ===================
+
+/**
+ * Schema parsowania treści maila (preview projektów)
+ */
+export const parseMailContentSchema = z.object({
+  rawInput: z.string().min(1, 'Treść maila nie może być pusta'),
+});
+
+/**
+ * Schema preview projektów (przed zapisem)
+ */
+export const previewProjectsSchema = z.object({
+  projects: z
+    .array(
+      z.string()
+        .min(1)
+        .max(10)
+        .regex(/^[A-Z]\d{3,5}$/i, 'Nieprawidłowy format numeru projektu')
+    )
+    .min(1, 'Musisz podać co najmniej jeden projekt')
+    .max(50, 'Maksymalnie 50 projektów na raz'),
+});
+
+/**
+ * Schema tworzenia nowej wersji listy opartej na projektach
+ */
+export const createListVersionSchema = z.object({
+  deliveryDate: dateSchema,
+  rawInput: z.string().min(1, 'Treść maila nie może być pusta'),
+  projects: z
+    .array(
+      z.string()
+        .min(1)
+        .max(10)
+        .regex(/^[A-Z]\d{3,5}$/i, 'Nieprawidłowy format numeru projektu')
+    )
+    .min(1, 'Musisz podać co najmniej jeden projekt')
+    .max(50, 'Maksymalnie 50 projektów na raz'),
+  parentId: z.number().int().positive().optional(),
+});
+
+/**
+ * Schema porównywania wersji
+ */
+export const compareVersionsSchema = z.object({
+  listId1: z.number().int().positive(),
+  listId2: z.number().int().positive(),
+});
+
+/**
+ * Schema weryfikacji listy projektów
+ */
+export const verifyProjectListSchema = z.object({
+  createDeliveryIfMissing: z.boolean().default(false),
+});
+
+/**
+ * Query dla pobierania wersji listy
+ */
+export const listVersionsQuerySchema = z.object({
+  deliveryDate: dateSchema,
+});
+
 // Type exports
 export type CreateVerificationListInput = z.infer<typeof createVerificationListSchema>;
 export type UpdateVerificationListInput = z.infer<typeof updateVerificationListSchema>;
@@ -117,3 +183,11 @@ export type HandleDuplicatesInput = z.infer<typeof handleDuplicatesSchema>;
 export type VerificationListParams = z.infer<typeof verificationListParamsSchema>;
 export type VerificationItemParams = z.infer<typeof verificationItemParamsSchema>;
 export type VerificationListQuery = z.infer<typeof verificationListQuerySchema>;
+
+// Type exports (NEW)
+export type ParseMailContentInput = z.infer<typeof parseMailContentSchema>;
+export type PreviewProjectsInput = z.infer<typeof previewProjectsSchema>;
+export type CreateListVersionInput = z.infer<typeof createListVersionSchema>;
+export type CompareVersionsInput = z.infer<typeof compareVersionsSchema>;
+export type VerifyProjectListInput = z.infer<typeof verifyProjectListSchema>;
+export type ListVersionsQuery = z.infer<typeof listVersionsQuerySchema>;

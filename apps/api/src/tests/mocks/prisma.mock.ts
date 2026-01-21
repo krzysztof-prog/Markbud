@@ -231,6 +231,26 @@ export const createMockPrisma = () => {
       delete: vi.fn(),
       count: vi.fn(),
     },
+    // Label check models
+    labelCheck: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      count: vi.fn(),
+    },
+    labelCheckResult: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+      count: vi.fn(),
+    },
     $transaction: vi.fn() as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     $queryRaw: vi.fn(),
   } as unknown as PrismaClient;

@@ -84,6 +84,30 @@ export class ArticleNumberParser {
       return false;
     }
   }
+
+  /**
+   * Sprawdza czy numer artykułu to stal (wzmocnienie stalowe)
+   * Stal rozpoznawana po prefiksie: 201xxx lub 202xxx
+   */
+  isSteel(articleNumber: string): boolean {
+    // Usuń sufiks "p" i białe znaki
+    const cleaned = articleNumber.replace(/p$/i, '').trim();
+
+    // Stal zaczyna się od 201 lub 202
+    return cleaned.startsWith('201') || cleaned.startsWith('202');
+  }
+
+  /**
+   * Parsuje numer stali z numeru artykułu
+   * Usuwa końcowe "00" z numeru artykułu (np. "20120200" → "201202")
+   */
+  parseSteelNumber(articleNumber: string): string {
+    // Usuń sufiks "p" i białe znaki
+    const cleaned = articleNumber.replace(/p$/i, '').trim();
+
+    // Usuń końcowe "00" (jeśli są)
+    return cleaned.replace(/00$/, '');
+  }
 }
 
 // Eksport instancji singletona dla wygody

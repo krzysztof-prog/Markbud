@@ -16,7 +16,6 @@ export class DeliveryNumberGenerator {
   /**
    * Generate delivery number in format DD.MM.YYYY_X
    * where X is I, II, III, IV etc. for multiple deliveries on same day
-   * Uses transaction with row locking to prevent race conditions
    *
    * @param deliveryDate - The date for which to generate the number
    * @returns Promise<string> - The generated delivery number (e.g., "15.01.2024_I")
@@ -25,22 +24,20 @@ export class DeliveryNumberGenerator {
     const datePrefix = formatPolishDate(deliveryDate);
     const { start, end } = getDayRange(deliveryDate);
 
-    // Use raw query with FOR UPDATE to lock rows and prevent race conditions
-    // This ensures only one transaction at a time can count deliveries for this day
-    return this.prisma.$transaction(async (tx) => {
-      const existingDeliveries = await tx.$queryRaw<Array<{ count: bigint }>>`
-        SELECT COUNT(*) as count
-        FROM deliveries
-        WHERE delivery_date >= ${start.getTime()}
-          AND delivery_date <= ${end.getTime()}
-        FOR UPDATE
-      `;
-
-      const count = Number(existingDeliveries[0]?.count || 0n) + 1;
-      const suffix = toRomanNumeral(count);
-
-      return `${datePrefix}_${suffix}`;
+    // Count existing deliveries for this day using Prisma query
+    // SQLite doesn't support FOR UPDATE, so we use a simple count
+    const count = await this.prisma.delivery.count({
+      where: {
+        deliveryDate: {
+          gte: start,
+          lte: end,
+        },
+        deletedAt: null, // Nie licz usuniętych dostaw
+      },
     });
+
+    const suffix = toRomanNumeral(count + 1);
+    return `${datePrefix}_${suffix}`;
   }
 
   /**

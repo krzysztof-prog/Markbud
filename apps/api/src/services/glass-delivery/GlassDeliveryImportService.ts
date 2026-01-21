@@ -49,6 +49,7 @@ export class GlassDeliveryImportService {
    * Import glass delivery from CSV file content
    * Akceptuje string (UTF-8) lub Buffer (CP1250 - automatycznie konwertowany)
    * @throws Error jeśli dostawa z tym samym rackNumber już istnieje
+   * UWAGA: Duplicate check przeniesiony do transakcji dla unikniecia race conditions
    */
   async importFromCsv(
     fileContent: string | Buffer,
@@ -56,25 +57,27 @@ export class GlassDeliveryImportService {
     deliveryDate?: Date
   ): Promise<GlassDeliveryWithItems> {
     const parsed = parseGlassDeliveryCsv(fileContent);
-
-    // Sprawdź czy dostawa z tym rackNumber już istnieje (zapobieganie duplikatom)
     const rackNumber = parsed.metadata.rackNumber || filename;
-    const existingDelivery = await this.prisma.glassDelivery.findFirst({
-      where: { rackNumber },
-      select: { id: true, createdAt: true }
-    });
-
-    if (existingDelivery) {
-      const importDate = existingDelivery.createdAt.toLocaleDateString('pl-PL');
-      throw new Error(
-        `Dostawa z numerem racka "${rackNumber}" została już zaimportowana (${importDate}). ` +
-        `Jeśli chcesz ponownie zaimportować, najpierw usuń poprzednią dostawę.`
-      );
-    }
 
     // Use transaction with extended timeout for large imports (60s instead of default 5s)
+    // WAZNE: Duplicate check MUSI byc w transakcji aby uniknac race condition
     return this.prisma.$transaction(
       async (tx) => {
+        // Sprawdź czy dostawa z tym rackNumber już istnieje (W TRANSAKCJI!)
+        // To zapobiega race condition przy równoczesnym imporcie tego samego pliku
+        const existingDelivery = await tx.glassDelivery.findFirst({
+          where: { rackNumber },
+          select: { id: true, createdAt: true }
+        });
+
+        if (existingDelivery) {
+          const importDate = existingDelivery.createdAt.toLocaleDateString('pl-PL');
+          throw new Error(
+            `Dostawa z numerem racka "${rackNumber}" została już zaimportowana (${importDate}). ` +
+            `Jeśli chcesz ponownie zaimportować, najpierw usuń poprzednią dostawę.`
+          );
+        }
+
         // Create GlassDelivery with items (tylko standardowe szyby)
         const standardItems = parsed.items.filter(item => item.category === 'standard');
 

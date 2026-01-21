@@ -139,11 +139,13 @@ export class UzyteBeleProcessor {
   /**
    * Process uzyte/bele CSV import
    * Core processing logic for a single file
+   * @param options - Opcjonalne parametry: isPrivateImport - czy to import prywatny (tworzy PrivateColor)
    */
   async processUzyteBeleImport(
     fileImport: { id: number; filepath: string; metadata: string | null },
     action: 'overwrite' | 'add_new',
-    replaceBase: boolean
+    replaceBase: boolean,
+    options?: { isPrivateImport?: boolean }
   ): Promise<UzyteBeleProcessResult> {
     // Check if file was detected by File Watcher and has deliveryId
     let metadata: Record<string, unknown> = {};
@@ -156,7 +158,7 @@ export class UzyteBeleProcessor {
     const deliveryId = typeof metadata.deliveryId === 'number' ? metadata.deliveryId : undefined;
 
     // Process uzyte_bele file (CsvParser uses its own prisma instance)
-    const result = await this.csvParser.processUzyteBele(fileImport.filepath, action, replaceBase);
+    const result = await this.csvParser.processUzyteBele(fileImport.filepath, action, replaceBase, options);
 
     // If file was from File Watcher, add order to delivery
     if (deliveryId && result.orderId) {

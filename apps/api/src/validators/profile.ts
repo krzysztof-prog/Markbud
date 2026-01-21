@@ -16,6 +16,13 @@ export const updateProfileSchema = z.object({
   name: z.string().min(1, 'Profile name is required').max(255).optional(),
   description: z.string().optional().nullable(),
   articleNumber: z.string().max(100).optional().nullable(),
+  isAkrobud: z.boolean().optional(),
+  // Systemy profilowe
+  isLiving: z.boolean().optional(),
+  isBlok: z.boolean().optional(),
+  isVlak: z.boolean().optional(),
+  isCt70: z.boolean().optional(),
+  isFocusing: z.boolean().optional(),
 });
 
 export const profileParamsSchema = idParamsSchema('profile');

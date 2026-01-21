@@ -117,8 +117,12 @@ export async function getMonthlyAverage(
   const { colorId } = colorIdParamSchema.parse(request.params);
   const { months } = averageQuerySchema.parse(request.query);
 
-  const usage = await getService().getMonthlyUsage(colorId, months);
-  reply.send(usage);
+  const averages = await getService().getMonthlyUsage(colorId, months);
+  // Wrap response to match frontend AverageResponse type
+  reply.send({
+    averages,
+    requestedMonths: months ?? 6,
+  });
 }
 
 /**

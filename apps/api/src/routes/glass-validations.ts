@@ -62,6 +62,25 @@ export const glassValidationRoutes: FastifyPluginAsync = async (fastify) => {
     handler.getByOrderNumber.bind(handler)
   );
 
+  // GET /glass-validations/order/:orderNumber/details - Szczegółowe rozbieżności szyb
+  fastify.get<{ Params: { orderNumber: string } }>(
+    '/order/:orderNumber/details',
+    {
+      schema: {
+        description: 'Get detailed glass discrepancies for an order - comparison per dimension with delivery info',
+        tags: ['glass-validations'],
+        params: {
+          type: 'object',
+          required: ['orderNumber'],
+          properties: {
+            orderNumber: { type: 'string', description: 'Order number' },
+          },
+        },
+      },
+    },
+    handler.getDetailedDiscrepancies.bind(handler)
+  );
+
   // GET /glass-validations - Lista walidacji z filtrami
   fastify.get<{ Querystring: GlassValidationFilters }>(
     '/',

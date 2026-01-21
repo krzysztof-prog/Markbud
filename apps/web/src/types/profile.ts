@@ -38,6 +38,12 @@ export interface CreateProfileData {
 export interface UpdateProfileData {
   number?: string;
   name?: string;
-  description?: string;
+  description?: string | null;
   isAkrobud?: boolean;
+  // Systemy profilowe
+  isLiving?: boolean;
+  isBlok?: boolean;
+  isVlak?: boolean;
+  isCt70?: boolean;
+  isFocusing?: boolean;
 }

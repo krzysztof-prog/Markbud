@@ -6,11 +6,15 @@
  * - Zarządzanie elementami listy
  * - Orkiestracja procesu weryfikacji
  * - Koordynacja aplikowania zmian
+ * - Obsługę projektów (relacja projekt → zlecenia)
+ * - Wersjonowanie list weryfikacyjnych
  *
  * Deleguje do:
- * - OrderNumberMatcher - dopasowywanie numerów zleceń
+ * - ProjectMatcher - dopasowywanie projektów do zleceń
  * - VerificationListComparator - porównywanie list z dostawami
  * - VerificationChangeApplier - aplikowanie zmian
+ * - VersionComparator - porównywanie wersji list
+ * - ProjectNumberParser - parsowanie maili z numerami projektów
  */
 
 import type { PrismaClient } from '@prisma/client';
@@ -31,6 +35,19 @@ import {
   VerificationChangeApplier,
   type ApplyChangesResult,
 } from './utils/VerificationChangeApplier.js';
+import {
+  parseMailContent,
+  type ParsedMailContent,
+} from '../parsers/ProjectNumberParser.js';
+import {
+  findOrdersByProjects,
+  type ProjectMatchResult,
+  type MatchedOrder,
+} from './utils/ProjectMatcher.js';
+import {
+  compareListVersions,
+  type VersionDiff,
+} from './utils/VersionComparator.js';
 
 // ===================
 // Types
@@ -81,6 +98,63 @@ export interface VerificationResult {
 
 // Re-eksport typów dla kompatybilności wstecznej
 export type { MatchedItem, MissingItem, ExcessItem, NotFoundItem, DuplicateItem, ApplyChangesResult };
+
+// Re-eksport typów dla projektów i wersjonowania
+export type { ParsedMailContent, ProjectMatchResult, MatchedOrder, VersionDiff };
+
+/**
+ * Preview projektu - wynik wyszukiwania zleceń przed zapisem
+ */
+export interface ProjectPreview {
+  /** Numer projektu (np. "D3455") */
+  projectNumber: string;
+  /** Liczba znalezionych zleceń */
+  orderCount: number;
+  /** Status dopasowania */
+  status: 'found' | 'not_found';
+  /** Znalezione zlecenia (szczegóły) */
+  orders: MatchedOrder[];
+}
+
+/**
+ * Wynik tworzenia wersji listy
+ */
+export interface CreateListVersionResult {
+  /** ID utworzonej listy */
+  listId: number;
+  /** Numer wersji */
+  version: number;
+  /** Data dostawy */
+  deliveryDate: Date;
+  /** Liczba projektów na liście */
+  projectsCount: number;
+  /** Liczba powiązanych zleceń */
+  ordersCount: number;
+  /** ID rodzica (jeśli to nowa wersja) */
+  parentId: number | null;
+}
+
+/**
+ * Informacje o wersji listy
+ */
+export interface ListVersionInfo {
+  /** ID listy */
+  id: number;
+  /** Numer wersji */
+  version: number;
+  /** Data dostawy */
+  deliveryDate: Date;
+  /** Status listy */
+  status: string;
+  /** Data utworzenia */
+  createdAt: Date;
+  /** ID rodzica */
+  parentId: number | null;
+  /** Liczba projektów */
+  projectsCount: number;
+  /** Liczba zleceń */
+  ordersCount: number;
+}
 
 // ===================
 // Service
@@ -478,6 +552,465 @@ export class AkrobudVerificationService {
         result.push(part);
       }
     }
+
+    return result;
+  }
+
+  // ===================
+  // Project-based Operations
+  // ===================
+
+  /**
+   * Parsuje treść maila i wykrywa datę dostawy oraz numery projektów
+   * Deleguje do ProjectNumberParser
+   */
+  parseMailContentForProjects(rawInput: string): ParsedMailContent {
+    logger.debug('Parsowanie treści maila', { inputLength: rawInput.length });
+    return parseMailContent(rawInput);
+  }
+
+  /**
+   * Preview projektów przed zapisem - wyszukuje zlecenia dla każdego projektu
+   * Używa ProjectMatcher do optymalizacji (jedno zapytanie do bazy)
+   */
+  async previewProjects(projects: string[]): Promise<ProjectPreview[]> {
+    if (projects.length === 0) {
+      return [];
+    }
+
+    logger.info('Preview projektów', { count: projects.length });
+
+    // Znajdź zlecenia dla wszystkich projektów naraz
+    const matchResults = await findOrdersByProjects(this.prisma, projects, {
+      excludeArchived: true,
+    });
+
+    // Przekształć wyniki na format ProjectPreview
+    const previews: ProjectPreview[] = [];
+    for (const project of projects) {
+      const result = matchResults.get(project.toUpperCase());
+      if (result) {
+        previews.push({
+          projectNumber: result.projectNumber,
+          orderCount: result.orderCount,
+          status: result.matchStatus,
+          orders: result.matchedOrders,
+        });
+      } else {
+        // Projekt nie znaleziony (nie powinno się zdarzyć, ale dla bezpieczeństwa)
+        previews.push({
+          projectNumber: project.toUpperCase(),
+          orderCount: 0,
+          status: 'not_found',
+          orders: [],
+        });
+      }
+    }
+
+    logger.info('Preview projektów zakończony', {
+      total: previews.length,
+      found: previews.filter((p) => p.status === 'found').length,
+      notFound: previews.filter((p) => p.status === 'not_found').length,
+    });
+
+    return previews;
+  }
+
+  /**
+   * Tworzy nową wersję listy weryfikacyjnej opartej na projektach
+   *
+   * Jeśli podano parentId - to jest aktualizacja istniejącej listy,
+   * wersja zostanie ustawiona na parent.version + 1
+   *
+   * Dla każdego projektu:
+   * 1. Tworzy AkrobudVerificationItem z projectNumber
+   * 2. Zapisuje powiązane zlecenia do VerificationItemOrder
+   */
+  async createListVersion(
+    deliveryDate: Date,
+    rawInput: string,
+    projects: string[],
+    parentId?: number
+  ): Promise<CreateListVersionResult> {
+    logger.info('Tworzenie nowej wersji listy', {
+      deliveryDate,
+      projectsCount: projects.length,
+      hasParent: !!parentId,
+    });
+
+    // Określ numer wersji
+    let version = 1;
+    if (parentId) {
+      const parent = await this.prisma.akrobudVerificationList.findUnique({
+        where: { id: parentId },
+        select: { version: true },
+      });
+      if (!parent) {
+        throw new NotFoundError('Lista rodzica');
+      }
+      version = parent.version + 1;
+    }
+
+    // Pobierz zlecenia dla wszystkich projektów (przed transakcją)
+    const matchResults = await findOrdersByProjects(this.prisma, projects, {
+      excludeArchived: true,
+    });
+
+    // Transakcja: utwórz listę i wszystkie powiązania
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Utwórz listę
+      const list = await tx.akrobudVerificationList.create({
+        data: {
+          deliveryDate,
+          rawInput,
+          version,
+          parentId: parentId ?? null,
+          status: 'draft',
+        },
+      });
+
+      let totalOrdersCount = 0;
+
+      // 2. Dla każdego projektu utwórz item i powiązania z zleceniami
+      for (let position = 0; position < projects.length; position++) {
+        const projectNumber = projects[position].toUpperCase();
+        const matchResult = matchResults.get(projectNumber);
+
+        // Utwórz item z projectNumber
+        const item = await tx.akrobudVerificationItem.create({
+          data: {
+            listId: list.id,
+            orderNumberInput: projectNumber, // Dla kompatybilności wstecznej
+            projectNumber,
+            position: position + 1,
+            matchStatus: matchResult?.matchStatus === 'found' ? 'found' : 'not_found',
+          },
+        });
+
+        // Jeśli znaleziono zlecenia - utwórz powiązania
+        if (matchResult && matchResult.matchedOrders.length > 0) {
+          for (const order of matchResult.matchedOrders) {
+            await tx.verificationItemOrder.create({
+              data: {
+                itemId: item.id,
+                orderId: order.id,
+              },
+            });
+            totalOrdersCount++;
+          }
+        }
+      }
+
+      return {
+        listId: list.id,
+        version: list.version,
+        deliveryDate: list.deliveryDate,
+        projectsCount: projects.length,
+        ordersCount: totalOrdersCount,
+        parentId: list.parentId,
+      };
+    });
+
+    logger.info('Utworzono nową wersję listy', {
+      listId: result.listId,
+      version: result.version,
+      projectsCount: result.projectsCount,
+      ordersCount: result.ordersCount,
+    });
+
+    return result;
+  }
+
+  /**
+   * Pobiera wszystkie wersje list dla danej daty dostawy
+   * Sortowane po version DESC (najnowsze pierwsze)
+   */
+  async getListVersions(deliveryDate: Date): Promise<ListVersionInfo[]> {
+    const startOfDay = new Date(deliveryDate);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(deliveryDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const lists = await this.prisma.akrobudVerificationList.findMany({
+      where: {
+        deliveryDate: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+        deletedAt: null,
+      },
+      include: {
+        items: {
+          include: {
+            matchedOrders: true,
+          },
+        },
+      },
+      orderBy: { version: 'desc' },
+    });
+
+    return lists.map((list) => ({
+      id: list.id,
+      version: list.version,
+      deliveryDate: list.deliveryDate,
+      status: list.status,
+      createdAt: list.createdAt,
+      parentId: list.parentId,
+      projectsCount: list.items.length,
+      ordersCount: list.items.reduce(
+        (sum, item) => sum + item.matchedOrders.length,
+        0
+      ),
+    }));
+  }
+
+  /**
+   * Pobiera wszystkie wersje listy na podstawie jej historii (parentId chain)
+   */
+  async getListVersionHistory(listId: number): Promise<ListVersionInfo[]> {
+    // Znajdź wszystkie listy w tej samej "rodzinie" (przez parentId)
+    const targetList = await this.prisma.akrobudVerificationList.findUnique({
+      where: { id: listId },
+      select: { deliveryDate: true },
+    });
+
+    if (!targetList) {
+      throw new NotFoundError('Lista weryfikacyjna');
+    }
+
+    // Pobierz wszystkie wersje dla tej daty
+    return this.getListVersions(targetList.deliveryDate);
+  }
+
+  /**
+   * Porównuje dwie wersje listy i zwraca różnice
+   */
+  async compareVersions(listId1: number, listId2: number): Promise<VersionDiff> {
+    // Pobierz obie listy z items
+    const [list1, list2] = await Promise.all([
+      this.prisma.akrobudVerificationList.findUnique({
+        where: { id: listId1 },
+        include: {
+          items: {
+            select: {
+              projectNumber: true,
+            },
+          },
+        },
+      }),
+      this.prisma.akrobudVerificationList.findUnique({
+        where: { id: listId2 },
+        include: {
+          items: {
+            select: {
+              projectNumber: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    if (!list1) {
+      throw new NotFoundError('Lista weryfikacyjna 1');
+    }
+    if (!list2) {
+      throw new NotFoundError('Lista weryfikacyjna 2');
+    }
+
+    // Konwertuj items na format wymagany przez VersionComparator
+    // Filtruj null projectNumbers (starsze listy mogą mieć tylko orderNumberInput)
+    const list1Input = {
+      version: list1.version,
+      items: list1.items
+        .filter((item) => item.projectNumber !== null)
+        .map((item) => ({
+          projectNumber: item.projectNumber!,
+        })),
+    };
+
+    const list2Input = {
+      version: list2.version,
+      items: list2.items
+        .filter((item) => item.projectNumber !== null)
+        .map((item) => ({
+          projectNumber: item.projectNumber!,
+        })),
+    };
+
+    // Zawsze porównuj starszą z nowszą (oldList pierwszy argument)
+    const [oldList, newList] = list1.version < list2.version
+      ? [list1Input, list2Input]
+      : [list2Input, list1Input];
+
+    return compareListVersions(oldList, newList);
+  }
+
+  /**
+   * Weryfikuje listę opartą na projektach - porównuje z dostawą
+   * Dla każdego projektu sprawdza które zlecenia są w dostawie
+   */
+  async verifyProjectList(
+    listId: number,
+    createDeliveryIfMissing: boolean = false
+  ): Promise<VerificationResult> {
+    const list = await this.prisma.akrobudVerificationList.findUnique({
+      where: { id: listId },
+      include: {
+        items: {
+          include: {
+            matchedOrders: {
+              include: {
+                order: {
+                  select: {
+                    id: true,
+                    orderNumber: true,
+                    client: true,
+                    project: true,
+                    status: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { position: 'asc' },
+        },
+      },
+    });
+
+    if (!list) {
+      throw new NotFoundError('Lista weryfikacyjna');
+    }
+
+    logger.info('Rozpoczynam weryfikację listy projektów', {
+      listId,
+      deliveryDate: list.deliveryDate,
+      itemsCount: list.items.length,
+    });
+
+    // 1. Znajdź dostawę na ten dzień
+    let delivery = await this.findDeliveryForDate(list.deliveryDate);
+    let needsDeliveryCreation = false;
+
+    if (!delivery && createDeliveryIfMissing) {
+      delivery = await this.createDeliveryForDate(list.deliveryDate);
+      logger.info('Utworzono nową dostawę', { deliveryId: delivery.id });
+    } else if (!delivery) {
+      needsDeliveryCreation = true;
+    }
+
+    // 2. Pobierz zlecenia z dostawy (jeśli istnieje)
+    const deliveryOrders = delivery
+      ? await this.getDeliveryOrders(delivery.id)
+      : [];
+
+    // Zbiór ID zleceń w dostawie
+    const deliveryOrderIds = new Set(deliveryOrders.map((o) => o.order.id));
+
+    // 3. Analiza projektów - które zlecenia są/nie są w dostawie
+    const matched: MatchedItem[] = [];
+    const missing: MissingItem[] = [];
+    const notFound: NotFoundItem[] = [];
+
+    for (const item of list.items) {
+      if (item.matchedOrders.length === 0) {
+        // Projekt bez zleceń - NotFoundItem nie ma pola 'reason'
+        notFound.push({
+          itemId: item.id,
+          orderNumberInput: item.projectNumber ?? item.orderNumberInput,
+          position: item.position,
+        });
+        continue;
+      }
+
+      // Sprawdź każde zlecenie projektu
+      for (const orderLink of item.matchedOrders) {
+        const order = orderLink.order;
+        const isInDelivery = deliveryOrderIds.has(order.id);
+
+        if (isInDelivery) {
+          matched.push({
+            itemId: item.id,
+            orderNumberInput: item.projectNumber ?? item.orderNumberInput,
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            client: order.client,
+            project: order.project,
+            position: item.position,
+            matchStatus: 'found',
+          });
+        } else {
+          missing.push({
+            itemId: item.id,
+            orderNumberInput: item.projectNumber ?? item.orderNumberInput,
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            client: order.client,
+            project: order.project,
+            position: item.position,
+          });
+        }
+      }
+    }
+
+    // 4. Znajdź nadmiarowe zlecenia (są w dostawie, nie ma na liście)
+    const listOrderIds = new Set(
+      list.items.flatMap((item) =>
+        item.matchedOrders.map((o) => o.order.id)
+      )
+    );
+
+    const excess: ExcessItem[] = deliveryOrders
+      .filter((o) => !listOrderIds.has(o.order.id))
+      .map((o) => ({
+        orderId: o.order.id,
+        orderNumber: o.order.orderNumber,
+        client: o.order.client,
+        project: o.order.project,
+        deliveryPosition: o.position,
+      }));
+
+    // 5. Połącz listę z dostawą (jeśli istnieje)
+    if (delivery && !list.deliveryId) {
+      await this.repository.linkToDelivery(listId, delivery.id);
+    }
+
+    // 6. Zaktualizuj status listy
+    await this.repository.update(listId, { status: 'verified' });
+
+    const result: VerificationResult = {
+      listId: list.id,
+      deliveryDate: list.deliveryDate,
+      delivery: delivery
+        ? {
+            id: delivery.id,
+            deliveryNumber: delivery.deliveryNumber,
+            status: delivery.status,
+          }
+        : null,
+      needsDeliveryCreation,
+      matched,
+      missing,
+      excess,
+      notFound,
+      duplicates: [], // Projekty nie mają duplikatów w tym sensie
+      summary: {
+        totalItems: list.items.length,
+        matchedCount: matched.length,
+        missingCount: missing.length,
+        excessCount: excess.length,
+        notFoundCount: notFound.length,
+        duplicatesCount: 0,
+      },
+    };
+
+    logger.info('Weryfikacja listy projektów zakończona', {
+      listId,
+      matched: matched.length,
+      missing: missing.length,
+      excess: excess.length,
+      notFound: notFound.length,
+    });
 
     return result;
   }

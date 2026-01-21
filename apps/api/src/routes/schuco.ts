@@ -414,4 +414,208 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
       });
     },
   });
+
+  // POST /api/schuco/cancel - Cancel active import
+  fastify.post('/cancel', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Cancel active Schuco import',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            cancelled: { type: 'boolean' },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const result = await schucoService.cancelFetch();
+      return reply.send(result);
+    },
+  });
+
+  // GET /api/schuco/is-running - Check if import is running
+  fastify.get('/is-running', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Check if Schuco import is currently running',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            isRunning: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      return reply.send({
+        isRunning: schucoService.isImportRunning(),
+      });
+    },
+  });
+
+  // GET /api/schuco/archive - Get archived deliveries with pagination
+  fastify.get('/archive', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get archived Schuco deliveries with pagination',
+      tags: ['schuco'],
+      querystring: {
+        type: 'object',
+        properties: {
+          page: { type: 'integer', default: 1, minimum: 1 },
+          pageSize: { type: 'integer', default: 50, minimum: 1, maximum: 200 },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'integer' },
+                  orderDate: { type: 'string' },
+                  orderNumber: { type: 'string' },
+                  projectNumber: { type: 'string' },
+                  orderName: { type: 'string' },
+                  shippingStatus: { type: 'string' },
+                  deliveryWeek: { type: 'string', nullable: true },
+                  totalAmount: { type: 'string', nullable: true },
+                  archivedAt: { type: 'string', format: 'date-time' },
+                },
+              },
+            },
+            total: { type: 'integer' },
+            page: { type: 'integer' },
+            pageSize: { type: 'integer' },
+            totalPages: { type: 'integer' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { page, pageSize } = request.query as { page?: number; pageSize?: number };
+      const result = await schucoService.getArchivedDeliveries(page, pageSize);
+      return reply.send(result);
+    },
+  });
+
+  // GET /api/schuco/archive/stats - Get archive statistics
+  fastify.get('/archive/stats', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get statistics about archived deliveries',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            totalArchived: { type: 'integer' },
+            oldestArchived: { type: 'string', format: 'date-time', nullable: true },
+            newestArchived: { type: 'string', format: 'date-time', nullable: true },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const stats = await schucoService.getArchiveStats();
+      return reply.send(stats);
+    },
+  });
+
+  // POST /api/schuco/archive/run - Manually trigger archiving
+  fastify.post('/archive/run', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Manually trigger archiving of old completed deliveries',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            archivedCount: { type: 'integer' },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const result = await schucoService.archiveOldDeliveries();
+      return reply.send({
+        ...result,
+        message: result.archivedCount > 0
+          ? `Zarchiwizowano ${result.archivedCount} zamówień`
+          : 'Brak zamówień do archiwizacji',
+      });
+    },
+  });
+
+  // GET /api/schuco/settings/filter-days - Get filter days setting
+  fastify.get('/settings/filter-days', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get the number of days for Schuco date filter',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            days: { type: 'integer' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const setting = await fastify.prisma.setting.findUnique({
+        where: { key: 'schuco_filter_days' },
+      });
+      const days = setting?.value ? parseInt(setting.value, 10) : 90;
+      return reply.send({ days: isNaN(days) || days <= 0 ? 90 : days });
+    },
+  });
+
+  // PUT /api/schuco/settings/filter-days - Update filter days setting
+  fastify.put('/settings/filter-days', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Update the number of days for Schuco date filter',
+      tags: ['schuco'],
+      body: {
+        type: 'object',
+        required: ['days'],
+        properties: {
+          days: { type: 'integer', minimum: 7, maximum: 365 },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            days: { type: 'integer' },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { days } = request.body as { days: number };
+      await fastify.prisma.setting.upsert({
+        where: { key: 'schuco_filter_days' },
+        update: { value: days.toString() },
+        create: { key: 'schuco_filter_days', value: days.toString() },
+      });
+      return reply.send({
+        days,
+        message: `Filtr daty zamówień ustawiony na ${days} dni`,
+      });
+    },
+  });
 }

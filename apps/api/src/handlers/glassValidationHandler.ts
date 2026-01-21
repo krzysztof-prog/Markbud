@@ -69,4 +69,17 @@ export class GlassValidationHandler {
     const validation = await this.service.resolve(id, resolvedBy, notes);
     return reply.send(validation);
   }
+
+  /**
+   * GET /glass-validations/order/:orderNumber/details
+   * Szczegółowe rozbieżności szyb dla zlecenia - porównanie per wymiar z info o dostawach
+   */
+  async getDetailedDiscrepancies(
+    request: FastifyRequest<{ Params: { orderNumber: string } }>,
+    reply: FastifyReply
+  ) {
+    const { orderNumber } = glassValidationOrderNumberParamsSchema.parse(request.params);
+    const details = await this.service.getDetailedDiscrepancies(orderNumber);
+    return reply.send(details);
+  }
 }

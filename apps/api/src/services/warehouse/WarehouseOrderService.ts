@@ -97,19 +97,21 @@ export class WarehouseOrderService {
   /**
    * Aktualizuje zamówienie magazynowe
    * Obsługuje też automatyczną aktualizację stanu magazynu przy zmianie statusu
+   * UWAGA: Caly read + update wykonywany w transakcji dla unikniecia lost updates
    */
   async update(id: number, data: UpdateWarehouseOrderInput) {
-    // Pobierz istniejące zamówienie
-    const existingOrder = await this.prisma.warehouseOrder.findUnique({
-      where: { id },
-    });
-
-    if (!existingOrder) {
-      throw new NotFoundError('Zamówienie nie znalezione');
-    }
-
-    // Wykonaj aktualizację w transakcji
+    // Wykonaj aktualizację w transakcji - WAZNE: read tez musi byc w transakcji
+    // aby uniknac lost updates przy concurrent requests
     return this.prisma.$transaction(async (tx) => {
+      // Pobierz istniejące zamówienie W TRANSAKCJI (nie poza nia!)
+      const existingOrder = await tx.warehouseOrder.findUnique({
+        where: { id },
+      });
+
+      if (!existingOrder) {
+        throw new NotFoundError('Zamówienie nie znalezione');
+      }
+
       const updateData: Prisma.WarehouseOrderUpdateInput = {};
 
       if (data.orderedBeams !== undefined) {
@@ -125,7 +127,7 @@ export class WarehouseOrderService {
         updateData.notes = data.notes;
       }
 
-      // Oblicz zmiany wpływające na magazyn
+      // Oblicz zmiany wpływające na magazyn (teraz uzywamy swiezych danych z transakcji)
       await this.updateStockIfNeeded(tx, existingOrder, data);
 
       // Zaktualizuj zamówienie

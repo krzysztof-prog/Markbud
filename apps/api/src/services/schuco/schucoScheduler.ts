@@ -49,10 +49,15 @@ export class SchucoScheduler {
       timezone: 'Europe/Warsaw',
     });
 
-    this.tasks = [task8am, task12pm, task3pm];
+    // Schedule archiving at 2:00 AM (nocna archiwizacja starych zamówień)
+    const taskArchive = cron.schedule('0 2 * * *', () => this.runArchive(), {
+      timezone: 'Europe/Warsaw',
+    });
+
+    this.tasks = [task8am, task12pm, task3pm, taskArchive];
     this.isRunning = true;
 
-    logger.info('[SchucoScheduler] Scheduler started. Tasks scheduled for 8:00, 12:00, 15:00 (Europe/Warsaw)');
+    logger.info('[SchucoScheduler] Scheduler started. Fetch: 8:00, 12:00, 15:00. Archive: 2:00 (Europe/Warsaw)');
   }
 
   /**
@@ -103,12 +108,31 @@ export class SchucoScheduler {
   }
 
   /**
+   * Run archive task - archiwizuj stare zrealizowane zamówienia
+   */
+  private async runArchive(): Promise<void> {
+    logger.info('[SchucoScheduler] Running scheduled archive (2:00)...');
+
+    try {
+      const result = await this.schucoService.archiveOldDeliveries();
+
+      logger.info(
+        `[SchucoScheduler] Scheduled archive completed (2:00). ` +
+          `Archived: ${result.archivedCount} deliveries`
+      );
+    } catch (error) {
+      logger.error('[SchucoScheduler] Scheduled archive error (2:00):', error);
+    }
+  }
+
+  /**
    * Get scheduler status
    */
-  getStatus(): { isRunning: boolean; scheduledTimes: string[] } {
+  getStatus(): { isRunning: boolean; scheduledTimes: string[]; archiveTime: string } {
     return {
       isRunning: this.isRunning,
       scheduledTimes: this.isRunning ? ['8:00', '12:00', '15:00'] : [],
+      archiveTime: this.isRunning ? '2:00' : '',
     };
   }
 }

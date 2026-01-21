@@ -322,4 +322,183 @@ export class OkucArticleRepository {
     logger.debug('Article not found by alias', { aliasNumber });
     return null;
   }
+
+  // ============================================================================
+  // REPLACEMENT (Zastępstwa artykułów) - metody do zarządzania wygaszaniem
+  // ============================================================================
+
+  /**
+   * Pobierz artykuły wygaszane z ich zamiennikami
+   */
+  async findPhaseOutArticles() {
+    const articles = await this.prisma.okucArticle.findMany({
+      where: {
+        isPhaseOut: true,
+        deletedAt: null,
+      },
+      include: {
+        replacedByArticle: {
+          select: {
+            id: true,
+            articleId: true,
+            name: true,
+            isPhaseOut: true,
+          },
+        },
+        stocks: true,
+      },
+      orderBy: { articleId: 'asc' },
+    });
+
+    logger.debug('Found phase-out articles', { count: articles.length });
+    return articles;
+  }
+
+  /**
+   * Ustaw mapowanie zastępstwa artykułu
+   */
+  async setReplacement(oldArticleId: number, newArticleId: number | null) {
+    const article = await this.prisma.okucArticle.update({
+      where: { id: oldArticleId },
+      data: {
+        isPhaseOut: newArticleId !== null,
+        replacedByArticleId: newArticleId,
+        // Reset daty transferu gdy zmieniamy mapowanie
+        demandTransferredAt: null,
+      },
+      include: {
+        replacedByArticle: {
+          select: {
+            id: true,
+            articleId: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    logger.info('Set article replacement', {
+      oldArticleId,
+      newArticleId,
+      articleNumber: article.articleId,
+    });
+
+    return article;
+  }
+
+  /**
+   * Sprawdź czy artykuł może być zamiennikiem (walidacja cykli i statusu)
+   */
+  async validateReplacementCandidate(
+    oldArticleId: number,
+    newArticleId: number
+  ): Promise<{ valid: boolean; error?: string }> {
+    // 1. Nie można ustawić siebie jako zamiennika
+    if (oldArticleId === newArticleId) {
+      return { valid: false, error: 'Artykuł nie może być swoim własnym zamiennikiem' };
+    }
+
+    // 2. Sprawdź czy nowy artykuł istnieje i nie jest usunięty
+    const newArticle = await this.prisma.okucArticle.findUnique({
+      where: { id: newArticleId, deletedAt: null },
+      include: {
+        replacedByArticle: true,
+      },
+    });
+
+    if (!newArticle) {
+      return { valid: false, error: 'Artykuł zastępujący nie istnieje' };
+    }
+
+    // 3. Sprawdź czy nowy artykuł nie jest już wygaszany
+    if (newArticle.isPhaseOut) {
+      return {
+        valid: false,
+        error: `Artykuł ${newArticle.articleId} jest już wygaszany - nie może być zamiennikiem`,
+      };
+    }
+
+    // 4. Sprawdź cykle (A → B → A) - iteracyjnie
+    const visited = new Set<number>([oldArticleId, newArticleId]);
+    let currentId = newArticle.replacedByArticleId;
+
+    while (currentId !== null) {
+      if (visited.has(currentId)) {
+        return {
+          valid: false,
+          error: 'Wykryto cykliczną zależność zastępstw',
+        };
+      }
+      visited.add(currentId);
+
+      const next = await this.prisma.okucArticle.findUnique({
+        where: { id: currentId },
+        select: { replacedByArticleId: true },
+      });
+
+      currentId = next?.replacedByArticleId ?? null;
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Przenieś zapotrzebowanie ze starego artykułu na nowy
+   * Przenosi tylko statusy pending/confirmed (nie in_production/completed)
+   */
+  async transferDemand(oldArticleId: number, newArticleId: number): Promise<number> {
+    // Przenieś demands
+    const result = await this.prisma.okucDemand.updateMany({
+      where: {
+        articleId: oldArticleId,
+        status: { in: ['pending', 'confirmed'] },
+        deletedAt: null,
+      },
+      data: {
+        articleId: newArticleId,
+        isManualEdit: true,
+        editedAt: new Date(),
+        editReason: 'Przeniesiono z artykułu wygaszanego (auto-transfer)',
+      },
+    });
+
+    // Oznacz datę transferu na starym artykule
+    await this.prisma.okucArticle.update({
+      where: { id: oldArticleId },
+      data: { demandTransferredAt: new Date() },
+    });
+
+    logger.info('Transferred demand from phase-out article', {
+      oldArticleId,
+      newArticleId,
+      transferred: result.count,
+    });
+
+    return result.count;
+  }
+
+  /**
+   * Policz oczekujące zapotrzebowania dla artykułu
+   */
+  async countPendingDemands(articleId: number): Promise<number> {
+    return this.prisma.okucDemand.count({
+      where: {
+        articleId,
+        status: { in: ['pending', 'confirmed'] },
+        deletedAt: null,
+      },
+    });
+  }
+
+  /**
+   * Pobierz sumę stanów magazynowych artykułu
+   */
+  async getTotalStock(articleId: number): Promise<number> {
+    const stocks = await this.prisma.okucStock.findMany({
+      where: { articleId },
+      select: { currentQuantity: true },
+    });
+
+    return stocks.reduce((sum, s) => sum + s.currentQuantity, 0);
+  }
 }

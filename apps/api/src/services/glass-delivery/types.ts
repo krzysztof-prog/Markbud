@@ -72,4 +72,23 @@ export type GlassDeliveryWithItemsAndCount = GlassDelivery & {
   _count: {
     items: number;
   };
+  totalQuantity: number; // Suma wszystkich quantity z items
 };
+
+/**
+ * Pogrupowana dostawa szyb - grupowanie po customerOrderNumber + rackNumber z items
+ * Używane w widoku tabeli dostaw
+ */
+export interface GroupedGlassDelivery {
+  // Klucz grupowania
+  customerOrderNumber: string;
+  rackNumber: string;
+  // Data dostawy (z parent GlassDelivery)
+  deliveryDate: Date;
+  // Suma szyb w tej grupie
+  totalQuantity: number;
+  // ID parent delivery (do usuwania)
+  glassDeliveryId: number;
+  // Szyby należące do tej grupy
+  items: GlassDeliveryItem[];
+}

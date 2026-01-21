@@ -8,13 +8,15 @@
 import { z } from 'zod';
 
 /**
- * Date schema that accepts ISO datetime string or Date object
- * Transforms to ISO string format
+ * Date schema that accepts:
+ * - ISO datetime string (e.g., "2026-01-27T10:00:00.000Z")
+ * - Date-only string (e.g., "2026-01-27")
+ * - Date object
+ * Validates the date is parseable
  */
 export const dateSchema = z
   .string()
-  .datetime()
-  .or(z.coerce.date().transform((d) => d.toISOString()));
+  .refine((val) => !isNaN(Date.parse(val)), { message: 'Invalid date format' });
 
 /**
  * Optional date schema

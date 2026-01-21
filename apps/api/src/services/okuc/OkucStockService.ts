@@ -4,6 +4,7 @@
  */
 
 import { OkucStockRepository } from '../../repositories/okuc/OkucStockRepository.js';
+import { ArticleReplacementService } from './ArticleReplacementService.js';
 import { prisma } from '../../utils/prisma.js';
 import { logger } from '../../utils/logger.js';
 import { NotFoundError, ValidationError } from '../../utils/errors.js';
@@ -58,7 +59,30 @@ interface SelectedConflict {
 }
 
 export class OkucStockService {
-  constructor(private repository: OkucStockRepository) {}
+  private replacementService: ArticleReplacementService;
+
+  constructor(private repository: OkucStockRepository) {
+    this.replacementService = new ArticleReplacementService();
+  }
+
+  /**
+   * Sprawdź i automatycznie przenieś zapotrzebowanie gdy stan artykułu = 0
+   * Wywoływane po każdej zmianie stanu magazynowego
+   */
+  private async checkAndAutoTransfer(articleId: number): Promise<void> {
+    try {
+      const result = await this.replacementService.checkAndTransferIfStockZero(articleId);
+      if (result && result.transferred > 0) {
+        logger.info('Auto-transferred demand after stock change', {
+          articleId,
+          transferred: result.transferred,
+        });
+      }
+    } catch (error) {
+      // Nie przerywaj operacji głównej - tylko loguj błąd
+      logger.warn('Failed to check auto-transfer', { articleId, error });
+    }
+  }
 
   /**
    * Pobierz liste wszystkich stanow magazynowych z opcjonalnymi filtrami
@@ -111,6 +135,10 @@ export class OkucStockService {
     if (!stock) {
       throw new NotFoundError('Stock not found or version mismatch');
     }
+
+    // Auto-transfer zapotrzebowania jeśli stan = 0 i artykuł jest wygaszany
+    await this.checkAndAutoTransfer(stock.articleId);
+
     return stock;
   }
 
@@ -122,6 +150,10 @@ export class OkucStockService {
     if (!stock) {
       throw new NotFoundError('Stock not found or version mismatch');
     }
+
+    // Auto-transfer zapotrzebowania jeśli stan = 0 i artykuł jest wygaszany
+    await this.checkAndAutoTransfer(stock.articleId);
+
     return stock;
   }
 

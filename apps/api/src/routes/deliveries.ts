@@ -7,6 +7,7 @@ import { DeliveryProtocolService } from '../services/delivery-protocol-service.j
 import { verifyAuth } from '../middleware/auth.js';
 import { parseIntParam } from '../utils/errors.js';
 import { ReadinessOrchestrator } from '../services/readinessOrchestrator.js';
+import { getLatestForDelivery } from '../handlers/labelCheckHandler.js';
 
 
 export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
@@ -176,4 +177,20 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     const result = await orchestrator.canShipDelivery(parseIntParam(id, 'id'));
     return reply.send(result);
   });
+
+  // GET /api/deliveries/:id/label-check - ostatnie sprawdzenie etykiet dla dostawy
+  fastify.get<{ Params: { id: string } }>('/:id/label-check', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get latest label check for a delivery',
+      tags: ['deliveries', 'label-checks'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string', description: 'Delivery ID' },
+        },
+      },
+    },
+  }, getLatestForDelivery);
 };

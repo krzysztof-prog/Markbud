@@ -108,11 +108,26 @@ export function useRealtimeSync({ enabled = true }: UseRealtimeSyncOptions = {})
         'order:created': ['orders', 'deliveries-calendar-continuous', 'deliveries-calendar-batch'],
         'order:updated': ['orders', 'deliveries-calendar-continuous', 'deliveries-calendar-batch'],
         'order:deleted': ['orders', 'deliveries-calendar-continuous', 'deliveries-calendar-batch'],
-        'warehouse:stock_updated': ['warehouse'],
-        'warehouse:stock_changed': ['warehouse'],
+        'warehouse:stock_updated': ['warehouse', 'profile-requirements'],
+        'warehouse:stock_changed': ['warehouse', 'profile-requirements'],
+        'warehouse:rw_processed': ['warehouse', 'profile-requirements'],
+        'steel:stock_updated': ['steel-stock'],
+        'steel:rw_processed': ['steel-stock'],
         'price:imported': ['pending-prices', 'orders'],
         'price:pending': ['pending-prices'],
+        // Schuco events - obsługiwane przez custom event dispatch
+        'schuco:fetch_started': [],
+        'schuco:fetch_progress': [],
+        'schuco:fetch_completed': ['schuco-deliveries', 'schuco-status', 'schuco-statistics', 'schuco-logs'],
+        'schuco:fetch_failed': ['schuco-status', 'schuco-logs'],
       };
+
+      // Emituj custom event dla Schuco progress (używane przez useSchucoRealtimeProgress)
+      if (event.type.startsWith('schuco:')) {
+        window.dispatchEvent(new CustomEvent('schuco-progress', {
+          detail: { type: event.type, data: event.data },
+        }));
+      }
 
       const keysToInvalidate = queryKeyMap[event.type] || [];
 

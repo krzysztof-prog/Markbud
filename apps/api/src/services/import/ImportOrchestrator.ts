@@ -208,7 +208,7 @@ export class ImportOrchestrator {
   async getPreview(id: number) {
     const fileImport = await this.getImportById(id);
 
-    if (fileImport.fileType === 'uzyte_bele') {
+    if (fileImport.fileType === 'uzyte_bele' || fileImport.fileType === 'uzyte_bele_prywatne') {
       const preview = await this.uzyteBeleProcessor.getUzyteBelePreview(fileImport.filepath);
       return {
         import: fileImport,
@@ -267,6 +267,9 @@ export class ImportOrchestrator {
 
       if (fileImport.fileType === 'uzyte_bele') {
         result = await this.uzyteBeleProcessor.processUzyteBeleImport(fileImport, action, replaceBase) as unknown as Record<string, unknown>;
+      } else if (fileImport.fileType === 'uzyte_bele_prywatne') {
+        // Import prywatny - przekaż opcję isPrivateImport do tworzenia PrivateColor
+        result = await this.uzyteBeleProcessor.processUzyteBeleImport(fileImport, action, replaceBase, { isPrivateImport: true }) as unknown as Record<string, unknown>;
       } else if (fileImport.fileType === 'ceny_pdf') {
         result = await this.cenyProcessor.processPdfApproval(fileImport) as unknown as Record<string, unknown>;
       } else {

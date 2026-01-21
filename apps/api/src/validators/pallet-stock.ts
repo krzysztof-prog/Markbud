@@ -109,6 +109,30 @@ const AlertConfigEntrySchema = z.object({
 export const UpdateAlertConfigSchema = z.array(AlertConfigEntrySchema);
 
 // ============================================
+// INITIAL STOCK SCHEMAS
+// ============================================
+
+/**
+ * Pojedynczy wpis stanu początkowego
+ * type - typ palety
+ * initialStock - stan początkowy (>= 0)
+ */
+const InitialStockEntrySchema = z.object({
+  type: ProductionPalletTypeSchema,
+  initialStock: z.number().int().min(0, 'Stan początkowy nie może być ujemny'),
+});
+
+/**
+ * Ustawienie stanów początkowych palet
+ * startDate - data od której system liczy (wspólna dla wszystkich typów)
+ * stocks - tablica stanów początkowych dla każdego typu palety
+ */
+export const SetInitialStocksSchema = z.object({
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Nieprawidłowy format daty (YYYY-MM-DD)'),
+  stocks: z.array(InitialStockEntrySchema),
+});
+
+// ============================================
 // TYPE EXPORTS
 // ============================================
 
@@ -121,3 +145,5 @@ export type UpdatePalletDayEntriesInput = z.infer<typeof UpdatePalletDayEntriesS
 export type CorrectMorningStockInput = z.infer<typeof CorrectMorningStockSchema>;
 export type AlertConfigEntry = z.infer<typeof AlertConfigEntrySchema>;
 export type UpdateAlertConfigInput = z.infer<typeof UpdateAlertConfigSchema>;
+export type InitialStockEntry = z.infer<typeof InitialStockEntrySchema>;
+export type SetInitialStocksInput = z.infer<typeof SetInitialStocksSchema>;

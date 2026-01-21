@@ -88,12 +88,14 @@ export class CsvParser {
   /**
    * Przetwórz plik "użyte bele" i zapisz do bazy
    * Deleguje do UzyteBeleParser
+   * @param options - Opcjonalne parametry: isPrivateImport - czy to import prywatny
    */
   async processUzyteBele(
     filepath: string,
     action: 'overwrite' | 'add_new',
-    replaceBase?: boolean
+    replaceBase?: boolean,
+    options?: { isPrivateImport?: boolean }
   ): Promise<{ orderId: number; requirementsCount: number; windowsCount: number; glassesCount: number }> {
-    return this.uzyteBeleParser.processUzyteBele(filepath, action, replaceBase);
+    return this.uzyteBeleParser.processUzyteBele(filepath, action, replaceBase, options);
   }
 }

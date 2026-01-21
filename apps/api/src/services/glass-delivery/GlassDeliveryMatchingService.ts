@@ -432,8 +432,11 @@ export class GlassDeliveryMatchingService {
         stillUnmatched++;
       }
 
-      // 5. Update Order statuses
+      // 5. Update Order statuses + twórz walidacje nadwyżek/braków
       const uniqueOrders = [...new Set(unmatchedItems.map((i) => i.orderNumber))];
+      const surplusValidations: ValidationCreateInput[] = [];
+      const shortageValidations: ValidationCreateInput[] = [];
+
       for (const orderNumber of uniqueOrders) {
         const order = await tx.order.findUnique({ where: { orderNumber } });
         if (!order) continue;
@@ -448,16 +451,60 @@ export class GlassDeliveryMatchingService {
           newStatus = 'ordered';
         } else if (delivered < ordered) {
           newStatus = 'partially_delivered';
+          shortageValidations.push({
+            glassOrderId: null,
+            orderNumber,
+            validationType: 'quantity_shortage',
+            severity: 'warning',
+            message: `Brak szyb: zamówiono ${ordered} szt., dostarczono ${delivered} szt. (brakuje ${ordered - delivered} szt.)`,
+            details: null,
+            orderedQuantity: ordered,
+            deliveredQuantity: delivered,
+            expectedQuantity: ordered,
+            resolvedBy: null,
+          });
         } else if (delivered === ordered) {
           newStatus = 'delivered';
         } else {
           newStatus = 'over_delivered';
+          surplusValidations.push({
+            glassOrderId: null,
+            orderNumber,
+            validationType: 'quantity_surplus',
+            severity: 'warning',
+            message: `Nadwyżka szyb: zamówiono ${ordered} szt., dostarczono ${delivered} szt. (nadwyżka ${delivered - ordered} szt.)`,
+            details: null,
+            orderedQuantity: ordered,
+            deliveredQuantity: delivered,
+            expectedQuantity: ordered,
+            resolvedBy: null,
+          });
         }
 
         await tx.order.update({
           where: { orderNumber },
           data: { glassOrderStatus: newStatus },
         });
+      }
+
+      // Usuń stare nierozwiązane walidacje nadwyżek/braków
+      if (uniqueOrders.length > 0) {
+        await tx.glassOrderValidation.updateMany({
+          where: {
+            orderNumber: { in: uniqueOrders },
+            validationType: { in: ['quantity_surplus', 'quantity_shortage'] },
+            resolved: false,
+          },
+          data: { resolved: true, resolvedAt: new Date() },
+        });
+      }
+
+      // Utwórz nowe walidacje
+      if (surplusValidations.length > 0) {
+        await tx.glassOrderValidation.createMany({ data: surplusValidations });
+      }
+      if (shortageValidations.length > 0) {
+        await tx.glassOrderValidation.createMany({ data: shortageValidations });
       }
     });
 
@@ -508,6 +555,7 @@ export class GlassDeliveryMatchingService {
 
   /**
    * Transaction-aware order status update (OPTIMIZED - batch operations)
+   * Tworzy walidacje dla nadwyżek i braków
    */
   private async updateOrderStatusesTx(
     tx: TransactionClient,
@@ -534,6 +582,10 @@ export class GlassDeliveryMatchingService {
       over_delivered: [],
     };
 
+    // Zbierz dane do walidacji nadwyżek i braków
+    const surplusValidations: ValidationCreateInput[] = [];
+    const shortageValidations: ValidationCreateInput[] = [];
+
     for (const order of orders) {
       const ordered = order.orderedGlassCount || 0;
       const delivered = order.deliveredGlassCount || 0;
@@ -545,10 +597,36 @@ export class GlassDeliveryMatchingService {
         newStatus = 'ordered';
       } else if (delivered < ordered) {
         newStatus = 'partially_delivered';
+        // Utwórz walidację braku (częściowa dostawa)
+        shortageValidations.push({
+          glassOrderId: null,
+          orderNumber: order.orderNumber,
+          validationType: 'quantity_shortage',
+          severity: 'warning',
+          message: `Brak szyb: zamówiono ${ordered} szt., dostarczono ${delivered} szt. (brakuje ${ordered - delivered} szt.)`,
+          details: null,
+          orderedQuantity: ordered,
+          deliveredQuantity: delivered,
+          expectedQuantity: ordered,
+          resolvedBy: null,
+        });
       } else if (delivered === ordered) {
         newStatus = 'delivered';
       } else {
         newStatus = 'over_delivered';
+        // Utwórz walidację nadwyżki
+        surplusValidations.push({
+          glassOrderId: null,
+          orderNumber: order.orderNumber,
+          validationType: 'quantity_surplus',
+          severity: 'warning',
+          message: `Nadwyżka szyb: zamówiono ${ordered} szt., dostarczono ${delivered} szt. (nadwyżka ${delivered - ordered} szt.)`,
+          details: null,
+          orderedQuantity: ordered,
+          deliveredQuantity: delivered,
+          expectedQuantity: ordered,
+          resolvedBy: null,
+        });
       }
 
       statusGroups[newStatus].push(order.orderNumber);
@@ -568,6 +646,30 @@ export class GlassDeliveryMatchingService {
     }
 
     await Promise.all(updatePromises);
+
+    // Usuń stare nierozwiązane walidacje nadwyżek/braków dla tych zleceń (aby uniknąć duplikatów)
+    await tx.glassOrderValidation.updateMany({
+      where: {
+        orderNumber: { in: orderNumbers },
+        validationType: { in: ['quantity_surplus', 'quantity_shortage'] },
+        resolved: false,
+      },
+      data: { resolved: true, resolvedAt: new Date() },
+    });
+
+    // Utwórz nowe walidacje nadwyżek
+    if (surplusValidations.length > 0) {
+      await tx.glassOrderValidation.createMany({
+        data: surplusValidations,
+      });
+    }
+
+    // Utwórz nowe walidacje braków
+    if (shortageValidations.length > 0) {
+      await tx.glassOrderValidation.createMany({
+        data: shortageValidations,
+      });
+    }
   }
 
   /**

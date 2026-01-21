@@ -15,12 +15,14 @@ import {
   forProductionQuerySchema,
   monthlyProductionQuerySchema,
   variantTypeSchema,
+  manualStatusSchema,
   type CreateOrderInput,
   type UpdateOrderInput,
   type PatchOrderInput,
   type BulkUpdateStatusInput,
   type ForProductionQuery,
   type MonthlyProductionQuery,
+  type ManualStatusInput,
 } from '../validators/order.js';
 import { prisma } from '../index.js';
 import { parseIntParam } from '../utils/errors.js';
@@ -73,6 +75,23 @@ export class OrderHandler {
     const { id } = orderParamsSchema.parse(request.params);
     const validated = updateOrderSchema.parse(request.body);
     const order = await this.service.updateOrder(parseInt(id), validated);
+    return reply.send(order);
+  }
+
+  /**
+   * Aktualizuj ręczny status zlecenia (NIE CIĄĆ, Anulowane, Wstrzymane)
+   */
+  async updateManualStatus(
+    request: FastifyRequest<{ Params: { id: string }; Body: ManualStatusInput }>,
+    reply: FastifyReply
+  ) {
+    const { id } = orderParamsSchema.parse(request.params);
+    const validated = manualStatusSchema.parse(request.body);
+    const order = await this.service.updateManualStatus(parseInt(id), validated.manualStatus);
+
+    // Wyślij event WebSocket o aktualizacji zlecenia
+    emitOrderUpdated(order);
+
     return reply.send(order);
   }
 
