@@ -42,6 +42,8 @@ const DEFAULT_FILTERS: FilterState = {
   hideProduced: true, // domyślnie ukryj wyprodukowane
   dateFrom: getDefaultDateFrom(),
   showOnlyMissing: false, // domyślnie pokazuj wszystkie zlecenia
+  hideMissing: true, // domyślnie ukryj brakujące numery
+  privateUpcoming2Weeks: false, // domyślnie wyłączony
 };
 
 // ================================
@@ -127,6 +129,8 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
           hideProduced: typeof parsed.hideProduced === 'boolean' ? parsed.hideProduced : true,
           dateFrom: parsed.dateFrom || getDefaultDateFrom(),
           showOnlyMissing: typeof parsed.showOnlyMissing === 'boolean' ? parsed.showOnlyMissing : false,
+          hideMissing: typeof parsed.hideMissing === 'boolean' ? parsed.hideMissing : false,
+          privateUpcoming2Weeks: typeof parsed.privateUpcoming2Weeks === 'boolean' ? parsed.privateUpcoming2Weeks : false,
         });
       } catch (e) {
         console.error('Error loading filters:', e);
@@ -234,16 +238,16 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
         return false;
       }
 
-      // Dla filtra "Tylko Akrobud" - ukryj valuePln i deadline
+      // Dla filtra "Tylko Akrobud" - ukryj valuePln
       if (filters.clientFilter === 'akrobud') {
-        if (col.id === 'valuePln' || col.id === 'deadline') {
+        if (col.id === 'valuePln') {
           return false;
         }
       }
 
-      // Dla filtra "Tylko Prywatne" - ukryj valueEur i akrobudDeliveryDate
+      // Dla filtra "Tylko Prywatne" - ukryj valueEur
       if (filters.clientFilter === 'private') {
-        if (col.id === 'valueEur' || col.id === 'akrobudDeliveryDate') {
+        if (col.id === 'valueEur') {
           return false;
         }
       }
@@ -308,9 +312,38 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
       result = result.filter((order: ExtendedOrder) => !isAkrobudOrder(order.client));
     }
 
-    // Filtrowanie - ukryj wyprodukowane (archiwalne)
+    // Filtr: Pokaż zlecenia prywatne na najbliższe 2 tygodnie (+ zaległe)
+    // Gdy włączony, pokazuje TYLKO zlecenia prywatne z deadline <= dziś + 14 dni LUB zaległe (deadline < dziś)
+    // Pomija zlecenia "W realizacji" (in_progress)
+    if (filters.privateUpcoming2Weeks) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const twoWeeksFromNow = new Date(today);
+      twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
+
+      result = result.filter((order: ExtendedOrder) => {
+        // Tylko prywatne (nie Akrobud)
+        if (isAkrobudOrder(order.client)) return false;
+
+        // Pomijaj zlecenia "W realizacji"
+        if (order.status === 'in_progress') return false;
+
+        // Musi mieć deadline
+        if (!order.deadline) return false;
+
+        const deadline = new Date(order.deadline);
+        deadline.setHours(0, 0, 0, 0);
+
+        // Pokaż jeśli deadline <= 2 tygodnie od dziś (włącznie z zaległymi)
+        return deadline.getTime() <= twoWeeksFromNow.getTime();
+      });
+    }
+
+    // Filtrowanie - ukryj wyprodukowane (archiwalne LUB completed)
     if (filters.hideProduced) {
-      result = result.filter((order: ExtendedOrder) => !order.archivedAt);
+      result = result.filter((order: ExtendedOrder) =>
+        !order.archivedAt && order.status !== 'completed'
+      );
     }
 
     // Filtrowanie po dacie "od"
@@ -354,8 +387,16 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
       });
     }
 
-    // Sortowanie
+    // Sortowanie - zamówienia completed zawsze na końcu listy
     result = [...result].sort((a: ExtendedOrder, b: ExtendedOrder) => {
+      // Najpierw: completed na końcu
+      const aCompleted = a.status === 'completed' ? 1 : 0;
+      const bCompleted = b.status === 'completed' ? 1 : 0;
+      if (aCompleted !== bCompleted) {
+        return aCompleted - bCompleted; // completed (1) idą na koniec
+      }
+
+      // Następnie: normalne sortowanie
       let aValue: string | number | undefined;
       let bValue: string | number | undefined;
 
@@ -388,7 +429,11 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
           aValue = typeof a.valueEur === 'number' ? a.valueEur : 0;
           bValue = typeof b.valueEur === 'number' ? b.valueEur : 0;
           break;
-        case 'orderStatus':
+        case 'status':
+          aValue = a.status || '';
+          bValue = b.status || '';
+          break;
+        case 'schucoStatus':
           aValue = a.orderStatus || '';
           bValue = b.orderStatus || '';
           break;
@@ -401,18 +446,10 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
           bValue = b.glassDeliveryDate ? new Date(b.glassDeliveryDate).getTime() : 0;
           break;
         case 'deadline':
-          // Termin realizacji - tylko data z CSV
+          // Termin realizacji - data z CSV lub dostawy Akrobud
           aValue = a.deadline ? new Date(a.deadline).getTime() : 0;
           bValue = b.deadline ? new Date(b.deadline).getTime() : 0;
           break;
-        case 'akrobudDeliveryDate': {
-          // Dostawa AKR - data z dostawy Akrobud
-          const aDelivery = getAkrobudDeliveryDate(a.deliveryOrders);
-          const bDelivery = getAkrobudDeliveryDate(b.deliveryOrders);
-          aValue = aDelivery ? new Date(aDelivery).getTime() : 0;
-          bValue = bDelivery ? new Date(bDelivery).getTime() : 0;
-          break;
-        }
         case 'archived':
           aValue = a.archivedAt ? 1 : 0;
           bValue = b.archivedAt ? 1 : 0;
@@ -428,6 +465,15 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
       }
     });
 
+    // Specjalne sortowanie dla filtru "Prywatne na 2 tyg." - od najstarszej daty do najnowszej
+    if (filters.privateUpcoming2Weeks) {
+      result = [...result].sort((a: ExtendedOrder, b: ExtendedOrder) => {
+        const dateA = a.deadline ? new Date(a.deadline).getTime() : 0;
+        const dateB = b.deadline ? new Date(b.deadline).getTime() : 0;
+        return dateA - dateB; // rosnąco = od najstarszej (zaległe na górze)
+      });
+    }
+
     return result;
   }, [allOrders, debouncedSearchQuery, sortField, sortDirection, debouncedColumnFilters, filters]);
 
@@ -437,7 +483,7 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
   }, [allOrders]);
 
   // Sprawdź czy jakikolwiek filtr jest aktywny
-  const hasActiveFilter = filters.clientFilter !== 'all' || filters.hideProduced || filters.dateFrom !== '' || filters.showOnlyMissing;
+  const hasActiveFilter = filters.clientFilter !== 'all' || filters.hideProduced || filters.dateFrom !== '' || filters.showOnlyMissing || filters.privateUpcoming2Weeks;
 
   return {
     // Filtry główne

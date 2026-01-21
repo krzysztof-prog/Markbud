@@ -118,6 +118,7 @@ export interface FilterState {
   dateFrom: string; // format YYYY-MM-DD
   showOnlyMissing: boolean; // pokazuj tylko brakujące numery zleceń
   hideMissing: boolean; // ukryj brakujące numery w normalnym widoku
+  privateUpcoming2Weeks: boolean; // pokaż zlecenia prywatne na najbliższe 2 tygodnie (+ zaległe)
 }
 
 /**

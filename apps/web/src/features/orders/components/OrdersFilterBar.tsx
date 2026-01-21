@@ -66,10 +66,30 @@ export const OrdersFilterBar: React.FC<OrdersFilterBarProps> = ({
 
       {/* Checkboxy filtrów */}
       <div className="flex items-center gap-4 border-l pl-4">
+        {/* Filtr prywatne na 2 tygodnie - wyróżniony */}
+        <div className="flex items-center gap-2 bg-purple-50 px-3 py-1 rounded-md border border-purple-200">
+          <Checkbox
+            id="filter-private-upcoming"
+            checked={filters.privateUpcoming2Weeks}
+            onCheckedChange={(checked) => {
+              setFilters(prev => ({
+                ...prev,
+                privateUpcoming2Weeks: !!checked,
+                // Resetuj clientFilter gdy włączamy ten filtr
+                clientFilter: checked ? 'all' : prev.clientFilter
+              }));
+            }}
+          />
+          <Label htmlFor="filter-private-upcoming" className="text-sm cursor-pointer text-purple-700 font-medium">
+            Prywatne na 2 tyg.
+          </Label>
+        </div>
+
         <div className="flex items-center gap-2">
           <Checkbox
             id="filter-akrobud"
             checked={filters.clientFilter === 'akrobud'}
+            disabled={filters.privateUpcoming2Weeks}
             onCheckedChange={(checked) => {
               setFilters(prev => ({
                 ...prev,
@@ -86,6 +106,7 @@ export const OrdersFilterBar: React.FC<OrdersFilterBarProps> = ({
           <Checkbox
             id="filter-private"
             checked={filters.clientFilter === 'private'}
+            disabled={filters.privateUpcoming2Weeks}
             onCheckedChange={(checked) => {
               setFilters(prev => ({
                 ...prev,
@@ -121,12 +142,31 @@ export const OrdersFilterBar: React.FC<OrdersFilterBarProps> = ({
             onCheckedChange={(checked) => {
               setFilters(prev => ({
                 ...prev,
-                showOnlyMissing: !!checked
+                showOnlyMissing: !!checked,
+                // Jeśli włączamy "tylko brakujące", wyłącz "ukryj brakujące"
+                hideMissing: checked ? false : prev.hideMissing
               }));
             }}
           />
           <Label htmlFor="filter-only-missing" className="text-sm cursor-pointer text-orange-600 font-medium">
             Tylko brakujące
+          </Label>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="filter-hide-missing"
+            checked={filters.hideMissing}
+            disabled={filters.showOnlyMissing}
+            onCheckedChange={(checked) => {
+              setFilters(prev => ({
+                ...prev,
+                hideMissing: !!checked
+              }));
+            }}
+          />
+          <Label htmlFor="filter-hide-missing" className="text-sm cursor-pointer">
+            Ukryj brakujące
           </Label>
         </div>
       </div>

@@ -6,9 +6,10 @@
  */
 
 import { useState, useMemo, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Header } from '@/components/layout/header';
 import { ordersApi, settingsApi } from '@/lib/api';
+import { useToast } from '@/components/ui/use-toast';
 import type { SchucoDeliveryLink } from '@/types';
 
 // Feature imports
@@ -127,6 +128,78 @@ export default function ZestawienieZlecenPage() {
     saveEdit,
   } = useOrderEdit();
 
+  // Query client i toast
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Mutacja do zmiany manualStatus z optimistic update dla natychmiastowej zmiany UI
+  const manualStatusMutation = useMutation({
+    mutationFn: ({ orderId, manualStatus }: { orderId: number; manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null }) =>
+      ordersApi.updateManualStatus(orderId, manualStatus),
+    // Optimistic update - natychmiast aktualizuj UI przed odpowiedzią serwera
+    onMutate: async ({ orderId, manualStatus }) => {
+      // Anuluj wszystkie pending queries aby uniknąć nadpisania optimistic update
+      await queryClient.cancelQueries({ queryKey: ['orders'] });
+
+      // Zachowaj poprzedni stan
+      const previousActive = queryClient.getQueryData(['orders', 'all-active']);
+      const previousArchived = queryClient.getQueryData(['orders', 'all-archived']);
+
+      // Optymistycznie zaktualizuj dane
+      const updateOrders = (oldData: unknown) => {
+        if (!oldData || typeof oldData !== 'object' || !('data' in oldData)) return oldData;
+        const typedData = oldData as { data: ExtendedOrder[] };
+        return {
+          ...typedData,
+          data: typedData.data.map((order: ExtendedOrder) =>
+            order.id === orderId ? { ...order, manualStatus } : order
+          ),
+        };
+      };
+
+      queryClient.setQueryData(['orders', 'all-active'], updateOrders);
+      queryClient.setQueryData(['orders', 'all-archived'], updateOrders);
+
+      // Zwróć kontekst z poprzednim stanem do rollbacku
+      return { previousActive, previousArchived };
+    },
+    onSuccess: (_data, variables) => {
+      // Pokaż toast z informacją o zmianie
+      const statusLabels: Record<string, string> = {
+        do_not_cut: 'NIE CIĄĆ',
+        cancelled: 'Anulowane',
+        on_hold: 'Wstrzymane',
+      };
+      const statusLabel = variables.manualStatus ? statusLabels[variables.manualStatus] : 'usunięty';
+
+      toast({
+        title: 'Status zaktualizowany',
+        description: variables.manualStatus
+          ? `Ustawiono status: ${statusLabel}`
+          : 'Status został usunięty',
+      });
+    },
+    onError: (error: Error, _variables, context) => {
+      // Rollback przy błędzie
+      if (context?.previousActive) {
+        queryClient.setQueryData(['orders', 'all-active'], context.previousActive);
+      }
+      if (context?.previousArchived) {
+        queryClient.setQueryData(['orders', 'all-archived'], context.previousArchived);
+      }
+
+      toast({
+        title: 'Błąd',
+        description: error.message || 'Nie udało się zmienić statusu',
+        variant: 'destructive',
+      });
+    },
+    onSettled: () => {
+      // Po zakończeniu (sukces lub błąd) odśwież dane z serwera dla pewności
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+
   // ================================
   // Callbacks
   // ================================
@@ -142,6 +215,10 @@ export default function ZestawienieZlecenPage() {
   const handleGlassDiscrepancyClick = useCallback((orderNumber: string) => {
     setGlassDiscrepancyOrderNumber(orderNumber);
   }, []);
+
+  const handleManualStatusChange = useCallback((orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => {
+    manualStatusMutation.mutate({ orderId, manualStatus });
+  }, [manualStatusMutation]);
 
   const handleExportCSV = useCallback(() => {
     const headers = visibleColumns.map(col => col.label);
@@ -228,9 +305,11 @@ export default function ZestawienieZlecenPage() {
             onOrderClick={handleOrderClick}
             onSchucoStatusClick={handleSchucoStatusClick}
             onGlassDiscrepancyClick={handleGlassDiscrepancyClick}
+            onManualStatusChange={handleManualStatusChange}
             getGroupLabel={getGroupLabel}
             missingOrderNumbers={missingOrderNumbers}
             showOnlyMissing={true}
+            hideMissing={false}
           />
         ) : filteredOrders.length > 0 ? (
           Object.entries(groupedOrders).map(([groupKey, orders]) => (
@@ -254,9 +333,12 @@ export default function ZestawienieZlecenPage() {
               onOrderClick={handleOrderClick}
               onSchucoStatusClick={handleSchucoStatusClick}
               onGlassDiscrepancyClick={handleGlassDiscrepancyClick}
+              onManualStatusChange={handleManualStatusChange}
               getGroupLabel={getGroupLabel}
               missingOrderNumbers={missingOrderNumbers}
               showOnlyMissing={false}
+              hideMissing={filters.hideMissing}
+              preserveOrder={filters.privateUpcoming2Weeks}
             />
           ))
         ) : (

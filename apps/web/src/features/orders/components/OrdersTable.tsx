@@ -42,12 +42,19 @@ interface OrdersTableProps {
   onSchucoStatusClick: (orderNumber: string, schucoLinks: SchucoDeliveryLink[]) => void;
   onGlassDiscrepancyClick?: (orderNumber: string) => void;
 
+  // Manual status callback
+  onManualStatusChange?: (orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => void;
+
   // Grouping
   getGroupLabel: (key: string) => string;
 
   // Missing order numbers
   missingOrderNumbers?: string[];
   showOnlyMissing?: boolean;
+  hideMissing?: boolean;
+
+  // Zachowaj oryginalną kolejność (nie sortuj po numerze zlecenia)
+  preserveOrder?: boolean;
 }
 
 // ================================
@@ -73,9 +80,12 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   onOrderClick,
   onSchucoStatusClick,
   onGlassDiscrepancyClick,
+  onManualStatusChange,
   getGroupLabel,
   missingOrderNumbers = [],
   showOnlyMissing = false,
+  hideMissing = false,
+  preserveOrder = false,
 }) => {
   // Jeśli tryb "tylko brakujące" - renderuj tylko brakujące numery
   if (showOnlyMissing) {
@@ -145,8 +155,8 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   const combinedItems: TableItem[] = React.useMemo(() => {
     const items: TableItem[] = orders.map(order => ({ type: 'order' as const, data: order }));
 
-    // Dodaj brakujące numery tylko jeśli mieszczą się w zakresie wyświetlanych zleceń
-    if (missingOrderNumbers.length > 0 && orders.length > 0) {
+    // Dodaj brakujące numery tylko jeśli nie są ukryte i mieszczą się w zakresie wyświetlanych zleceń
+    if (!hideMissing && !preserveOrder && missingOrderNumbers.length > 0 && orders.length > 0) {
       const orderNumbers = orders.map(o => parseNum(o.orderNumber));
       const minOrder = Math.min(...orderNumbers);
       const maxOrder = Math.max(...orderNumbers);
@@ -160,15 +170,17 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
       });
     }
 
-    // Sortuj malejąco po numerze
-    items.sort((a, b) => {
-      const numA = a.type === 'order' ? parseNum(a.data.orderNumber) : parseInt(a.orderNumber, 10);
-      const numB = b.type === 'order' ? parseNum(b.data.orderNumber) : parseInt(b.orderNumber, 10);
-      return numB - numA; // malejąco
-    });
+    // Sortuj malejąco po numerze (pomiń jeśli preserveOrder=true - zachowaj oryginalną kolejność)
+    if (!preserveOrder) {
+      items.sort((a, b) => {
+        const numA = a.type === 'order' ? parseNum(a.data.orderNumber) : parseInt(a.orderNumber, 10);
+        const numB = b.type === 'order' ? parseNum(b.data.orderNumber) : parseInt(b.orderNumber, 10);
+        return numB - numA; // malejąco
+      });
+    }
 
     return items;
-  }, [orders, missingOrderNumbers]);
+  }, [orders, missingOrderNumbers, hideMissing, preserveOrder]);
 
   return (
     <Card>
@@ -239,6 +251,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                     onOrderClick={onOrderClick}
                     onSchucoStatusClick={onSchucoStatusClick}
                     onGlassDiscrepancyClick={onGlassDiscrepancyClick}
+                    onManualStatusChange={onManualStatusChange}
                   />
                 );
               })}
