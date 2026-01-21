@@ -138,25 +138,47 @@ export const SummarySection: React.FC<SummarySectionProps> = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.label} className={row.className}>
-                <TableCell className={row.label.includes('RAZEM') ? 'font-semibold' : ''}>
-                  {row.label}
-                </TableCell>
-                <TableCell className="text-right">
-                  {formatNumber(row.data.windows)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {formatNumber(row.data.units)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {formatNumber(row.data.sashes)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {formatPln(row.data.valuePln)} PLN
-                </TableCell>
-              </TableRow>
-            ))}
+            {rows.map((row) => {
+              // Dla AKROBUD: pokaż wartość EUR w nawiasie i PLN
+              const isAkrobud = row.label === 'AKROBUD';
+              const akrobudValueEur = safeAkrobud.valueEur ?? 0;
+
+              return (
+                <TableRow key={row.label} className={row.className}>
+                  <TableCell className={row.label.includes('RAZEM') ? 'font-semibold' : ''}>
+                    {row.label}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatNumber(row.data.windows)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatNumber(row.data.units)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatNumber(row.data.sashes)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {isAkrobud && akrobudValueEur > 0 ? (
+                      <>
+                        <span className="text-muted-foreground text-xs mr-1">
+                          ({akrobudValueEur.toLocaleString('pl-PL', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })} EUR)
+                        </span>
+                        {/* PLN przeliczone z EUR po kursie */}
+                        {(akrobudValueEur * eurRate).toLocaleString('pl-PL', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })} PLN
+                      </>
+                    ) : (
+                      <>{formatPln(row.data.valuePln)} PLN</>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
 
             {/* Wiersz z przeliczeniem EUR jeśli są zlecenia w EUR */}
             {totalValueEur > 0 && (

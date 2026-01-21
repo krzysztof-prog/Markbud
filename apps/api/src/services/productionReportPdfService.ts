@@ -39,21 +39,20 @@ export class ProductionReportPdfService {
   private readonly TABLE_TOP = 100;
 
   // Szerokości kolumn tabeli (suma = ~757 dla A4 landscape z marginesami 30)
-  // Kolumny bez RW Ok. i RW Pr.
+  // Kolumny bez RW Ok., RW Pr. i Dostawa
   private readonly COL_WIDTHS = {
-    deliveryDate: 60,    // Dostawa
-    orderNumber: 60,     // Nr prod.
-    client: 95,          // Klient (więcej miejsca)
-    productionDate: 50,  // Data prod.
-    windows: 35,         // Okna
-    units: 35,           // Jedn.
-    sashes: 35,          // Skrzyd.
-    valuePln: 70,        // PLN
-    valueEur: 60,        // EUR
-    materialValue: 65,   // Materiał
-    coefficient: 40,     // Wsp.
-    unitValue: 50,       // Jedn.zł
-    invoiceNumber: 70,   // Nr FV
+    orderNumber: 70,     // Nr prod. (zwiększone)
+    client: 130,         // Klient (znacznie więcej miejsca)
+    productionDate: 55,  // Data prod.
+    windows: 40,         // Okna
+    units: 40,           // Jedn.
+    sashes: 40,          // Skrzyd.
+    valuePln: 80,        // PLN (zwiększone)
+    valueEur: 70,        // EUR (zwiększone)
+    materialValue: 75,   // Materiał (zwiększone)
+    coefficient: 45,     // Wsp.
+    unitValue: 55,       // Jedn.zł
+    invoiceNumber: 80,   // Nr FV (zwiększone)
   };
 
   /**
@@ -203,15 +202,12 @@ export class ProductionReportPdfService {
   }
 
   /**
-   * Rysuj nagłówek tabeli z wszystkimi kolumnami
+   * Rysuj nagłówek tabeli z wszystkimi kolumnami (bez kolumny Dostawa)
    */
   private drawTableHeader(doc: PDFKit.PDFDocument, startX: number, startY: number): void {
     doc.fontSize(7).font('Roboto-Bold').fillColor('#374151');
 
     let x = startX;
-
-    doc.text('Dostawa', x, startY, { width: this.COL_WIDTHS.deliveryDate, align: 'center' });
-    x += this.COL_WIDTHS.deliveryDate;
 
     doc.text('Nr prod.', x, startY, { width: this.COL_WIDTHS.orderNumber, align: 'left' });
     x += this.COL_WIDTHS.orderNumber;
@@ -252,25 +248,30 @@ export class ProductionReportPdfService {
   }
 
   /**
-   * Rysuj wiersz tabeli z wszystkimi kolumnami
+   * Formatuj liczbę z separatorem tysięcy (spacja) i przecinkiem dziesiętnym
+   */
+  private formatNumber(value: number, decimals: number = 2): string {
+    // Formatuj z polskim locale (spacja jako separator tysięcy, przecinek dziesiętny)
+    return value.toLocaleString('pl-PL', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+      useGrouping: true,
+    });
+  }
+
+  /**
+   * Rysuj wiersz tabeli z wszystkimi kolumnami (bez kolumny Dostawa)
    */
   private drawTableRow(doc: PDFKit.PDFDocument, item: ReportItem, startX: number, y: number): void {
     let x = startX;
-
-    // Data dostawy
-    const deliveryDate = item.deliveryDate
-      ? new Date(item.deliveryDate).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' })
-      : '—';
-    doc.text(deliveryDate, x, y, { width: this.COL_WIDTHS.deliveryDate, align: 'center' });
-    x += this.COL_WIDTHS.deliveryDate;
 
     // Nr produkcyjny
     doc.text(item.orderNumber, x, y, { width: this.COL_WIDTHS.orderNumber, align: 'left' });
     x += this.COL_WIDTHS.orderNumber;
 
-    // Klient (obcinamy jeśli za długi)
+    // Klient (obcinamy jeśli za długi - zwiększamy limit bo kolumna szersza)
     const client = item.client || '-';
-    const truncatedClient = client.length > 12 ? client.substring(0, 11) + '…' : client;
+    const truncatedClient = client.length > 18 ? client.substring(0, 17) + '…' : client;
     doc.text(truncatedClient, x, y, { width: this.COL_WIDTHS.client, align: 'left' });
     x += this.COL_WIDTHS.client;
 
@@ -295,11 +296,7 @@ export class ProductionReportPdfService {
 
     // Wartość PLN (pokazuj "-" dla 0)
     if (item.valuePln > 0) {
-      const plnValue = item.valuePln.toLocaleString('pl-PL', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-      doc.text(plnValue, x, y, { width: this.COL_WIDTHS.valuePln, align: 'right' });
+      doc.text(this.formatNumber(item.valuePln), x, y, { width: this.COL_WIDTHS.valuePln, align: 'right' });
     } else {
       doc.text('—', x, y, { width: this.COL_WIDTHS.valuePln, align: 'right' });
     }
@@ -307,11 +304,7 @@ export class ProductionReportPdfService {
 
     // Wartość EUR (pokazuj "-" dla 0 lub null)
     if (item.valueEur !== null && item.valueEur > 0) {
-      const eurValue = item.valueEur.toLocaleString('pl-PL', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-      doc.text(eurValue, x, y, { width: this.COL_WIDTHS.valueEur, align: 'right' });
+      doc.text(this.formatNumber(item.valueEur), x, y, { width: this.COL_WIDTHS.valueEur, align: 'right' });
     } else {
       doc.text('—', x, y, { width: this.COL_WIDTHS.valueEur, align: 'right' });
     }
@@ -319,11 +312,7 @@ export class ProductionReportPdfService {
 
     // Wartość materiału
     if (item.materialValue > 0) {
-      const matValue = item.materialValue.toLocaleString('pl-PL', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-      doc.text(matValue, x, y, { width: this.COL_WIDTHS.materialValue, align: 'right' });
+      doc.text(this.formatNumber(item.materialValue), x, y, { width: this.COL_WIDTHS.materialValue, align: 'right' });
     } else {
       doc.text('—', x, y, { width: this.COL_WIDTHS.materialValue, align: 'right' });
     }
@@ -337,9 +326,9 @@ export class ProductionReportPdfService {
     doc.text(item.unitValue || '—', x, y, { width: this.COL_WIDTHS.unitValue, align: 'right' });
     x += this.COL_WIDTHS.unitValue;
 
-    // Nr FV
+    // Nr FV (zwiększamy limit bo kolumna szersza)
     const invoice = item.invoiceNumber || '';
-    const truncatedInvoice = invoice.length > 10 ? invoice.substring(0, 9) + '…' : invoice;
+    const truncatedInvoice = invoice.length > 12 ? invoice.substring(0, 11) + '…' : invoice;
     doc.text(truncatedInvoice, x, y, { width: this.COL_WIDTHS.invoiceNumber, align: 'center' });
   }
 
@@ -372,7 +361,7 @@ export class ProductionReportPdfService {
       `Okna: ${atypical.windows}`,
       `Jednostki: ${atypical.units}`,
       `Skrzydła: ${atypical.sashes}`,
-      `Wartość: ${atypical.valuePln.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} PLN`,
+      `Wartość: ${this.formatNumber(atypical.valuePln)} PLN`,
     ].join('   |   ');
 
     doc.text(atypicalData);
@@ -468,23 +457,13 @@ export class ProductionReportPdfService {
 
       // Dla AKROBUD pokaż wartość PLN (przeliczoną z EUR), a EUR w nawiasie
       if (row.isAkrobud && akrobudEurTotal > 0) {
-        const plnFormatted = akrobudEurInPln.toLocaleString('pl-PL', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
-        const eurFormatted = akrobudEurTotal.toLocaleString('pl-PL', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
+        const plnFormatted = this.formatNumber(akrobudEurInPln);
+        const eurFormatted = this.formatNumber(akrobudEurTotal);
         doc.text(`${plnFormatted} (${eurFormatted} EUR)`, x, y, { width: colWidths.value + 60, align: 'right' });
       } else {
         // Dla pozostałych wierszy - wyświetl "-" dla 0
         if (row.data.valuePln > 0) {
-          const valuePln = row.data.valuePln.toLocaleString('pl-PL', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          });
-          doc.text(valuePln, x, y, { width: colWidths.value, align: 'right' });
+          doc.text(this.formatNumber(row.data.valuePln), x, y, { width: colWidths.value, align: 'right' });
         } else {
           doc.text('—', x, y, { width: colWidths.value, align: 'right' });
         }
@@ -517,14 +496,8 @@ export class ProductionReportPdfService {
       doc.text('—', x, y, { width: colWidths.sashes, align: 'right' });
       x += colWidths.sashes;
 
-      const eurFormatted = totalEur.toLocaleString('pl-PL', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-      const eurInPlnFormatted = eurInPln.toLocaleString('pl-PL', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
+      const eurFormatted = this.formatNumber(totalEur);
+      const eurInPlnFormatted = this.formatNumber(eurInPln);
       doc.text(`${eurFormatted} EUR (${eurInPlnFormatted} PLN)`, x, y, { width: colWidths.value + 60, align: 'right' });
 
       y += 14;
@@ -542,11 +515,7 @@ export class ProductionReportPdfService {
       doc.text('—', x, y, { width: colWidths.sashes, align: 'right' });
       x += colWidths.sashes;
 
-      const totalFormatted = totalWithEur.toLocaleString('pl-PL', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-      doc.text(`${totalFormatted} PLN`, x, y, { width: colWidths.value, align: 'right' });
+      doc.text(`${this.formatNumber(totalWithEur)} PLN`, x, y, { width: colWidths.value, align: 'right' });
 
       y += 20;
 
@@ -559,9 +528,11 @@ export class ProductionReportPdfService {
 
     // Statystyki dodatkowe
     doc.fontSize(9).font('Roboto').fillColor('#374151');
-    doc.text(`Średnia wartość na jednostkę: ${summary.razem.units > 0 ? (summary.razem.valuePln / summary.razem.units).toFixed(2) : '—'} PLN`, startX, y);
+    const avgPerUnit = summary.razem.units > 0 ? this.formatNumber(summary.razem.valuePln / summary.razem.units) : '—';
+    doc.text(`Średnia wartość na jednostkę: ${avgPerUnit} PLN`, startX, y);
     y += 12;
-    doc.text(`Średnia wartość na dzień roboczy (${summary.workingDays} dni): ${summary.workingDays > 0 ? (summary.razem.valuePln / summary.workingDays).toFixed(2) : '—'} PLN`, startX, y);
+    const avgPerDay = summary.workingDays > 0 ? this.formatNumber(summary.razem.valuePln / summary.workingDays) : '—';
+    doc.text(`Średnia wartość na dzień roboczy (${summary.workingDays} dni): ${avgPerDay} PLN`, startX, y);
   }
 
   /**

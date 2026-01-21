@@ -677,6 +677,13 @@ export class ProductionReportService {
     const avgUnitsPerDay =
       workingDays > 0 ? (razem.units / workingDays).toFixed(2) : '—';
 
+    // DEBUG: sprawdź valueEur dla AKROBUD
+    console.log('[DEBUG] AKROBUD summary:', {
+      valueEur: akrobud.valueEur,
+      valuePln: akrobud.valuePln,
+      itemsCount: items.filter(i => i.client?.toUpperCase().includes('AKROBUD')).length
+    });
+
     return {
       typowe,
       akrobud,
