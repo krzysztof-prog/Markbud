@@ -28,6 +28,7 @@ import {
   Activity,
   Bug,
   ClipboardCheck,
+  ScanLine,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -56,14 +57,16 @@ const navigation: NavigationItem[] = [
   {
     name: 'Dashboard',
     href: '/',
-    icon: LayoutDashboard
-    // Dostępne dla wszystkich
+    icon: LayoutDashboard,
+    // Dostępne dla wszystkich OPRÓCZ księgowej (widzi tylko zestawienie miesięczne)
+    requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.USER]
   },
   {
     name: 'Dashboard Operatora',
     href: '/operator',
     icon: Activity,
-    // Dostępne dla wszystkich - każdy widzi swoje dane, kierownik+ może przełączać
+    // Dostępne dla wszystkich OPRÓCZ księgowej
+    requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.USER]
   },
   {
     name: 'Moja Praca',
@@ -79,10 +82,17 @@ const navigation: NavigationItem[] = [
     requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK]
   },
   {
+    name: 'Zestawienie miesięczne',
+    href: '/zestawienia/miesieczne',
+    icon: FileText,
+    // TYLKO dla księgowej - jedyna zakładka którą widzi
+    requiredRoles: [UserRole.KSIEGOWA]
+  },
+  {
     name: 'Zestawienie zleceń',
     href: '/zestawienia/zlecenia',
     icon: FileText,
-    // Dostęp dla wszystkich OPRÓCZ księgowej (raport miesięczny jest w Panelu Kierownika)
+    // Dostęp dla wszystkich OPRÓCZ księgowej
     requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.USER]
   },
   {
@@ -94,11 +104,18 @@ const navigation: NavigationItem[] = [
       { name: 'Kalendarz dostaw', href: '/dostawy', icon: Calendar },
       { name: 'Weryfikacja listy', href: '/dostawy/weryfikacja', icon: ListChecks },
       { name: 'Profile na dostawy', href: '/magazyn/akrobud/profile-na-dostawy', icon: Box },
+      { name: 'Kontrola etykiet', href: '/kontrola-etykiet', icon: ScanLine },
     ]
   },
   {
     name: 'Magazyn PVC',
     href: '/magazyn/pvc',
+    icon: Box,
+    requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.USER]
+  },
+  {
+    name: 'Magazyn Stali',
+    href: '/magazyn/stal',
     icon: Box,
     requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.USER]
   },
@@ -111,6 +128,7 @@ const navigation: NavigationItem[] = [
       { name: 'Stan magazynu', href: '/magazyn/okuc', icon: Warehouse },
       { name: 'Artykuły', href: '/magazyn/okuc/artykuly', icon: Box },
       { name: 'Zapotrzebowanie', href: '/magazyn/okuc/zapotrzebowanie', icon: ClipboardList },
+      { name: 'RW (Rozchód)', href: '/magazyn/okuc/rw', icon: Archive },
       { name: 'Zamówienia', href: '/magazyn/okuc/zamowienia', icon: FileText },
       { name: 'Historia', href: '/magazyn/okuc/historia', icon: Archive },
     ]
