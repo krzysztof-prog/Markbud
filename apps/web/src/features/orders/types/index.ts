@@ -75,6 +75,8 @@ export interface ExtendedOrder extends Order {
 // ================================
 
 export type ColumnId =
+  | 'status'
+  | 'orderStatus'
   | 'orderNumber'
   | 'client'
   | 'project'
@@ -88,10 +90,10 @@ export type ColumnId =
   | 'okucDemandStatus'
   | 'valuePln'
   | 'valueEur'
-  | 'orderStatus'
+  | 'schucoStatus'
   | 'pvcDelivery'
-  | 'deadline'
   | 'akrobudDeliveryDate'
+  | 'deadline'
   | 'createdAt'
   | 'archived';
 
@@ -115,6 +117,7 @@ export interface FilterState {
   hideProduced: boolean;
   dateFrom: string; // format YYYY-MM-DD
   showOnlyMissing: boolean; // pokazuj tylko brakujące numery zleceń
+  hideMissing: boolean; // ukryj brakujące numery w normalnym widoku
 }
 
 /**
@@ -161,6 +164,7 @@ export interface FilteredSummary {
 // ================================
 
 export const DEFAULT_COLUMNS: Column[] = [
+  { id: 'status', label: 'Status', sortable: false, align: 'center', visible: true },
   { id: 'orderNumber', label: 'Nr zlecenia', sortable: false, align: 'left', visible: true },
   { id: 'client', label: 'Klient', sortable: false, align: 'left', visible: true },
   { id: 'system', label: 'System', sortable: false, align: 'left', visible: true },
@@ -169,14 +173,13 @@ export const DEFAULT_COLUMNS: Column[] = [
   { id: 'glasses', label: 'Szkleń', sortable: false, align: 'center', visible: true },
   { id: 'glassDeliveryDate', label: 'Data szyb', sortable: false, align: 'center', visible: true },
   { id: 'okucDemandStatus', label: 'Okucia', sortable: false, align: 'center', visible: true },
-  { id: 'orderStatus', label: 'Status Schuco', sortable: false, align: 'center', visible: true },
+  { id: 'schucoStatus', label: 'Profile', sortable: false, align: 'center', visible: true },
   { id: 'pvcDelivery', label: 'Dostawa PVC', sortable: false, align: 'left', visible: true },
   { id: 'deadline', label: 'Termin realizacji', sortable: false, align: 'left', visible: true },
-  { id: 'akrobudDeliveryDate', label: 'Dostawa AKR', sortable: false, align: 'left', visible: true },
   { id: 'valuePln', label: 'Wartość PLN', sortable: false, align: 'right', visible: true },
   { id: 'valueEur', label: 'Wartość EUR', sortable: false, align: 'right', visible: true },
   { id: 'documentAuthor', label: 'Autor', sortable: false, align: 'left', visible: true },
-  { id: 'archived', label: 'Status', sortable: false, align: 'center', visible: false },
+  { id: 'archived', label: 'Archiwum', sortable: false, align: 'center', visible: false },
   { id: 'project', label: 'Projekt', sortable: false, align: 'left', visible: false },
 ];
 

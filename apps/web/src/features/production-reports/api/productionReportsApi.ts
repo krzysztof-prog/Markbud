@@ -31,6 +31,8 @@ interface BackendReportItem {
   project: string | null;
   productionDate: string;
   completedAt: string | null;
+  deliveryDate: string | null;
+  deliveryId: number | null;
   windows: number;
   units: number;
   sashes: number;
@@ -43,6 +45,33 @@ interface BackendReportItem {
   invoiceNumber: string | null;
   invoiceDate: string | null;
   avgUnitValue: string;
+  // Nowe kolumny
+  materialValue: number;
+  coefficient: string;
+  unitValue: string;
+  totalGlassQuantity: number;
+}
+
+/** Preview auto-fill FV */
+export interface InvoiceAutoFillPreview {
+  deliveryDate: string;
+  ordersToUpdate: Array<{
+    orderId: number;
+    orderNumber: string;
+    client: string | null;
+    currentInvoiceNumber: string | null;
+    hasConflict: boolean;
+  }>;
+  totalOrders: number;
+  conflictCount: number;
+}
+
+/** Wynik auto-fill FV */
+export interface InvoiceAutoFillResult {
+  updatedCount: number;
+  skippedCount: number;
+  updatedOrders: string[];
+  skippedOrders: string[];
 }
 
 interface BackendFullReport {
@@ -87,8 +116,10 @@ function mapBackendReportToFrontend(backend: BackendFullReport): ProductionRepor
     valueEur: item.originalValueEur !== null && item.originalValueEur !== undefined
       ? Math.round(item.originalValueEur * 100)
       : (item.valueEur !== null ? Math.round(item.valueEur * 100) : null),
-    deliveryId: null,
-    deliveryName: undefined,
+    deliveryId: item.deliveryId,
+    deliveryName: item.deliveryDate
+      ? new Date(item.deliveryDate).toLocaleDateString('pl-PL')
+      : undefined,
     productionDate: item.productionDate,
   }));
 
@@ -122,10 +153,15 @@ function mapBackendReportToFrontend(backend: BackendFullReport): ProductionRepor
       rwProfile: item.rwProfile,
       invoiceNumber: item.invoiceNumber,
       invoiceDate: item.invoiceDate,
-      deliveryId: null,
+      deliveryId: item.deliveryId,
       deliveryNumber: null,
-      deliveryDate: null,
+      deliveryDate: item.deliveryDate,
       isAkrobud: item.client?.toUpperCase().includes('AKROBUD') ?? false,
+      // Nowe kolumny
+      materialValue: item.materialValue,
+      coefficient: item.coefficient,
+      unitValue: item.unitValue,
+      totalGlassQuantity: item.totalGlassQuantity,
     };
   });
 
@@ -213,6 +249,33 @@ export const productionReportsApi = {
 
   reopenMonth: (year: number, month: number) =>
     fetchApi<void>(`${BASE_URL}/${year}/${month}/reopen`, { method: 'POST' }),
+
+  // Auto-fill FV dla zleceń z tą samą datą dostawy
+  getInvoiceAutoFillPreview: async (
+    year: number,
+    month: number,
+    sourceOrderId: number
+  ): Promise<InvoiceAutoFillPreview> => {
+    return fetchApi<InvoiceAutoFillPreview>(
+      `${BASE_URL}/${year}/${month}/invoice-auto-fill-preview?sourceOrderId=${sourceOrderId}`
+    );
+  },
+
+  executeInvoiceAutoFill: async (
+    year: number,
+    month: number,
+    sourceOrderId: number,
+    invoiceNumber: string,
+    skipConflicts: boolean
+  ): Promise<InvoiceAutoFillResult> => {
+    return fetchApi<InvoiceAutoFillResult>(
+      `${BASE_URL}/${year}/${month}/invoice-auto-fill`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ sourceOrderId, invoiceNumber, skipConflicts }),
+      }
+    );
+  },
 
   exportPdf: async (year: number, month: number, eurRate: number = 4.30): Promise<void> => {
     const token = localStorage.getItem('auth_token');

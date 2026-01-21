@@ -5,3 +5,4 @@ export { SummarySection } from './SummarySection';
 export { CloseMonthDialog } from './CloseMonthDialog';
 export { ReopenMonthDialog } from './ReopenMonthDialog';
 export { OrdersTable } from './OrdersTable';
+export { InvoiceAutoFillDialog } from './InvoiceAutoFillDialog';

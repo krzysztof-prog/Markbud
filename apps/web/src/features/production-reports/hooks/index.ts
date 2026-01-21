@@ -179,3 +179,73 @@ export function useReopenMonth(callbacks?: { onSuccess?: () => void }) {
     },
   });
 }
+
+// ============================================
+// AUTO-FILL FV HOOKS
+// ============================================
+
+/**
+ * Hook do pobierania preview auto-fill FV
+ * Pokazuje które zlecenia zostaną zaktualizowane (ta sama data dostawy)
+ */
+export function useInvoiceAutoFillPreview(
+  year: number,
+  month: number,
+  sourceOrderId: number | null,
+  enabled: boolean = false
+) {
+  return useQuery({
+    queryKey: [...productionReportKeys.report(year, month), 'auto-fill-preview', sourceOrderId],
+    queryFn: () => {
+      if (!sourceOrderId) throw new Error('sourceOrderId is required');
+      return productionReportsApi.getInvoiceAutoFillPreview(year, month, sourceOrderId);
+    },
+    enabled: enabled && sourceOrderId !== null,
+    staleTime: 10 * 1000, // 10 sekund - krótko bo dane się zmieniają
+  });
+}
+
+/**
+ * Hook do wykonania auto-fill FV
+ */
+export function useExecuteInvoiceAutoFill(callbacks?: {
+  onSuccess?: (result: {
+    updatedCount: number;
+    skippedCount: number;
+    updatedOrders: string[];
+    skippedOrders: string[];
+  }) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      year,
+      month,
+      sourceOrderId,
+      invoiceNumber,
+      skipConflicts,
+    }: {
+      year: number;
+      month: number;
+      sourceOrderId: number;
+      invoiceNumber: string;
+      skipConflicts: boolean;
+    }) =>
+      productionReportsApi.executeInvoiceAutoFill(
+        year,
+        month,
+        sourceOrderId,
+        invoiceNumber,
+        skipConflicts
+      ),
+
+    onSuccess: (result, variables) => {
+      // Invaliduj raport po auto-fill
+      queryClient.invalidateQueries({
+        queryKey: productionReportKeys.report(variables.year, variables.month),
+      });
+      callbacks?.onSuccess?.(result);
+    },
+  });
+}

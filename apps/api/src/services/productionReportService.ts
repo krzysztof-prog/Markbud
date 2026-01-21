@@ -28,6 +28,10 @@ export interface ReportItem {
   productionDate: Date;
   completedAt: Date | null;
 
+  // Data dostawy (z relacji DeliveryOrder -> Delivery)
+  deliveryDate: Date | null;
+  deliveryId: number | null;
+
   // Wartości wyświetlane (override lub z Order)
   windows: number;
   units: number;
@@ -49,6 +53,12 @@ export interface ReportItem {
 
   // Obliczona średnia jednostka (valuePln / units)
   avgUnitValue: string; // formatowana wartość lub '—'
+
+  // Nowe kolumny dla zestawienia miesięcznego
+  materialValue: number; // wartość materiału w PLN
+  coefficient: string; // współczynnik PLN/materiał (formatowany lub '—')
+  unitValue: string; // jednostka (PLN - materiał) / szkła (formatowany lub '—')
+  totalGlassQuantity: number; // suma ilości szkła z materiałówki
 }
 
 /** Podsumowanie raportu */
@@ -169,7 +179,12 @@ export class ProductionReportService {
       const sashes = override?.overrideSashes ?? order.totalSashes ?? 0;
 
       // Wartość w groszach - konwersja na PLN
-      const valueGrosze = override?.overrideValuePln ?? order.valuePln ?? 0;
+      // Dla AKROBUD: valuePln (z PDF, przeliczone przez użytkownika)
+      // Dla innych: windowsNetValue (z CSV materiałówki) jako fallback
+      const isAkrobud = (order.client ?? '').toUpperCase().includes('AKROBUD');
+      const valueGrosze = override?.overrideValuePln
+        ?? order.valuePln
+        ?? (isAkrobud ? 0 : (order.windowsNetValue ?? 0));
       const valuePln = groszeToPln(valueGrosze as Grosze);
 
       // Wartość EUR w centach - konwersja na EUR (używaj override jeśli istnieje)
@@ -191,6 +206,32 @@ export class ProductionReportService {
       // Oryginalna wartość EUR z Order (w centach -> EUR)
       const originalValueEur = order.valueEur !== null ? centyToEur(order.valueEur as Centy) : null;
 
+      // Wyciągnij dane dostawy z relacji (jeśli istnieje)
+      const deliveryData = order.deliveryOrders?.[0]?.delivery ?? null;
+      const deliveryDate = deliveryData?.deliveryDate ?? null;
+      const deliveryId = deliveryData?.id ?? null;
+
+      // === NOWE KOLUMNY ===
+      // Wartość materiału w PLN (z groszy)
+      const materialValueGrosze = order.windowsMaterial ?? 0;
+      const materialValue = groszeToPln(materialValueGrosze as Grosze);
+
+      // Suma ilości szkła z materiałówki
+      const totalGlassQuantity = (order.materials ?? []).reduce(
+        (sum, m) => sum + (m.glassQuantity ?? 0),
+        0
+      );
+
+      // Współczynnik = PLN / materiał (2 miejsca po przecinku)
+      const coefficient = materialValue > 0
+        ? (valuePln / materialValue).toFixed(2)
+        : '—';
+
+      // Jednostka = (PLN - materiał) / szkła (liczby całkowite)
+      const unitValue = totalGlassQuantity > 0
+        ? Math.round((valuePln - materialValue) / totalGlassQuantity).toString()
+        : '—';
+
       return {
         orderId: order.id,
         orderNumber: order.orderNumber,
@@ -198,6 +239,8 @@ export class ProductionReportService {
         project: order.project,
         productionDate: order.productionDate!,
         completedAt: order.completedAt,
+        deliveryDate,
+        deliveryId,
         windows,
         units: override?.overrideUnits ?? units,
         sashes,
@@ -210,6 +253,11 @@ export class ProductionReportService {
         invoiceNumber: override?.invoiceNumber ?? order.invoiceNumber,
         invoiceDate: override?.invoiceDate ?? null,
         avgUnitValue,
+        // Nowe kolumny
+        materialValue,
+        coefficient,
+        unitValue,
+        totalGlassQuantity,
       };
     });
 
@@ -369,6 +417,127 @@ export class ProductionReportService {
     // Pobierz pełny raport (używamy getReport aby nie duplikować logiki)
     const fullReport = await this.getReport(year, month);
     return fullReport.summary;
+  }
+
+  /**
+   * Pobierz preview auto-fill dla numeru FV
+   * Zwraca listę zleceń z tą samą datą dostawy, które zostaną zaktualizowane
+   *
+   * @param year Rok raportu
+   * @param month Miesiąc raportu
+   * @param sourceOrderId ID zlecenia źródłowego (z którego pobieramy deliveryDate)
+   */
+  async getInvoiceAutoFillPreview(
+    year: number,
+    month: number,
+    sourceOrderId: number
+  ): Promise<{
+    deliveryDate: Date;
+    ordersToUpdate: Array<{
+      orderId: number;
+      orderNumber: string;
+      client: string | null;
+      currentInvoiceNumber: string | null;
+      hasConflict: boolean;
+    }>;
+    totalOrders: number;
+    conflictCount: number;
+  }> {
+    this.validateYearMonth(year, month);
+
+    // Pobierz pełny raport
+    const fullReport = await this.getReport(year, month);
+
+    // Znajdź zlecenie źródłowe
+    const sourceItem = fullReport.items.find(item => item.orderId === sourceOrderId);
+    if (!sourceItem) {
+      throw new NotFoundError('Zlecenie nie znalezione w raporcie');
+    }
+
+    if (!sourceItem.deliveryDate) {
+      throw new ValidationError('Zlecenie nie ma przypisanej daty dostawy');
+    }
+
+    const deliveryDate = sourceItem.deliveryDate;
+    const deliveryDateStr = new Date(deliveryDate).toISOString().split('T')[0];
+
+    // Znajdź wszystkie zlecenia z tą samą datą dostawy (oprócz źródłowego)
+    const ordersToUpdate = fullReport.items
+      .filter(item => {
+        if (item.orderId === sourceOrderId) return false;
+        if (!item.deliveryDate) return false;
+        const itemDateStr = new Date(item.deliveryDate).toISOString().split('T')[0];
+        return itemDateStr === deliveryDateStr;
+      })
+      .map(item => ({
+        orderId: item.orderId,
+        orderNumber: item.orderNumber,
+        client: item.client,
+        currentInvoiceNumber: item.invoiceNumber,
+        hasConflict: item.invoiceNumber !== null && item.invoiceNumber !== '',
+      }));
+
+    const conflictCount = ordersToUpdate.filter(o => o.hasConflict).length;
+
+    return {
+      deliveryDate,
+      ordersToUpdate,
+      totalOrders: ordersToUpdate.length,
+      conflictCount,
+    };
+  }
+
+  /**
+   * Wykonaj auto-fill numeru FV dla zleceń z tą samą datą dostawy
+   *
+   * @param year Rok raportu
+   * @param month Miesiąc raportu
+   * @param sourceOrderId ID zlecenia źródłowego
+   * @param invoiceNumber Numer faktury do ustawienia
+   * @param skipConflicts Czy pominąć zlecenia z istniejącym numerem FV
+   */
+  async executeInvoiceAutoFill(
+    year: number,
+    month: number,
+    sourceOrderId: number,
+    invoiceNumber: string,
+    skipConflicts: boolean
+  ): Promise<{
+    updatedCount: number;
+    skippedCount: number;
+    updatedOrders: string[];
+    skippedOrders: string[];
+  }> {
+    this.validateYearMonth(year, month);
+
+    const report = await this.repository.findByYearMonth(year, month);
+    if (!report) {
+      throw new NotFoundError('ProductionReport');
+    }
+
+    // Pobierz preview aby mieć listę zleceń do aktualizacji
+    const preview = await this.getInvoiceAutoFillPreview(year, month, sourceOrderId);
+
+    const updatedOrders: string[] = [];
+    const skippedOrders: string[] = [];
+
+    for (const order of preview.ordersToUpdate) {
+      if (order.hasConflict && skipConflicts) {
+        skippedOrders.push(order.orderNumber);
+        continue;
+      }
+
+      // Aktualizuj fakturę
+      await this.repository.updateInvoice(report.id, order.orderId, invoiceNumber, null);
+      updatedOrders.push(order.orderNumber);
+    }
+
+    return {
+      updatedCount: updatedOrders.length,
+      skippedCount: skippedOrders.length,
+      updatedOrders,
+      skippedOrders,
+    };
   }
 
   /**

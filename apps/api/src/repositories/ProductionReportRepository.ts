@@ -185,11 +185,42 @@ export class ProductionReportRepository {
         completedAt: true,
         invoiceNumber: true,
         createdAt: true,
+        // Wartości z materiałówki do obliczeń współczynników
+        windowsNetValue: true,
+        windowsMaterial: true,
         // Windows do obliczenia units
         windows: {
           select: {
             id: true,
             quantity: true,
+          },
+        },
+        // Materials do obliczenia sumy glassQuantity
+        materials: {
+          select: {
+            glassQuantity: true,
+          },
+        },
+        // Dostawy - pobieramy datę dostawy przez relację DeliveryOrder
+        deliveryOrders: {
+          select: {
+            delivery: {
+              select: {
+                id: true,
+                deliveryDate: true,
+              },
+            },
+          },
+          where: {
+            delivery: {
+              deletedAt: null, // Tylko aktywne dostawy
+            },
+          },
+          take: 1, // Bierzemy pierwszą (najczęściej jest jedna)
+          orderBy: {
+            delivery: {
+              deliveryDate: 'desc', // Najnowsza jeśli wiele
+            },
           },
         },
       },

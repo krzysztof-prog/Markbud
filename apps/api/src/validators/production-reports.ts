@@ -25,7 +25,7 @@ export const updateReportItemSchema = z.object({
 // Aktualizacja danych FV - dostępne dla accountant nawet po zamknięciu
 export const updateInvoiceSchema = z.object({
   invoiceNumber: z.string().max(50).optional().nullable(),
-  invoiceDate: z.string().datetime().optional().nullable()
+  invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}(T.*)?$/, { message: 'Nieprawidłowy format daty' }).optional().nullable()
 });
 
 // Aktualizacja nietypówek (korekta raportowa) - tylko dla manager/admin

@@ -11,6 +11,7 @@ import {
   CloseMonthDialog,
   ReopenMonthDialog,
   OrdersTable,
+  InvoiceAutoFillDialog,
 } from './components';
 import {
   useProductionReport,
@@ -42,6 +43,19 @@ export const ProductionReportPage: React.FC<ProductionReportPageProps> = ({
   // Dialogi
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [showReopenDialog, setShowReopenDialog] = useState(false);
+
+  // Stan dialogu auto-fill FV
+  const [autoFillDialog, setAutoFillDialog] = useState<{
+    isOpen: boolean;
+    orderId: number;
+    orderNumber: string;
+    invoiceNumber: string | null;
+  }>({
+    isOpen: false,
+    orderId: 0,
+    orderNumber: '',
+    invoiceNumber: null,
+  });
 
   // Pobierz dane raportu
   const {
@@ -114,6 +128,27 @@ export const ProductionReportPage: React.FC<ProductionReportPageProps> = ({
     },
     [year, month, updateInvoiceMutation, toast]
   );
+
+  // Handler otwierania dialogu auto-fill FV
+  const handleOpenAutoFillDialog = useCallback(
+    (orderId: number, orderNumber: string, invoiceNumber: string | null) => {
+      setAutoFillDialog({
+        isOpen: true,
+        orderId,
+        orderNumber,
+        invoiceNumber,
+      });
+    },
+    []
+  );
+
+  // Handler zamknięcia dialogu auto-fill
+  const handleCloseAutoFillDialog = useCallback(() => {
+    setAutoFillDialog((prev) => ({
+      ...prev,
+      isOpen: false,
+    }));
+  }, []);
 
   // Handler aktualizacji nietypówek
   const handleUpdateAtypical = useCallback(
@@ -270,6 +305,7 @@ export const ProductionReportPage: React.FC<ProductionReportPageProps> = ({
             canEditInvoice={permissions.canEditInvoice}
             onUpdateItem={handleUpdateItem}
             onUpdateInvoice={handleUpdateInvoice}
+            onAutoFillInvoice={handleOpenAutoFillDialog}
             isPending={isPending}
           />
 
@@ -318,6 +354,17 @@ export const ProductionReportPage: React.FC<ProductionReportPageProps> = ({
         month={month}
         onConfirm={handleReopenMonth}
         isPending={reopenMonthMutation.isPending}
+      />
+
+      {/* Dialog auto-fill numeru FV */}
+      <InvoiceAutoFillDialog
+        isOpen={autoFillDialog.isOpen}
+        onClose={handleCloseAutoFillDialog}
+        year={year}
+        month={month}
+        sourceOrderId={autoFillDialog.orderId}
+        sourceOrderNumber={autoFillDialog.orderNumber}
+        initialInvoiceNumber={autoFillDialog.invoiceNumber || ''}
       />
     </div>
   );

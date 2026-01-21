@@ -3,7 +3,9 @@
  *
  * Generuje raport PDF zawierający:
  * - Nagłówek z miesiącem, rokiem i kursem EUR/PLN
- * - Tabelę zleceń z kolumnami: Nr prod., Klient, Data prod., Okna, Jedn., Skrzyd., PLN, EUR, Nr FV
+ * - Tabelę zleceń z kolumnami (A4 landscape):
+ *   Dostawa, Nr prod., Klient, Data prod., Okna, Jedn., Skrzyd., PLN, EUR,
+ *   Materiał, Wsp., Jedn.zł, Nr FV
  * - Sekcję nietypówek
  * - Podsumowanie z przeliczeniem EUR na PLN
  */
@@ -32,22 +34,26 @@ export class ProductionReportPdfService {
   private readonly BOLD_FONT = path.join(this.FONT_DIR, 'Roboto-Bold.ttf');
   private readonly REGULAR_FONT = path.join(this.FONT_DIR, 'Roboto-Regular.ttf');
 
-  // Marginesy i stałe layoutu
-  private readonly PAGE_MARGIN = 40;
+  // Marginesy i stałe layoutu (landscape A4)
+  private readonly PAGE_MARGIN = 30;
   private readonly TABLE_TOP = 100;
 
-  // Szerokości kolumn tabeli (suma = ~515 dla A4 portrait)
-  // Usunięto kolumny rwOkucia i rwProfile zgodnie z wymaganiami
+  // Szerokości kolumn tabeli (suma = ~757 dla A4 landscape z marginesami 30)
+  // Kolumny bez RW Ok. i RW Pr.
   private readonly COL_WIDTHS = {
-    orderNumber: 70,
-    client: 100,
-    productionDate: 50,
-    windows: 40,
-    units: 40,
-    sashes: 40,
-    valuePln: 70,
-    valueEur: 55,
-    invoiceNumber: 50,
+    deliveryDate: 60,    // Dostawa
+    orderNumber: 60,     // Nr prod.
+    client: 95,          // Klient (więcej miejsca)
+    productionDate: 50,  // Data prod.
+    windows: 35,         // Okna
+    units: 35,           // Jedn.
+    sashes: 35,          // Skrzyd.
+    valuePln: 70,        // PLN
+    valueEur: 60,        // EUR
+    materialValue: 65,   // Materiał
+    coefficient: 40,     // Wsp.
+    unitValue: 50,       // Jedn.zł
+    invoiceNumber: 70,   // Nr FV
   };
 
   /**
@@ -56,10 +62,10 @@ export class ProductionReportPdfService {
   async generatePdf(report: FullReport, eurRate: number = DEFAULT_EUR_RATE): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       try {
-        // Utwórz dokument PDF A4 pionowo
+        // Utwórz dokument PDF A4 poziomo (landscape) aby zmieścić wszystkie kolumny
         const doc = new PDFDocument({
           size: 'A4',
-          layout: 'portrait',
+          layout: 'landscape',
           margins: {
             top: this.PAGE_MARGIN,
             bottom: this.PAGE_MARGIN,
@@ -156,19 +162,19 @@ export class ProductionReportPdfService {
 
     currentY += 5;
 
-    // Wiersze z danymi
-    doc.fontSize(8).font('Roboto').fillColor('#000000');
+    // Wiersze z danymi (mniejsza czcionka dla landscape)
+    doc.fontSize(7).font('Roboto').fillColor('#000000');
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
 
-      // Sprawdź czy jest miejsce na wiersz
-      if (currentY > doc.page.height - 120) {
+      // Sprawdź czy jest miejsce na wiersz (landscape ma mniej wysokości)
+      if (currentY > doc.page.height - 100) {
         doc.addPage();
         currentY = this.PAGE_MARGIN;
         this.drawTableHeader(doc, startX, currentY);
         currentY = doc.y + 10;
-        doc.fontSize(8).font('Roboto').fillColor('#000000');
+        doc.fontSize(7).font('Roboto').fillColor('#000000');
       }
 
       // Zebra striping - co drugi wiersz ciemniejszy
@@ -197,12 +203,15 @@ export class ProductionReportPdfService {
   }
 
   /**
-   * Rysuj nagłówek tabeli
+   * Rysuj nagłówek tabeli z wszystkimi kolumnami
    */
   private drawTableHeader(doc: PDFKit.PDFDocument, startX: number, startY: number): void {
-    doc.fontSize(8).font('Roboto-Bold').fillColor('#374151');
+    doc.fontSize(7).font('Roboto-Bold').fillColor('#374151');
 
     let x = startX;
+
+    doc.text('Dostawa', x, startY, { width: this.COL_WIDTHS.deliveryDate, align: 'center' });
+    x += this.COL_WIDTHS.deliveryDate;
 
     doc.text('Nr prod.', x, startY, { width: this.COL_WIDTHS.orderNumber, align: 'left' });
     x += this.COL_WIDTHS.orderNumber;
@@ -228,16 +237,32 @@ export class ProductionReportPdfService {
     doc.text('EUR', x, startY, { width: this.COL_WIDTHS.valueEur, align: 'right' });
     x += this.COL_WIDTHS.valueEur;
 
-    doc.text('FV', x, startY, { width: this.COL_WIDTHS.invoiceNumber, align: 'center' });
+    doc.text('Materiał', x, startY, { width: this.COL_WIDTHS.materialValue, align: 'right' });
+    x += this.COL_WIDTHS.materialValue;
+
+    doc.text('Wsp.', x, startY, { width: this.COL_WIDTHS.coefficient, align: 'right' });
+    x += this.COL_WIDTHS.coefficient;
+
+    doc.text('Jedn.zł', x, startY, { width: this.COL_WIDTHS.unitValue, align: 'right' });
+    x += this.COL_WIDTHS.unitValue;
+
+    doc.text('Nr FV', x, startY, { width: this.COL_WIDTHS.invoiceNumber, align: 'center' });
 
     doc.moveDown(0.5);
   }
 
   /**
-   * Rysuj wiersz tabeli
+   * Rysuj wiersz tabeli z wszystkimi kolumnami
    */
   private drawTableRow(doc: PDFKit.PDFDocument, item: ReportItem, startX: number, y: number): void {
     let x = startX;
+
+    // Data dostawy
+    const deliveryDate = item.deliveryDate
+      ? new Date(item.deliveryDate).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' })
+      : '—';
+    doc.text(deliveryDate, x, y, { width: this.COL_WIDTHS.deliveryDate, align: 'center' });
+    x += this.COL_WIDTHS.deliveryDate;
 
     // Nr produkcyjny
     doc.text(item.orderNumber, x, y, { width: this.COL_WIDTHS.orderNumber, align: 'left' });
@@ -245,7 +270,7 @@ export class ProductionReportPdfService {
 
     // Klient (obcinamy jeśli za długi)
     const client = item.client || '-';
-    const truncatedClient = client.length > 15 ? client.substring(0, 14) + '…' : client;
+    const truncatedClient = client.length > 12 ? client.substring(0, 11) + '…' : client;
     doc.text(truncatedClient, x, y, { width: this.COL_WIDTHS.client, align: 'left' });
     x += this.COL_WIDTHS.client;
 
@@ -268,16 +293,20 @@ export class ProductionReportPdfService {
     doc.text(item.sashes.toString(), x, y, { width: this.COL_WIDTHS.sashes, align: 'center' });
     x += this.COL_WIDTHS.sashes;
 
-    // Wartość PLN
-    const plnValue = item.valuePln.toLocaleString('pl-PL', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    doc.text(plnValue, x, y, { width: this.COL_WIDTHS.valuePln, align: 'right' });
+    // Wartość PLN (pokazuj "-" dla 0)
+    if (item.valuePln > 0) {
+      const plnValue = item.valuePln.toLocaleString('pl-PL', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+      doc.text(plnValue, x, y, { width: this.COL_WIDTHS.valuePln, align: 'right' });
+    } else {
+      doc.text('—', x, y, { width: this.COL_WIDTHS.valuePln, align: 'right' });
+    }
     x += this.COL_WIDTHS.valuePln;
 
-    // Wartość EUR
-    if (item.valueEur !== null) {
+    // Wartość EUR (pokazuj "-" dla 0 lub null)
+    if (item.valueEur !== null && item.valueEur > 0) {
       const eurValue = item.valueEur.toLocaleString('pl-PL', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
@@ -287,6 +316,26 @@ export class ProductionReportPdfService {
       doc.text('—', x, y, { width: this.COL_WIDTHS.valueEur, align: 'right' });
     }
     x += this.COL_WIDTHS.valueEur;
+
+    // Wartość materiału
+    if (item.materialValue > 0) {
+      const matValue = item.materialValue.toLocaleString('pl-PL', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+      doc.text(matValue, x, y, { width: this.COL_WIDTHS.materialValue, align: 'right' });
+    } else {
+      doc.text('—', x, y, { width: this.COL_WIDTHS.materialValue, align: 'right' });
+    }
+    x += this.COL_WIDTHS.materialValue;
+
+    // Współczynnik
+    doc.text(item.coefficient || '—', x, y, { width: this.COL_WIDTHS.coefficient, align: 'right' });
+    x += this.COL_WIDTHS.coefficient;
+
+    // Jednostka wartości
+    doc.text(item.unitValue || '—', x, y, { width: this.COL_WIDTHS.unitValue, align: 'right' });
+    x += this.COL_WIDTHS.unitValue;
 
     // Nr FV
     const invoice = item.invoiceNumber || '';
@@ -376,13 +425,19 @@ export class ProductionReportPdfService {
 
     y += 15;
 
+    // Oblicz sumę EUR dla AKROBUD (zlecenia z klientem zawierającym 'AKROBUD')
+    const akrobudEurTotal = items
+      .filter(item => (item.client ?? '').toUpperCase().includes('AKROBUD'))
+      .reduce((sum, item) => sum + (item.valueEur ?? 0), 0);
+    const akrobudEurInPln = akrobudEurTotal * eurRate;
+
     // Wiersze podsumowania
     const rows = [
-      { label: 'TYPOWE', data: summary.typowe, bg: null },
-      { label: 'AKROBUD', data: summary.akrobud, bg: '#DBEAFE' },
-      { label: 'RESZTA', data: summary.reszta, bg: null },
-      { label: 'NIETYPÓWKI', data: summary.atypical, bg: '#FEF3C7' },
-      { label: 'RAZEM PLN', data: summary.razem, bg: '#F3F4F6', bold: true },
+      { label: 'TYPOWE', data: summary.typowe, bg: null, isAkrobud: false },
+      { label: 'AKROBUD', data: summary.akrobud, bg: '#DBEAFE', isAkrobud: true },
+      { label: 'RESZTA', data: summary.reszta, bg: null, isAkrobud: false },
+      { label: 'NIETYPÓWKI', data: summary.atypical, bg: '#FEF3C7', isAkrobud: false },
+      { label: 'RAZEM PLN', data: summary.razem, bg: '#F3F4F6', bold: true, isAkrobud: false },
     ];
 
     for (const row of rows) {
@@ -398,20 +453,42 @@ export class ProductionReportPdfService {
       doc.text(row.label, x, y, { width: colWidths.label });
       x += colWidths.label;
 
-      doc.text(row.data.windows.toString(), x, y, { width: colWidths.windows, align: 'right' });
+      // Wyświetl "-" dla wartości 0
+      const windowsText = row.data.windows > 0 ? row.data.windows.toString() : '—';
+      doc.text(windowsText, x, y, { width: colWidths.windows, align: 'right' });
       x += colWidths.windows;
 
-      doc.text(row.data.units.toString(), x, y, { width: colWidths.units, align: 'right' });
+      const unitsText = row.data.units > 0 ? row.data.units.toString() : '—';
+      doc.text(unitsText, x, y, { width: colWidths.units, align: 'right' });
       x += colWidths.units;
 
-      doc.text(row.data.sashes.toString(), x, y, { width: colWidths.sashes, align: 'right' });
+      const sashesText = row.data.sashes > 0 ? row.data.sashes.toString() : '—';
+      doc.text(sashesText, x, y, { width: colWidths.sashes, align: 'right' });
       x += colWidths.sashes;
 
-      const valuePln = row.data.valuePln.toLocaleString('pl-PL', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-      doc.text(valuePln, x, y, { width: colWidths.value, align: 'right' });
+      // Dla AKROBUD pokaż wartość PLN (przeliczoną z EUR), a EUR w nawiasie
+      if (row.isAkrobud && akrobudEurTotal > 0) {
+        const plnFormatted = akrobudEurInPln.toLocaleString('pl-PL', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+        const eurFormatted = akrobudEurTotal.toLocaleString('pl-PL', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+        doc.text(`${plnFormatted} (${eurFormatted} EUR)`, x, y, { width: colWidths.value + 60, align: 'right' });
+      } else {
+        // Dla pozostałych wierszy - wyświetl "-" dla 0
+        if (row.data.valuePln > 0) {
+          const valuePln = row.data.valuePln.toLocaleString('pl-PL', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
+          doc.text(valuePln, x, y, { width: colWidths.value, align: 'right' });
+        } else {
+          doc.text('—', x, y, { width: colWidths.value, align: 'right' });
+        }
+      }
 
       y += 14;
     }

@@ -50,6 +50,12 @@ export interface ProductionReportItem {
 
   // Czy to zlecenie AKROBUD
   isAkrobud: boolean;
+
+  // Nowe kolumny - wartości dla zestawienia miesięcznego
+  materialValue: number; // wartość materiału w PLN
+  coefficient: string; // współczynnik PLN/materiał (formatowany lub '—')
+  unitValue: string; // jednostka (PLN - materiał) / szkła (formatowany lub '—')
+  totalGlassQuantity: number; // suma ilości szkła z materiałówki
 }
 
 // Dane zlecenia (uproszczone, z backendu)

@@ -26,7 +26,7 @@ export const DeliveryGroup: React.FC<DeliveryGroupProps> = ({
         className="bg-blue-50 hover:bg-blue-100 cursor-pointer"
         onClick={onToggle}
       >
-        <TableCell colSpan={11} className="py-2">
+        <TableCell colSpan={15} className="py-2">
           <div className="flex items-center gap-2">
             {isExpanded ? (
               <ChevronDown className="h-4 w-4" />

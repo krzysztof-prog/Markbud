@@ -37,6 +37,7 @@ interface OrdersTableProps {
   canEditInvoice: boolean;
   onUpdateItem: (orderId: number, data: UpdateReportItemInput) => void;
   onUpdateInvoice: (orderId: number, data: UpdateInvoiceInput) => void;
+  onAutoFillInvoice?: (orderId: number, orderNumber: string, invoiceNumber: string | null) => void;
   isPending?: boolean;
 }
 
@@ -47,6 +48,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   canEditInvoice,
   onUpdateItem,
   onUpdateInvoice,
+  onAutoFillInvoice,
   isPending = false,
 }) => {
   // Stan rozwinięcia grup dostaw AKROBUD
@@ -146,6 +148,9 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                 <TableHead className="w-[60px] text-center">Skrzyd.</TableHead>
                 <TableHead className="w-[110px] text-right pr-2">PLN</TableHead>
                 <TableHead className="w-[110px] text-right pr-2">EUR</TableHead>
+                <TableHead className="w-[90px] text-right pr-2" title="Wartość materiału">Materiał</TableHead>
+                <TableHead className="w-[70px] text-right pr-2" title="Współczynnik PLN/materiał">Wsp.</TableHead>
+                <TableHead className="w-[70px] text-right pr-2" title="(PLN - materiał) / szkła">Jedn. zł</TableHead>
                 <TableHead className="w-[50px] text-center">RW Ok.</TableHead>
                 <TableHead className="w-[50px] text-center">RW Pr.</TableHead>
                 <TableHead className="w-[100px] text-center">Nr FV</TableHead>
@@ -174,6 +179,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                         canEditInvoice={canEditInvoice}
                         onUpdateItem={onUpdateItem}
                         onUpdateInvoice={onUpdateInvoice}
+                        onAutoFillInvoice={onAutoFillInvoice}
                         isPending={isPending}
                         isEven={index % 2 === 0}
                       />
@@ -192,6 +198,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                   canEditInvoice={canEditInvoice}
                   onUpdateItem={onUpdateItem}
                   onUpdateInvoice={onUpdateInvoice}
+                  onAutoFillInvoice={onAutoFillInvoice}
                   isPending={isPending}
                   isEven={index % 2 === 0}
                 />
@@ -200,7 +207,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
               {/* Brak zleceń */}
               {orders.length === 0 && (
                 <TableRow>
-                  <td colSpan={12} className="text-center py-8 text-muted-foreground">
+                  <td colSpan={15} className="text-center py-8 text-muted-foreground">
                     Brak zleceń produkcyjnych w wybranym miesiącu
                   </td>
                 </TableRow>

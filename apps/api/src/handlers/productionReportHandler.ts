@@ -212,6 +212,69 @@ export const productionReportHandler = {
   },
 
   /**
+   * GET /:year/:month/invoice-auto-fill-preview
+   * Pobiera preview auto-fill dla numeru FV
+   * Pokazuje które zlecenia zostaną zaktualizowane (ta sama data dostawy)
+   * Wymaga roli: manager, admin lub accountant
+   */
+  async getInvoiceAutoFillPreview(
+    request: FastifyRequest<{
+      Params: { year: string; month: string };
+      Querystring: { sourceOrderId: string };
+    }>,
+    reply: FastifyReply
+  ) {
+    checkRole(request, INVOICE_ROLES);
+
+    const { year, month } = productionReportParamsSchema.parse(request.params);
+    const sourceOrderIdStr = request.query.sourceOrderId;
+
+    if (!sourceOrderIdStr) {
+      throw new ValidationError('Brak parametru sourceOrderId');
+    }
+
+    const sourceOrderId = parseOrderId(sourceOrderIdStr);
+    const preview = await productionReportService.getInvoiceAutoFillPreview(year, month, sourceOrderId);
+
+    return reply.send(preview);
+  },
+
+  /**
+   * POST /:year/:month/invoice-auto-fill
+   * Wykonuje auto-fill numeru FV dla zleceń z tą samą datą dostawy
+   * Wymaga roli: manager, admin lub accountant
+   */
+  async executeInvoiceAutoFill(
+    request: FastifyRequest<{
+      Params: { year: string; month: string };
+      Body: { sourceOrderId: number; invoiceNumber: string; skipConflicts: boolean };
+    }>,
+    reply: FastifyReply
+  ) {
+    checkRole(request, INVOICE_ROLES);
+
+    const { year, month } = productionReportParamsSchema.parse(request.params);
+    const body = request.body as { sourceOrderId: number; invoiceNumber: string; skipConflicts: boolean };
+
+    if (!body.sourceOrderId || typeof body.sourceOrderId !== 'number') {
+      throw new ValidationError('Brak lub nieprawidłowy parametr sourceOrderId');
+    }
+    if (!body.invoiceNumber || typeof body.invoiceNumber !== 'string') {
+      throw new ValidationError('Brak lub nieprawidłowy parametr invoiceNumber');
+    }
+
+    const result = await productionReportService.executeInvoiceAutoFill(
+      year,
+      month,
+      body.sourceOrderId,
+      body.invoiceNumber,
+      body.skipConflicts ?? false
+    );
+
+    return reply.send(result);
+  },
+
+  /**
    * GET /:year/:month/pdf
    * Eksportuje raport produkcji do PDF
    * Dostępne dla wszystkich zalogowanych użytkowników

@@ -1,9 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { TableCell, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
 import { EditableCell } from './EditableCell';
 import { CheckboxCell } from './CheckboxCell';
+import { Copy } from 'lucide-react';
 import type { ProductionReportItem, UpdateReportItemInput, UpdateInvoiceInput } from '../../types';
 
 interface OrderData {
@@ -26,6 +28,7 @@ interface OrderRowProps {
   canEditInvoice: boolean; // księgowa może edytować FV
   onUpdateItem: (orderId: number, data: UpdateReportItemInput) => void;
   onUpdateInvoice: (orderId: number, data: UpdateInvoiceInput) => void;
+  onAutoFillInvoice?: (orderId: number, orderNumber: string, invoiceNumber: string | null) => void; // Auto-fill callback
   isPending?: boolean;
   isEven?: boolean; // zebra striping - co drugi wiersz ciemniejszy
 }
@@ -37,6 +40,7 @@ export const OrderRow: React.FC<OrderRowProps> = ({
   canEditInvoice,
   onUpdateItem,
   onUpdateInvoice,
+  onAutoFillInvoice,
   isPending = false,
   isEven = false,
 }) => {
@@ -147,6 +151,23 @@ export const OrderRow: React.FC<OrderRowProps> = ({
         />
       </TableCell>
 
+      {/* Wartość materiału (read-only) */}
+      <TableCell className="w-[90px] pr-2 text-right text-sm tabular-nums">
+        {item?.materialValue !== undefined && item.materialValue > 0
+          ? item.materialValue.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          : '—'}
+      </TableCell>
+
+      {/* Współczynnik PLN/materiał (read-only) */}
+      <TableCell className="w-[70px] pr-2 text-right text-sm tabular-nums">
+        {item?.coefficient ?? '—'}
+      </TableCell>
+
+      {/* Jednostka (PLN - materiał) / szkła (read-only) */}
+      <TableCell className="w-[70px] pr-2 text-right text-sm tabular-nums">
+        {item?.unitValue ?? '—'}
+      </TableCell>
+
       {/* RW Okucia */}
       <TableCell className="w-[50px] text-center">
         <CheckboxCell
@@ -169,19 +190,41 @@ export const OrderRow: React.FC<OrderRowProps> = ({
         />
       </TableCell>
 
-      {/* Nr FV (edytowalny przez księgową) */}
-      <TableCell className="w-[100px]">
-        <EditableCell
-          value={item?.invoiceNumber ?? null}
-          type="text"
-          onChange={(val) =>
-            onUpdateInvoice(order.id, { invoiceNumber: val as string | null })
-          }
-          disabled={!canEditInvoice}
-          isPending={isPending}
-          placeholder="—"
-          align="center"
-        />
+      {/* Nr FV (edytowalny przez księgową) + przycisk auto-fill */}
+      <TableCell className="w-[130px]">
+        <div className="flex items-center gap-1">
+          <div className="flex-1">
+            <EditableCell
+              value={item?.invoiceNumber ?? null}
+              type="text"
+              onChange={(val) =>
+                onUpdateInvoice(order.id, { invoiceNumber: val as string | null })
+              }
+              disabled={!canEditInvoice}
+              isPending={isPending}
+              placeholder="—"
+              align="center"
+            />
+          </div>
+          {/* Przycisk auto-fill - pokazuj tylko gdy:
+              1. Użytkownik może edytować FV
+              2. Zlecenie ma przypisaną dostawę (deliveryId)
+              3. Jest callback do auto-fill */}
+          {canEditInvoice && order.deliveryId && onAutoFillInvoice && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 flex-shrink-0"
+              onClick={() =>
+                onAutoFillInvoice(order.id, order.orderNumber, item?.invoiceNumber ?? null)
+              }
+              disabled={isPending}
+              title="Uzupełnij Nr FV dla wszystkich zleceń z tej samej dostawy"
+            >
+              <Copy className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
       </TableCell>
     </TableRow>
   );
