@@ -581,9 +581,15 @@ export class UzyteBeleParser {
 
           privateColorId = privateColor.id;
         } else {
-          // Import zwykły (Akrobud) - pomijamy nieznany kolor
-          console.warn(`Kolor ${req.colorCode} nie znaleziony, pomijam`);
-          continue;
+          // Import zwykły (Akrobud) - utwórz nowy kolor Akrobud
+          const newColor = await tx.color.create({
+            data: {
+              code: req.colorCode,
+              name: req.colorCode, // Domyślnie nazwa = kod, użytkownik może zmienić w ustawieniach
+            },
+          });
+          console.log(`Utworzono nowy kolor Akrobud: ${req.colorCode}`);
+          colorId = newColor.id;
         }
 
         // Utwórz lub zaktualizuj requirement
@@ -709,23 +715,22 @@ export class UzyteBeleParser {
           },
         });
 
-        // Oblicz sumy dla każdej kategorii (totalNet * quantity)
-        const valueWithQuantity = mat.totalNet * mat.quantity;
-        const materialWithQuantity = mat.material * mat.quantity;
-
+        // Oblicz sumy dla każdej kategorii
+        // Uwaga: totalNet i material już zawierają pełne wartości dla pozycji,
+        // NIE mnożymy przez quantity (to powodowało podwójne liczenie)
         switch (mat.category) {
           case 'okno':
-            windowsNetValue += valueWithQuantity;
-            windowsMaterial += materialWithQuantity;
+            windowsNetValue += mat.totalNet;
+            windowsMaterial += mat.material;
             break;
           case 'montaz':
-            assemblyValue += valueWithQuantity;
+            assemblyValue += mat.totalNet;
             break;
           case 'dodatki':
-            extrasValue += valueWithQuantity;
+            extrasValue += mat.totalNet;
             break;
           case 'inne':
-            otherValue += valueWithQuantity;
+            otherValue += mat.totalNet;
             break;
         }
       }
