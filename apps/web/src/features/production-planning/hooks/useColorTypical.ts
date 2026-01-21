@@ -24,11 +24,15 @@ export function useUpdateColorTypical() {
   return useMutation({
     mutationFn: ({ id, isTypical }: { id: number; isTypical: boolean }) =>
       updateColorTypical(id, isTypical),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      showSuccessToast(
+        'Kolor zaktualizowany',
+        variables.isTypical ? 'Kolor oznaczony jako typowy' : 'Kolor oznaczony jako nietypowy'
+      );
     },
     onError: (error: Error) => {
-      showErrorToast(getErrorMessage(error));
+      showErrorToast('Błąd aktualizacji koloru', getErrorMessage(error));
     },
   });
 }

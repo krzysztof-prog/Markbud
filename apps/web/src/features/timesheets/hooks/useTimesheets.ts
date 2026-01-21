@@ -3,6 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { showSuccessToast, showErrorToast, getErrorMessage } from '@/lib/toast-helpers';
 import { timesheetsApi } from '../api/timesheetsApi';
 import type {
   CreateWorkerInput,
@@ -92,6 +93,10 @@ export function useCreateWorker() {
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.workers.all });
       // Nowy pracownik musi pojawić się w widoku dnia
       queryClient.invalidateQueries({ queryKey: ['timesheets', 'daySummary'] });
+      showSuccessToast('Pracownik dodany', 'Nowy pracownik został utworzony');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd dodawania pracownika', getErrorMessage(error));
     },
   });
 }
@@ -105,6 +110,10 @@ export function useUpdateWorker() {
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.workers.all });
       // Zmiana danych pracownika (np. stanowisko) musi odświeżyć widok dnia
       queryClient.invalidateQueries({ queryKey: ['timesheets', 'daySummary'] });
+      showSuccessToast('Pracownik zaktualizowany', 'Dane pracownika zostały zapisane');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd aktualizacji pracownika', getErrorMessage(error));
     },
   });
 }
@@ -117,6 +126,10 @@ export function useDeactivateWorker() {
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.workers.all });
       // Dezaktywowany pracownik musi zniknąć z widoku dnia
       queryClient.invalidateQueries({ queryKey: ['timesheets', 'daySummary'] });
+      showSuccessToast('Pracownik dezaktywowany', 'Pracownik został oznaczony jako nieaktywny');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd dezaktywacji pracownika', getErrorMessage(error));
     },
   });
 }
@@ -147,6 +160,10 @@ export function useCreatePosition() {
       timesheetsApi.positions.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.positions.all });
+      showSuccessToast('Stanowisko dodane', 'Nowe stanowisko zostało utworzone');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd dodawania stanowiska', getErrorMessage(error));
     },
   });
 }
@@ -158,6 +175,10 @@ export function useUpdatePosition() {
       timesheetsApi.positions.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.positions.all });
+      showSuccessToast('Stanowisko zaktualizowane', 'Zmiany zostały zapisane');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd aktualizacji stanowiska', getErrorMessage(error));
     },
   });
 }
@@ -188,6 +209,10 @@ export function useCreateTaskType() {
       timesheetsApi.taskTypes.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.taskTypes.all });
+      showSuccessToast('Typ zadania dodany', 'Nowy typ zadania nieprodukcyjnego został utworzony');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd dodawania typu zadania', getErrorMessage(error));
     },
   });
 }
@@ -204,6 +229,10 @@ export function useUpdateTaskType() {
     }) => timesheetsApi.taskTypes.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.taskTypes.all });
+      showSuccessToast('Typ zadania zaktualizowany', 'Zmiany zostały zapisane');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd aktualizacji typu zadania', getErrorMessage(error));
     },
   });
 }
@@ -234,6 +263,10 @@ export function useCreateSpecialWorkType() {
       timesheetsApi.specialWorkTypes.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.specialWorkTypes.all });
+      showSuccessToast('Nietypówka dodana', 'Nowy typ pracy nietypowej został utworzony');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd dodawania nietypówki', getErrorMessage(error));
     },
   });
 }
@@ -250,6 +283,10 @@ export function useUpdateSpecialWorkType() {
     }) => timesheetsApi.specialWorkTypes.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.specialWorkTypes.all });
+      showSuccessToast('Nietypówka zaktualizowana', 'Zmiany zostały zapisane');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd aktualizacji nietypówki', getErrorMessage(error));
     },
   });
 }
@@ -285,6 +322,10 @@ export function useCreateTimeEntry() {
         queryKey: timesheetsKeys.daySummary(variables.date),
       });
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.calendar.all });
+      showSuccessToast('Wpis dodany', 'Wpis czasu pracy został zapisany');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd dodawania wpisu', getErrorMessage(error));
     },
   });
 }
@@ -300,6 +341,10 @@ export function useUpdateTimeEntry() {
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.calendar.all });
       // Ważne: invaliduj też daySummary - bez tego widok dnia nie odświeży godzin nieprodukcyjnych
       queryClient.invalidateQueries({ queryKey: ['timesheets', 'daySummary'] });
+      showSuccessToast('Wpis zaktualizowany', 'Zmiany zostały zapisane');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd aktualizacji wpisu', getErrorMessage(error));
     },
   });
 }
@@ -312,6 +357,10 @@ export function useDeleteTimeEntry() {
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.entries.all });
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.calendar.all });
       queryClient.invalidateQueries({ queryKey: ['timesheets', 'daySummary'] });
+      showSuccessToast('Wpis usunięty', 'Wpis czasu pracy został usunięty');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd usuwania wpisu', getErrorMessage(error));
     },
   });
 }
@@ -331,6 +380,10 @@ export function useSetStandardDay() {
         queryKey: timesheetsKeys.daySummary(variables.date),
       });
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.calendar.all });
+      showSuccessToast('Dzień standardowy ustawiony', 'Godziny pracy zostały uzupełnione');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd ustawiania dnia standardowego', getErrorMessage(error));
     },
   });
 }
@@ -345,6 +398,10 @@ export function useSetAbsenceRange() {
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.entries.all });
       queryClient.invalidateQueries({ queryKey: ['timesheets', 'daySummary'] });
       queryClient.invalidateQueries({ queryKey: timesheetsKeys.calendar.all });
+      showSuccessToast('Nieobecność zapisana', 'Okres nieobecności został zarejestrowany');
+    },
+    onError: (error: Error) => {
+      showErrorToast('Błąd zapisywania nieobecności', getErrorMessage(error));
     },
   });
 }

@@ -80,39 +80,24 @@ export const PositionsManagement: React.FC = () => {
       return;
     }
 
-    try {
-      if (editingPosition) {
-        const data: UpdatePositionInput = {
-          name: name.trim(),
-          sortOrder,
-          isActive,
-        };
-        await updatePosition.mutateAsync({ id: editingPosition.id, data });
-        toast({
-          title: 'Sukces',
-          description: 'Stanowisko zostało zaktualizowane',
-        });
-      } else {
-        const data: CreatePositionInput = {
-          name: name.trim(),
-          sortOrder,
-          isActive,
-        };
-        await createPosition.mutateAsync(data);
-        toast({
-          title: 'Sukces',
-          description: 'Stanowisko zostało dodane',
-        });
-      }
-      setIsFormOpen(false);
-      resetForm();
-    } catch (error) {
-      toast({
-        title: 'Błąd',
-        description: (error as Error).message,
-        variant: 'destructive',
-      });
+    // Toasty są obsługiwane przez hooki useCreatePosition i useUpdatePosition
+    if (editingPosition) {
+      const data: UpdatePositionInput = {
+        name: name.trim(),
+        sortOrder,
+        isActive,
+      };
+      await updatePosition.mutateAsync({ id: editingPosition.id, data });
+    } else {
+      const data: CreatePositionInput = {
+        name: name.trim(),
+        sortOrder,
+        isActive,
+      };
+      await createPosition.mutateAsync(data);
     }
+    setIsFormOpen(false);
+    resetForm();
   }, [name, sortOrder, isActive, editingPosition, createPosition, updatePosition, toast, resetForm]);
 
   const isPending = createPosition.isPending || updatePosition.isPending;
