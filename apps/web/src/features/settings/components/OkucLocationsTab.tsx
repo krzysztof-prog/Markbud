@@ -356,6 +356,7 @@ export function OkucLocationsTab() {
                 value={newLocationName}
                 onChange={(e) => setNewLocationName(e.target.value)}
                 placeholder="np. Schuco"
+                autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && newLocationName.trim()) {
                     handleAddLocation();
@@ -409,6 +410,7 @@ export function OkucLocationsTab() {
                 value={editLocationName}
                 onChange={(e) => setEditLocationName(e.target.value)}
                 placeholder="np. Schuco"
+                autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && editLocationName.trim()) {
                     handleEditLocation();

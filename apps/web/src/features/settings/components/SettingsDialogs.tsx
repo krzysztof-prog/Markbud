@@ -37,6 +37,15 @@ interface Profile {
   articleNumber?: string | null;
 }
 
+interface Steel {
+  id?: number;
+  number: string;
+  articleNumber?: string | null;
+  name: string;
+  description?: string | null;
+  sortOrder?: number;
+}
+
 // Pallet Dialog
 interface PalletDialogProps {
   open: boolean;
@@ -84,6 +93,7 @@ export function PalletDialog({
               }}
               onBlur={() => onTouchField('name')}
               placeholder="np. EUR 120x80"
+              autoFocus
               className={cn(
                 touched.name && errors.name && 'border-red-500 focus-visible:ring-red-500'
               )}
@@ -203,6 +213,7 @@ export function ColorDialog({
                 }}
                 onBlur={() => onTouchField('code')}
                 placeholder="np. 050"
+                autoFocus
                 className={cn(
                   touched.code && errors.code && 'border-red-500 focus-visible:ring-red-500'
                 )}
@@ -343,6 +354,7 @@ export function ProfileDialog({
                 }}
                 onBlur={() => onTouchField('number')}
                 placeholder="np. 9016"
+                autoFocus
                 className={cn(
                   touched.number && errors.number && 'border-red-500 focus-visible:ring-red-500'
                 )}
@@ -388,6 +400,119 @@ export function ProfileDialog({
               value={data?.description || ''}
               onChange={(e) => onDataChange({ ...data, description: e.target.value || null })}
               placeholder="np. Profil ramowy okienny"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Anuluj
+          </Button>
+          <Button onClick={onSave} disabled={isPending}>
+            {isPending ? 'Zapisuje...' : mode === 'add' ? 'Dodaj' : 'Zapisz'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Steel Dialog
+interface SteelDialogProps {
+  open: boolean;
+  mode: 'add' | 'edit';
+  data: Partial<Steel> | null;
+  onOpenChange: (open: boolean) => void;
+  onDataChange: (data: Partial<Steel>) => void;
+  onSave: () => void;
+  isPending: boolean;
+  errors: Record<string, string | undefined>;
+  touched: Record<string, boolean>;
+  onValidateField: (field: 'number' | 'name', value: string) => void;
+  onTouchField: (field: 'number' | 'name') => void;
+}
+
+export function SteelDialog({
+  open,
+  mode,
+  data,
+  onOpenChange,
+  onDataChange,
+  onSave,
+  isPending,
+  errors,
+  touched,
+  onValidateField,
+  onTouchField,
+}: SteelDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{mode === 'add' ? 'Dodaj stal' : 'Edytuj stal'}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium block mb-1">
+                Numer <span className="text-red-600">*</span>
+              </label>
+              <Input
+                value={data?.number || ''}
+                onChange={(e) => {
+                  onDataChange({ ...data, number: e.target.value });
+                  onValidateField('number', e.target.value);
+                }}
+                onBlur={() => onTouchField('number')}
+                placeholder="np. 201202"
+                autoFocus
+                className={cn(
+                  touched.number && errors.number && 'border-red-500 focus-visible:ring-red-500'
+                )}
+                aria-invalid={touched.number && !!errors.number}
+              />
+              {touched.number && errors.number && (
+                <p className="text-sm text-red-600 mt-1">{errors.number}</p>
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-1">
+                Nazwa <span className="text-red-600">*</span>
+              </label>
+              <Input
+                value={data?.name || ''}
+                onChange={(e) => {
+                  onDataChange({ ...data, name: e.target.value });
+                  onValidateField('name', e.target.value);
+                }}
+                onBlur={() => onTouchField('name')}
+                placeholder="np. Wzmocnienie 1,5 mm"
+                className={cn(
+                  touched.name && errors.name && 'border-red-500 focus-visible:ring-red-500'
+                )}
+                aria-invalid={touched.name && !!errors.name}
+              />
+              {touched.name && errors.name && (
+                <p className="text-sm text-red-600 mt-1">{errors.name}</p>
+              )}
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium block mb-1">Numer artykulu (opcjonalny)</label>
+            <Input
+              value={data?.articleNumber || ''}
+              onChange={(e) => onDataChange({ ...data, articleNumber: e.target.value || null })}
+              placeholder="np. 20120200"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Numery artykułów zaczynające się od 201 lub 202 są rozpoznawane jako stal
+            </p>
+          </div>
+          <div>
+            <label className="text-sm font-medium block mb-1">Opis (opcjonalny)</label>
+            <Input
+              value={data?.description || ''}
+              onChange={(e) => onDataChange({ ...data, description: e.target.value || null })}
+              placeholder="np. Wzmocnienie do ramy okiennej"
             />
           </div>
         </div>

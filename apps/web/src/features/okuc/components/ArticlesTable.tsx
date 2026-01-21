@@ -41,7 +41,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Check, X, Edit, Trash2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Check, X, Edit, Trash2, Package, Loader2 } from 'lucide-react';
 import type { OkucArticle, OkucLocation } from '@/types/okuc';
 
 interface ArticlesTableProps {
@@ -161,10 +162,14 @@ export function ArticlesTable({
   // Empty state
   if (!isLoading && (!articles || articles.length === 0)) {
     return (
-      <div className="py-12 text-center">
-        <p className="text-slate-400 mb-2">Brak artykułów spełniających kryteria</p>
-        <p className="text-sm text-slate-500">
-          Kliknij &quot;Dodaj artykuł&quot; aby utworzyć pierwszy.
+      <div className="rounded-lg border p-8 text-center">
+        <Package className="h-12 w-12 text-slate-300 mx-auto mb-4" aria-hidden="true" />
+        <h3 className="text-lg font-semibold text-slate-600 mb-2">Brak artykułów</h3>
+        <p className="text-sm text-slate-500 mb-4">
+          Nie znaleziono artykułów spełniających kryteria wyszukiwania.
+        </p>
+        <p className="text-xs text-slate-400">
+          Kliknij &quot;Nowy artykuł&quot; aby dodać pierwszy artykuł do systemu.
         </p>
       </div>
     );
@@ -246,7 +251,14 @@ export function ArticlesTable({
                   {/* Name */}
                   <TableCell>
                     <div>
-                      <div className="font-medium text-sm">{article.name}</div>
+                      <div className="font-medium text-sm flex items-center gap-2">
+                        {article.name}
+                        {article.isPhaseOut && (
+                          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
+                            Wygaszany{article.replacedByArticle ? ` → ${article.replacedByArticle.articleId}` : ''}
+                          </Badge>
+                        )}
+                      </div>
                       {article.description && (
                         <div className="text-xs text-slate-500 truncate max-w-[300px]">
                           {article.description}
@@ -258,18 +270,30 @@ export function ArticlesTable({
                   {/* PVC - Check/X (zielony Check, czerwony X) */}
                   <TableCell className="text-center">
                     {article.usedInPvc ? (
-                      <Check className="h-4 w-4 text-green-600 mx-auto" />
+                      <>
+                        <Check className="h-4 w-4 text-green-600 mx-auto" aria-hidden="true" />
+                        <span className="sr-only">Tak</span>
+                      </>
                     ) : (
-                      <X className="h-4 w-4 text-red-400 mx-auto" />
+                      <>
+                        <X className="h-4 w-4 text-red-400 mx-auto" aria-hidden="true" />
+                        <span className="sr-only">Nie</span>
+                      </>
                     )}
                   </TableCell>
 
                   {/* ALU - Check/X (zielony Check, czerwony X) */}
                   <TableCell className="text-center">
                     {article.usedInAlu ? (
-                      <Check className="h-4 w-4 text-green-600 mx-auto" />
+                      <>
+                        <Check className="h-4 w-4 text-green-600 mx-auto" aria-hidden="true" />
+                        <span className="sr-only">Tak</span>
+                      </>
                     ) : (
-                      <X className="h-4 w-4 text-red-400 mx-auto" />
+                      <>
+                        <X className="h-4 w-4 text-red-400 mx-auto" aria-hidden="true" />
+                        <span className="sr-only">Nie</span>
+                      </>
                     )}
                   </TableCell>
 
@@ -283,7 +307,10 @@ export function ArticlesTable({
                       <SelectTrigger className="w-full h-8 text-sm" disabled={isUpdatingOrderClassId === article.id}>
                         <SelectValue>
                           {isUpdatingOrderClassId === article.id ? (
-                            <span className="text-muted-foreground">Zapisywanie...</span>
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Zapisywanie...
+                            </span>
                           ) : article.orderClass === 'typical' ? (
                             'Typowy'
                           ) : (
@@ -308,7 +335,10 @@ export function ArticlesTable({
                       <SelectTrigger className="w-full h-8 text-sm" disabled={isUpdatingSizeClassId === article.id}>
                         <SelectValue>
                           {isUpdatingSizeClassId === article.id ? (
-                            <span className="text-muted-foreground">Zapisywanie...</span>
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Zapisywanie...
+                            </span>
                           ) : article.sizeClass === 'standard' ? (
                             'Standard'
                           ) : (
@@ -333,7 +363,10 @@ export function ArticlesTable({
                       <SelectTrigger className="w-full h-8 text-sm" disabled={isUpdatingLocation}>
                         <SelectValue placeholder="Nie przypisano">
                           {isUpdatingLocation ? (
-                            <span className="text-muted-foreground">Zapisywanie...</span>
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Zapisywanie...
+                            </span>
                           ) : article.location?.name ? (
                             article.location.name
                           ) : (
@@ -364,9 +397,9 @@ export function ArticlesTable({
                         onClick={() => onEdit(article.id)}
                         disabled={isDeleting}
                         className="h-8 w-8 hover:bg-blue-50"
+                        aria-label={`Edytuj artykuł ${article.articleId}`}
                       >
-                        <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edytuj</span>
+                        <Edit className="h-4 w-4" aria-hidden="true" />
                       </Button>
 
                       {/* Delete Button - disabled podczas isPending */}
@@ -376,14 +409,12 @@ export function ArticlesTable({
                         onClick={() => handleDeleteClick(article.id)}
                         disabled={isDeleting}
                         className="h-8 w-8 hover:bg-red-50 hover:text-red-600"
+                        aria-label={`Usuń artykuł ${article.articleId}`}
                       >
                         {isDeleting ? (
-                          <span className="text-xs">...</span>
+                          <span className="text-xs" aria-hidden="true">...</span>
                         ) : (
-                          <>
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Usuń</span>
-                          </>
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
                         )}
                       </Button>
                     </div>

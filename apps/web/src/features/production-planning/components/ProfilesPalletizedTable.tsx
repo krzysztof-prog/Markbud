@@ -2,9 +2,9 @@
 
 import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Search } from 'lucide-react';
+import { SearchInput } from '@/components/ui/search-input';
+import { Loader2 } from 'lucide-react';
 import { useProfilesWithPalletized, useUpdateProfilePalletized } from '../hooks';
 
 export function ProfilesPalletizedTable() {
@@ -49,15 +49,12 @@ export function ProfilesPalletizedTable() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="mb-4 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Szukaj profilu..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Szukaj profilu..."
+          containerClassName="mb-4"
+        />
 
         <div className="rounded border overflow-hidden max-h-[500px] overflow-y-auto">
           <table className="w-full text-sm">
@@ -75,11 +72,15 @@ export function ProfilesPalletizedTable() {
                   className={`border-t hover:bg-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
                 >
                   <td className="px-4 py-2 text-center">
-                    <Checkbox
-                      checked={profile.isPalletized}
-                      onCheckedChange={(checked) => handleToggle(profile.id, !!checked)}
-                      disabled={updateMutation.isPending}
-                    />
+                    {updateMutation.isPending && updateMutation.variables?.id === profile.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin mx-auto text-slate-400" />
+                    ) : (
+                      <Checkbox
+                        checked={profile.isPalletized}
+                        onCheckedChange={(checked) => handleToggle(profile.id, !!checked)}
+                        disabled={updateMutation.isPending}
+                      />
+                    )}
                   </td>
                   <td className="px-4 py-2 font-mono">{profile.code}</td>
                   <td className="px-4 py-2">{profile.name}</td>

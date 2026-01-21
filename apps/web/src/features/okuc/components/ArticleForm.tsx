@@ -4,19 +4,21 @@
  * Walidacja:
  * - Co najmniej jedno z (usedInPvc || usedInAlu) musi być true
  * - Wszystkie wymagane pola wypełnione
+ *
+ * Wersja: Sheet (sidebar) zamiast Dialog
  */
 
 'use client';
 
 import { useState, useEffect } from 'react';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type { OkucArticle, CreateArticleInput, UpdateArticleInput } from '@/types/okuc';
 
 interface ArticleFormProps {
@@ -143,18 +146,19 @@ export function ArticleForm({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edytuj artykuł' : 'Dodaj nowy artykuł'}</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-[900px] sm:w-[1000px] sm:max-w-[1000px] p-0">
+        <SheetHeader className="px-6 py-4 border-b">
+          <SheetTitle>{isEditing ? 'Edytuj artykuł' : 'Dodaj nowy artykuł'}</SheetTitle>
+          <SheetDescription>
             {isEditing
               ? 'Zmień dane artykułu. Numer artykułu nie może zostać zmieniony.'
               : 'Wypełnij dane nowego artykułu. Co najmniej jedno pole PVC lub ALU musi być zaznaczone.'}
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        <div className="space-y-4 py-4">
+        <ScrollArea className="h-[calc(100vh-180px)]">
+          <div className="space-y-4 p-6">
           {/* Numer artykułu */}
           <div className="space-y-2">
             <Label htmlFor="articleId">
@@ -166,6 +170,7 @@ export function ArticleForm({
               onChange={(e) => setFormData({ ...formData, articleId: e.target.value })}
               placeholder="np. A123"
               disabled={isEditing || isPending}
+              autoFocus={!isEditing}
             />
             {errors.articleId && (
               <p className="text-sm text-destructive">{errors.articleId}</p>
@@ -353,17 +358,18 @@ export function ArticleForm({
               )}
             </div>
           </div>
-        </div>
+          </div>
+        </ScrollArea>
 
-        <DialogFooter>
+        <SheetFooter className="px-6 py-4 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Anuluj
           </Button>
           <Button onClick={handleSubmit} disabled={isPending}>
             {isPending ? 'Zapisywanie...' : isEditing ? 'Zapisz zmiany' : 'Dodaj artykuł'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

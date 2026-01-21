@@ -5,7 +5,7 @@ import { createDynamicComponent } from '@/lib/dynamic-import';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,7 +27,6 @@ import {
   ArrowLeft,
   Download,
   Upload,
-  Search,
   ChevronDown,
   RefreshCw,
 } from 'lucide-react';
@@ -321,15 +320,12 @@ export default function OkucLandingPage() {
                 </Select>
 
                 {/* Wyszukiwarka */}
-                <div className="relative flex-1 max-w-md">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    placeholder="Szukaj po numerze lub nazwie artykułu..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
+                <SearchInput
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder="Szukaj po numerze lub nazwie artykułu..."
+                  containerClassName="flex-1 max-w-md"
+                />
               </div>
 
               {/* Tabela stanów magazynowych */}

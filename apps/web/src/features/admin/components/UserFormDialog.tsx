@@ -165,7 +165,7 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({ open, onOpenChan
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" {...register('email')} />
+            <Input id="email" type="email" autoFocus {...register('email')} />
             {errors.email && <p className="text-sm text-red-600">{errors.email.message}</p>}
           </div>
 

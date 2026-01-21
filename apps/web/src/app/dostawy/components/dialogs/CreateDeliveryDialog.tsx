@@ -22,8 +22,8 @@ interface CreateDeliveryDialogProps {
   isPending: boolean;
   errors: { deliveryDate?: string };
   touched: { deliveryDate?: boolean };
-  onValidate: (field: string, value: string) => void;
-  onTouch: (field: string) => void;
+  onValidate: (field: 'deliveryDate', value: string) => boolean;
+  onTouch: (field: 'deliveryDate') => void;
   onReset: () => void;
 }
 
@@ -71,6 +71,7 @@ export function CreateDeliveryDialog({
                 onValidate('deliveryDate', e.target.value);
               }}
               onBlur={() => onTouch('deliveryDate')}
+              autoFocus
               className={cn(
                 touched.deliveryDate && errors.deliveryDate && 'border-red-500 focus-visible:ring-red-500'
               )}

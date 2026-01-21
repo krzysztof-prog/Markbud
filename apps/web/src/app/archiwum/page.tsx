@@ -11,7 +11,8 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ordersApi } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { formatGrosze, formatCenty, type Grosze, type Centy } from '@/lib/money';
-import { Archive, RotateCcw, Trash2, Search } from 'lucide-react';
+import { Archive, RotateCcw, Trash2 } from 'lucide-react';
+import { SearchInput } from '@/components/ui/search-input';
 import { useDebounce } from '@/hooks/useDebounce';
 import type { Order } from '@/types';
 
@@ -59,16 +60,12 @@ export default function ArchiwumPage() {
               <Archive className="h-5 w-5" />
               Zarchiwizowane zlecenia
             </CardTitle>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Szukaj zlecenia..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 pr-4 py-2 border rounded-md text-sm w-64"
-              />
-            </div>
+            <SearchInput
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Szukaj zlecenia..."
+              className="w-64"
+            />
           </CardHeader>
           <CardContent>
             {isLoading ? (

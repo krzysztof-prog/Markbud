@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Archive, Download, Search, TrendingUp, Settings } from 'lucide-react';
+import { SearchInput } from '@/components/ui/search-input';
+import { Archive, Download, TrendingUp, Settings } from 'lucide-react';
 import type { FilterState, GroupBy } from '../types';
 
 // ================================
@@ -54,15 +55,12 @@ export const OrdersFilterBar: React.FC<OrdersFilterBarProps> = ({
   return (
     <div className="flex flex-wrap items-center gap-4">
       {/* Wyszukiwanie */}
-      <div className="relative w-64">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-        <Input
-          placeholder="Szukaj po numerze, kliencie..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
-        />
-      </div>
+      <SearchInput
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Szukaj po numerze, kliencie..."
+        containerClassName="w-64"
+      />
 
       {/* Checkboxy filtrów */}
       <div className="flex items-center gap-4 border-l pl-4">
