@@ -166,12 +166,19 @@ export async function shouldSkipImport(
   }
 
   // Sprawdź czy zarchiwizowany plik nadal istnieje
+  // Sprawdzamy oba warianty nazw folderów: z podkreślnikiem (_archiwum) i bez (archiwum)
   const directory = path.dirname(filePath);
-  const archivePath = path.join(directory, '_archiwum', filename);
-  const skippedPath = path.join(directory, '_pominiete', filename);
 
-  const archivedExists = existsSync(archivePath);
-  const skippedExists = existsSync(skippedPath);
+  // Wariant 1: z podkreślnikiem (używany przez UzyteBeleWatcher, CenyWatcher)
+  const archivePathUnderscore = path.join(directory, '_archiwum', filename);
+  const skippedPathUnderscore = path.join(directory, '_pominiete', filename);
+
+  // Wariant 2: bez podkreślnika (używany przez UzyteBelePrywatneWatcher)
+  const archivePathNoUnderscore = path.join(directory, 'archiwum', filename);
+  const skippedPathNoUnderscore = path.join(directory, 'pominiete', filename);
+
+  const archivedExists = existsSync(archivePathUnderscore) || existsSync(archivePathNoUnderscore);
+  const skippedExists = existsSync(skippedPathUnderscore) || existsSync(skippedPathNoUnderscore);
 
   if (archivedExists || skippedExists) {
     // Plik jest w archiwum lub pominięte - pomiń import
