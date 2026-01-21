@@ -295,4 +295,21 @@ System zapamiętuje:
 ## Zobacz też
 
 - [Panel kierownika](../manager/overview.md)
-- [Dokumentacja UX](UX_GODZINOWKI_DESIGN.md)
+
+---
+
+## Dokumentacja szczegółowa
+
+Pełna dokumentacja UX została podzielona na mniejsze pliki:
+
+| Plik | Opis |
+|------|------|
+| [design-philosophy.md](design-philosophy.md) | Filozofia projektowa, decyzje UX, zasada 90/10 |
+| [screens-calendar.md](screens-calendar.md) | Ekran kalendarza miesięcznego |
+| [screens-day-view.md](screens-day-view.md) | Ekran widoku dnia (główny) |
+| [screens-worker-panel.md](screens-worker-panel.md) | Panel edycji pracownika |
+| [data-model.md](data-model.md) | Model danych Prisma |
+| [admin-dictionaries.md](admin-dictionaries.md) | Słowniki (Admin) - pracownicy, stanowiska, typy |
+| [implementation.md](implementation.md) | Struktura plików, responsywność, fazy wdrożenia |
+
+**Archiwum:** [UX_GODZINOWKI_DESIGN.md](UX_GODZINOWKI_DESIGN.md) - oryginalny plik (1053 linie)
