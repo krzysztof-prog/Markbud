@@ -117,3 +117,12 @@ export {
   getExcelParser,
   hasNewParsersEnabled,
 } from './parsers/index.js';
+
+// Import Queue
+export { ImportQueueService, importQueue } from './ImportQueueService.js';
+export type {
+  ImportJob,
+  ImportJobType,
+  ImportJobResult,
+  QueueStats,
+} from './ImportQueueService.js';

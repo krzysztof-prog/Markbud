@@ -19,6 +19,7 @@ import {
   shouldSkipImport,
 } from './utils.js';
 import { MojaPracaRepository } from '../../repositories/MojaPracaRepository.js';
+import { importQueue, type ImportJobResult } from '../import/ImportQueueService.js';
 
 // ESM compatibility: __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -137,9 +138,27 @@ export class UzyteBeleWatcher implements IFileWatcher {
       await ensureDirectoryExists(uploadsDir);
       const parser = new CsvParser();
 
-      for (const file of csvFiles) {
-        const filePath = path.join(basePath, file.name);
-        await this.processSingleFile(filePath, uploadsDir, parser);
+      // Dodaj pliki do kolejki zamiast bezpośredniego przetwarzania
+      const jobs = csvFiles.map((file) => ({
+        type: 'uzyte_bele' as const,
+        filePath: path.join(basePath, file.name),
+        priority: 10, // Normalna priorytet dla pojedynczych plików
+        execute: async (): Promise<ImportJobResult> => {
+          const result = await this.processSingleFile(
+            path.join(basePath, file.name),
+            uploadsDir,
+            parser
+          );
+          return {
+            success: result === 'success',
+            shouldRetry: result === 'failed',
+          };
+        },
+      }));
+
+      if (jobs.length > 0) {
+        importQueue.enqueueBatch(jobs);
+        console.log(`   📥 Dodano ${jobs.length} plików do kolejki importów`);
       }
     } catch (error) {
       logger.error(
@@ -173,11 +192,28 @@ export class UzyteBeleWatcher implements IFileWatcher {
 
         console.log(`📄 Wykryto nowy plik CSV: ${filePath}`);
 
-        const uploadsDir = path.join(process.cwd(), 'uploads');
-        await ensureDirectoryExists(uploadsDir);
-        const parser = new CsvParser();
+        // Sprawdź czy plik nie jest już w kolejce
+        if (importQueue.isFileInQueue(filePath)) {
+          console.log(`   ℹ️ Plik już w kolejce: ${filePath}`);
+          return;
+        }
 
-        await this.processSingleFile(filePath, uploadsDir, parser);
+        // Dodaj do kolejki zamiast bezpośredniego przetwarzania
+        importQueue.enqueue({
+          type: 'uzyte_bele',
+          filePath,
+          priority: 5, // Wyższy priorytet dla nowych plików (wykrytych przez watcher)
+          execute: async (): Promise<ImportJobResult> => {
+            const uploadsDir = path.join(process.cwd(), 'uploads');
+            await ensureDirectoryExists(uploadsDir);
+            const parser = new CsvParser();
+            const result = await this.processSingleFile(filePath, uploadsDir, parser);
+            return {
+              success: result === 'success',
+              shouldRetry: result === 'failed',
+            };
+          },
+        });
       })
       .on('error', (error) => {
         logger.error(`❌ Błąd File Watcher dla plików CSV ${basePath}: ${error}`);
@@ -439,6 +475,7 @@ export class UzyteBeleWatcher implements IFileWatcher {
 
   /**
    * Automatyczny import folderu (podobnie jak POST /api/imports/folder)
+   * Pliki są dodawane do kolejki importów zamiast bezpośredniego przetwarzania
    */
   private async importFolder(
     folderPath: string,
@@ -471,31 +508,72 @@ export class UzyteBeleWatcher implements IFileWatcher {
     await ensureDirectoryExists(uploadsDir);
 
     const parser = new CsvParser();
-    let successCount = 0;
-    let failCount = 0;
 
-    // Przetwórz każdy plik CSV
-    for (const csvFile of csvFiles) {
-      const result = await this.processFile(csvFile, folderPath, uploadsDir, parser, delivery.id);
+    // Tracking wyników dla archiwizacji folderu
+    const folderResults = {
+      total: csvFiles.length,
+      success: 0,
+      failed: 0,
+      skipped: 0,
+    };
 
-      if (result === 'success') {
-        successCount++;
-      } else if (result === 'failed') {
-        failCount++;
-      }
-      // 'skipped' - plik już był zaimportowany lub oczekuje na decyzję
+    // Dodaj pliki do kolejki zamiast bezpośredniego przetwarzania
+    const jobs = csvFiles.map((csvFile) => ({
+      type: 'uzyte_bele' as const,
+      filePath: csvFile,
+      priority: 10,
+      metadata: { deliveryId: delivery.id, folderPath, folderName },
+      execute: async (): Promise<ImportJobResult> => {
+        const result = await this.processFile(csvFile, folderPath, uploadsDir, parser, delivery.id);
+
+        // Aktualizuj tracking wyników
+        if (result === 'success') {
+          folderResults.success++;
+        } else if (result === 'failed') {
+          folderResults.failed++;
+        } else {
+          folderResults.skipped++;
+        }
+
+        // Sprawdź czy to ostatni plik z folderu
+        const processed = folderResults.success + folderResults.failed + folderResults.skipped;
+        if (processed === folderResults.total) {
+          // Wszystkie pliki przetworzone - archiwizuj folder jeśli możliwe
+          await this.handleFolderCompletion(folderPath, folderName, folderResults);
+        }
+
+        return {
+          success: result === 'success',
+          shouldRetry: result === 'failed',
+        };
+      },
+    }));
+
+    if (jobs.length > 0) {
+      importQueue.enqueueBatch(jobs);
+      logger.info(`   📥 Dodano ${jobs.length} plików z folderu "${folderName}" do kolejki importów`);
     }
+  }
 
+  /**
+   * Obsługuje zakończenie przetwarzania folderu - archiwizacja jeśli możliwa
+   */
+  private async handleFolderCompletion(
+    folderPath: string,
+    folderName: string,
+    results: { total: number; success: number; failed: number; skipped: number }
+  ): Promise<void> {
     logger.info(
-      `   🎉 Import zakończony: ${successCount}/${csvFiles.length} plików zaimportowano pomyślnie`
+      `   🎉 Import folderu "${folderName}" zakończony: ${results.success}/${results.total} sukces, ` +
+        `${results.failed} błędów, ${results.skipped} pominiętych`
     );
 
-    // Archiwizuj folder jeśli wszystkie pliki zostały pomyślnie zaimportowane
-    if (successCount > 0 && failCount === 0) {
+    // Archiwizuj folder jeśli były sukcesy i nie było błędów
+    if (results.success > 0 && results.failed === 0) {
       const uzyteBelePath = await this.getBasePath();
       await archiveFolder(folderPath, uzyteBelePath);
-    } else if (failCount > 0) {
-      logger.warn(`   ⚠️ Folder NIE został zarchiwizowany - wykryto ${failCount} błędów`);
+    } else if (results.failed > 0) {
+      logger.warn(`   ⚠️ Folder "${folderName}" NIE został zarchiwizowany - wykryto ${results.failed} błędów`);
     }
   }
 

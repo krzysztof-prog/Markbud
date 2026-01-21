@@ -10,6 +10,7 @@ import { prisma } from '../index.js';
 import { ImportRepository } from '../repositories/ImportRepository.js';
 import { ImportService } from '../services/importService.js';
 import { ImportHandler } from '../handlers/importHandler.js';
+import { importQueue } from '../services/import/ImportQueueService.js';
 
 
 export const importRoutes: FastifyPluginAsync = async (fastify) => {
@@ -55,4 +56,58 @@ export const importRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Params: { id: string }; Body: { action?: 'overwrite' | 'add_new'; replaceBase?: boolean } }>('/:id/approve', handler.approve.bind(handler));
   fastify.post<{ Params: { id: string } }>('/:id/reject', handler.reject.bind(handler));
   fastify.delete<{ Params: { id: string } }>('/:id', handler.delete.bind(handler));
+
+  // Import queue status (for monitoring)
+  fastify.get('/queue/status', async () => {
+    const stats = importQueue.getStats();
+    const currentJob = importQueue.getCurrentJob();
+    const pendingJobs = importQueue.getPendingJobs();
+    const retryJobs = importQueue.getRetryJobs();
+
+    return {
+      stats,
+      currentJob: currentJob
+        ? {
+            id: currentJob.id,
+            type: currentJob.type,
+            filePath: currentJob.filePath,
+            retryCount: currentJob.retryCount,
+            addedAt: currentJob.addedAt,
+          }
+        : null,
+      pendingJobs: pendingJobs.slice(0, 10).map((j) => ({
+        id: j.id,
+        type: j.type,
+        filePath: j.filePath,
+        priority: j.priority,
+        addedAt: j.addedAt,
+      })),
+      retryJobs: retryJobs.map((j) => ({
+        id: j.id,
+        type: j.type,
+        filePath: j.filePath,
+        retryCount: j.retryCount,
+        lastError: j.lastError,
+      })),
+      isActive: importQueue.isActive(),
+    };
+  });
+
+  // Pause queue
+  fastify.post('/queue/pause', async () => {
+    importQueue.pause();
+    return { success: true, message: 'Kolejka zatrzymana' };
+  });
+
+  // Resume queue
+  fastify.post('/queue/resume', async () => {
+    importQueue.resume();
+    return { success: true, message: 'Kolejka wznowiona' };
+  });
+
+  // Clear queue
+  fastify.delete('/queue/clear', async () => {
+    importQueue.clear();
+    return { success: true, message: 'Kolejka wyczyszczona' };
+  });
 };

@@ -8,6 +8,7 @@ import { logger } from '../../utils/logger.js';
 import { emitOrderUpdated } from '../event-emitter.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
 import { ensureDirectoryExists, generateSafeFilename, shouldSkipImport } from './utils.js';
+import { importQueue, type ImportJobResult } from '../import/ImportQueueService.js';
 
 /**
  * Domyślna konfiguracja watchera
@@ -99,9 +100,27 @@ export class UzyteBelePrywatneWatcher implements IFileWatcher {
       await ensureDirectoryExists(uploadsDir);
       const parser = new CsvParser();
 
-      for (const file of csvFiles) {
-        const filePath = path.join(basePath, file.name);
-        await this.processPrivateFile(filePath, uploadsDir, parser);
+      // Dodaj pliki do kolejki importów zamiast bezpośredniego przetwarzania
+      const jobs = csvFiles.map((file) => ({
+        type: 'uzyte_bele_prywatne' as const,
+        filePath: path.join(basePath, file.name),
+        priority: 10, // Normalna priorytet
+        execute: async (): Promise<ImportJobResult> => {
+          const result = await this.processPrivateFile(
+            path.join(basePath, file.name),
+            uploadsDir,
+            parser
+          );
+          return {
+            success: result === 'success',
+            shouldRetry: result === 'failed',
+          };
+        },
+      }));
+
+      if (jobs.length > 0) {
+        importQueue.enqueueBatch(jobs);
+        console.log(`   📥 Dodano ${jobs.length} plików prywatnych do kolejki importów`);
       }
     } catch (error) {
       logger.error(
@@ -135,11 +154,28 @@ export class UzyteBelePrywatneWatcher implements IFileWatcher {
 
         console.log(`📄 Wykryto nowy plik prywatny: ${filePath}`);
 
-        const uploadsDir = path.join(process.cwd(), 'uploads');
-        await ensureDirectoryExists(uploadsDir);
-        const parser = new CsvParser();
+        // Sprawdź czy plik jest już w kolejce
+        if (importQueue.isFileInQueue(filePath)) {
+          console.log(`   ℹ️ Plik już w kolejce: ${filePath}`);
+          return;
+        }
 
-        await this.processPrivateFile(filePath, uploadsDir, parser);
+        // Dodaj do kolejki zamiast bezpośredniego przetwarzania
+        importQueue.enqueue({
+          type: 'uzyte_bele_prywatne',
+          filePath,
+          priority: 5, // Wyższy priorytet dla nowych plików (wykrytych przez watcher)
+          execute: async (): Promise<ImportJobResult> => {
+            const uploadsDir = path.join(process.cwd(), 'uploads');
+            await ensureDirectoryExists(uploadsDir);
+            const parser = new CsvParser();
+            const result = await this.processPrivateFile(filePath, uploadsDir, parser);
+            return {
+              success: result === 'success',
+              shouldRetry: result === 'failed',
+            };
+          },
+        });
       })
       .on('error', (error) => {
         logger.error(`❌ Błąd File Watcher dla plików prywatnych ${basePath}: ${error}`);
