@@ -155,6 +155,12 @@ export class OrderRepository {
         createdAt: true,
         updatedAt: true,
         archivedAt: true,
+        // Sumy z materiałówki (wartości w groszach)
+        windowsNetValue: true,
+        windowsMaterial: true,
+        assemblyValue: true,
+        extrasValue: true,
+        otherValue: true,
         requirements: {
           select: {
             id: true,
@@ -336,6 +342,19 @@ export class OrderRepository {
     });
   }
 
+  /**
+   * Aktualizuj ręczny status zlecenia
+   */
+  async updateManualStatus(id: number, manualStatus: string | null) {
+    return this.prisma.order.update({
+      where: { id },
+      data: {
+        manualStatus,
+        manualStatusSetAt: manualStatus ? new Date() : null,
+      },
+    });
+  }
+
   async bulkUpdateStatus(
     orderIds: number[],
     status: string,
@@ -480,6 +499,15 @@ export class OrderRepository {
       where: {
         deliveryDate: params.deliveryDate,
         status: params.status,
+        // Pokaż tylko dostawy które mają przynajmniej jedno zlecenie NIE dodane do produkcji
+        // (czyli bez productionDate)
+        deliveryOrders: {
+          some: {
+            order: {
+              productionDate: null,
+            },
+          },
+        },
       },
       select: {
         id: true,
@@ -660,9 +688,13 @@ export class OrderRepository {
   /**
    * Pobiera sumy requirements zgrupowane po profileId i colorId
    * Używane w widoku totals dla zapotrzebowania
+   * Uwaga: Pobiera tylko requirements z kolorami Akrobud (colorId != null), nie prywatne
    */
   async getRequirementsTotals() {
     const requirements = await this.prisma.orderRequirement.findMany({
+      where: {
+        colorId: { not: null }, // Tylko kolory Akrobud, nie prywatne
+      },
       select: {
         profileId: true,
         colorId: true,
@@ -691,6 +723,10 @@ export class OrderRepository {
     > = {};
 
     for (const req of requirements) {
+      // Pomijamy requirements bez colorId (prywatne kolory) - już przefiltrowane w query
+      // ale TypeScript nadal wymaga sprawdzenia
+      if (!req.colorId || !req.color) continue;
+
       const key = `${req.profileId}-${req.colorId}`;
       if (!totals[key]) {
         totals[key] = {

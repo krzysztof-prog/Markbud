@@ -273,11 +273,13 @@ export class UzyteBeleParser {
    * @param filepath - Ścieżka do pliku CSV
    * @param action - 'overwrite' (nadpisz istniejące) lub 'add_new' (utwórz nowe/zaktualizuj)
    * @param replaceBase - Jeśli true i zlecenie ma sufiks, zamieni zlecenie bazowe zamiast tworzyć nowe
+   * @param options - Opcjonalne parametry: isPrivateImport - czy to import prywatny (tworzy PrivateColor dla nieznanych kolorów)
    */
   async processUzyteBele(
     filepath: string,
     action: 'overwrite' | 'add_new',
-    replaceBase?: boolean
+    replaceBase?: boolean,
+    options?: { isPrivateImport?: boolean }
   ): Promise<{ orderId: number; requirementsCount: number; windowsCount: number; glassesCount: number; materialsCount: number }> {
     const parsed = await this.parseUzyteBeleFile(filepath);
 
@@ -548,39 +550,93 @@ export class UzyteBeleParser {
           });
         }
 
-        // Znajdź kolor
+        // Znajdź kolor Akrobud
         const color = await tx.color.findUnique({
           where: { code: req.colorCode },
         });
 
-        if (!color) {
+        // Zmienne do upsert - albo colorId albo privateColorId
+        let colorId: number | null = null;
+        let privateColorId: number | null = null;
+
+        if (color) {
+          // Znaleziono kolor Akrobud
+          colorId = color.id;
+        } else if (options?.isPrivateImport) {
+          // Import prywatny - znajdź lub utwórz PrivateColor
+          let privateColor = await tx.privateColor.findUnique({
+            where: { code: req.colorCode },
+          });
+
+          if (!privateColor) {
+            // Utwórz nowy kolor prywatny
+            privateColor = await tx.privateColor.create({
+              data: {
+                code: req.colorCode,
+                name: req.colorCode, // Domyślnie nazwa = kod, użytkownik może zmienić
+              },
+            });
+            console.log(`Utworzono nowy kolor prywatny: ${req.colorCode}`);
+          }
+
+          privateColorId = privateColor.id;
+        } else {
+          // Import zwykły (Akrobud) - pomijamy nieznany kolor
           console.warn(`Kolor ${req.colorCode} nie znaleziony, pomijam`);
           continue;
         }
 
         // Utwórz lub zaktualizuj requirement
-        await tx.orderRequirement.upsert({
-          where: {
-            orderId_profileId_colorId: {
+        // Uwaga: używamy różnych unique constraints w zależności od typu koloru
+        if (colorId) {
+          // Kolor Akrobud
+          await tx.orderRequirement.upsert({
+            where: {
+              orderId_profileId_colorId: {
+                orderId: order.id,
+                profileId: profile.id,
+                colorId: colorId,
+              },
+            },
+            update: {
+              beamsCount: req.calculatedBeams,
+              meters: req.calculatedMeters,
+              restMm: req.originalRest,
+            },
+            create: {
               orderId: order.id,
               profileId: profile.id,
-              colorId: color.id,
+              colorId: colorId,
+              beamsCount: req.calculatedBeams,
+              meters: req.calculatedMeters,
+              restMm: req.originalRest,
             },
-          },
-          update: {
-            beamsCount: req.calculatedBeams,
-            meters: req.calculatedMeters,
-            restMm: req.originalRest,
-          },
-          create: {
-            orderId: order.id,
-            profileId: profile.id,
-            colorId: color.id,
-            beamsCount: req.calculatedBeams,
-            meters: req.calculatedMeters,
-            restMm: req.originalRest,
-          },
-        });
+          });
+        } else if (privateColorId) {
+          // Kolor prywatny - używamy innego unique constraint
+          await tx.orderRequirement.upsert({
+            where: {
+              orderId_profileId_privateColorId: {
+                orderId: order.id,
+                profileId: profile.id,
+                privateColorId: privateColorId,
+              },
+            },
+            update: {
+              beamsCount: req.calculatedBeams,
+              meters: req.calculatedMeters,
+              restMm: req.originalRest,
+            },
+            create: {
+              orderId: order.id,
+              profileId: profile.id,
+              privateColorId: privateColorId,
+              beamsCount: req.calculatedBeams,
+              meters: req.calculatedMeters,
+              restMm: req.originalRest,
+            },
+          });
+        }
       }
 
       // Dodaj windows (w tej samej transakcji) i zachowaj mapowanie position -> id

@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { ordersApi } from '@/lib/api';
 import { toast } from '@/hooks/useToast';
 import { formatGrosze, formatCenty, type Grosze, type Centy } from '@/lib/money';
-import { Package, Layers, Grid3X3, Calendar, FileText, FileDown, ChevronDown, ChevronUp, Truck } from 'lucide-react';
+import { Package, Layers, Grid3X3, Calendar, FileText, FileDown, ChevronDown, ChevronUp, Truck, Calculator } from 'lucide-react';
 import type { Order, SchucoDeliveryLink } from '@/types';
 import type { Requirement } from '@/types';
 import { ReadinessChecklist } from '@/components/ReadinessChecklist';
@@ -47,6 +47,12 @@ interface OrderDetail extends Order {
   notes?: string;
   requirements?: Requirement[];
   schucoLinks?: SchucoDeliveryLink[];
+  // Sumy z materiałówki (wartości w groszach)
+  windowsNetValue?: number | null;
+  windowsMaterial?: number | null;
+  assemblyValue?: number | null;
+  extrasValue?: number | null;
+  otherValue?: number | null;
 }
 
 interface OrderDetailModalProps {
@@ -76,12 +82,27 @@ export function OrderDetailModal({
   const [schucoExpanded, setSchucoExpanded] = React.useState(true); // Domyślnie rozwinięte
 
   // Sprawdź czy istnieje PDF dla tego zlecenia w bazie danych
+  // UWAGA: Używamy isMounted pattern aby uniknąć race condition przy unmount
   React.useEffect(() => {
+    let isMounted = true;
+
     if (orderId && open) {
       ordersApi.checkPdf(orderId)
-        .then((result) => setHasPdf(result.hasPdf))
-        .catch(() => setHasPdf(false));
+        .then((result) => {
+          if (isMounted) {
+            setHasPdf(result.hasPdf);
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setHasPdf(false);
+          }
+        });
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [orderId, open]);
 
   const handleOpenPdf = async () => {
@@ -96,8 +117,9 @@ export function OrderDetailModal({
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
 
-      // Zwolnij URL po otwarciu (po 1 sekundzie dla pewności)
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      // Zwolnij URL natychmiast po otwarciu okna (przeglądarka już ma dane)
+      // UWAGA: setTimeout powodował memory leak gdy komponent był odmontowany
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Błąd podczas otwierania PDF:', error);
       toast({
@@ -287,6 +309,60 @@ export function OrderDetailModal({
                 return null;
               })()}
             </div>
+
+            {/* Materiałówka - sumy wartości */}
+            {(order.windowsNetValue || order.windowsMaterial || order.assemblyValue || order.extrasValue || order.otherValue) && (
+              <div className="border rounded-lg border-emerald-200 bg-emerald-50/30">
+                <div className="px-4 py-3">
+                  <h4 className="font-medium flex items-center gap-2 text-emerald-900 mb-3">
+                    <Calculator className="h-4 w-4" />
+                    Materiałówka - sumy
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {order.windowsNetValue != null && order.windowsNetValue > 0 && (
+                      <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                        <div className="text-xs text-slate-500 mb-1">Wartość netto okien</div>
+                        <div className="font-semibold text-emerald-700">
+                          {formatGrosze(order.windowsNetValue as Grosze)}
+                        </div>
+                      </div>
+                    )}
+                    {order.windowsMaterial != null && order.windowsMaterial > 0 && (
+                      <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                        <div className="text-xs text-slate-500 mb-1">Materiał okien</div>
+                        <div className="font-semibold text-emerald-700">
+                          {formatGrosze(order.windowsMaterial as Grosze)}
+                        </div>
+                      </div>
+                    )}
+                    {order.assemblyValue != null && order.assemblyValue > 0 && (
+                      <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                        <div className="text-xs text-slate-500 mb-1">Wartość montażu</div>
+                        <div className="font-semibold text-emerald-700">
+                          {formatGrosze(order.assemblyValue as Grosze)}
+                        </div>
+                      </div>
+                    )}
+                    {order.extrasValue != null && order.extrasValue > 0 && (
+                      <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                        <div className="text-xs text-slate-500 mb-1">Wartość dodatków</div>
+                        <div className="font-semibold text-emerald-700">
+                          {formatGrosze(order.extrasValue as Grosze)}
+                        </div>
+                      </div>
+                    )}
+                    {order.otherValue != null && order.otherValue > 0 && (
+                      <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                        <div className="text-xs text-slate-500 mb-1">Inne</div>
+                        <div className="font-semibold text-emerald-700">
+                          {formatGrosze(order.otherValue as Grosze)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Zamówienia Schuco - Collapsible */}
             {order.schucoLinks && order.schucoLinks.length > 0 && (

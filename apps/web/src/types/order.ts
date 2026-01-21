@@ -48,9 +48,18 @@ export interface Order {
   archivedAt?: Timestamp;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
+  // Ręczny status zlecenia: 'do_not_cut' (NIE CIĄĆ), 'cancelled' (Anulowane), 'on_hold' (Wstrzymane)
+  manualStatus?: 'do_not_cut' | 'cancelled' | 'on_hold' | null;
+  manualStatusSetAt?: Timestamp;
   totalWindows?: number;
   totalSashes?: number;
   totalGlasses?: number;
+  // Sumy z materiałówki (wartości w groszach)
+  windowsNetValue?: number | null;
+  windowsMaterial?: number | null;
+  assemblyValue?: number | null;
+  extrasValue?: number | null;
+  otherValue?: number | null;
   windows?: {
     id?: ID;
     profileType?: string;

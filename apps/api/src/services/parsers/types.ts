@@ -32,6 +32,27 @@ export interface UzyteBeleGlass {
   areaSqm: number;      // Obliczona powierzchnia w m²
 }
 
+// Kategoria pozycji materiałówki
+export type MaterialCategory = 'okno' | 'montaz' | 'dodatki' | 'inne';
+
+// Interfejs pozycji materiałówki z pliku "użyte bele"
+export interface UzytebeleMaterial {
+  position: number;             // Numer pozycji
+  category: MaterialCategory;   // Kategoria pozycji
+  glazing: number;              // Szklenia w groszach
+  fittings: number;             // Okucia w groszach
+  parts: number;                // Części w groszach
+  glassQuantity: number;        // Ilość szkła
+  material: number;             // Materiał w groszach
+  assemblyValueBeforeDiscount: number;  // Wartość netto montażu przed rabatem w groszach
+  assemblyValueAfterDiscount: number;   // Wartość netto montażu po rabacie w groszach
+  netValue: number;             // Wartość netto w groszach
+  totalNet: number;             // Suma netto w groszach
+  quantity: number;             // Sztuk
+  coefficient: number | null;   // Współczynnik
+  unit: number | null;          // Jednostka
+}
+
 /**
  * Informacja o błędzie parsowania
  */
@@ -83,6 +104,7 @@ export interface ParsedUzyteBele {
   }>;
   windows: UzyteBeleWindow[];
   glasses: UzyteBeleGlass[];
+  materials: UzytebeleMaterial[]; // Pozycje materiałówki
   totals: {
     windows: number;
     sashes: number;
