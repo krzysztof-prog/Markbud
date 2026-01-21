@@ -86,8 +86,8 @@ const navigation: NavigationItem[] = [
     name: 'Zestawienie miesięczne',
     href: '/zestawienia/miesieczne',
     icon: FileText,
-    // TYLKO dla księgowej - jedyna zakładka którą widzi
-    requiredRoles: [UserRole.KSIEGOWA]
+    // Dla księgowej (jedyna zakładka którą widzi) oraz kierownika/admin/owner
+    requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.KSIEGOWA]
   },
   {
     name: 'Zestawienie zleceń',
@@ -102,6 +102,7 @@ const navigation: NavigationItem[] = [
     icon: Warehouse,
     requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.USER],
     subItems: [
+      { name: 'Magazyn Akrobud', href: '/magazyn/akrobud', icon: Warehouse },
       { name: 'Kalendarz dostaw', href: '/dostawy', icon: Calendar },
       { name: 'Weryfikacja listy', href: '/dostawy/weryfikacja', icon: ListChecks },
       { name: 'Profile na dostawy', href: '/magazyn/akrobud/profile-na-dostawy', icon: Box },

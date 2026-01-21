@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import dynamic from 'next/dynamic';
-import { PlayCircle, CheckCircle, FileText, Clock, Package, FileCheck, Loader2 } from 'lucide-react';
+import { PlayCircle, CheckCircle, Clock, Package, FileCheck, Loader2 } from 'lucide-react';
 
 // Skeleton loader dla tabs
 const TabLoader = () => (
@@ -56,14 +56,6 @@ const BZTab = dynamic(
   }
 );
 
-// Dynamiczny import strony zestawień miesięcznych
-const MonthlyReportContent = dynamic(
-  () => import('@/features/production-reports/ProductionReportPage').then((mod) => ({ default: mod.ProductionReportPage })),
-  {
-    loading: () => <TabLoader />,
-    ssr: false,
-  }
-);
 
 /**
  * Component wrapujący useSearchParams() w Suspense boundary
@@ -100,13 +92,6 @@ function TabManager() {
             Zakończ zlecenia
           </TabsTrigger>
           <TabsTrigger
-            value="monthly-report"
-            className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
-          >
-            <FileText className="h-4 w-4" />
-            Zestawienie miesięczne
-          </TabsTrigger>
-          <TabsTrigger
             value="time-tracker"
             className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none px-4 py-3"
           >
@@ -139,10 +124,6 @@ function TabManager() {
           <CompleteOrdersTab />
         </TabsContent>
 
-        <TabsContent value="monthly-report" className="m-0 h-full">
-          <MonthlyReportContent />
-        </TabsContent>
-
         <TabsContent value="time-tracker" className="m-0 h-full">
           <TimeTrackerTab />
         </TabsContent>
@@ -162,13 +143,14 @@ function TabManager() {
 /**
  * Panel Kierownika - strona główna
  *
- * Zawiera 6 zakładek:
+ * Zawiera 5 zakładek:
  * 1. Dodaj do produkcji - wybieranie zleceń do produkcji (status: in_progress)
  * 2. Zakończ zlecenia - oznaczanie zleceń jako wyprodukowane (status: completed)
- * 3. Zestawienie miesięczne - raport produkcji z rozliczeniami
- * 4. Godzinówki - zarządzanie czasem pracy pracowników
- * 5. Paletówki - ewidencja stanu palet
- * 6. B-Z - protokoły dostaw (w przygotowaniu)
+ * 3. Godzinówki - zarządzanie czasem pracy pracowników
+ * 4. Paletówki - ewidencja stanu palet
+ * 5. B-Z - protokoły dostaw (w przygotowaniu)
+ *
+ * Zestawienie miesięczne zostało przeniesione na osobną stronę /zestawienia/miesieczne
  */
 export default function KierownikPage() {
   return (
