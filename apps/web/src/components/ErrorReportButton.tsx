@@ -51,11 +51,12 @@ export function ErrorReportButton() {
       });
       setOpen(false);
       setDescription("");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to submit bug report:", error);
+      const errorMessage = error instanceof Error ? error.message : "Nie udało się wysłać zgłoszenia";
       toast({
         title: "Błąd",
-        description: error?.response?.data?.error || "Nie udało się wysłać zgłoszenia",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

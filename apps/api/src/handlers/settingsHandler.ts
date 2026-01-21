@@ -129,7 +129,7 @@ export class SettingsHandler {
   // User Folder Settings
   async getUserFolderPath(request: FastifyRequest, reply: FastifyReply) {
     // Get userId from authenticated request
-    const userId = (request as any).user?.userId;
+    const userId = (request as unknown as { user?: { userId?: number } }).user?.userId;
 
     if (!userId) {
       throw new UnauthorizedError('Brak autoryzacji');
@@ -143,7 +143,7 @@ export class SettingsHandler {
     request: FastifyRequest<{ Body: { importsBasePath: string } }>,
     reply: FastifyReply
   ) {
-    const userId = (request as any).user?.userId;
+    const userId = (request as unknown as { user?: { userId?: number } }).user?.userId;
 
     if (!userId) {
       throw new UnauthorizedError('Brak autoryzacji');

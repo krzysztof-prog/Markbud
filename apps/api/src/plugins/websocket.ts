@@ -322,7 +322,7 @@ export async function setupWebSocket(fastify: FastifyInstance) {
       email: authConnection.email,
       ip: connection.socket.remoteAddress,
       connectionId,
-      userConnectionsBefore: userConnectionCount.get(authConnection.userId!) || 0,
+      userConnectionsBefore: authConnection.userId ? userConnectionCount.get(authConnection.userId) || 0 : 0,
     });
 
     activeConnections.add(authConnection);

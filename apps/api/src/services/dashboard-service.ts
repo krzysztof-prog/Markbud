@@ -236,7 +236,7 @@ export class DashboardService {
     ]);
 
     // Calculate statistics
-    let totalOrders = orders.length;
+    const totalOrders = orders.length;
     let totalWindows = 0;
     let totalValuePln = 0;
     let totalValueEur = 0;

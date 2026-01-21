@@ -81,7 +81,8 @@ export class CenyWatcher implements IFileWatcher {
     this.isProcessing = true;
 
     while (this.queue.length > 0) {
-      const filePath = this.queue.shift()!;
+      const filePath = this.queue.shift();
+      if (!filePath) break;
 
       try {
         await this.processCenyPdf(filePath);

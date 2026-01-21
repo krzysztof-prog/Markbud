@@ -207,7 +207,7 @@ export function Sidebar() {
     }
 
     // Sprawdź requiredPermission
-    if (item.requiredPermission && user && !hasPermission(user.role, item.requiredPermission as any)) {
+    if (item.requiredPermission && user && !hasPermission(user.role, item.requiredPermission as keyof typeof PERMISSIONS)) {
       return false;
     }
 

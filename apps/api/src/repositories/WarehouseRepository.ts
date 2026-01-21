@@ -11,7 +11,7 @@ import { logger } from '../utils/logger.js';
 export class WarehouseRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async getStock(profileId?: number, colorId?: number, pagination?: PaginationParams): Promise<PaginatedResponse<any>> {
+  async getStock(profileId?: number, colorId?: number, pagination?: PaginationParams): Promise<PaginatedResponse<unknown>> {
     const where: Prisma.WarehouseStockWhereInput = {
       deletedAt: null, // Exclude soft-deleted stock records
     };

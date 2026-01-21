@@ -44,7 +44,7 @@ export async function getOperatorDashboard(
   reply: FastifyReply
 ): Promise<void> {
   // Pobierz userId z tokenu JWT (zalogowany uzytkownik)
-  const authUser = (request as any).user;
+  const authUser = (request as unknown as { user?: { userId?: number; role?: string } }).user;
 
   if (!authUser?.userId) {
     return reply.status(401).send({ error: 'Brak autoryzacji' });

@@ -36,11 +36,11 @@ const INVOICE_ROLES = ['manager', 'admin', 'accountant'];
  * Sprawdza czy użytkownik ma wymaganą rolę
  * W systemie single-user tymczasowo przepuszcza wszystkich
  */
-function checkRole(request: FastifyRequest, allowedRoles: string[]): void {
+function checkRole(_request: FastifyRequest, _allowedRoles: string[]): void {
   // TEMPORARY: Single-user system - pomijamy sprawdzanie ról
   // Gdy system będzie miał pełną autoryzację, odkomentować poniższy kod:
   /*
-  const userRole = (request as any).user?.role;
+  const userRole = (request as unknown as { user?: { role?: string } }).user?.role;
   if (!userRole || !allowedRoles.includes(userRole)) {
     throw new ForbiddenError('Brak uprawnień do wykonania tej operacji');
   }
@@ -52,7 +52,7 @@ function checkRole(request: FastifyRequest, allowedRoles: string[]): void {
  * Pobiera userId z requestu (dla audytu)
  */
 function getUserId(request: FastifyRequest): number {
-  const userId = (request as any).user?.userId;
+  const userId = (request as unknown as { user?: { userId?: number } }).user?.userId;
   return typeof userId === 'number' ? userId : 1; // domyślnie 1 dla single-user
 }
 

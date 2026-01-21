@@ -18,7 +18,7 @@ import {
   Plus,
   X,
   Package,
-  ScanLine,
+  // ScanLine, // nieużywane obecnie
 } from 'lucide-react';
 import { CheckLabelsButton } from '@/features/label-checks';
 import {

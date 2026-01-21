@@ -14,7 +14,7 @@ export function createWarehouseOrderHandler(service: WarehouseOrderService) {
      */
     async getAll(
       request: FastifyRequest<{ Querystring: Record<string, string | undefined> }>,
-      reply: FastifyReply
+      _reply: FastifyReply
     ) {
       const query = warehouseOrderQuerySchema.parse(request.query);
       const orders = await service.findAll(query);
@@ -26,7 +26,7 @@ export function createWarehouseOrderHandler(service: WarehouseOrderService) {
      */
     async getById(
       request: FastifyRequest<{ Params: { id: string } }>,
-      reply: FastifyReply
+      _reply: FastifyReply
     ) {
       const { id } = warehouseOrderIdParamsSchema.parse(request.params);
       const order = await service.findById(id);
@@ -53,7 +53,7 @@ export function createWarehouseOrderHandler(service: WarehouseOrderService) {
         Params: { id: string };
         Body: Record<string, unknown>;
       }>,
-      reply: FastifyReply
+      _reply: FastifyReply
     ) {
       const { id } = warehouseOrderIdParamsSchema.parse(request.params);
       const data = updateWarehouseOrderSchema.parse(request.body);

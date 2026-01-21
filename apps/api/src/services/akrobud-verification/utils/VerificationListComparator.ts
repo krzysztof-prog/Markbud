@@ -10,7 +10,7 @@
  */
 
 import type { PrismaClient } from '@prisma/client';
-import { OrderNumberMatcher, type OrderMatchResult } from './OrderNumberMatcher.js';
+import { OrderNumberMatcher } from './OrderNumberMatcher.js';
 
 // ===================
 // Types
@@ -266,7 +266,7 @@ export class VerificationListComparator {
       if (!baseToPositions.has(base)) {
         baseToPositions.set(base, []);
       }
-      baseToPositions.get(base)!.push(item.position);
+      baseToPositions.get(base)?.push(item.position);
     }
 
     const duplicates: DuplicateItem[] = [];
@@ -296,7 +296,7 @@ export class VerificationListComparator {
       if (!orderNumberCounts.has(orderNumber)) {
         orderNumberCounts.set(orderNumber, []);
       }
-      orderNumberCounts.get(orderNumber)!.push(items[i].position ?? i + 1);
+      orderNumberCounts.get(orderNumber)?.push(items[i].position ?? i + 1);
     }
 
     const duplicates: DuplicateItem[] = [];

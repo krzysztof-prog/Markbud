@@ -10,9 +10,13 @@ import {
   createOkucOrderSchema,
   updateOkucOrderSchema,
   receiveOrderSchema,
+  confirmOrderImportSchema,
 } from '../../validators/okuc.js';
+import { OkucOrderImportService } from '../../services/okuc/OkucOrderImportService.js';
+import type { MultipartFile as _MultipartFile } from '@fastify/multipart';
 
 const repository = new OkucOrderRepository(prisma);
+const importService = new OkucOrderImportService(prisma);
 
 export const okucOrderHandler = {
   /**
@@ -183,5 +187,65 @@ export const okucOrderHandler = {
 
     logger.info('Deleted order', { id });
     return reply.status(204).send();
+  },
+
+  /**
+   * POST /api/okuc/orders/import/parse
+   * Parsuje plik XLSX i zwraca podgląd danych do zatwierdzenia
+   */
+  async parseImport(request: FastifyRequest, reply: FastifyReply) {
+    // Pobierz plik XLSX z multipart
+    const data = await request.file();
+    if (!data) {
+      return reply.status(400).send({ error: 'Brak pliku XLSX' });
+    }
+
+    // Sprawdź typ pliku
+    const filename = data.filename.toLowerCase();
+    if (!filename.endsWith('.xlsx') && !filename.endsWith('.xls')) {
+      return reply.status(400).send({
+        error: 'Nieprawidłowy typ pliku. Wymagany format: XLSX lub XLS',
+      });
+    }
+
+    // Wczytaj zawartość pliku do bufora
+    const chunks: Buffer[] = [];
+    for await (const chunk of data.file) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
+
+    // Parsuj plik XLSX
+    const result = await importService.parseXlsx(buffer);
+
+    logger.info('Parsed OKUC order import', {
+      itemsCount: result.items.length,
+      missingArticlesCount: result.missingArticles.length,
+    });
+
+    return reply.status(200).send(result);
+  },
+
+  /**
+   * POST /api/okuc/orders/import/confirm
+   * Zatwierdza import i tworzy zamówienie
+   */
+  async confirmImport(request: FastifyRequest, reply: FastifyReply) {
+    const data = confirmOrderImportSchema.parse(request.body);
+
+    // Get userId from authenticated user or fallback to system user
+    const rawUserId = request.user?.userId || 1;
+    const userId = typeof rawUserId === 'string' ? parseInt(rawUserId, 10) : rawUserId;
+
+    const result = await importService.confirmImport(data, userId);
+
+    logger.info('Confirmed OKUC order import', {
+      orderId: result.order.id,
+      orderNumber: result.order.orderNumber,
+      articlesCreated: result.articlesCreated,
+      pricesUpdated: result.pricesUpdated,
+    });
+
+    return reply.status(201).send(result);
   },
 };

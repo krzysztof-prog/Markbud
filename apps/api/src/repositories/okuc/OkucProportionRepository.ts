@@ -205,11 +205,11 @@ export class OkucProportionRepository {
    * Get all proportion chains starting from a source article
    * Returns chains like: A -> B -> C
    */
-  async getProportionChains(sourceArticleId: number): Promise<any[]> {
-    const chains: any[] = [];
+  async getProportionChains(sourceArticleId: number): Promise<unknown[]> {
+    const chains: unknown[] = [];
     const visited = new Set<number>();
 
-    const buildChain = async (articleId: number, currentChain: any[] = []) => {
+    const buildChain = async (articleId: number, currentChain: unknown[] = []) => {
       if (visited.has(articleId)) {
         return; // Prevent infinite loops
       }

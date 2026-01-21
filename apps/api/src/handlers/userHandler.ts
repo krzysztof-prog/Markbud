@@ -97,7 +97,7 @@ export async function deleteUserHandler(
 
   // Pobierz ID aktualnie zalogowanego użytkownika z dekoratora request.user
   // (dodany przez middleware withAuth)
-  const requestUser = (request as any).user as AuthenticatedUser | undefined;
+  const requestUser = (request as unknown as { user?: AuthenticatedUser }).user;
   const currentUserId = requestUser?.userId
     ? typeof requestUser.userId === 'number'
       ? requestUser.userId

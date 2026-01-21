@@ -83,7 +83,8 @@ export class GlassWatcher implements IFileWatcher {
     this.isProcessing = true;
 
     while (this.queue.length > 0) {
-      const task = this.queue.shift()!;
+      const task = this.queue.shift();
+      if (!task) break;
 
       try {
         switch (task.type) {

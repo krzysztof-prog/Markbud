@@ -43,7 +43,7 @@ export function useSuspenseVerificationLists(filters?: VerificationListFilters) 
 export function useVerificationList(id: number | null) {
   return useQuery({
     queryKey: VERIFICATION_LIST_KEYS.list(id ?? 0),
-    queryFn: () => verificationApi.getById(id!),
+    queryFn: () => id !== null ? verificationApi.getById(id) : Promise.reject(new Error('No id')),
     enabled: id !== null && id > 0,
     staleTime: 30 * 1000,
   });

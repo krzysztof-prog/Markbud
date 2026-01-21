@@ -18,7 +18,7 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
-  Zap,
+  // Zap, // nieużywane obecnie
   Filter
 } from 'lucide-react';
 
@@ -106,7 +106,7 @@ export default function GlassStatisticsPage() {
   }, [glassDeliveries]);
 
   // Policz dostarczono na podstawie matchStatus z GlassDeliveryItem
-  const matchedDeliveryCount = useMemo(() => {
+  const _matchedDeliveryCount = useMemo(() => {
     if (!glassDeliveries) return 0;
     return glassDeliveries.reduce((sum, delivery) => {
       const matchedQuantity = delivery.items?.reduce((itemSum, item) => {

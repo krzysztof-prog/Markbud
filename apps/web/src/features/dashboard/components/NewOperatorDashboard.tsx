@@ -182,27 +182,28 @@ export function NewOperatorDashboard() {
     );
   }
 
-  const { user, stats, alerts, recentActivity, pendingConflictsCount } = data;
+  const { user, stats, recentActivity, pendingConflictsCount } = data;
 
   return (
     <div className="p-6 space-y-6">
       {/* Sekcja powitania z przelacznikiem */}
-      <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-6 text-white">
+      <div style={{ backgroundColor: '#1e293b', padding: '1.5rem', borderRadius: '0.5rem' }}>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold mb-2">Witaj, {user.name}!</h2>
-            <p className="text-blue-100">
+            <h2 style={{ color: '#ffffff', fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+              Witaj, {user.name}!
+            </h2>
+            <p style={{ color: '#94a3b8' }}>
               {filterByUser ? 'Twoje' : 'Wszystkie'} aktywne zlecenia: {stats.totalOrders}.{' '}
               {stats.readyForProduction} gotowych do produkcji.
             </p>
           </div>
           {canToggle && (
-            <div className="flex items-center gap-3 bg-white/10 rounded-lg px-4 py-2">
-              <span className="text-sm">Tylko moje zlecenia</span>
+            <div style={{ backgroundColor: '#334155', padding: '0.5rem 1rem', borderRadius: '0.5rem' }} className="flex items-center gap-3">
+              <span style={{ color: '#ffffff', fontSize: '0.875rem' }}>Tylko moje zlecenia</span>
               <Switch
                 checked={filterByUser}
                 onCheckedChange={setFilterByUser}
-                className="data-[state=checked]:bg-white/30"
               />
             </div>
           )}

@@ -263,12 +263,12 @@ export class DeliveryProtocolService {
         doc.text(`Miejsce: ___________________`, 320, doc.y - 13);
 
         // ==================== STOPKA ====================
-        const range = (doc as any).bufferedPageRange();
+        const range = (doc as unknown as { bufferedPageRange: () => { count: number } }).bufferedPageRange();
         for (let i = 0; i < range.count; i++) {
           doc.switchToPage(i);
 
-          // Zapisz bieżącą pozycję Y
-          const currentY = doc.y;
+          // Zapisz bieżącą pozycję Y (nieużywane ale zachowane dla przyszłości)
+          const _currentY = doc.y;
 
           // Ustaw stopkę na stałej wysokości (dół strony)
           const footerY = doc.page.height - 40;

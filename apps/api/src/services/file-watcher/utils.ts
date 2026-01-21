@@ -144,6 +144,9 @@ export function generateSafeFilename(originalFilename: string): string {
  * Sprawdza czy plik był już zaimportowany I nadal istnieje w archiwum/pominiętych
  * Jeśli plik był zaimportowany ale został usunięty z archiwum - pozwala na ponowny import
  *
+ * WAŻNE: Sprawdza FIZYCZNIE czy plik istnieje w archiwum/pominiętych
+ * Nawet jeśli nie ma rekordu w bazie, ale plik jest w archiwum - pomijamy import
+ *
  * @returns true jeśli plik powinien być pominięty, false jeśli można importować
  */
 export async function shouldSkipImport(
@@ -151,23 +154,11 @@ export async function shouldSkipImport(
   filename: string,
   filePath: string
 ): Promise<boolean> {
-  // Znajdź poprzedni import tego pliku (po nazwie pliku, nie pełnej ścieżce)
-  const existingImport = await prisma.fileImport.findFirst({
-    where: {
-      filename: filename,
-      status: { in: ['completed', 'processing'] },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  if (!existingImport) {
-    // Plik nigdy nie był importowany - można importować
-    return false;
-  }
-
-  // Sprawdź czy zarchiwizowany plik nadal istnieje
-  // Sprawdzamy oba warianty nazw folderów: z podkreślnikiem (_archiwum) i bez (archiwum)
   const directory = path.dirname(filePath);
+
+  // NAJPIERW sprawdź fizycznie czy plik istnieje w archiwum/pominiętych
+  // To jest najważniejszy warunek - jeśli plik już tam jest, nie importuj ponownie
+  // Sprawdzamy oba warianty nazw folderów: z podkreślnikiem (_archiwum) i bez (archiwum)
 
   // Wariant 1: z podkreślnikiem (używany przez UzyteBeleWatcher, CenyWatcher)
   const archivePathUnderscore = path.join(directory, '_archiwum', filename);
@@ -184,6 +175,24 @@ export async function shouldSkipImport(
     // Plik jest w archiwum lub pominięte - pomiń import
     logger.info(`   ⏭️ Plik ${filename} już istnieje w archiwum/pominiętych - pomijam`);
     return true;
+  }
+
+  // Sprawdź w bazie czy plik był importowany (szukaj po nazwie oryginalnej lub z timestampem)
+  // Uwaga: filename w bazie może mieć prefix timestamp (np. 1769035865820_53821_uzyte_bele.csv)
+  const existingImport = await prisma.fileImport.findFirst({
+    where: {
+      OR: [
+        { filename: filename },
+        { filename: { endsWith: `_${filename}` } }, // Szukaj też z prefixem timestamp
+      ],
+      status: { in: ['completed', 'processing'] },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!existingImport) {
+    // Plik nigdy nie był importowany i nie jest w archiwum - można importować
+    return false;
   }
 
   // Plik był importowany ale został usunięty z archiwum - pozwól na ponowny import

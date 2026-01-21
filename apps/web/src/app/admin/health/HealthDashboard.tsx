@@ -11,19 +11,19 @@ import { RefreshCw, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 interface HealthCheckResult {
   status: 'ok' | 'warning' | 'error';
   message?: string;
-  details?: any;
+  details?: Record<string, unknown>;
 }
 
 interface HealthData {
   status: 'healthy' | 'degraded' | 'unhealthy';
   timestamp: string;
   environment: string;
-  checks: {
-    database: HealthCheckResult;
-    diskSpace: HealthCheckResult;
-    networkFolders: HealthCheckResult;
-    lastImports: HealthCheckResult;
-    uptime: HealthCheckResult;
+  checks?: {
+    database?: HealthCheckResult;
+    diskSpace?: HealthCheckResult;
+    networkFolders?: HealthCheckResult;
+    lastImports?: HealthCheckResult;
+    uptime?: HealthCheckResult;
   };
 }
 
@@ -56,8 +56,31 @@ export function HealthDashboard() {
   }
 
   if (!data) {
-    return null;
+    return (
+      <Alert>
+        <AlertTitle>Brak danych</AlertTitle>
+        <AlertDescription>
+          Nie udało się pobrać danych health check. Spróbuj odświeżyć stronę.
+        </AlertDescription>
+      </Alert>
+    );
   }
+
+  // Domyślne wartości dla brakujących checks
+  const defaultCheck: HealthCheckResult = {
+    status: 'error',
+    message: 'Brak danych - sprawdzenie niedostępne',
+  };
+
+  // Bezpieczne pobieranie checks z obsługą undefined
+  const rawChecks = data.checks ?? {};
+  const checks = {
+    database: rawChecks.database ?? defaultCheck,
+    diskSpace: rawChecks.diskSpace ?? defaultCheck,
+    networkFolders: rawChecks.networkFolders ?? defaultCheck,
+    lastImports: rawChecks.lastImports ?? defaultCheck,
+    uptime: rawChecks.uptime ?? defaultCheck,
+  };
 
   return (
     <div className="space-y-6">
@@ -67,13 +90,13 @@ export function HealthDashboard() {
           <div>
             <CardTitle>Status Ogólny</CardTitle>
             <p className="text-sm text-gray-500 mt-1">
-              Środowisko: <strong>{data.environment}</strong> | Ostatnie
+              Środowisko: <strong>{data.environment || 'unknown'}</strong> | Ostatnie
               sprawdzenie:{' '}
-              <strong>{new Date(data.timestamp).toLocaleString('pl-PL')}</strong>
+              <strong>{data.timestamp ? new Date(data.timestamp).toLocaleString('pl-PL') : '-'}</strong>
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <StatusBadge status={data.status} />
+            <StatusBadge status={data.status || 'unhealthy'} />
             <Button
               variant="outline"
               size="sm"
@@ -90,23 +113,21 @@ export function HealthDashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <StatusCard
           title="Baza Danych"
-          check={data.checks.database}
-          icon={<CheckCircle2 className="h-5 w-5" />}
-        />
+          check={checks.database}
+                  />
         <StatusCard
           title="Miejsce na dysku"
-          check={data.checks.diskSpace}
-          icon={<CheckCircle2 className="h-5 w-5" />}
-        />
+          check={checks.diskSpace}
+                  />
         <StatusCard
           title="Foldery sieciowe"
-          check={data.checks.networkFolders}
-          icon={<CheckCircle2 className="h-5 w-5" />}
-          details={
-            data.checks.networkFolders.details?.folders && (
+          check={checks.networkFolders}
+                    details={
+            checks.networkFolders?.details?.folders &&
+            Array.isArray(checks.networkFolders.details.folders) && (
               <ul className="text-xs space-y-1 mt-2">
-                {data.checks.networkFolders.details.folders.map(
-                  (folder: any, idx: number) => (
+                {checks.networkFolders.details.folders.map(
+                  (folder: { name: string; status: string }, idx: number) => (
                     <li key={idx} className="flex items-center gap-2">
                       <span
                         className={`inline-block w-2 h-2 rounded-full ${
@@ -127,14 +148,14 @@ export function HealthDashboard() {
         />
         <StatusCard
           title="Ostatnie importy"
-          check={data.checks.lastImports}
-          icon={<CheckCircle2 className="h-5 w-5" />}
-          details={
-            data.checks.lastImports.details?.imports && (
+          check={checks.lastImports}
+                    details={
+            checks.lastImports?.details?.imports &&
+            Array.isArray(checks.lastImports.details.imports) && (
               <ul className="text-xs space-y-1 mt-2">
-                {data.checks.lastImports.details.imports
+                {checks.lastImports.details.imports
                   .slice(0, 3)
-                  .map((imp: any) => (
+                  .map((imp: { id: string; type: string; status: string; createdAt: string }) => (
                     <li key={imp.id}>
                       {imp.type}: {imp.status} (
                       {new Date(imp.createdAt).toLocaleString('pl-PL', {
@@ -152,9 +173,8 @@ export function HealthDashboard() {
         />
         <StatusCard
           title="Uptime"
-          check={data.checks.uptime}
-          icon={<CheckCircle2 className="h-5 w-5" />}
-        />
+          check={checks.uptime}
+                  />
       </div>
     </div>
   );
@@ -175,11 +195,10 @@ function StatusBadge({ status }: { status: 'healthy' | 'degraded' | 'unhealthy' 
 interface StatusCardProps {
   title: string;
   check: HealthCheckResult;
-  icon: React.ReactNode;
   details?: React.ReactNode;
 }
 
-function StatusCard({ title, check, icon, details }: StatusCardProps) {
+function StatusCard({ title, check, details }: StatusCardProps) {
   const getIcon = () => {
     switch (check.status) {
       case 'ok':

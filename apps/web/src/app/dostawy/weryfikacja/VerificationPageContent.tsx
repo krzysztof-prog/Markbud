@@ -183,8 +183,8 @@ export const VerificationPageContent: React.FC = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/dostawy">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
+            <Button variant="ghost" size="icon" aria-label="Powrót do dostaw">
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Button>
           </Link>
           <div>
@@ -316,24 +316,18 @@ export const VerificationPageContent: React.FC = () => {
                 </CardHeader>
               </Card>
 
-              {/* Dodawanie elementów */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Dodaj zlecenia</CardTitle>
-                  <CardDescription>
-                    Wklej listę numerów zleceń od klienta Akrobud
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <VerificationItemsInput
-                    onAddItems={(data) =>
-                      addItems.mutate({ listId: selectedListId, data })
-                    }
-                    isPending={addItems.isPending}
-                    existingItems={selectedList.items}
-                  />
-                </CardContent>
-              </Card>
+              {/* Dodawanie elementów - wklejanie treści maila */}
+              <VerificationItemsInput
+                onAddProjects={(data) => {
+                  // Przekształć projekty na format oczekiwany przez API
+                  const apiData = {
+                    items: data.projects.map((project) => ({ orderNumber: project })),
+                    inputMode: 'textarea' as const,
+                  };
+                  addItems.mutate({ listId: selectedListId, data: apiData });
+                }}
+                isPending={addItems.isPending}
+              />
 
               {/* Lista elementów */}
               <Card>
@@ -473,9 +467,11 @@ export const VerificationPageContent: React.FC = () => {
                 title: selectedList.title,
                 notes: selectedList.notes,
               }}
-              onSubmit={(data) =>
-                updateList.mutate({ id: selectedListId!, data })
-              }
+              onSubmit={(data) => {
+                if (selectedListId) {
+                  updateList.mutate({ id: selectedListId, data });
+                }
+              }}
               onCancel={() => setIsEditDialogOpen(false)}
               isPending={updateList.isPending}
             />

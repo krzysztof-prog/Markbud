@@ -57,7 +57,7 @@ export default function RemanentPage() {
   // Pobierz dane magazynowe dla wybranego koloru
   const { data: warehouseData, isLoading: warehouseLoading } = useQuery({
     queryKey: ['warehouse', selectedColorId],
-    queryFn: () => warehouseApi.getByColor(selectedColorId!),
+    queryFn: () => selectedColorId ? warehouseApi.getByColor(selectedColorId) : Promise.resolve({ data: [] }),
     enabled: !!selectedColorId,
   });
 
@@ -149,7 +149,7 @@ export default function RemanentPage() {
             <Archive className="h-4 w-4 mr-2" />
             Finalizuj miesiąc
           </Button>
-          <Link href="/magazyn/akrobud/szczegoly">
+          <Link href="/magazyn/akrobud">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Powrót
@@ -162,7 +162,6 @@ export default function RemanentPage() {
         <Breadcrumb
           items={[
             { label: 'AKROBUD', href: '/magazyn/akrobud', icon: <Warehouse className="h-4 w-4" /> },
-            { label: 'Szczegóły', href: '/magazyn/akrobud/szczegoly' },
             { label: 'Remanent', icon: <ClipboardCheck className="h-4 w-4" /> },
           ]}
         />

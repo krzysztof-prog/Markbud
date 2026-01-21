@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/select';
 import { Plus, Filter, Calendar, AlertTriangle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { DemandTable } from '@/features/okuc/components/DemandTable';
+// DemandTable - komponent używany dynamicznie, import zachowany dla przyszłości
 import { DemandForm } from '@/features/okuc/components/DemandForm';
 import { DeleteDemandDialog } from '@/features/okuc/components/DeleteDemandDialog';
 import { NewArticlesReviewModal } from '@/features/okuc/components/NewArticlesReviewModal';
@@ -88,10 +88,13 @@ export default function OkucDemandPage() {
   });
 
   // === CLIENT-SIDE FILTERING ===
+  // WAŻNE: Zapotrzebowanie pokazuje tylko pozycje które NIE są completed
+  // (completed = przeszło do RW, zostało już zużyte)
   const filteredDemands = useMemo(() => {
-    let result = [...demands];
+    // Bazowo filtruj tylko niezakończone (status != completed)
+    let result = demands.filter((d) => d.status !== 'completed');
 
-    // Status filter
+    // Status filter (ale już bez completed, bo to RW)
     if (filterStatus !== 'all') {
       result = result.filter((d) => d.status === filterStatus);
     }
@@ -119,13 +122,52 @@ export default function OkucDemandPage() {
     return result;
   }, [demands, filterStatus, filterSource, filterWeekFrom, filterWeekTo, filterManualEdit]);
 
+  // === GROUPED VIEW - Suma zapotrzebowania per artykuł ===
+  const groupedDemands = useMemo(() => {
+    const grouped = new Map<string, {
+      articleId: string;
+      articleName: string;
+      totalQuantity: number;
+      demandIds: number[];
+      statuses: Set<DemandStatus>;
+      sources: Set<DemandSource>;
+      hasManualEdit: boolean;
+    }>();
+
+    for (const demand of filteredDemands) {
+      const key = demand.article?.articleId || String(demand.articleId);
+      const existing = grouped.get(key);
+
+      if (existing) {
+        existing.totalQuantity += demand.quantity;
+        existing.demandIds.push(demand.id);
+        existing.statuses.add(demand.status);
+        existing.sources.add(demand.source);
+        if (demand.isManualEdit) existing.hasManualEdit = true;
+      } else {
+        grouped.set(key, {
+          articleId: key,
+          articleName: demand.article?.name || 'Nieznany artykuł',
+          totalQuantity: demand.quantity,
+          demandIds: [demand.id],
+          statuses: new Set([demand.status]),
+          sources: new Set([demand.source]),
+          hasManualEdit: demand.isManualEdit,
+        });
+      }
+    }
+
+    // Sortuj alfabetycznie po numerze artykułu
+    return Array.from(grouped.values()).sort((a, b) => a.articleId.localeCompare(b.articleId));
+  }, [filteredDemands]);
+
   // === EVENT HANDLERS ===
   const handleAddNew = () => {
     setSelectedDemand(null);
     setIsFormOpen(true);
   };
 
-  const handleEdit = (demandId: number) => {
+  const _handleEdit = (demandId: number) => {
     const demand = demands?.find((d) => d.id === demandId);
     if (demand) {
       setSelectedDemand(demand);
@@ -133,7 +175,7 @@ export default function OkucDemandPage() {
     }
   };
 
-  const handleDelete = (demandId: number) => {
+  const _handleDelete = (demandId: number) => {
     const demand = demands?.find((d) => d.id === demandId);
     if (demand) {
       setSelectedDemand(demand);
@@ -233,8 +275,8 @@ export default function OkucDemandPage() {
                   <SelectItem value="pending">Oczekujące</SelectItem>
                   <SelectItem value="confirmed">Potwierdzone</SelectItem>
                   <SelectItem value="in_production">W produkcji</SelectItem>
-                  <SelectItem value="completed">Zakończone</SelectItem>
                   <SelectItem value="cancelled">Anulowane</SelectItem>
+                  {/* Zakończone (completed) nie pokazujemy - to już RW */}
                 </SelectContent>
               </Select>
             </div>
@@ -306,8 +348,8 @@ export default function OkucDemandPage() {
           {/* Stats + Wyczyść filtry */}
           <div className="pt-2 border-t flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              Znaleziono: <strong>{filteredDemands.length}</strong> zapotrzebowań (z{' '}
-              <strong>{demands.length}</strong> wszystkich)
+              Znaleziono: <strong>{groupedDemands.length}</strong> artykułów
+              {' '}({filteredDemands.length} pozycji, suma: <strong>{filteredDemands.reduce((sum, d) => sum + d.quantity, 0)}</strong> szt.)
             </p>
             {hasActiveFilters && (
               <Button variant="outline" size="sm" onClick={handleClearFilters}>
@@ -351,7 +393,7 @@ export default function OkucDemandPage() {
         )}
 
         {/* Empty state - PO filtrowaniu */}
-        {!isLoading && !error && demands.length > 0 && filteredDemands.length === 0 && (
+        {!isLoading && !error && demands.length > 0 && groupedDemands.length === 0 && (
           <div className="bg-card border rounded-lg p-12 text-center">
             <Filter className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">Brak wyników</h3>
@@ -364,14 +406,77 @@ export default function OkucDemandPage() {
           </div>
         )}
 
-        {/* Table */}
-        {!isLoading && !error && filteredDemands.length > 0 && (
-          <DemandTable
-            demands={filteredDemands}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            isDeletingId={deleteMutation.isPending ? selectedDemand?.id : undefined}
-          />
+        {/* Table - Zgrupowana lista artykułów z sumą zapotrzebowania */}
+        {!isLoading && !error && groupedDemands.length > 0 && (
+          <div className="bg-card border rounded-lg overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                    Artykuł
+                  </th>
+                  <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">
+                    Suma zapotrzebowania
+                  </th>
+                  <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">
+                    Liczba pozycji
+                  </th>
+                  <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">
+                    Statusy
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {groupedDemands.map((item) => (
+                  <tr key={item.articleId} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-3">
+                      <div>
+                        <div className="font-mono font-medium text-sm">{item.articleId}</div>
+                        <div className="text-xs text-muted-foreground truncate max-w-xs">
+                          {item.articleName}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="font-semibold text-lg">{item.totalQuantity}</span>
+                      <span className="text-muted-foreground ml-1">szt.</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="text-sm text-muted-foreground">
+                        {item.demandIds.length}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex gap-1 justify-center flex-wrap">
+                        {Array.from(item.statuses).map((status) => (
+                          <span
+                            key={status}
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              status === 'pending'
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : status === 'confirmed'
+                                ? 'bg-blue-100 text-blue-800'
+                                : status === 'in_production'
+                                ? 'bg-purple-100 text-purple-800'
+                                : status === 'completed'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}
+                          >
+                            {status === 'pending' && 'Oczekujące'}
+                            {status === 'confirmed' && 'Potwierdzone'}
+                            {status === 'in_production' && 'W produkcji'}
+                            {status === 'completed' && 'Zakończone'}
+                            {status === 'cancelled' && 'Anulowane'}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

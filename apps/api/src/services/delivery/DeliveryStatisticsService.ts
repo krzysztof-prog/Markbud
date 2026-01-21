@@ -109,6 +109,9 @@ export class DeliveryStatisticsService {
 
       delivery.deliveryOrders.forEach((deliveryOrder) => {
         deliveryOrder.order.requirements.forEach((req) => {
+          // Pomijamy requirements z prywatnymi kolorami (bez color)
+          if (!req.color) return;
+
           const key = `${req.profileId}-${req.color.code}`;
           const current = profileMap.get(key) || { beams: 0, meters: 0 };
           profileMap.set(key, {
@@ -161,7 +164,8 @@ export class DeliveryStatisticsService {
     // Aggregate data
     deliveries.forEach((delivery) => {
       const weekday = getDay(delivery.deliveryDate);
-      const stats = weekdayStats.get(weekday)!;
+      const stats = weekdayStats.get(weekday);
+      if (!stats) return;
 
       stats.deliveriesCount += 1;
 
@@ -347,6 +351,9 @@ export class DeliveryStatisticsService {
     deliveries.forEach((delivery) => {
       delivery.deliveryOrders.forEach((dOrder) => {
         dOrder.order.requirements.forEach((req) => {
+          // Pomijamy requirements z prywatnymi kolorami (bez colorId/color)
+          if (!req.colorId || !req.color) return;
+
           const key = `${req.profileId}-${req.colorId}`;
 
           if (!profileUsage.has(key)) {
@@ -363,7 +370,8 @@ export class DeliveryStatisticsService {
             });
           }
 
-          const usage = profileUsage.get(key)!;
+          const usage = profileUsage.get(key);
+          if (!usage) return;
           usage.totalBeams += req.beamsCount;
           usage.totalMeters += req.meters;
           usage.deliveryCount += 1;

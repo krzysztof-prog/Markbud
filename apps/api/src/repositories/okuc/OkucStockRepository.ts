@@ -175,7 +175,7 @@ export class OkucStockRepository {
         articleId_warehouseType_subWarehouse: {
           articleId,
           warehouseType,
-          subWarehouse: (subWarehouse ?? null) as any,
+          subWarehouse: subWarehouse ?? null,
         },
       },
       include: {
@@ -326,6 +326,14 @@ export class OkucStockRepository {
       },
     });
 
+    interface StockSummary {
+      warehouseType: string;
+      subWarehouse: string | null;
+      totalArticles: number;
+      totalQuantity: number;
+      belowMinCount: number;
+    }
+
     // Group by warehouse
     const summary = stocks.reduce((acc, stock) => {
       const key = `${stock.warehouseType}-${stock.subWarehouse || 'main'}`;
@@ -347,7 +355,7 @@ export class OkucStockRepository {
       }
 
       return acc;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, StockSummary>);
 
     logger.debug('Generated stock summary', { warehouseType, count: Object.keys(summary).length });
     return Object.values(summary);
@@ -410,7 +418,7 @@ export class OkucStockRepository {
         articleId_warehouseType_subWarehouse: {
           articleId,
           warehouseType,
-          subWarehouse: (subWarehouse ?? null) as any,
+          subWarehouse: subWarehouse ?? null,
         },
       },
       create: {

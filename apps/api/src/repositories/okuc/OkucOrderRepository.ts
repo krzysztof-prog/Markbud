@@ -350,7 +350,10 @@ export class OkucOrderRepository {
         itemsCount: data.items.length,
       });
 
-      return updatedOrder!;
+      if (!updatedOrder) {
+        throw new Error(`Order ${id} not found after update`);
+      }
+      return updatedOrder;
     });
   }
 

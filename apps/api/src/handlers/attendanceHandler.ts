@@ -6,7 +6,8 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { AttendanceService, type UpdateDayInput } from '../services/attendanceService.js';
 import { z } from 'zod';
-import { getExcelJS, getPdfKit } from '../utils/eager-import.js';
+import ExcelJS from 'exceljs';
+import PDFDocument from 'pdfkit';
 
 // Walidatory
 const monthlyQuerySchema = z.object({
@@ -100,11 +101,9 @@ export class AttendanceHandler {
     data: Awaited<ReturnType<AttendanceService['getMonthlyAttendance']>>,
     reply: FastifyReply,
     filename: string,
-    monthName: string,
-    year: number
+    _monthName: string,
+    _year: number
   ) {
-    // Używamy pre-załadowanego exceljs (eager w PROD)
-    const ExcelJS = await getExcelJS();
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Obecności');
 
@@ -197,9 +196,6 @@ export class AttendanceHandler {
     monthName: string,
     year: number
   ) {
-    // Używamy pre-załadowanego pdfkit (eager w PROD)
-    const PDFDocument = await getPdfKit();
-
     // Mapowanie typów na wyświetlane wartości
     const typeToDisplay = (type: string | null): string => {
       if (type === 'work') return '8';

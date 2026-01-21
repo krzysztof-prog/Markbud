@@ -27,7 +27,7 @@ export class DeliveryRepository {
   // Basic CRUD Operations
   // ===================
 
-  async findAll(filters: DeliveryFilters = {}, pagination?: PaginationParams): Promise<PaginatedResponse<any>> {
+  async findAll(filters: DeliveryFilters = {}, pagination?: PaginationParams): Promise<PaginatedResponse<unknown>> {
     const where: Prisma.DeliveryWhereInput = {};
 
     // Exclude soft-deleted deliveries
@@ -514,6 +514,12 @@ export class DeliveryRepository {
         deliveryDate: true,
         status: true,
         deliveryOrders: {
+          where: {
+            order: {
+              // Ukryj zlecenia zakończone i zarchiwizowane - nie potrzebują profili
+              status: { notIn: ['completed', 'archived'] },
+            },
+          },
           select: {
             id: true,
             orderId: true,
@@ -521,7 +527,12 @@ export class DeliveryRepository {
               select: {
                 id: true,
                 orderNumber: true,
+                status: true,
                 requirements: {
+                  where: {
+                    // Tylko requirements które nie zostały jeszcze przetworzone przez RW
+                    status: { not: 'completed' },
+                  },
                   select: {
                     id: true,
                     profileId: true,
@@ -529,6 +540,7 @@ export class DeliveryRepository {
                     beamsCount: true,
                     meters: true,
                     restMm: true,
+                    status: true,
                     color: {
                       select: { id: true, code: true, name: true },
                     },

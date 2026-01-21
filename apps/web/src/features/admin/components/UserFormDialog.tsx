@@ -95,7 +95,7 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({ open, onOpenChan
       });
       onOpenChange(false);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: 'Błąd',
         description: error.message || 'Nie udało się utworzyć użytkownika',
@@ -105,7 +105,7 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({ open, onOpenChan
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: UpdateUserInput) => updateUser(user!.id, data),
+    mutationFn: (data: UpdateUserInput) => user ? updateUser(user.id, data) : Promise.reject(new Error('No user')),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({
@@ -114,7 +114,7 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({ open, onOpenChan
       });
       onOpenChange(false);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: 'Błąd',
         description: error.message || 'Nie udało się zaktualizować użytkownika',
@@ -185,7 +185,7 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({ open, onOpenChan
 
           <div className="space-y-2">
             <Label htmlFor="role">Rola</Label>
-            <Select value={selectedRole} onValueChange={(value) => setValue('role', value as any)}>
+            <Select value={selectedRole} onValueChange={(value) => setValue('role', value as UserFormValues['role'])}>
               <SelectTrigger>
                 <SelectValue placeholder="Wybierz rolę" />
               </SelectTrigger>

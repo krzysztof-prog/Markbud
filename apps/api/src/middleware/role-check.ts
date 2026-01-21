@@ -4,12 +4,11 @@
  * Sprawdza czy użytkownik ma odpowiednią rolę do wykonania akcji
  */
 
-import type { FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyReply } from 'fastify';
 import type { AuthenticatedRequest } from './auth';
-import { PrismaClient } from '@prisma/client';
 import { UserRole } from '../validators/auth';
-
-const prisma = new PrismaClient();
+import { prisma } from '../utils/prisma.js';
+import { UnauthorizedError, ForbiddenError } from '../utils/errors.js';
 
 // Lokalne kopie funkcji z @markbud/shared (problem z ESM)
 const ROLE_PERMISSIONS = {
@@ -39,15 +38,16 @@ function hasPermission(role: string, permission: string): boolean {
 /**
  * Middleware: Sprawdza czy użytkownik może zarządzać użytkownikami
  * Tylko owner i admin
+ * UWAGA: Rzuca wyjatki zamiast reply.send() dla spojnosci z error handling middleware
  */
 export async function requireUserManagement(
   request: AuthenticatedRequest,
-  reply: FastifyReply
+  _reply: FastifyReply
 ): Promise<void> {
   const userId = request.user?.userId;
 
   if (!userId) {
-    return reply.status(401).send({ error: 'Brak autoryzacji. Zaloguj się ponownie.' });
+    throw new UnauthorizedError('Brak autoryzacji. Zaloguj się ponownie.');
   }
 
   // Konwertuj userId na number jeśli jest stringiem
@@ -60,28 +60,27 @@ export async function requireUserManagement(
   });
 
   if (!user) {
-    return reply.status(401).send({ error: 'Użytkownik nie istnieje.' });
+    throw new UnauthorizedError('Użytkownik nie istnieje.');
   }
 
   if (!canManageUsers(user.role)) {
-    return reply.status(403).send({
-      error: 'Brak uprawnień. Tylko właściciel i administrator mogą zarządzać użytkownikami.',
-    });
+    throw new ForbiddenError('Brak uprawnień. Tylko właściciel i administrator mogą zarządzać użytkownikami.');
   }
 }
 
 /**
  * Middleware: Sprawdza czy użytkownik ma dostęp do panelu kierownika
  * Owner, admin, kierownik
+ * UWAGA: Rzuca wyjatki zamiast reply.send() dla spojnosci z error handling middleware
  */
 export async function requireManagerAccess(
   request: AuthenticatedRequest,
-  reply: FastifyReply
+  _reply: FastifyReply
 ): Promise<void> {
   const userId = request.user?.userId;
 
   if (!userId) {
-    return reply.status(401).send({ error: 'Brak autoryzacji. Zaloguj się ponownie.' });
+    throw new UnauthorizedError('Brak autoryzacji. Zaloguj się ponownie.');
   }
 
   // Konwertuj userId na number jeśli jest stringiem
@@ -94,28 +93,27 @@ export async function requireManagerAccess(
   });
 
   if (!user) {
-    return reply.status(401).send({ error: 'Użytkownik nie istnieje.' });
+    throw new UnauthorizedError('Użytkownik nie istnieje.');
   }
 
   if (!canAccessManagerPanel(user.role)) {
-    return reply.status(403).send({
-      error: 'Brak uprawnień. Tylko właściciel, administrator i kierownik mają dostęp do tego panelu.',
-    });
+    throw new ForbiddenError('Brak uprawnień. Tylko właściciel, administrator i kierownik mają dostęp do tego panelu.');
   }
 }
 
 /**
  * Middleware: Sprawdza czy użytkownik jest administratorem
  * Tylko owner i admin
+ * UWAGA: Rzuca wyjatki zamiast reply.send() dla spojnosci z error handling middleware
  */
 export async function requireAdmin(
   request: AuthenticatedRequest,
-  reply: FastifyReply
+  _reply: FastifyReply
 ): Promise<void> {
   const userId = request.user?.userId;
 
   if (!userId) {
-    return reply.status(401).send({ error: 'Brak autoryzacji. Zaloguj się ponownie.' });
+    throw new UnauthorizedError('Brak autoryzacji. Zaloguj się ponownie.');
   }
 
   // Konwertuj userId na number jeśli jest stringiem
@@ -128,25 +126,24 @@ export async function requireAdmin(
   });
 
   if (!user) {
-    return reply.status(401).send({ error: 'Użytkownik nie istnieje.' });
+    throw new UnauthorizedError('Użytkownik nie istnieje.');
   }
 
   if (user.role !== UserRole.ADMIN && user.role !== UserRole.OWNER) {
-    return reply.status(403).send({
-      error: 'Dostęp tylko dla administratorów.',
-    });
+    throw new ForbiddenError('Dostęp tylko dla administratorów.');
   }
 }
 
 /**
  * Middleware generyczny: Sprawdza konkretne uprawnienie
+ * UWAGA: Rzuca wyjatki zamiast reply.send() dla spojnosci z error handling middleware
  */
 export function requirePermission(permission: string) {
-  return async (request: AuthenticatedRequest, reply: FastifyReply): Promise<void> => {
+  return async (request: AuthenticatedRequest, _reply: FastifyReply): Promise<void> => {
     const userId = request.user?.userId;
 
     if (!userId) {
-      return reply.status(401).send({ error: 'Brak autoryzacji. Zaloguj się ponownie.' });
+      throw new UnauthorizedError('Brak autoryzacji. Zaloguj się ponownie.');
     }
 
     // Konwertuj userId na number jeśli jest stringiem
@@ -158,13 +155,11 @@ export function requirePermission(permission: string) {
     });
 
     if (!user) {
-      return reply.status(401).send({ error: 'Użytkownik nie istnieje.' });
+      throw new UnauthorizedError('Użytkownik nie istnieje.');
     }
 
     if (!hasPermission(user.role, permission)) {
-      return reply.status(403).send({
-        error: `Brak uprawnień. Ta akcja wymaga uprawnienia: ${permission}`,
-      });
+      throw new ForbiddenError(`Brak uprawnień. Ta akcja wymaga uprawnienia: ${permission}`);
     }
   };
 }

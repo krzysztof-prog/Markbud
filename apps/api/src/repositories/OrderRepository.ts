@@ -15,7 +15,7 @@ export interface OrderFilters {
 export class OrderRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async findAll(filters: OrderFilters = {}, pagination?: PaginationParams): Promise<PaginatedResponse<any>> {
+  async findAll(filters: OrderFilters = {}, pagination?: PaginationParams): Promise<PaginatedResponse<unknown>> {
     const where: Prisma.OrderWhereInput = {};
 
     if (filters.status) {

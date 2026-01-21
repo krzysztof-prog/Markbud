@@ -64,7 +64,7 @@ export const UsersList: React.FC = () => {
       });
       setDeletingUser(null);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: 'Błąd',
         description: error.message || 'Nie udało się usunąć użytkownika',

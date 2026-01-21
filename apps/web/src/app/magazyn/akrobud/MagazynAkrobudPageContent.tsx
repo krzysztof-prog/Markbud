@@ -206,12 +206,13 @@ export default function MagazynAkrobudPageContent() {
                 </TabsContent>
 
                 <TabsContent value="magazyn" className="mt-3 md:mt-4">
-                  {/* eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- selectedColorId is guaranteed to be non-null when this tab content is rendered (component only renders when selectedColor exists) */}
-                  <WarehouseStockTable
-                    data={warehouseData?.data || []}
-                    isLoading={warehouseLoading}
-                    colorId={selectedColorId!}
-                  />
+                  {selectedColorId && (
+                    <WarehouseStockTable
+                      data={warehouseData?.data || []}
+                      isLoading={warehouseLoading}
+                      colorId={selectedColorId}
+                    />
+                  )}
                 </TabsContent>
 
                 <TabsContent value="historia" className="mt-3 md:mt-4">
