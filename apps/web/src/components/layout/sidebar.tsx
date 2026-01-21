@@ -37,6 +37,7 @@ import { UserMenu } from '@/features/auth/components/UserMenu';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { UserRole, hasPermission } from '@markbud/shared';
 import { useConflictsCount } from '@/features/moja-praca';
+import { WeatherWidget } from '@/features/weather';
 
 type NavigationItem = {
   name: string;
@@ -463,6 +464,14 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+        {/* Weather Widget */}
+        <div className={cn(
+          'border-t border-slate-800',
+          desktopCollapsed ? 'md:px-2 py-2' : ''
+        )}>
+          <WeatherWidget collapsed={desktopCollapsed} />
+        </div>
 
         {/* User Menu */}
         <div className={cn(
