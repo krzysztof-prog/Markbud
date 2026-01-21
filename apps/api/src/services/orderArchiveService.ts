@@ -12,6 +12,9 @@ import { logger } from '../utils/logger.js';
 // Domyślna wartość jeśli nie ma w bazie
 const DEFAULT_ARCHIVE_AFTER_DAYS = 40;
 
+// Ile dni po ustawieniu statusu 'cancelled' archiwizować zlecenie
+const CANCELLED_ARCHIVE_AFTER_DAYS = 30;
+
 export interface ArchiveResult {
   success: boolean;
   archivedCount: number;
@@ -123,6 +126,86 @@ export class OrderArchiveService {
       const errorMessage = error instanceof Error ? error.message : 'Nieznany błąd';
       result.errors.push(errorMessage);
       logger.error('[OrderArchiveService] Błąd podczas archiwizacji:', error);
+    }
+
+    return result;
+  }
+
+  /**
+   * Archiwizuje zlecenia ze statusem 'cancelled' po 30 dniach od ustawienia statusu
+   * Uruchamiane automatycznie przez scheduler
+   */
+  async archiveCancelledOrders(): Promise<ArchiveResult> {
+    const result: ArchiveResult = {
+      success: true,
+      archivedCount: 0,
+      archivedOrderNumbers: [],
+      errors: [],
+    };
+
+    try {
+      // Data graniczna: 30 dni temu
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - CANCELLED_ARCHIVE_AFTER_DAYS);
+
+      logger.info(
+        `[OrderArchiveService] Szukam anulowanych zleceń starszych niż ${cutoffDate.toISOString()} (${CANCELLED_ARCHIVE_AFTER_DAYS} dni)`
+      );
+
+      // Znajdź zlecenia do archiwizacji:
+      // - manualStatus = 'cancelled'
+      // - manualStatusSetAt starsze niż 30 dni
+      // - NIE zarchiwizowane (archivedAt = null)
+      const ordersToArchive = await this.prisma.order.findMany({
+        where: {
+          manualStatus: 'cancelled',
+          manualStatusSetAt: {
+            not: null,
+            lt: cutoffDate,
+          },
+          archivedAt: null,
+        },
+        select: {
+          id: true,
+          orderNumber: true,
+          manualStatusSetAt: true,
+        },
+      });
+
+      if (ordersToArchive.length === 0) {
+        logger.info('[OrderArchiveService] Brak anulowanych zleceń do archiwizacji');
+        return result;
+      }
+
+      logger.info(
+        `[OrderArchiveService] Znaleziono ${ordersToArchive.length} anulowanych zleceń do archiwizacji`
+      );
+
+      // Archiwizuj wszystkie znalezione zlecenia
+      const now = new Date();
+      const orderIds = ordersToArchive.map((o) => o.id);
+
+      await this.prisma.order.updateMany({
+        where: {
+          id: { in: orderIds },
+        },
+        data: {
+          archivedAt: now,
+          status: 'archived',
+        },
+      });
+
+      result.archivedCount = ordersToArchive.length;
+      result.archivedOrderNumbers = ordersToArchive.map((o) => o.orderNumber);
+
+      logger.info(
+        `[OrderArchiveService] Zarchiwizowano ${result.archivedCount} anulowanych zleceń: ${result.archivedOrderNumbers.join(', ')}`
+      );
+    } catch (error) {
+      result.success = false;
+      const errorMessage = error instanceof Error ? error.message : 'Nieznany błąd';
+      result.errors.push(errorMessage);
+      logger.error('[OrderArchiveService] Błąd podczas archiwizacji anulowanych:', error);
     }
 
     return result;

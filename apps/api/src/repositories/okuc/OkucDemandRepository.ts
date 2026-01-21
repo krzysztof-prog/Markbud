@@ -10,6 +10,8 @@ export class OkucDemandRepository {
 
   /**
    * Find all demands with optional filters
+   * UWAGA: Domyślnie wyklucza zlecenia z manualStatus='do_not_cut' lub 'cancelled'
+   * (te zlecenia nie powinny generować zapotrzebowania na okucia)
    */
   async findAll(filters?: {
     articleId?: number;
@@ -20,6 +22,7 @@ export class OkucDemandRepository {
     fromWeek?: string;
     toWeek?: string;
     isManualEdit?: boolean;
+    includeExcludedOrders?: boolean; // Jeśli true, nie wyklucza zleceń z manualStatus
   }) {
     const where: Prisma.OkucDemandWhereInput = {};
 
@@ -59,6 +62,24 @@ export class OkucDemandRepository {
       where.isManualEdit = filters.isManualEdit;
     }
 
+    // Domyślnie wyklucz zlecenia z manualStatus='do_not_cut' lub 'cancelled'
+    // Te zlecenia nie powinny generować zapotrzebowania na okucia
+    if (!filters?.includeExcludedOrders) {
+      where.OR = [
+        // Demand bez powiązanego zlecenia (orderId = null) - zawsze uwzględniaj
+        { orderId: null },
+        // Demand z zleceniem, które NIE ma wykluczającego statusu
+        {
+          order: {
+            OR: [
+              { manualStatus: null },
+              { manualStatus: { notIn: ['do_not_cut', 'cancelled'] } },
+            ],
+          },
+        },
+      ];
+    }
+
     const demands = await this.prisma.okucDemand.findMany({
       where,
       include: {
@@ -68,6 +89,7 @@ export class OkucDemandRepository {
             id: true,
             orderNumber: true,
             status: true,
+            manualStatus: true,
           },
         },
       },
@@ -108,10 +130,12 @@ export class OkucDemandRepository {
 
   /**
    * Get demand summary grouped by week
+   * UWAGA: Wyklucza zlecenia z manualStatus='do_not_cut' lub 'cancelled'
    */
   async getSummaryByWeek(filters?: {
     fromWeek?: string;
     toWeek?: string;
+    includeExcludedOrders?: boolean;
   }) {
     const where: Prisma.OkucDemandWhereInput = {};
 
@@ -124,6 +148,29 @@ export class OkucDemandRepository {
 
       if (filters.toWeek) {
         where.expectedWeek.lte = filters.toWeek;
+      }
+    }
+
+    // Wyklucz zlecenia z manualStatus='do_not_cut' lub 'cancelled'
+    // Ponieważ groupBy nie wspiera filtrowania po relacjach,
+    // musimy najpierw pobrać ID zleceń do wykluczenia
+    if (!filters?.includeExcludedOrders) {
+      const excludedOrders = await this.prisma.order.findMany({
+        where: {
+          manualStatus: { in: ['do_not_cut', 'cancelled'] },
+        },
+        select: { id: true },
+      });
+
+      const excludedOrderIds = excludedOrders.map((o) => o.id);
+
+      if (excludedOrderIds.length > 0) {
+        // Wyklucz demands powiązane z wykluczonymi zleceniami
+        // Ale zachowaj demands bez powiązania z zleceniem (orderId = null)
+        where.OR = [
+          { orderId: null },
+          { orderId: { notIn: excludedOrderIds } },
+        ];
       }
     }
 

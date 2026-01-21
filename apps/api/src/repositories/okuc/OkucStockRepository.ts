@@ -38,6 +38,16 @@ export class OkucStockRepository {
       ];
     }
 
+    // Pobierz ID zleceń do wykluczenia z zapotrzebowania
+    // (zlecenia z manualStatus='do_not_cut' lub 'cancelled' NIE generują zapotrzebowania na okucia)
+    const excludedOrders = await this.prisma.order.findMany({
+      where: {
+        manualStatus: { in: ['do_not_cut', 'cancelled'] },
+      },
+      select: { id: true },
+    });
+    const excludedOrderIds = excludedOrders.map((o) => o.id);
+
     const stocks = await this.prisma.okucStock.findMany({
       where,
       include: {
@@ -49,6 +59,22 @@ export class OkucStockRepository {
             description: true,
             orderUnit: true,
             location: true,
+            // Pobierz aktywne zapotrzebowanie (pending, confirmed, in_production)
+            // UWAGA: Wyklucza zlecenia z manualStatus='do_not_cut' lub 'cancelled'
+            demands: {
+              where: {
+                status: { in: ['pending', 'confirmed', 'in_production'] },
+                deletedAt: null,
+                // Wyklucz demands z zleceń NIE CIĄĆ lub Anulowane
+                OR: [
+                  { orderId: null }, // Demand bez powiązanego zlecenia - uwzględnij
+                  { orderId: { notIn: excludedOrderIds.length > 0 ? excludedOrderIds : [-1] } }, // -1 jako dummy gdy pusta lista
+                ],
+              },
+              select: {
+                quantity: true,
+              },
+            },
           },
         },
         updatedBy: {
@@ -66,8 +92,43 @@ export class OkucStockRepository {
       ],
     });
 
-    logger.debug('Found stock', { count: stocks.length, filters });
-    return stocks;
+    // Oblicz sumę zapotrzebowania dla każdego stocka
+    const stocksWithDemand = stocks.map((stock) => {
+      const demands = stock.article?.demands ?? [];
+      const demandTotal = demands.reduce((sum, d) => sum + d.quantity, 0);
+
+      // Log dla debugowania
+      if (demands.length > 0) {
+        logger.debug('Stock has demands', {
+          articleId: stock.article?.articleId,
+          demandsCount: demands.length,
+          demandTotal,
+        });
+      }
+
+      return {
+        ...stock,
+        reservedQty: demandTotal, // Zapotrzebowanie = suma demands
+        article: stock.article ? {
+          id: stock.article.id,
+          articleId: stock.article.articleId,
+          name: stock.article.name,
+          description: stock.article.description,
+          orderUnit: stock.article.orderUnit,
+          location: stock.article.location,
+        } : null,
+      };
+    });
+
+    // Log ogólny
+    const totalDemandsFound = stocksWithDemand.filter(s => s.reservedQty > 0).length;
+    logger.debug('Found stock with demands', {
+      count: stocksWithDemand.length,
+      withDemands: totalDemandsFound,
+      filters
+    });
+
+    return stocksWithDemand;
   }
 
   /**

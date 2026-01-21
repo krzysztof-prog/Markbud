@@ -70,22 +70,48 @@ export class OrderArchiveScheduler {
   private async runArchive(): Promise<void> {
     logger.info('[OrderArchiveScheduler] Rozpoczynam zaplanowaną archiwizację...');
 
-    try {
-      const result = await this.archiveService.archiveOldCompletedOrders();
+    let totalArchived = 0;
 
-      if (result.success) {
-        if (result.archivedCount > 0) {
+    // 1. Archiwizacja wyprodukowanych zleceń (po X dniach od completedAt)
+    try {
+      const completedResult = await this.archiveService.archiveOldCompletedOrders();
+
+      if (completedResult.success) {
+        totalArchived += completedResult.archivedCount;
+        if (completedResult.archivedCount > 0) {
           logger.info(
-            `[OrderArchiveScheduler] Archiwizacja zakończona. Zarchiwizowano ${result.archivedCount} zleceń`
+            `[OrderArchiveScheduler] Zarchiwizowano ${completedResult.archivedCount} wyprodukowanych zleceń`
           );
-        } else {
-          logger.debug('[OrderArchiveScheduler] Archiwizacja zakończona. Brak zleceń do archiwizacji');
         }
       } else {
-        logger.error('[OrderArchiveScheduler] Archiwizacja zakończona z błędami:', result.errors);
+        logger.error('[OrderArchiveScheduler] Błąd archiwizacji wyprodukowanych:', completedResult.errors);
       }
     } catch (error) {
-      logger.error('[OrderArchiveScheduler] Błąd podczas archiwizacji:', error);
+      logger.error('[OrderArchiveScheduler] Błąd podczas archiwizacji wyprodukowanych:', error);
+    }
+
+    // 2. Archiwizacja anulowanych zleceń (po 30 dniach od ustawienia statusu cancelled)
+    try {
+      const cancelledResult = await this.archiveService.archiveCancelledOrders();
+
+      if (cancelledResult.success) {
+        totalArchived += cancelledResult.archivedCount;
+        if (cancelledResult.archivedCount > 0) {
+          logger.info(
+            `[OrderArchiveScheduler] Zarchiwizowano ${cancelledResult.archivedCount} anulowanych zleceń`
+          );
+        }
+      } else {
+        logger.error('[OrderArchiveScheduler] Błąd archiwizacji anulowanych:', cancelledResult.errors);
+      }
+    } catch (error) {
+      logger.error('[OrderArchiveScheduler] Błąd podczas archiwizacji anulowanych:', error);
+    }
+
+    if (totalArchived > 0) {
+      logger.info(`[OrderArchiveScheduler] Archiwizacja zakończona. Łącznie zarchiwizowano ${totalArchived} zleceń`);
+    } else {
+      logger.debug('[OrderArchiveScheduler] Archiwizacja zakończona. Brak zleceń do archiwizacji');
     }
   }
 
@@ -104,10 +130,20 @@ export class OrderArchiveScheduler {
    */
   async manualTrigger(): Promise<{ archivedCount: number; archivedOrderNumbers: string[] }> {
     logger.info('[OrderArchiveScheduler] Ręczne uruchomienie archiwizacji');
-    const result = await this.archiveService.archiveOldCompletedOrders();
+
+    const allArchivedNumbers: string[] = [];
+
+    // 1. Archiwizacja wyprodukowanych
+    const completedResult = await this.archiveService.archiveOldCompletedOrders();
+    allArchivedNumbers.push(...completedResult.archivedOrderNumbers);
+
+    // 2. Archiwizacja anulowanych
+    const cancelledResult = await this.archiveService.archiveCancelledOrders();
+    allArchivedNumbers.push(...cancelledResult.archivedOrderNumbers);
+
     return {
-      archivedCount: result.archivedCount,
-      archivedOrderNumbers: result.archivedOrderNumbers,
+      archivedCount: allArchivedNumbers.length,
+      archivedOrderNumbers: allArchivedNumbers,
     };
   }
 }
