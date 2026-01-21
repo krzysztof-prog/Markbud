@@ -21,7 +21,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import dynamic from 'next/dynamic';
+import { createDynamicComponent } from '@/lib/dynamic-import';
 import { Header } from '@/components/layout/header';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
@@ -45,10 +45,9 @@ import { ArticlesTable } from '@/features/okuc/components/ArticlesTable';
 import { ArticleForm } from '@/features/okuc/components/ArticleForm';
 import { DeleteArticleDialog } from '@/features/okuc/components/DeleteArticleDialog';
 
-// Lazy load heavy dialog - 568 linii
-const ImportArticlesDialog = dynamic(
-  () => import('@/features/okuc/components/ImportArticlesDialog').then((mod) => ({ default: mod.ImportArticlesDialog })),
-  { ssr: false }
+// ImportArticlesDialog - eager w PROD, lazy w DEV
+const ImportArticlesDialog = createDynamicComponent(
+  () => import('@/features/okuc/components/ImportArticlesDialog').then((mod) => ({ default: mod.ImportArticlesDialog }))
 );
 import { useQueryClient } from '@tanstack/react-query';
 import {

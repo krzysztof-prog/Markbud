@@ -12,6 +12,7 @@ import { authRoutes } from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import { profileRoutes } from './routes/profiles.js';
 import { colorRoutes } from './routes/colors.js';
+import { privateColorRoutes } from './routes/private-colors.js';
 import { orderRoutes } from './routes/orders.js';
 import { warehouseRoutes } from './routes/warehouse.js';
 import { warehouseOrderRoutes } from './routes/warehouse-orders.js';
@@ -40,6 +41,7 @@ import { mojaPracaRoutes } from './routes/moja-praca.js';
 import { productionPlanningRoutes } from './routes/production-planning.js';
 import { steelRoutes } from './routes/steel.js';
 import { labelCheckRoutes } from './routes/label-checks.js';
+import { attendanceRoutes } from './routes/attendance.js';
 
 // Services
 import { FileWatcherService } from './services/file-watcher/index.js';
@@ -56,6 +58,7 @@ import { logger } from './utils/logger.js';
 import { config } from './utils/config.js';
 import { setupErrorHandler } from './middleware/error-handler.js';
 import { setupRequestLogging } from './middleware/request-logger.js';
+import { preloadHeavyModules } from './utils/eager-import.js';
 
 // Załaduj zmienne środowiskowe
 dotenvConfig();
@@ -155,6 +158,7 @@ await fastify.register(authRoutes, { prefix: '/api/auth' });
 await fastify.register(userRoutes, { prefix: '/api/users' });
 await fastify.register(profileRoutes, { prefix: '/api/profiles' });
 await fastify.register(colorRoutes, { prefix: '/api/colors' });
+await fastify.register(privateColorRoutes, { prefix: '/api/private-colors' });
 await fastify.register(orderRoutes, { prefix: '/api/orders' });
 await fastify.register(warehouseRoutes, { prefix: '/api/warehouse' });
 await fastify.register(warehouseOrderRoutes, { prefix: '/api/warehouse-orders' });
@@ -206,6 +210,9 @@ await fastify.register(steelRoutes, { prefix: '/api/steel' });
 
 // Label Check Routes (Kontrola etykiet)
 await fastify.register(labelCheckRoutes, { prefix: '/api/label-checks' });
+
+// Attendance Routes (BZ - Bieżąca Zmiana - widok miesięczny obecności)
+await fastify.register(attendanceRoutes, { prefix: '/api/attendance' });
 
 // Health checks (basic - must be before extended health routes)
 fastify.get('/api/health', {
@@ -298,6 +305,9 @@ process.on('SIGTERM', () => closeGracefully('SIGTERM'));
 // Start serwera
 const start = async () => {
   try {
+    // Pre-load ciężkich modułów w produkcji (exceljs, pdfkit)
+    await preloadHeavyModules();
+
     // Inicjalizacja SQLite WAL mode + optymalizacje (przed wszystkim innym)
     await initializeSQLiteOptimizations();
 

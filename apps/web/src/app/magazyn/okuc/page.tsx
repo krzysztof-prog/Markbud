@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import dynamic from 'next/dynamic';
+import { createDynamicComponent } from '@/lib/dynamic-import';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,22 +29,21 @@ import {
   Upload,
   Search,
   ChevronDown,
+  RefreshCw,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useOkucArticles } from '@/features/okuc/hooks/useOkucArticles';
 import { useOkucStock, useUpdateOkucStock } from '@/features/okuc/hooks/useOkucStock';
 import { StockTable } from '@/features/okuc/components/StockTable';
 
-// Lazy load heavy dialogs - ładowane tylko gdy potrzebne
-const ImportArticlesDialog = dynamic(
-  () => import('@/features/okuc/components/ImportArticlesDialog').then((mod) => ({ default: mod.ImportArticlesDialog })),
-  { ssr: false }
+// Dialogi - eager w PROD, lazy w DEV
+const ImportArticlesDialog = createDynamicComponent(
+  () => import('@/features/okuc/components/ImportArticlesDialog').then((mod) => ({ default: mod.ImportArticlesDialog }))
 );
-const ImportStockDialog = dynamic(
-  () => import('@/features/okuc/components/ImportStockDialog').then((mod) => ({ default: mod.ImportStockDialog })),
-  { ssr: false }
+const ImportStockDialog = createDynamicComponent(
+  () => import('@/features/okuc/components/ImportStockDialog').then((mod) => ({ default: mod.ImportStockDialog }))
 );
-import { okucArticlesApi, okucStockApi } from '@/features/okuc/api/okucApi';
+import { okucArticlesApi, okucStockApi } from '@/features/okuc/api';
 import { useToast } from '@/components/ui/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import type { WarehouseType } from '@/types/okuc';
@@ -193,12 +192,20 @@ export default function OkucLandingPage() {
   return (
     <div className="flex flex-col h-full">
       <Header title="Okucia (DualStock)">
-        <Link href="/">
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Powrót do dashboardu
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/magazyn/okuc/zastepstwa">
+            <Button variant="outline" size="sm">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Zastępstwa
+            </Button>
+          </Link>
+          <Link href="/">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Powrót do dashboardu
+            </Button>
+          </Link>
+        </div>
       </Header>
 
       <div className="flex-1 overflow-auto p-6">
@@ -337,26 +344,30 @@ export default function OkucLandingPage() {
         </div>
       </div>
 
-      {/* Dialog importu artykułów */}
-      <ImportArticlesDialog
-        open={importArticlesOpen}
-        onOpenChange={setImportArticlesOpen}
-        onSuccess={() => {
-          // Odśwież dane po imporcie
-          queryClient.invalidateQueries({ queryKey: ['okuc-articles'] });
-          queryClient.invalidateQueries({ queryKey: ['okuc-stock'] });
-        }}
-      />
+      {/* Dialog importu artykułów - renderowany tylko gdy otwarty */}
+      {importArticlesOpen && (
+        <ImportArticlesDialog
+          open={importArticlesOpen}
+          onOpenChange={setImportArticlesOpen}
+          onSuccess={() => {
+            // Odśwież dane po imporcie
+            queryClient.invalidateQueries({ queryKey: ['okuc-articles'] });
+            queryClient.invalidateQueries({ queryKey: ['okuc-stock'] });
+          }}
+        />
+      )}
 
-      {/* Dialog importu stanu magazynowego */}
-      <ImportStockDialog
-        open={importStockOpen}
-        onOpenChange={setImportStockOpen}
-        onSuccess={() => {
-          // Odśwież dane po imporcie
-          queryClient.invalidateQueries({ queryKey: ['okuc-stock'] });
-        }}
-      />
+      {/* Dialog importu stanu magazynowego - renderowany tylko gdy otwarty */}
+      {importStockOpen && (
+        <ImportStockDialog
+          open={importStockOpen}
+          onOpenChange={setImportStockOpen}
+          onSuccess={() => {
+            // Odśwież dane po imporcie
+            queryClient.invalidateQueries({ queryKey: ['okuc-stock'] });
+          }}
+        />
+      )}
     </div>
   );
 }

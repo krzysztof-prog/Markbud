@@ -1,15 +1,13 @@
 'use client';
 
 import { Suspense } from 'react';
-import dynamic from 'next/dynamic';
+import { createDynamicComponent } from '@/lib/dynamic-import';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const VerificationPageContent = dynamic(
+// DEV: lazy loading (faster start), PROD: eager loading (faster runtime)
+const VerificationPageContent = createDynamicComponent(
   () => import('./VerificationPageContent').then((mod) => mod.default),
-  {
-    ssr: false,
-    loading: () => <VerificationPageSkeleton />,
-  }
+  { loading: () => <VerificationPageSkeleton /> }
 );
 
 function VerificationPageSkeleton() {

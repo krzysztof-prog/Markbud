@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, KeyboardEvent } from 'react';
-import dynamic from 'next/dynamic';
+import { createDynamicComponent } from '@/lib/dynamic-import';
 import { Search, X, FileText, Calendar, Package } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
@@ -11,10 +11,9 @@ import { ordersApi } from '@/lib/api';
 import { formatGrosze, type Grosze } from '@/lib/money';
 import { useDebounce } from '@/hooks/useDebounce';
 
-// Lazy load OrderDetailModal - ciężki komponent (551 linii)
-const OrderDetailModal = dynamic(
-  () => import('@/features/orders/components/OrderDetailModal').then((mod) => ({ default: mod.OrderDetailModal })),
-  { ssr: false }
+// OrderDetailModal - ciężki komponent (551 linii) - eager w PROD, lazy w DEV
+const OrderDetailModal = createDynamicComponent(
+  () => import('@/features/orders/components/OrderDetailModal').then((mod) => ({ default: mod.OrderDetailModal }))
 );
 
 interface GlobalSearchProps {

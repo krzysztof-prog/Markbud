@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
+import { createDynamicComponent } from '@/lib/dynamic-import';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
@@ -13,10 +13,9 @@ import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Warehouse, ClipboardCheck, History } from 'lucide-react';
 
-// Lazy load OrderDetailModal - ciężki komponent (551 linii)
-const OrderDetailModal = dynamic(
-  () => import('@/features/orders/components/OrderDetailModal').then((mod) => ({ default: mod.OrderDetailModal })),
-  { ssr: false }
+// OrderDetailModal - ciężki komponent (551 linii) - eager w PROD, lazy w DEV
+const OrderDetailModal = createDynamicComponent(
+  () => import('@/features/orders/components/OrderDetailModal').then((mod) => ({ default: mod.OrderDetailModal }))
 );
 import Link from 'next/link';
 import type { Color } from '@/types';

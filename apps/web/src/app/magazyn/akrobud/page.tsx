@@ -1,21 +1,19 @@
 /**
  * Magazyn Akrobud Page
  *
- * Client component with lazy loading for better performance
- * Uses dynamic import to reduce initial bundle size
+ * Client component with conditional lazy loading
+ * DEV: lazy loading (faster start)
+ * PROD: eager loading (faster runtime)
  */
 
 'use client';
 
-import dynamic from 'next/dynamic';
+import { createDynamicComponent } from '@/lib/dynamic-import';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 
-const MagazynAkrobudPageContent = dynamic(
+const MagazynAkrobudPageContent = createDynamicComponent(
   () => import('./MagazynAkrobudPageContent').then((mod) => mod.default),
-  {
-    loading: () => <TableSkeleton />,
-    ssr: false,
-  }
+  { loading: () => <TableSkeleton /> }
 );
 
 export default function MagazynAkrobudPage() {

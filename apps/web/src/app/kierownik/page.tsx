@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import dynamic from 'next/dynamic';
+import { createDynamicComponent } from '@/lib/dynamic-import';
 import { PlayCircle, CheckCircle, Clock, Package, FileCheck, Loader2 } from 'lucide-react';
 
 // Skeleton loader dla tabs
@@ -15,45 +15,30 @@ const TabLoader = () => (
   </div>
 );
 
-// Lazy loading dla wszystkich ciężkich komponentów
-const AddToProductionTab = dynamic(
+// Komponenty z warunkowym lazy loading (eager w PROD, lazy w DEV)
+const AddToProductionTab = createDynamicComponent(
   () => import('@/features/manager/components/AddToProductionTab').then((mod) => ({ default: mod.AddToProductionTab })),
-  {
-    loading: () => <TabLoader />,
-    ssr: false,
-  }
+  { loading: () => <TabLoader /> }
 );
 
-const CompleteOrdersTab = dynamic(
+const CompleteOrdersTab = createDynamicComponent(
   () => import('@/features/manager/components/CompleteOrdersTab').then((mod) => ({ default: mod.CompleteOrdersTab })),
-  {
-    loading: () => <TabLoader />,
-    ssr: false,
-  }
+  { loading: () => <TabLoader /> }
 );
 
-const TimeTrackerTab = dynamic(
+const TimeTrackerTab = createDynamicComponent(
   () => import('@/features/manager/components/TimeTrackerTab').then((mod) => ({ default: mod.TimeTrackerTab })),
-  {
-    loading: () => <TabLoader />,
-    ssr: false,
-  }
+  { loading: () => <TabLoader /> }
 );
 
-const PalletsTab = dynamic(
+const PalletsTab = createDynamicComponent(
   () => import('@/features/manager/components/PalletsTab').then((mod) => ({ default: mod.PalletsTab })),
-  {
-    loading: () => <TabLoader />,
-    ssr: false,
-  }
+  { loading: () => <TabLoader /> }
 );
 
-const BZTab = dynamic(
+const BZTab = createDynamicComponent(
   () => import('@/features/manager/components/BZTab').then((mod) => ({ default: mod.BZTab })),
-  {
-    loading: () => <TabLoader />,
-    ssr: false,
-  }
+  { loading: () => <TabLoader /> }
 );
 
 

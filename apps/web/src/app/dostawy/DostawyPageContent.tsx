@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import dynamic from 'next/dynamic';
+import { createDynamicComponent } from '@/lib/dynamic-import';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
@@ -24,62 +24,67 @@ import {
   BulkUpdateDialogSkeleton,
 } from '@/components/loaders/DeliverySkeleton';
 
-// Lazy-loaded components with skeletons
-const DeliveriesListView = dynamic(
+// Komponenty z warunkowym lazy loading (eager w PROD, lazy w DEV)
+const DeliveriesListView = createDynamicComponent(
   () => import('./components/DeliveriesListView').then((mod) => ({ default: mod.DeliveriesListView })),
-  { loading: () => <ListViewSkeleton />, ssr: false }
+  { loading: () => <ListViewSkeleton /> }
 );
 
-const DeliveryCalendar = dynamic(
+const DeliveryCalendar = createDynamicComponent(
   () => import('./components/DeliveryCalendar').then((mod) => ({ default: mod.DeliveryCalendar })),
-  { loading: () => <CalendarSkeleton />, ssr: false }
+  { loading: () => <CalendarSkeleton /> }
 );
 
-const UnassignedOrdersPanel = dynamic(
+const UnassignedOrdersPanel = createDynamicComponent(
   () => import('./components/UnassignedOrdersPanel').then((mod) => ({ default: mod.UnassignedOrdersPanel })),
-  { loading: () => <PanelSkeleton />, ssr: false }
+  { loading: () => <PanelSkeleton /> }
 );
 
-const BulkUpdateDatesDialog = dynamic(
+const BulkUpdateDatesDialog = createDynamicComponent(
   () => import('./components/BulkUpdateDatesDialog').then((mod) => ({ default: mod.BulkUpdateDatesDialog })),
-  { loading: () => <BulkUpdateDialogSkeleton />, ssr: false }
+  { loading: () => <BulkUpdateDialogSkeleton /> }
 );
 
 // Individual dialog components
-const DestructiveDeleteDeliveryDialog = dynamic(
+const DestructiveDeleteDeliveryDialog = createDynamicComponent(
   () => import('./components/dialogs').then((mod) => ({ default: mod.DeleteDeliveryConfirmDialog })),
-  { loading: () => <DialogSkeleton />, ssr: false }
+  { loading: () => <DialogSkeleton /> }
 );
 
-const AddItemDialog = dynamic(
+const AddItemDialog = createDynamicComponent(
   () => import('./components/dialogs').then((mod) => ({ default: mod.AddItemDialog })),
-  { loading: () => <DialogSkeleton />, ssr: false }
+  { loading: () => <DialogSkeleton /> }
 );
 
-const CompleteOrdersDialog = dynamic(
+const CompleteOrdersDialog = createDynamicComponent(
   () => import('./components/dialogs').then((mod) => ({ default: mod.CompleteOrdersDialog })),
-  { loading: () => <DialogSkeleton />, ssr: false }
+  { loading: () => <DialogSkeleton /> }
 );
 
-const DeliveryDetailsDialog = dynamic(
+const DeliveryDetailsDialog = createDynamicComponent(
   () => import('./components/dialogs').then((mod) => ({ default: mod.DeliveryDetailsDialog })),
-  { loading: () => <DialogSkeleton />, ssr: false }
+  { loading: () => <DialogSkeleton /> }
 );
 
-const OrderDetailModal = dynamic(
+const CreateDeliveryDialog = createDynamicComponent(
+  () => import('./components/dialogs').then((mod) => ({ default: mod.CreateDeliveryDialog })),
+  { loading: () => <DialogSkeleton /> }
+);
+
+const OrderDetailModal = createDynamicComponent(
   () => import('@/features/orders/components/OrderDetailModal').then((mod) => ({ default: mod.OrderDetailModal })),
-  { loading: () => <DialogSkeleton />, ssr: false }
+  { loading: () => <DialogSkeleton /> }
 );
 
-const WindowStatsDialog = dynamic(
+const WindowStatsDialog = createDynamicComponent(
   () => import('@/components/window-stats-dialog').then((mod) => ({ default: mod.WindowStatsDialog })),
-  { loading: () => <DialogSkeleton />, ssr: false }
+  { loading: () => <DialogSkeleton /> }
 );
 
 // P1-3: Variant Type Selection Dialog
-const VariantTypeSelectionDialog = dynamic(
+const VariantTypeSelectionDialog = createDynamicComponent(
   () => import('@/components/ui/variant-type-selection-dialog').then((mod) => ({ default: mod.VariantTypeSelectionDialog })),
-  { loading: () => <DialogSkeleton />, ssr: false }
+  { loading: () => <DialogSkeleton /> }
 );
 
 // Extracted hooks
@@ -106,7 +111,7 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
 
   // === LOCAL STATE ===
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
-  const [_showNewDeliveryDialog, setShowNewDeliveryDialog] = useState(false);
+  const [showNewDeliveryDialog, setShowNewDeliveryDialog] = useState(false);
   const [newDeliveryDate, setNewDeliveryDate] = useState('');
   const [newDeliveryNotes, setNewDeliveryNotes] = useState('');
   const [deliveryToDelete, setDeliveryToDelete] = useState<Delivery | null>(null);
@@ -200,14 +205,6 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
   }, [selectedOrderId]);
 
   // === EVENT HANDLERS ===
-  const _handleCreateDelivery = () => {
-    if (!validation.validateAll({ deliveryDate: newDeliveryDate })) {
-      validation.touch('deliveryDate');
-      return;
-    }
-    actions.createDeliveryMutation.mutate({ deliveryDate: newDeliveryDate, notes: newDeliveryNotes || undefined });
-  };
-
   const handleDayClick = useCallback((date: Date) => {
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     setNewDeliveryDate(dateStr);
@@ -314,6 +311,28 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
         />
 
         <WindowStatsDialog open={showWindowStatsDialog} onOpenChange={setShowWindowStatsDialog} />
+
+        <CreateDeliveryDialog
+          open={showNewDeliveryDialog}
+          onOpenChange={setShowNewDeliveryDialog}
+          newDeliveryDate={newDeliveryDate}
+          setNewDeliveryDate={setNewDeliveryDate}
+          newDeliveryNotes={newDeliveryNotes}
+          setNewDeliveryNotes={setNewDeliveryNotes}
+          onSubmit={() => {
+            if (!validation.validateAll({ deliveryDate: newDeliveryDate })) {
+              validation.touch('deliveryDate');
+              return;
+            }
+            actions.createDeliveryMutation.mutate({ deliveryDate: newDeliveryDate, notes: newDeliveryNotes || undefined });
+          }}
+          isPending={actions.createDeliveryMutation.isPending}
+          errors={validation.errors}
+          touched={validation.touched}
+          onValidate={validation.validate}
+          onTouch={validation.touch}
+          onReset={validation.reset}
+        />
         <BulkUpdateDatesDialog open={showBulkUpdateDatesDialog} onOpenChange={setShowBulkUpdateDatesDialog} />
         <OrderDetailModal orderId={selectedOrderId} orderNumber={selectedOrderNumber || undefined} open={!!selectedOrderId}
           onOpenChange={(open) => { if (!open) { setSelectedOrderId(null); setSelectedOrderNumber(null); } }}

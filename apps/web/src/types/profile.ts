@@ -39,4 +39,5 @@ export interface UpdateProfileData {
   number?: string;
   name?: string;
   description?: string;
+  isAkrobud?: boolean;
 }

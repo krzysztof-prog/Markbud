@@ -1,5 +1,5 @@
 /**
- * Dostawy Schuco Page
+ * Kontrola Etykiet Page
  *
  * Client component with conditional lazy loading
  * DEV: lazy loading (faster start)
@@ -11,11 +11,11 @@
 import { createDynamicComponent } from '@/lib/dynamic-import';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 
-const DostawySchucoPageContent = createDynamicComponent(
-  () => import('./DostawySchucoPageContent').then((mod) => mod.default),
+const LabelChecksPageContent = createDynamicComponent(
+  () => import('./LabelChecksPageContent').then((mod) => mod.default),
   { loading: () => <TableSkeleton /> }
 );
 
-export default function DostawySchucoPage() {
-  return <DostawySchucoPageContent />;
+export default function LabelChecksPage() {
+  return <LabelChecksPageContent />;
 }
