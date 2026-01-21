@@ -11,7 +11,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { okucArticlesApi } from '@/features/okuc/api/okucApi';
+import { okucArticlesApi } from '@/features/okuc/api';
 import { toast } from '@/hooks/useToast';
 import type {
   OkucArticle,
@@ -430,6 +430,106 @@ export function useUpdateArticleLocation(callbacks?: {
       toast({
         title: 'Błąd zmiany lokalizacji',
         description: error.message || 'Nie udało się zmienić lokalizacji. Spróbuj ponownie.',
+        variant: 'destructive',
+      });
+
+      callbacks?.onError?.(error);
+    },
+  });
+}
+
+/**
+ * Hook do aktualizacji klasy zamówienia artykułu (inline edit)
+ *
+ * Po sukcesie:
+ * - Invaliduje listę artykułów
+ * - Pokazuje toast z potwierdzeniem
+ *
+ * @param callbacks - Opcjonalne callbacki (onSuccess, onError)
+ * @returns Mutation z funkcją mutate i stanem isPending
+ *
+ * @example
+ * const { mutate, isPending } = useUpdateArticleOrderClass();
+ * mutate({ articleId: 123, orderClass: 'typical' });
+ */
+export function useUpdateArticleOrderClass(callbacks?: {
+  onSuccess?: (article: OkucArticle) => void;
+  onError?: (error: Error) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ articleId, orderClass }: { articleId: number; orderClass: 'typical' | 'atypical' }) =>
+      okucArticlesApi.update(articleId, { orderClass }),
+    onSuccess: (article) => {
+      // Invaliduj wszystkie listy
+      queryClient.invalidateQueries({ queryKey: okucArticlesKeys.lists() });
+      // Invaliduj szczegóły tego artykułu
+      queryClient.invalidateQueries({ queryKey: okucArticlesKeys.detail(article.id) });
+
+      const orderClassLabel = article.orderClass === 'typical' ? 'Typowy' : 'Atypowy';
+      toast({
+        title: 'Klasa zamówienia zmieniona',
+        description: `Artykuł ${article.articleId} ustawiono jako "${orderClassLabel}".`,
+        variant: 'success',
+      });
+
+      callbacks?.onSuccess?.(article);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd zmiany klasy zamówienia',
+        description: error.message || 'Nie udało się zmienić klasy zamówienia. Spróbuj ponownie.',
+        variant: 'destructive',
+      });
+
+      callbacks?.onError?.(error);
+    },
+  });
+}
+
+/**
+ * Hook do aktualizacji klasy wielkości artykułu (inline edit)
+ *
+ * Po sukcesie:
+ * - Invaliduje listę artykułów
+ * - Pokazuje toast z potwierdzeniem
+ *
+ * @param callbacks - Opcjonalne callbacki (onSuccess, onError)
+ * @returns Mutation z funkcją mutate i stanem isPending
+ *
+ * @example
+ * const { mutate, isPending } = useUpdateArticleSizeClass();
+ * mutate({ articleId: 123, sizeClass: 'gabarat' });
+ */
+export function useUpdateArticleSizeClass(callbacks?: {
+  onSuccess?: (article: OkucArticle) => void;
+  onError?: (error: Error) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ articleId, sizeClass }: { articleId: number; sizeClass: 'standard' | 'gabarat' }) =>
+      okucArticlesApi.update(articleId, { sizeClass }),
+    onSuccess: (article) => {
+      // Invaliduj wszystkie listy
+      queryClient.invalidateQueries({ queryKey: okucArticlesKeys.lists() });
+      // Invaliduj szczegóły tego artykułu
+      queryClient.invalidateQueries({ queryKey: okucArticlesKeys.detail(article.id) });
+
+      const sizeClassLabel = article.sizeClass === 'standard' ? 'Standard' : 'Gabarat';
+      toast({
+        title: 'Klasa wielkości zmieniona',
+        description: `Artykuł ${article.articleId} ustawiono jako "${sizeClassLabel}".`,
+        variant: 'success',
+      });
+
+      callbacks?.onSuccess?.(article);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd zmiany klasy wielkości',
+        description: error.message || 'Nie udało się zmienić klasy wielkości. Spróbuj ponownie.',
         variant: 'destructive',
       });
 

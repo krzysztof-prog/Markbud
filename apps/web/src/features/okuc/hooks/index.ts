@@ -23,8 +23,10 @@ export {
   useOkucArticlesPendingReview,
   useBatchUpdateOrderClass,
 
-  // Hook do przypisywania lokalizacji do artykulu
+  // Hooki do inline edycji artykulow w tabeli
   useUpdateArticleLocation,
+  useUpdateArticleOrderClass,
+  useUpdateArticleSizeClass,
 } from './useOkucArticles';
 
 // ============================================================================

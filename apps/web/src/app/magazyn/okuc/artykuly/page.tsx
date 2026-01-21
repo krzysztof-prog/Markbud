@@ -58,6 +58,8 @@ import {
   useUpdateOkucArticle,
   useDeleteOkucArticle,
   useUpdateArticleLocation,
+  useUpdateArticleOrderClass,
+  useUpdateArticleSizeClass,
   useOkucLocations,
 } from '@/features/okuc/hooks';
 import type { OkucArticle, OrderClass, SizeClass, CreateArticleInput, UpdateArticleInput } from '@/types/okuc';
@@ -71,9 +73,11 @@ export default function OkucArticlesPage() {
   // === STATE ===
   const [selectedArticle, setSelectedArticle] = useState<OkucArticle | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [_isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [updatingLocationArticleId, setUpdatingLocationArticleId] = useState<number | undefined>(undefined);
+  const [updatingOrderClassArticleId, setUpdatingOrderClassArticleId] = useState<number | undefined>(undefined);
+  const [updatingSizeClassArticleId, setUpdatingSizeClassArticleId] = useState<number | undefined>(undefined);
 
   // Filtry
   const [searchQuery, setSearchQuery] = useState('');
@@ -111,6 +115,24 @@ export default function OkucArticlesPage() {
     },
     onError: () => {
       setUpdatingLocationArticleId(undefined);
+    },
+  });
+
+  const updateOrderClassMutation = useUpdateArticleOrderClass({
+    onSuccess: () => {
+      setUpdatingOrderClassArticleId(undefined);
+    },
+    onError: () => {
+      setUpdatingOrderClassArticleId(undefined);
+    },
+  });
+
+  const updateSizeClassMutation = useUpdateArticleSizeClass({
+    onSuccess: () => {
+      setUpdatingSizeClassArticleId(undefined);
+    },
+    onError: () => {
+      setUpdatingSizeClassArticleId(undefined);
     },
   });
 
@@ -206,6 +228,16 @@ export default function OkucArticlesPage() {
   const handleLocationChange = (articleId: number, locationId: number | null) => {
     setUpdatingLocationArticleId(articleId);
     updateLocationMutation.mutate({ articleId, locationId });
+  };
+
+  const handleOrderClassChange = (articleId: number, orderClass: 'typical' | 'atypical') => {
+    setUpdatingOrderClassArticleId(articleId);
+    updateOrderClassMutation.mutate({ articleId, orderClass });
+  };
+
+  const handleSizeClassChange = (articleId: number, sizeClass: 'standard' | 'gabarat') => {
+    setUpdatingSizeClassArticleId(articleId);
+    updateSizeClassMutation.mutate({ articleId, sizeClass });
   };
 
   // === RENDER ===
@@ -389,8 +421,12 @@ export default function OkucArticlesPage() {
             onEdit={handleEdit}
             onDelete={handleDelete}
             onLocationChange={handleLocationChange}
+            onOrderClassChange={handleOrderClassChange}
+            onSizeClassChange={handleSizeClassChange}
             isDeletingId={deleteMutation.isPending ? selectedArticle?.id : undefined}
             isUpdatingLocationId={updatingLocationArticleId}
+            isUpdatingOrderClassId={updatingOrderClassArticleId}
+            isUpdatingSizeClassId={updatingSizeClassArticleId}
           />
         )}
       </div>
@@ -406,6 +442,7 @@ export default function OkucArticlesPage() {
 
       <DeleteArticleDialog
         article={selectedArticle}
+        open={isDeleteDialogOpen}
         onClose={() => {
           setIsDeleteDialogOpen(false);
           setSelectedArticle(null);

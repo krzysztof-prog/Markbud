@@ -5,6 +5,13 @@
  * Sortowanie domyślnie po articleId (ascending).
  * Confirmation dialog dla usuwania (inline).
  * Inline edycja lokalizacji magazynowej.
+ *
+ * Kolumny:
+ * - Numer artykułu
+ * - Nazwa
+ * - PVC/ALU
+ * - Magazyn
+ * - Akcje
  */
 
 'use client';
@@ -34,7 +41,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Check, X, Edit, Trash2 } from 'lucide-react';
 import type { OkucArticle, OkucLocation } from '@/types/okuc';
 
@@ -45,11 +51,15 @@ interface ArticlesTableProps {
   onEdit: (articleId: number) => void;
   onDelete: (articleId: number) => void;
   onLocationChange: (articleId: number, locationId: number | null) => void;
+  onOrderClassChange: (articleId: number, orderClass: 'typical' | 'atypical') => void;
+  onSizeClassChange: (articleId: number, sizeClass: 'standard' | 'gabarat') => void;
   isDeletingId?: number; // ID artykułu który jest usuwany
   isUpdatingLocationId?: number; // ID artykułu którego lokalizacja jest aktualizowana
+  isUpdatingOrderClassId?: number; // ID artykułu którego orderClass jest aktualizowany
+  isUpdatingSizeClassId?: number; // ID artykułu którego sizeClass jest aktualizowany
 }
 
-type SortField = 'articleId' | 'name' | 'orderClass' | 'sizeClass' | 'location';
+type SortField = 'articleId' | 'name' | 'location';
 type SortDirection = 'asc' | 'desc';
 
 export function ArticlesTable({
@@ -59,8 +69,12 @@ export function ArticlesTable({
   onEdit,
   onDelete,
   onLocationChange,
+  onOrderClassChange,
+  onSizeClassChange,
   isDeletingId,
   isUpdatingLocationId,
+  isUpdatingOrderClassId,
+  isUpdatingSizeClassId,
 }: ArticlesTableProps) {
   // State dla sortowania - domyślnie articleId ascending
   const [sortField, setSortField] = useState<SortField>('articleId');
@@ -97,14 +111,6 @@ export function ArticlesTable({
         case 'name':
           aValue = a.name.toLowerCase();
           bValue = b.name.toLowerCase();
-          break;
-        case 'orderClass':
-          aValue = a.orderClass;
-          bValue = b.orderClass;
-          break;
-        case 'sizeClass':
-          aValue = a.sizeClass;
-          bValue = b.sizeClass;
           break;
         case 'location':
           // Lokalizacje bez przypisania na końcu
@@ -171,22 +177,22 @@ export function ArticlesTable({
         <Table>
           <TableHeader>
             <TableRow>
-              {/* ArticleID - sortowalne */}
+              {/* ArticleID - sortowalne, szerokość 100px */}
               <TableHead
-                className="cursor-pointer select-none hover:bg-slate-50"
+                className="cursor-pointer select-none hover:bg-slate-50 w-[100px]"
                 onClick={() => handleSort('articleId')}
               >
                 <div className="flex items-center gap-1">
-                  Numer artykułu
+                  Nr artykułu
                   {sortField === 'articleId' && (
                     <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
                   )}
                 </div>
               </TableHead>
 
-              {/* Name - sortowalne */}
+              {/* Name - sortowalne, flex */}
               <TableHead
-                className="cursor-pointer select-none hover:bg-slate-50"
+                className="cursor-pointer select-none hover:bg-slate-50 min-w-[200px]"
                 onClick={() => handleSort('name')}
               >
                 <div className="flex items-center gap-1">
@@ -197,41 +203,21 @@ export function ArticlesTable({
                 </div>
               </TableHead>
 
-              {/* PVC */}
-              <TableHead className="text-center">PVC</TableHead>
+              {/* PVC - szerokość 50px */}
+              <TableHead className="text-center w-[50px]">PVC</TableHead>
 
-              {/* ALU */}
-              <TableHead className="text-center">ALU</TableHead>
+              {/* ALU - szerokość 50px */}
+              <TableHead className="text-center w-[50px]">ALU</TableHead>
 
-              {/* Order Class - sortowalne */}
+              {/* Klasa zamówienia - szerokość 120px */}
+              <TableHead className="w-[120px]">Klasa</TableHead>
+
+              {/* Wielkość - szerokość 120px */}
+              <TableHead className="w-[120px]">Wielkość</TableHead>
+
+              {/* Location - sortowalne, szerokość 160px */}
               <TableHead
-                className="cursor-pointer select-none hover:bg-slate-50"
-                onClick={() => handleSort('orderClass')}
-              >
-                <div className="flex items-center gap-1">
-                  Typ zamówienia
-                  {sortField === 'orderClass' && (
-                    <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                  )}
-                </div>
-              </TableHead>
-
-              {/* Size Class - sortowalne */}
-              <TableHead
-                className="cursor-pointer select-none hover:bg-slate-50"
-                onClick={() => handleSort('sizeClass')}
-              >
-                <div className="flex items-center gap-1">
-                  Rozmiar
-                  {sortField === 'sizeClass' && (
-                    <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                  )}
-                </div>
-              </TableHead>
-
-              {/* Location - sortowalne */}
-              <TableHead
-                className="cursor-pointer select-none hover:bg-slate-50"
+                className="cursor-pointer select-none hover:bg-slate-50 w-[160px]"
                 onClick={() => handleSort('location')}
               >
                 <div className="flex items-center gap-1">
@@ -242,8 +228,8 @@ export function ArticlesTable({
                 </div>
               </TableHead>
 
-              {/* Actions */}
-              <TableHead className="text-right">Akcje</TableHead>
+              {/* Actions - szerokość 80px */}
+              <TableHead className="text-right w-[80px]">Akcje</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -255,14 +241,14 @@ export function ArticlesTable({
               return (
                 <TableRow key={article.id}>
                   {/* Article ID */}
-                  <TableCell className="font-mono font-medium">{article.articleId}</TableCell>
+                  <TableCell className="font-mono font-medium text-sm">{article.articleId}</TableCell>
 
                   {/* Name */}
                   <TableCell>
                     <div>
-                      <div className="font-medium">{article.name}</div>
+                      <div className="font-medium text-sm">{article.name}</div>
                       {article.description && (
-                        <div className="text-sm text-slate-500 truncate max-w-xs">
+                        <div className="text-xs text-slate-500 truncate max-w-[300px]">
                           {article.description}
                         </div>
                       )}
@@ -287,18 +273,54 @@ export function ArticlesTable({
                     )}
                   </TableCell>
 
-                  {/* Order Class - Badge niebieski */}
+                  {/* Klasa zamówienia - Select inline */}
                   <TableCell>
-                    <Badge variant="default" className="bg-blue-500 hover:bg-blue-600">
-                      {article.orderClass === 'typical' ? 'Typowy' : 'Atypowy'}
-                    </Badge>
+                    <Select
+                      value={article.orderClass}
+                      onValueChange={(value) => onOrderClassChange(article.id, value as 'typical' | 'atypical')}
+                      disabled={isUpdatingOrderClassId === article.id || isDeleting}
+                    >
+                      <SelectTrigger className="w-full h-8 text-sm" disabled={isUpdatingOrderClassId === article.id}>
+                        <SelectValue>
+                          {isUpdatingOrderClassId === article.id ? (
+                            <span className="text-muted-foreground">Zapisywanie...</span>
+                          ) : article.orderClass === 'typical' ? (
+                            'Typowy'
+                          ) : (
+                            'Atypowy'
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="typical">Typowy</SelectItem>
+                        <SelectItem value="atypical">Atypowy</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </TableCell>
 
-                  {/* Size Class - Badge niebieski */}
+                  {/* Wielkość - Select inline */}
                   <TableCell>
-                    <Badge variant="default" className="bg-blue-500 hover:bg-blue-600">
-                      {article.sizeClass === 'standard' ? 'Standard' : 'Gabarat'}
-                    </Badge>
+                    <Select
+                      value={article.sizeClass}
+                      onValueChange={(value) => onSizeClassChange(article.id, value as 'standard' | 'gabarat')}
+                      disabled={isUpdatingSizeClassId === article.id || isDeleting}
+                    >
+                      <SelectTrigger className="w-full h-8 text-sm" disabled={isUpdatingSizeClassId === article.id}>
+                        <SelectValue>
+                          {isUpdatingSizeClassId === article.id ? (
+                            <span className="text-muted-foreground">Zapisywanie...</span>
+                          ) : article.sizeClass === 'standard' ? (
+                            'Standard'
+                          ) : (
+                            'Gabarat'
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="standard">Standard</SelectItem>
+                        <SelectItem value="gabarat">Gabarat</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </TableCell>
 
                   {/* Location - Select inline */}
@@ -308,7 +330,7 @@ export function ArticlesTable({
                       onValueChange={(value) => handleLocationChange(article.id, value)}
                       disabled={isUpdatingLocation || isDeleting}
                     >
-                      <SelectTrigger className="w-[180px]" disabled={isUpdatingLocation}>
+                      <SelectTrigger className="w-full h-8 text-sm" disabled={isUpdatingLocation}>
                         <SelectValue placeholder="Nie przypisano">
                           {isUpdatingLocation ? (
                             <span className="text-muted-foreground">Zapisywanie...</span>
@@ -334,14 +356,14 @@ export function ArticlesTable({
 
                   {/* Actions - tylko Edit + Delete */}
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-end gap-1">
                       {/* Edit Button */}
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon"
                         onClick={() => onEdit(article.id)}
                         disabled={isDeleting}
-                        className="hover:bg-blue-50"
+                        className="h-8 w-8 hover:bg-blue-50"
                       >
                         <Edit className="h-4 w-4" />
                         <span className="sr-only">Edytuj</span>
@@ -350,13 +372,13 @@ export function ArticlesTable({
                       {/* Delete Button - disabled podczas isPending */}
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon"
                         onClick={() => handleDeleteClick(article.id)}
                         disabled={isDeleting}
-                        className="hover:bg-red-50 hover:text-red-600"
+                        className="h-8 w-8 hover:bg-red-50 hover:text-red-600"
                       >
                         {isDeleting ? (
-                          <span className="text-xs">Usuwanie...</span>
+                          <span className="text-xs">...</span>
                         ) : (
                           <>
                             <Trash2 className="h-4 w-4" />
