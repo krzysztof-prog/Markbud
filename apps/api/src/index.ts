@@ -39,6 +39,7 @@ import { healthRoutes } from './routes/health.js';
 import { mojaPracaRoutes } from './routes/moja-praca.js';
 import { productionPlanningRoutes } from './routes/production-planning.js';
 import { steelRoutes } from './routes/steel.js';
+import { labelCheckRoutes } from './routes/label-checks.js';
 
 // Services
 import { FileWatcherService } from './services/file-watcher/index.js';
@@ -46,6 +47,7 @@ import { startSchucoScheduler, stopSchucoScheduler } from './services/schuco/sch
 import { startPendingPriceCleanupScheduler, stopPendingPriceCleanupScheduler } from './services/pendingOrderPriceCleanupScheduler.js';
 import { startImportLockCleanupScheduler, stopImportLockCleanupScheduler } from './services/importLockCleanupScheduler.js';
 import { startOrderArchiveScheduler, stopOrderArchiveScheduler } from './services/orderArchiveScheduler.js';
+import { startSoftDeleteCleanupScheduler, stopSoftDeleteCleanupScheduler } from './services/softDeleteCleanupScheduler.js';
 import { setupWebSocket } from './plugins/websocket.js';
 import { seedDefaultWorkers } from './services/seedDefaultWorkers.js';
 
@@ -202,6 +204,9 @@ await fastify.register(productionPlanningRoutes, { prefix: '/api/production-plan
 // Steel Routes (Wzmocnienia stalowe - magazyn stali)
 await fastify.register(steelRoutes, { prefix: '/api/steel' });
 
+// Label Check Routes (Kontrola etykiet)
+await fastify.register(labelCheckRoutes, { prefix: '/api/label-checks' });
+
 // Health checks (basic - must be before extended health routes)
 fastify.get('/api/health', {
   schema: {
@@ -281,6 +286,7 @@ const closeGracefully = async (signal: string) => {
   stopPendingPriceCleanupScheduler();
   stopImportLockCleanupScheduler();
   stopOrderArchiveScheduler();
+  stopSoftDeleteCleanupScheduler();
   await fastify.close();
   await prisma.$disconnect();
   process.exit(0);
@@ -320,6 +326,9 @@ const start = async () => {
 
     // Uruchom Order Archive Scheduler (archiwizacja zleceń codziennie o 2:30)
     startOrderArchiveScheduler(prisma);
+
+    // Uruchom Soft Delete Cleanup Scheduler (trwałe usuwanie soft-deleted rekordów w niedziele o 3:00)
+    startSoftDeleteCleanupScheduler(prisma);
 
   } catch (err) {
     logger.error('Failed to start server', err);

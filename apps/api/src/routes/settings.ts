@@ -5,6 +5,8 @@ import * as path from 'path';
 import { SettingsRepository } from '../repositories/SettingsRepository.js';
 import { SettingsService } from '../services/settingsService.js';
 import { SettingsHandler } from '../handlers/settingsHandler.js';
+import { verifyAuth } from '../middleware/auth.js';
+import { getSoftDeleteCleanupScheduler } from '../services/softDeleteCleanupScheduler.js';
 
 
 export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
@@ -57,9 +59,10 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     handler.deleteDocumentAuthorMapping.bind(handler)
   );
   // GET /api/settings/browse-folders - przeglądaj foldery Windows
+  // SECURITY: Wymaga autoryzacji - zapobiega information disclosure
   fastify.get<{
     Querystring: { path?: string };
-  }>('/browse-folders', async (request, reply) => {
+  }>('/browse-folders', { preHandler: [verifyAuth] }, async (request, reply) => {
     const requestedPath = request.query.path || '';
 
     // Jeśli pusta ścieżka - zwróć dyski Windows
@@ -163,9 +166,10 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // POST /api/settings/validate-folder - sprawdź czy folder istnieje
+  // SECURITY: Wymaga autoryzacji - zapobiega information disclosure
   fastify.post<{
     Body: { path: string };
-  }>('/validate-folder', async (request, reply) => {
+  }>('/validate-folder', { preHandler: [verifyAuth] }, async (request, reply) => {
     const { path: folderPath } = request.body;
 
     if (!folderPath) {
@@ -245,5 +249,69 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
         details: error instanceof Error ? error.message : 'Nieznany blad',
       });
     }
+  });
+
+  // ============================================================
+  // Soft Delete Cleanup - trwale usuwa rekordy z deletedAt > 2 lata
+  // ============================================================
+
+  // GET /api/settings/soft-delete-cleanup/status - status schedulera i statystyki
+  fastify.get('/soft-delete-cleanup/status', { preHandler: [verifyAuth] }, async () => {
+    const scheduler = getSoftDeleteCleanupScheduler(prisma);
+    const status = scheduler.getStatus();
+    const { stats, totalToDelete } = await scheduler.dryRun();
+
+    return {
+      scheduler: status,
+      retentionDays: 730, // 2 lata
+      stats: stats.filter(s => s.toDeleteCount > 0), // Tylko modele z rekordami do usuniecia
+      totalToDelete,
+    };
+  });
+
+  // GET /api/settings/soft-delete-cleanup/dry-run - podglad co zostanie usuniete
+  fastify.get('/soft-delete-cleanup/dry-run', { preHandler: [verifyAuth] }, async () => {
+    const scheduler = getSoftDeleteCleanupScheduler(prisma);
+    const { stats, totalToDelete } = await scheduler.dryRun();
+
+    return {
+      message: 'Dry run - podglad co zostanie usuniete (rekordy z deletedAt > 2 lata)',
+      stats,
+      totalToDelete,
+    };
+  });
+
+  // POST /api/settings/soft-delete-cleanup/run - reczne uruchomienie cleanup
+  fastify.post('/soft-delete-cleanup/run', { preHandler: [verifyAuth] }, async (request, reply) => {
+    const scheduler = getSoftDeleteCleanupScheduler(prisma);
+
+    // Najpierw dry run zeby sprawdzic
+    const { totalToDelete } = await scheduler.dryRun();
+
+    if (totalToDelete === 0) {
+      return {
+        success: true,
+        message: 'Brak rekordow do usuniecia',
+        totalDeleted: 0,
+        deletedCounts: {},
+      };
+    }
+
+    // Wykonaj faktyczne usuwanie
+    const result = await scheduler.manualTrigger();
+
+    if (result.errors.length > 0) {
+      return reply.status(500).send({
+        success: false,
+        message: 'Cleanup zakonczony z bledami',
+        ...result,
+      });
+    }
+
+    return {
+      success: true,
+      message: `Usunieto ${result.totalDeleted} rekordow`,
+      ...result,
+    };
   });
 };
