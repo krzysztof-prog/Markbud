@@ -585,26 +585,35 @@ export class TimesheetsService {
       };
     });
 
+    // Optymalizacja: deleteMany + createMany zamiast pętli upsert
+    // Unikamy timeoutu transakcji przy wielu pracownikach
     return this.prisma.$transaction(async (tx) => {
-      const results = [];
+      const workerIdsToProcess = entries.map((e) => e.workerId);
 
-      for (const entry of entries) {
-        const result = await tx.timeEntry.upsert({
-          where: {
-            date_workerId: { date: entry.date, workerId: entry.workerId },
-          },
-          update: {
-            positionId: entry.positionId,
-            productiveHours: entry.productiveHours,
-          },
-          create: entry,
-          include: {
-            worker: true,
-            position: true,
-          },
-        });
-        results.push(result);
-      }
+      // 1. Usuń istniejące wpisy dla tej daty i pracowników
+      await tx.timeEntry.deleteMany({
+        where: {
+          date,
+          workerId: { in: workerIdsToProcess },
+        },
+      });
+
+      // 2. Utwórz nowe wpisy batch'em
+      await tx.timeEntry.createMany({
+        data: entries,
+      });
+
+      // 3. Pobierz utworzone wpisy z relacjami do zwrócenia
+      const results = await tx.timeEntry.findMany({
+        where: {
+          date,
+          workerId: { in: workerIdsToProcess },
+        },
+        include: {
+          worker: true,
+          position: true,
+        },
+      });
 
       return results;
     });
@@ -645,36 +654,50 @@ export class TimesheetsService {
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    // Utwórz/aktualizuj wpisy dla każdej daty
+    // Optymalizacja: deleteMany + createMany zamiast pętli upsert
+    // Unikamy timeoutu transakcji przy długim zakresie dat
+    const entries = dates.map((date) => {
+      date.setHours(0, 0, 0, 0);
+      return {
+        date,
+        workerId: data.workerId,
+        positionId: data.positionId,
+        productiveHours: 0,
+        absenceType: data.absenceType,
+      };
+    });
+
     return this.prisma.$transaction(async (tx) => {
-      const results = [];
+      // 1. Usuń istniejące wpisy dla tego pracownika w zakresie dat
+      await tx.timeEntry.deleteMany({
+        where: {
+          workerId: data.workerId,
+          date: {
+            gte: fromDate,
+            lte: toDate,
+          },
+        },
+      });
 
-      for (const date of dates) {
-        date.setHours(0, 0, 0, 0);
+      // 2. Utwórz nowe wpisy batch'em
+      await tx.timeEntry.createMany({
+        data: entries,
+      });
 
-        const result = await tx.timeEntry.upsert({
-          where: {
-            date_workerId: { date, workerId: data.workerId },
+      // 3. Pobierz utworzone wpisy z relacjami do zwrócenia
+      const results = await tx.timeEntry.findMany({
+        where: {
+          workerId: data.workerId,
+          date: {
+            gte: fromDate,
+            lte: toDate,
           },
-          update: {
-            positionId: data.positionId,
-            productiveHours: 0,
-            absenceType: data.absenceType,
-          },
-          create: {
-            date,
-            workerId: data.workerId,
-            positionId: data.positionId,
-            productiveHours: 0,
-            absenceType: data.absenceType,
-          },
-          include: {
-            worker: true,
-            position: true,
-          },
-        });
-        results.push(result);
-      }
+        },
+        include: {
+          worker: true,
+          position: true,
+        },
+      });
 
       return results;
     });
