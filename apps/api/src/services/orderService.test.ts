@@ -27,7 +27,7 @@ vi.mock('./readinessOrchestrator.js', () => ({
 
 import { OrderService } from './orderService.js';
 import { OrderRepository } from '../repositories/OrderRepository.js';
-import { ValidationError, NotFoundError } from '../utils/errors.js';
+import { ValidationError } from '../utils/errors.js';
 import { ORDER_STATUSES } from '../utils/order-status-machine.js';
 
 describe('OrderService - Status Transition Validation', () => {
