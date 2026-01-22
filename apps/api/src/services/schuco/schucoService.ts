@@ -554,13 +554,37 @@ export class SchucoService {
       // For unchanged, we can use updateMany which is much faster
       const unchangedIds = unchangedDeliveries.map(d => d.existing!.id);
 
-      // Update in batches of 100 for updateMany
-      for (let i = 0; i < unchangedIds.length; i += 100) {
-        const batchIds = unchangedIds.slice(i, i + 100);
-        await this.prisma.schucoDelivery.updateMany({
-          where: { id: { in: batchIds } },
-          data: { fetchedAt: now },
-        });
+      // Update in batches of 25 (zmniejszono z 100 - SQLite timeout issues)
+      const UNCHANGED_BATCH_SIZE = 25;
+      for (let i = 0; i < unchangedIds.length; i += UNCHANGED_BATCH_SIZE) {
+        const batchIds = unchangedIds.slice(i, i + UNCHANGED_BATCH_SIZE);
+
+        // Retry logic dla SQLite timeout
+        let retries = 3;
+        while (retries > 0) {
+          try {
+            await this.prisma.schucoDelivery.updateMany({
+              where: { id: { in: batchIds } },
+              data: { fetchedAt: now },
+            });
+            break; // Success - exit retry loop
+          } catch (error) {
+            retries--;
+            if (retries === 0) {
+              logger.error(`[SchucoService] Failed to update batch after 3 retries: ${(error as Error).message}`);
+              // Continue with next batch instead of failing completely
+            } else {
+              logger.warn(`[SchucoService] Batch update failed, retrying... (${retries} left)`);
+              await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+            }
+          }
+        }
+
+        // Log progress co 100 rekordów
+        if ((i + UNCHANGED_BATCH_SIZE) % 100 === 0 || i + UNCHANGED_BATCH_SIZE >= unchangedIds.length) {
+          const processed = Math.min(i + UNCHANGED_BATCH_SIZE, unchangedIds.length);
+          logger.info(`[SchucoService] Unchanged progress: ${processed}/${unchangedIds.length}`);
+        }
       }
 
       stats.unchangedRecords = unchangedDeliveries.length;
