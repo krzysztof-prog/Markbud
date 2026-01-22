@@ -14,6 +14,11 @@ import type {
   UpdatePalletTypeData,
   Holiday,
   WorkingDay,
+  Steel,
+  SteelWithStock,
+  CreateSteelData,
+  UpdateSteelData,
+  UpdateSteelStockData,
 } from '@/types';
 import { fetchApi } from '../api-client';
 
@@ -240,5 +245,82 @@ export const profileDepthsApi = {
   delete: (id: number) =>
     fetchApi(`/api/profile-depths/${id}`, {
       method: 'DELETE',
+    }),
+};
+
+// Stal (wzmocnienia stalowe)
+export const steelApi = {
+  /**
+   * GET /api/steel
+   * Pobierz wszystkie stale
+   */
+  getAll: () => fetchApi<Steel[]>('/api/steel'),
+
+  /**
+   * GET /api/steel/with-stock
+   * Pobierz wszystkie stale ze stanem magazynowym
+   */
+  getAllWithStock: () => fetchApi<SteelWithStock[]>('/api/steel/with-stock'),
+
+  /**
+   * GET /api/steel/:id
+   * Pobierz stal po ID
+   */
+  getById: (id: number) => fetchApi<Steel>(`/api/steel/${id}`),
+
+  /**
+   * POST /api/steel
+   * Utwórz nową stal
+   */
+  create: (data: CreateSteelData) =>
+    fetchApi<Steel>('/api/steel', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * PUT /api/steel/:id
+   * Zaktualizuj stal
+   */
+  update: (id: number, data: UpdateSteelData) =>
+    fetchApi<Steel>(`/api/steel/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * DELETE /api/steel/:id
+   * Usuń stal
+   */
+  delete: (id: number) =>
+    fetchApi<void>(`/api/steel/${id}`, {
+      method: 'DELETE',
+    }),
+
+  /**
+   * PATCH /api/steel/update-orders
+   * Zmień kolejność stali
+   */
+  updateOrders: (orders: Array<{ id: number; sortOrder: number }>) =>
+    fetchApi<{ success: boolean }>('/api/steel/update-orders', {
+      method: 'PATCH',
+      body: JSON.stringify({ orders }),
+    }),
+
+  /**
+   * GET /api/steel/:id/stock
+   * Pobierz stan magazynowy stali
+   */
+  getStock: (id: number) =>
+    fetchApi<{ steelId: number; currentStockBeams: number; initialStockBeams: number }>(`/api/steel/${id}/stock`),
+
+  /**
+   * PATCH /api/steel/:id/stock
+   * Zaktualizuj stan magazynowy stali
+   */
+  updateStock: (id: number, data: UpdateSteelStockData) =>
+    fetchApi<{ steelId: number; currentStockBeams: number }>(`/api/steel/${id}/stock`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
     }),
 };

@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Eye, Edit, Send, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { Eye, Edit, Send, Trash2, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import type { OkucOrder } from '@/types/okuc';
 import { groszeToPln } from '@/lib/money';
 import type { Grosze } from '@/lib/money';
@@ -40,7 +40,9 @@ interface OrdersTableProps {
   onView: (id: number) => void;
   onEdit: (id: number) => void;
   onSend: (id: number) => void;
+  onDelete?: (id: number) => void;
   isSendingId?: number; // ID zamówienia które jest wysyłane
+  isDeletingId?: number; // ID zamówienia które jest usuwane
 }
 
 type SortField = 'orderNumber' | 'basketType' | 'createdAt' | 'status' | 'itemsCount' | 'estimatedValue';
@@ -71,14 +73,17 @@ export function OrdersTable({
   onView,
   onEdit,
   onSend,
+  onDelete,
   isSendingId,
+  isDeletingId,
 }: OrdersTableProps) {
   // State dla sortowania - domyślnie createdAt DESC
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
-  // State dla confirmation dialog
+  // State dla confirmation dialogs
   const [sendConfirmId, setSendConfirmId] = useState<number | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
   // Obsługa sortowania
   const handleSort = (field: SortField) => {
@@ -167,11 +172,24 @@ export function OrdersTable({
     return order.status === 'approved';
   };
 
+  // Czy można usunąć zamówienie (tylko drafty)
+  const canDelete = (order: OkucOrder): boolean => {
+    return order.status === 'draft';
+  };
+
   // Obsługa potwierdzenia wysyłki
   const handleConfirmSend = () => {
     if (sendConfirmId !== null) {
       onSend(sendConfirmId);
       setSendConfirmId(null);
+    }
+  };
+
+  // Obsługa potwierdzenia usunięcia
+  const handleConfirmDelete = () => {
+    if (deleteConfirmId !== null && onDelete) {
+      onDelete(deleteConfirmId);
+      setDeleteConfirmId(null);
     }
   };
 
@@ -253,6 +271,7 @@ export function OrdersTable({
               const basketConfig = BASKET_TYPE_CONFIG[order.basketType] || { label: order.basketType, variant: 'default' as const };
               const estimatedValueGrosze = getEstimatedValue(order);
               const isSending = isSendingId === order.id;
+              const isDeleting = isDeletingId === order.id;
 
               return (
                 <TableRow key={order.id}>
@@ -324,6 +343,20 @@ export function OrdersTable({
                           <Send className="h-4 w-4" />
                         </Button>
                       )}
+
+                      {/* Usuń - tylko dla draft */}
+                      {canDelete(order) && onDelete && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteConfirmId(order.id)}
+                          disabled={isDeleting}
+                          title="Usuń zamówienie"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -356,6 +389,35 @@ export function OrdersTable({
               disabled={isSendingId !== undefined}
             >
               {isSendingId !== undefined ? 'Wysyłanie...' : 'Wyślij'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation Dialog dla usunięcia */}
+      <Dialog open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Usuń zamówienie</DialogTitle>
+            <DialogDescription>
+              Czy na pewno chcesz usunąć to zamówienie?
+              Ta operacja jest nieodwracalna. Usunięte zostaną również wszystkie pozycje zamówienia.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmId(null)}
+              disabled={isDeletingId !== undefined}
+            >
+              Anuluj
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeletingId !== undefined}
+            >
+              {isDeletingId !== undefined ? 'Usuwanie...' : 'Usuń'}
             </Button>
           </DialogFooter>
         </DialogContent>

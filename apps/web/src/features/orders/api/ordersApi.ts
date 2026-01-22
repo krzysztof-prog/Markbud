@@ -99,4 +99,15 @@ export const ordersApi = {
    */
   delete: (id: number) =>
     fetchApi<void>(`/api/orders/${id}`, { method: 'DELETE' }),
+
+  /**
+   * Aktualizuj ręczny status zlecenia
+   * @param id - ID zlecenia
+   * @param manualStatus - 'do_not_cut' | 'cancelled' | 'on_hold' | null
+   */
+  updateManualStatus: (id: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) =>
+    fetchApi<Order>(`/api/orders/${id}/manual-status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ manualStatus }),
+    }),
 };

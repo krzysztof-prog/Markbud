@@ -142,7 +142,7 @@ export const WarehouseStockTable = React.memo(function WarehouseStockTable({
   // Helper to get average for a profile - memoized to avoid recalculation
   const getAverageForProfile = useCallback(
     (profileId: number) => {
-      const profileAverage = averageData?.averages.find((a) => a.profileId === profileId);
+      const profileAverage = averageData?.averages?.find((a) => a.profileId === profileId);
       return profileAverage?.averageBeamsPerMonth || 0;
     },
     [averageData]

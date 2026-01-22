@@ -18,12 +18,16 @@ interface VariantDialogState {
   open: boolean;
   orderNumber: string;
   orderId: number;
-  conflictingOrderNumber: string;
+  /** Numer zlecenia bazowego (może być null dla VARIANT_TYPE_REQUIRED_FOR_SUFFIX) */
+  conflictingOrderNumber: string | null;
+  /** Oryginalna dostawa (może być null dla VARIANT_TYPE_REQUIRED_FOR_SUFFIX) */
   originalDelivery: {
     deliveryId: number;
     deliveryNumber: string;
-  };
+  } | null;
   targetDeliveryId: number;
+  /** Typ błędu - określa wariant dialogu */
+  errorCode: 'VARIANT_TYPE_REQUIRED' | 'VARIANT_TYPE_REQUIRED_FOR_SUFFIX';
 }
 
 export function useAddOrderWithVariantCheck(
@@ -33,26 +37,43 @@ export function useAddOrderWithVariantCheck(
   const [isSettingVariantType, setIsSettingVariantType] = useState(false);
 
   /**
-   * Parsuje błąd API i sprawdza czy to VARIANT_TYPE_REQUIRED
+   * Parsuje błąd API i sprawdza czy wymaga wyboru typu wariantu
+   * Obsługuje dwa kody błędów:
+   * - VARIANT_TYPE_REQUIRED - wariant już przypisany gdzieś, trzeba wybrać typ
+   * - VARIANT_TYPE_REQUIRED_FOR_SUFFIX - zlecenie ma sufix ale nie ma typu
    */
   const isVariantTypeRequired = useCallback((error: unknown): boolean => {
     if (!error || typeof error !== 'object') return false;
     const apiError = error as ApiError;
 
-    // Check: status 400 + data.code === 'VARIANT_TYPE_REQUIRED'
+    // Check: status 400 + data.code === 'VARIANT_TYPE_REQUIRED' lub 'VARIANT_TYPE_REQUIRED_FOR_SUFFIX'
     return (
       apiError.status === 400 &&
-      apiError.data?.code === 'VARIANT_TYPE_REQUIRED'
+      (apiError.data?.code === 'VARIANT_TYPE_REQUIRED' ||
+       apiError.data?.code === 'VARIANT_TYPE_REQUIRED_FOR_SUFFIX')
     );
   }, []);
 
   /**
-   * Wyodrębnia metadata z błędu VARIANT_TYPE_REQUIRED
+   * Wyodrębnia metadata z błędu VARIANT_TYPE_REQUIRED lub VARIANT_TYPE_REQUIRED_FOR_SUFFIX
    */
   const extractVariantMetadata = useCallback((error: ApiError, orderId: number, deliveryId: number) => {
     const data = error.data || {};
+    const errorCode = data.code as 'VARIANT_TYPE_REQUIRED' | 'VARIANT_TYPE_REQUIRED_FOR_SUFFIX';
 
-    // Backend zwraca:
+    // Dla VARIANT_TYPE_REQUIRED_FOR_SUFFIX backend nie zwraca metadata
+    // (zlecenie ma sufix ale nie jest jeszcze nigdzie przypisane)
+    if (errorCode === 'VARIANT_TYPE_REQUIRED_FOR_SUFFIX') {
+      return {
+        conflictingOrderNumber: null,
+        originalDelivery: null,
+        targetDeliveryId: deliveryId,
+        orderId,
+        errorCode,
+      };
+    }
+
+    // Dla VARIANT_TYPE_REQUIRED backend zwraca:
     // {
     //   error: "message",
     //   code: "VARIANT_TYPE_REQUIRED",
@@ -61,19 +82,21 @@ export function useAddOrderWithVariantCheck(
     //     originalDelivery: { deliveryId: 1, deliveryNumber: "D001" }
     //   }
     // }
-
     const metadata = data.metadata as Record<string, unknown> | undefined;
     const conflictingOrder = metadata?.conflictingOrder as { orderNumber?: string } | undefined;
     const originalDelivery = metadata?.originalDelivery as { deliveryId?: number; deliveryNumber?: string } | undefined;
 
     return {
-      conflictingOrderNumber: conflictingOrder?.orderNumber || 'nieznane',
-      originalDelivery: {
-        deliveryId: originalDelivery?.deliveryId || 0,
-        deliveryNumber: originalDelivery?.deliveryNumber || 'nieznany',
-      },
+      conflictingOrderNumber: conflictingOrder?.orderNumber || null,
+      originalDelivery: originalDelivery?.deliveryId && originalDelivery?.deliveryNumber
+        ? {
+            deliveryId: originalDelivery.deliveryId,
+            deliveryNumber: originalDelivery.deliveryNumber,
+          }
+        : null,
       targetDeliveryId: deliveryId,
       orderId,
+      errorCode,
     };
   }, []);
 
@@ -86,7 +109,7 @@ export function useAddOrderWithVariantCheck(
         // Próbuj dodać zlecenie
         await addOrderMutation({ deliveryId, orderId });
       } catch (error) {
-        // Sprawdź czy to błąd VARIANT_TYPE_REQUIRED
+        // Sprawdź czy to błąd wymagający wyboru typu wariantu
         if (isVariantTypeRequired(error)) {
           const apiError = error as ApiError;
           const metadata = extractVariantMetadata(apiError, orderId, deliveryId);
@@ -99,6 +122,7 @@ export function useAddOrderWithVariantCheck(
             conflictingOrderNumber: metadata.conflictingOrderNumber,
             originalDelivery: metadata.originalDelivery,
             targetDeliveryId: metadata.targetDeliveryId,
+            errorCode: metadata.errorCode,
           });
 
           // Nie throw - dialog przejmuje kontrolę

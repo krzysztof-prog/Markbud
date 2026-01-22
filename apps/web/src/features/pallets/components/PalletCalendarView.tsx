@@ -104,13 +104,20 @@ interface PalletCalendarViewProps {
   selectedDate?: string;
 }
 
+// Minimalna data - początek systemu paletówek
+const MIN_YEAR = 2026;
+const MIN_MONTH = 1;
+
 export const PalletCalendarView: React.FC<PalletCalendarViewProps> = ({
   onDaySelect,
   selectedDate,
 }) => {
-  const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1);
+  // Domyślnie styczeń 2026
+  const [year, setYear] = useState(MIN_YEAR);
+  const [month, setMonth] = useState(MIN_MONTH);
+
+  // Czy można cofnąć się do poprzedniego miesiąca
+  const canGoPrev = year > MIN_YEAR || (year === MIN_YEAR && month > MIN_MONTH);
 
   // Pobieranie danych kalendarza
   const { data: calendarData, isLoading } = usePalletCalendar(year, month);
@@ -134,13 +141,16 @@ export const PalletCalendarView: React.FC<PalletCalendarViewProps> = ({
 
   // Nawigacja
   const handlePrevMonth = useCallback(() => {
+    // Nie pozwalaj cofnąć się przed minimalną datę
+    if (!canGoPrev) return;
+
     if (month === 1) {
       setYear(year - 1);
       setMonth(12);
     } else {
       setMonth(month - 1);
     }
-  }, [year, month]);
+  }, [year, month, canGoPrev]);
 
   const handleNextMonth = useCallback(() => {
     if (month === 12) {
@@ -191,6 +201,7 @@ export const PalletCalendarView: React.FC<PalletCalendarViewProps> = ({
               variant="ghost"
               size="icon"
               onClick={handlePrevMonth}
+              disabled={!canGoPrev}
               aria-label="Poprzedni miesiąc"
             >
               <ChevronLeft className="h-4 w-4" />

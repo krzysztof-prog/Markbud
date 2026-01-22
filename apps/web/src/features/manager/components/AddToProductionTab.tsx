@@ -1,12 +1,22 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { DeliveryCheckbox } from './DeliveryCheckbox';
 import { OrderCheckbox } from './OrderCheckbox';
 import { CollapsibleSection } from './CollapsibleSection';
@@ -32,6 +42,13 @@ export const AddToProductionTab: React.FC = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Stan dla dialogu potwierdzenia braków magazynowych
+  const [warehouseShortageDialog, setWarehouseShortageDialog] = useState<{
+    open: boolean;
+    message: string;
+    orderIds: number[];
+  }>({ open: false, message: '', orderIds: [] });
+
   // Custom hook dla selection logic
   const {
     selectedOrderIds,
@@ -51,13 +68,14 @@ export const AddToProductionTab: React.FC = () => {
 
   // Mutation do bulk update statusu z optimistic update
   const bulkUpdateMutation = useMutation({
-    mutationFn: (orderIds: number[]) =>
+    mutationFn: ({ orderIds, skipWarehouseValidation = false }: { orderIds: number[]; skipWarehouseValidation?: boolean }) =>
       managerApi.bulkUpdateStatus({
         orderIds,
         status: 'in_progress',
         productionDate: getTodayISOString(),
+        skipWarehouseValidation,
       }),
-    onMutate: async (orderIds) => {
+    onMutate: async ({ orderIds }) => {
       await queryClient.cancelQueries({ queryKey: ['orders', 'for-production'] });
       const previous = queryClient.getQueryData(['orders', 'for-production']);
 
@@ -85,9 +103,22 @@ export const AddToProductionTab: React.FC = () => {
       if (context?.previous) {
         queryClient.setQueryData(['orders', 'for-production'], context.previous);
       }
+
+      const errorMessage = error instanceof Error ? error.message : 'Nie udało się dodać do produkcji';
+
+      // Sprawdź czy błąd dotyczy braków magazynowych - pokaż dialog zamiast toasta
+      if (errorMessage.includes('Niewystarczający stan magazynu')) {
+        setWarehouseShortageDialog({
+          open: true,
+          message: errorMessage,
+          orderIds: variables.orderIds,
+        });
+        return; // Nie pokazuj toasta - dialog obsłuży komunikację
+      }
+
       toast({
         title: 'Błąd',
-        description: error instanceof Error ? error.message : 'Nie udało się dodać do produkcji',
+        description: errorMessage,
         variant: 'destructive',
       });
     },
@@ -100,8 +131,17 @@ export const AddToProductionTab: React.FC = () => {
   // Obsługa dodania do produkcji z useCallback
   const handleAddToProduction = useCallback(() => {
     if (selectedOrderIds.size === 0) return;
-    bulkUpdateMutation.mutate(Array.from(selectedOrderIds));
+    bulkUpdateMutation.mutate({ orderIds: Array.from(selectedOrderIds) });
   }, [selectedOrderIds, bulkUpdateMutation]);
+
+  // Obsługa potwierdzenia dodania mimo braków magazynowych
+  const handleConfirmWithShortage = useCallback(() => {
+    bulkUpdateMutation.mutate({
+      orderIds: warehouseShortageDialog.orderIds,
+      skipWarehouseValidation: true,
+    });
+    setWarehouseShortageDialog({ open: false, message: '', orderIds: [] });
+  }, [warehouseShortageDialog.orderIds, bulkUpdateMutation]);
 
   // Delivery toggle wrapper z delivery object
   const handleDeliveryToggleWithData = useCallback(
@@ -266,6 +306,35 @@ export const AddToProductionTab: React.FC = () => {
           </CollapsibleSection>
         </>
       )}
+
+      {/* Dialog potwierdzenia braków magazynowych */}
+      <AlertDialog
+        open={warehouseShortageDialog.open}
+        onOpenChange={(open) => {
+          if (!open) setWarehouseShortageDialog({ open: false, message: '', orderIds: [] });
+        }}
+      >
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-orange-600">
+              <AlertCircle className="h-5 w-5" />
+              Braki magazynowe
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-left whitespace-pre-wrap">
+              {warehouseShortageDialog.message}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmWithShortage}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              Dodaj mimo braków
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

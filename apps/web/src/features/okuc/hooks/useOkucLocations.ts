@@ -6,7 +6,8 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { okucLocationsApi } from '../api/okucApi';
+import { okucLocationsApi } from '../api';
+import { toast } from '@/hooks/useToast';
 import type { OkucLocation } from '@/types/okuc';
 
 // ============================================================================
@@ -49,6 +50,18 @@ export function useCreateOkucLocation() {
       okucLocationsApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: okucLocationsKeys.all });
+      toast({
+        title: 'Lokalizacja dodana',
+        description: 'Nowa lokalizacja została pomyślnie utworzona.',
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd tworzenia lokalizacji',
+        description: error.message || 'Nie udało się utworzyć lokalizacji.',
+        variant: 'destructive',
+      });
     },
   });
 }
@@ -69,6 +82,18 @@ export function useUpdateOkucLocation() {
     }) => okucLocationsApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: okucLocationsKeys.all });
+      toast({
+        title: 'Lokalizacja zaktualizowana',
+        description: 'Zmiany zostały zapisane.',
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd aktualizacji lokalizacji',
+        description: error.message || 'Nie udało się zaktualizować lokalizacji.',
+        variant: 'destructive',
+      });
     },
   });
 }
@@ -83,6 +108,18 @@ export function useDeleteOkucLocation() {
     mutationFn: (id: number) => okucLocationsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: okucLocationsKeys.all });
+      toast({
+        title: 'Lokalizacja usunięta',
+        description: 'Lokalizacja została pomyślnie usunięta.',
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd usuwania lokalizacji',
+        description: error.message || 'Nie udało się usunąć lokalizacji.',
+        variant: 'destructive',
+      });
     },
   });
 }
@@ -127,6 +164,18 @@ export function useReorderOkucLocations() {
           context.previousLocations
         );
       }
+      toast({
+        title: 'Błąd zmiany kolejności',
+        description: 'Nie udało się zmienić kolejności lokalizacji.',
+        variant: 'destructive',
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Kolejność zmieniona',
+        description: 'Nowa kolejność lokalizacji została zapisana.',
+        variant: 'success',
+      });
     },
     onSettled: () => {
       // Zawsze odswiezamy po mutacji
@@ -153,7 +202,19 @@ export function useOkucLocationMutations(callbacks?: {
       okucLocationsApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: okucLocationsKeys.all });
+      toast({
+        title: 'Lokalizacja dodana',
+        description: 'Nowa lokalizacja została pomyślnie utworzona.',
+        variant: 'success',
+      });
       callbacks?.onCreateSuccess?.();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd tworzenia lokalizacji',
+        description: error.message || 'Nie udało się utworzyć lokalizacji.',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -167,7 +228,19 @@ export function useOkucLocationMutations(callbacks?: {
     }) => okucLocationsApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: okucLocationsKeys.all });
+      toast({
+        title: 'Lokalizacja zaktualizowana',
+        description: 'Zmiany zostały zapisane.',
+        variant: 'success',
+      });
       callbacks?.onUpdateSuccess?.();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd aktualizacji lokalizacji',
+        description: error.message || 'Nie udało się zaktualizować lokalizacji.',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -175,9 +248,19 @@ export function useOkucLocationMutations(callbacks?: {
     mutationFn: (id: number) => okucLocationsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: okucLocationsKeys.all });
+      toast({
+        title: 'Lokalizacja usunięta',
+        description: 'Lokalizacja została pomyślnie usunięta.',
+        variant: 'success',
+      });
       callbacks?.onDeleteSuccess?.();
     },
     onError: (error: Error) => {
+      toast({
+        title: 'Błąd usuwania lokalizacji',
+        description: error.message || 'Nie udało się usunąć lokalizacji.',
+        variant: 'destructive',
+      });
       callbacks?.onDeleteError?.(error);
     },
   });
@@ -204,6 +287,13 @@ export function useOkucLocationMutations(callbacks?: {
 
       return { previousLocations };
     },
+    onSuccess: () => {
+      toast({
+        title: 'Kolejność zmieniona',
+        description: 'Nowa kolejność lokalizacji została zapisana.',
+        variant: 'success',
+      });
+    },
     onError: (_err, _newIds, context) => {
       if (context?.previousLocations) {
         queryClient.setQueryData(
@@ -211,6 +301,11 @@ export function useOkucLocationMutations(callbacks?: {
           context.previousLocations
         );
       }
+      toast({
+        title: 'Błąd zmiany kolejności',
+        description: 'Nie udało się zmienić kolejności lokalizacji.',
+        variant: 'destructive',
+      });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: okucLocationsKeys.all });

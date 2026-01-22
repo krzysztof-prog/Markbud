@@ -19,10 +19,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Pobierz token z localStorage
+   * Jeśli nie ma w localStorage ale jest w cookies, synchronizuj
    */
   const getToken = useCallback((): string | null => {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem(TOKEN_KEY);
+
+    const localToken = localStorage.getItem(TOKEN_KEY);
+    if (localToken) return localToken;
+
+    // Sprawdź czy token jest w cookies (middleware go widzi)
+    const cookieToken = document.cookie
+      .split('; ')
+      .find(row => row.startsWith(`${TOKEN_KEY}=`))
+      ?.split('=')[1];
+
+    if (cookieToken) {
+      // Synchronizuj - skopiuj z cookie do localStorage
+      localStorage.setItem(TOKEN_KEY, cookieToken);
+      return cookieToken;
+    }
+
+    return null;
   }, []);
 
   /**
@@ -54,6 +71,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!token) {
       setUser(null);
       setIsLoading(false);
+
+      // Jeśli nie ma tokenu i nie jesteśmy na /login, przekieruj
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        const currentPath = window.location.pathname;
+        window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
+      }
       return;
     }
 
@@ -65,6 +88,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Token nieprawidłowy/wygasł - wyloguj
       removeToken();
       setUser(null);
+
+      // Przekieruj na login
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        const currentPath = window.location.pathname;
+        window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
+      }
     } finally {
       setIsLoading(false);
     }

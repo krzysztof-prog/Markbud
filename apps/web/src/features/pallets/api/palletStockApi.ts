@@ -11,6 +11,8 @@ import type {
   CorrectMorningStockInput,
   ProductionPalletType,
   PalletCalendarSummary,
+  PalletInitialStock,
+  SetInitialStocksInput,
 } from '../types/index';
 
 const BASE_URL = '/api/pallet-stock';
@@ -43,6 +45,7 @@ export const palletDayApi = {
   closeDay: (date: string) =>
     fetchApi<PalletStockDay>(`${BASE_URL}/day/${date}/close`, {
       method: 'POST',
+      body: JSON.stringify({}),
     }),
 
   /**
@@ -94,7 +97,28 @@ export const palletAlertConfigApi = {
   updateConfig: (configs: PalletAlertConfig[]) =>
     fetchApi<PalletAlertConfig[]>(`${BASE_URL}/alerts/config`, {
       method: 'PUT',
-      body: JSON.stringify({ configs }),
+      body: JSON.stringify(configs),
+    }),
+};
+
+// ============================================
+// INITIAL STOCK API
+// ============================================
+
+export const palletInitialStockApi = {
+  /**
+   * Pobierz stany początkowe palet
+   */
+  getInitialStocks: () =>
+    fetchApi<PalletInitialStock[]>(`${BASE_URL}/initial`),
+
+  /**
+   * Ustaw stany początkowe palet (tylko admin)
+   */
+  setInitialStocks: (input: SetInitialStocksInput) =>
+    fetchApi<PalletInitialStock[]>(`${BASE_URL}/initial`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
     }),
 };
 
@@ -106,4 +130,5 @@ export const palletStockApi = {
   day: palletDayApi,
   month: palletMonthApi,
   alertConfig: palletAlertConfigApi,
+  initialStock: palletInitialStockApi,
 };

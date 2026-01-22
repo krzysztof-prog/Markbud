@@ -2,6 +2,7 @@ import { fetchApi, uploadFile } from '@/lib/api-client';
 import type {
   GlassDelivery,
   GlassDeliveryFilters,
+  GroupedGlassDelivery,
   ValidationDashboard,
   GlassOrderValidation,
   LatestImportSummary,
@@ -12,7 +13,11 @@ import type {
 } from '../types';
 
 export const glassDeliveriesApi = {
-  getAll: (filters?: GlassDeliveryFilters): Promise<GlassDelivery[]> => {
+  /**
+   * Pobierz wszystkie dostawy pogrupowane po customerOrderNumber + rackNumber
+   * Każda unikalna kombinacja pokazuje się jako osobny wiersz w tabeli
+   */
+  getAll: (filters?: GlassDeliveryFilters): Promise<GroupedGlassDelivery[]> => {
     const params = new URLSearchParams();
     if (filters?.dateFrom) params.append('dateFrom', filters.dateFrom);
     if (filters?.dateTo) params.append('dateTo', filters.dateTo);

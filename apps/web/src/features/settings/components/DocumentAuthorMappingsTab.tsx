@@ -57,7 +57,7 @@ export function DocumentAuthorMappingsTab({
               {mappings?.map((mapping, index: number) => (
                 <tr
                   key={mapping.id}
-                  className={`border-t hover:bg-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
+                  className={`border-t hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
                 >
                   <td className="px-4 py-3 font-medium">{mapping.authorName}</td>
                   <td className="px-4 py-3">{mapping.user.name}</td>

@@ -205,7 +205,7 @@ export function ProfileDepthsTab() {
                 {profileDepths?.map((depth, index: number) => (
                   <tr
                     key={depth.id}
-                    className={`border-t hover:bg-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
+                    className={`border-t hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
                   >
                     <td className="px-4 py-3 font-medium font-mono">{depth.profileType}</td>
                     <td className="px-4 py-3 text-center font-semibold">{depth.depthMm} mm</td>

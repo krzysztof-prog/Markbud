@@ -6,6 +6,7 @@
     "validate": "node scripts/validate-config.js",
     "predev": "node scripts/validate-config.js && node scripts/kill-dev-servers.js",
     "dev": "turbo dev",
+    "dev:clean": "node scripts/kill-dev-servers.js --clean && turbo dev",
     "predev:web": "node scripts/kill-dev-servers.js",
     "dev:web": "pnpm --filter @akrobud/web dev",
     "predev:api": "node scripts/kill-dev-servers.js",

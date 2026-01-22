@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 /**
  * Kills all running dev servers (node, tsx) on ports 3000, 3001, 4000
- * Usage: node scripts/kill-dev-servers.js
+ * Usage: node scripts/kill-dev-servers.js [--clean]
+ *
+ * --clean: Dodatkowo czyści cache Next.js (.next) i turbo (.turbo)
  */
 
 const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
 const PORTS = [3000, 3001, 4000];
+const CLEAN_MODE = process.argv.includes('--clean');
 
 console.log('🔍 Szukam procesów dev serverów...');
 
@@ -66,6 +71,28 @@ try {
     } catch (e) {
       console.log('✅ Brak procesów do zabicia');
     }
+  }
+
+  // Czyszczenie cache jeśli --clean
+  if (CLEAN_MODE) {
+    console.log('\n🧹 Czyszczę cache...');
+
+    const cacheDirs = [
+      path.join(__dirname, '..', 'apps', 'web', '.next'),
+      path.join(__dirname, '..', '.turbo'),
+      path.join(__dirname, '..', 'node_modules', '.cache'),
+    ];
+
+    cacheDirs.forEach(dir => {
+      try {
+        if (fs.existsSync(dir)) {
+          fs.rmSync(dir, { recursive: true, force: true });
+          console.log(`   ✅ Usunięto: ${path.basename(dir)}`);
+        }
+      } catch (e) {
+        console.log(`   ⚠️  Nie udało się usunąć: ${path.basename(dir)}`);
+      }
+    });
   }
 
   console.log('✨ Gotowe!');

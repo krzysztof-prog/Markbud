@@ -177,6 +177,7 @@ export class LogisticsRepository {
 
   /**
    * Pobiera wszystkie wersje dla danego kodu dostawy
+   * Include'uje dane zleceń dla każdej pozycji (potrzebne do diff)
    */
   async getAllVersionsByDeliveryCode(deliveryCode: string) {
     return prisma.logisticsMailList.findMany({
@@ -187,6 +188,15 @@ export class LogisticsRepository {
       orderBy: { version: 'desc' },
       include: {
         items: {
+          include: {
+            order: {
+              select: {
+                id: true,
+                orderNumber: true,
+                client: true,
+              },
+            },
+          },
           orderBy: { position: 'asc' },
         },
         _count: {
@@ -311,43 +321,59 @@ export class LogisticsRepository {
   }
 
   /**
-   * Szuka Order po numerze projektu (orderNumber)
+   * Szuka Order po numerze projektu (pole project) - case-insensitive
+   * SQLite: używamy UPPER() w raw query
+   * UWAGA: Szukamy po polu `project` (np. "D3995"), NIE po `order_number` (np. "53642")
    */
   async findOrderByProjectNumber(projectNumber: string) {
-    return prisma.order.findFirst({
-      where: {
-        orderNumber: projectNumber,
-        archivedAt: null,
-      },
-      select: {
-        id: true,
-        orderNumber: true,
-        client: true,
-        project: true,
-        status: true,
-      },
-    });
+    const upperProjectNumber = projectNumber.toUpperCase();
+
+    // SQLite raw query z UPPER() dla case-insensitive
+    // Szukamy po polu `project` które zawiera numer projektu typu D3995
+    const orders = await prisma.$queryRaw<
+      { id: number; orderNumber: string; client: string | null; project: string | null; status: string | null }[]
+    >`
+      SELECT id, order_number as orderNumber, client, project, status
+      FROM orders
+      WHERE UPPER(project) = ${upperProjectNumber}
+        AND archived_at IS NULL
+      LIMIT 1
+    `;
+
+    return orders[0] || null;
   }
 
   /**
-   * Szuka wielu Orders po numerach projektów
+   * Szuka wielu Orders po numerach projektów (pole project) - case-insensitive
+   * SQLite: używamy UPPER() w raw query
+   * UWAGA: Szukamy po polu `project` (np. "D3995"), NIE po `order_number` (np. "53642")
    */
   async findOrdersByProjectNumbers(projectNumbers: string[]) {
-    return prisma.order.findMany({
-      where: {
-        orderNumber: {
-          in: projectNumbers,
-        },
-        archivedAt: null,
-      },
-      select: {
-        id: true,
-        orderNumber: true,
-        client: true,
-        project: true,
-        status: true,
-      },
-    });
+    if (projectNumbers.length === 0) {
+      return [];
+    }
+
+    // Normalizuj do uppercase dla porównania
+    const upperProjectNumbers = projectNumbers.map((pn) => pn.toUpperCase());
+
+    // SQLite raw query z UPPER() dla case-insensitive
+    // Budujemy dynamiczne IN clause
+    // Szukamy po polu `project` które zawiera numer projektu typu D3995
+    const placeholders = upperProjectNumbers.map(() => '?').join(', ');
+
+    const orders = await prisma.$queryRawUnsafe<
+      { id: number; orderNumber: string; client: string | null; project: string | null; status: string | null }[]
+    >(
+      `
+      SELECT id, order_number as orderNumber, client, project, status
+      FROM orders
+      WHERE UPPER(project) IN (${placeholders})
+        AND archived_at IS NULL
+    `,
+      ...upperProjectNumbers
+    );
+
+    return orders;
   }
 
   /**
@@ -371,6 +397,37 @@ export class LogisticsRepository {
     return prisma.logisticsMailItem.update({
       where: { id },
       data,
+    });
+  }
+
+  /**
+   * Aktualizuje ilość pozycji mailowej
+   */
+  async updateMailItemQuantity(id: number, quantity: number) {
+    return prisma.logisticsMailItem.update({
+      where: { id },
+      data: { quantity },
+    });
+  }
+
+  /**
+   * Soft delete pozycji mailowej
+   */
+  async softDeleteMailItem(id: number) {
+    return prisma.logisticsMailItem.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  /**
+   * Oznacza pozycję jako potwierdzoną (decyzja użytkownika)
+   * Ustawia confirmedAt na aktualną datę
+   */
+  async markItemAsConfirmed(id: number) {
+    return prisma.logisticsMailItem.update({
+      where: { id },
+      data: { confirmedAt: new Date() },
     });
   }
 }

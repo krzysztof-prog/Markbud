@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
@@ -33,6 +34,7 @@ export default function DeliveryActions({
   const isDisabled = !hasOrders;
 
   return (
+    <TooltipProvider>
     <div className="flex gap-1">
       <Tooltip>
         <TooltipTrigger asChild>
@@ -98,5 +100,6 @@ export default function DeliveryActions({
         <TooltipContent>Pobierz protokół odbioru</TooltipContent>
       </Tooltip>
     </div>
+    </TooltipProvider>
   );
 }

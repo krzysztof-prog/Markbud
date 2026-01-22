@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useOkucStock, useUpdateOkucStock } from '@/features/okuc/hooks/useOkucStock';
-import type { OkucStock, WarehouseType, SubWarehouse } from '@/types/okuc';
+import type { WarehouseType, SubWarehouse } from '@/types/okuc';
 
 /** Wpis formularza remanentu */
 interface RemanentFormEntry {

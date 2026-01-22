@@ -68,6 +68,13 @@ model Profile {
   name              String
   description       String?
   sortOrder         Int                @default(0) @map("sort_order")
+  isAkrobud         Boolean            @default(false) @map("is_akrobud") // Czy pokazywać w magazynie Akrobud
+  // Systemy profilowe - do których systemów pasuje profil
+  isLiving          Boolean            @default(false) @map("is_living")
+  isBlok            Boolean            @default(false) @map("is_blok")
+  isVlak            Boolean            @default(false) @map("is_vlak")
+  isCt70            Boolean            @default(false) @map("is_ct70")
+  isFocusing        Boolean            @default(false) @map("is_focusing")
   // Planowanie produkcji - dodane 2026-01-15
   profileType       String             @default("typical") @map("profile_type") // 'typical' | 'atypical' - wpływa na lead time
   isPalletized      Boolean            @default(false) @map("is_palletized") // Czy profil jest w paletach (przygotowanie sobota)
@@ -193,10 +200,12 @@ model Order {
   materials             OrderMaterial[]
   schucoLinks           OrderSchucoLink[]
   okucDemands           OkucDemand[]
-  verificationItems     AkrobudVerificationItem[]
+  verificationItems           AkrobudVerificationItem[]
+  verificationItemOrders      VerificationItemOrder[]     // Zlecenia powiązane z projektami weryfikacji
   productionReportItems ProductionReportItem[]    @relation("ProductionReportItems")
   conflictsAsBase       PendingImportConflict[]   @relation("ConflictBaseOrder")
   steelRequirements     OrderSteelRequirement[]
+  logisticsMailItems    LogisticsMailItem[]
 
   @@index([status])
   @@index([archivedAt])
@@ -225,6 +234,7 @@ model OrderRequirement {
   beamsCount     Int      @map("beams_count")
   meters         Float
   restMm         Int      @map("rest_mm")
+  status         String   @default("pending") // pending | completed (dla RW)
   createdAt      DateTime @default(now()) @map("created_at")
   color          Color?   @relation(fields: [colorId], references: [id], onDelete: Restrict)
   privateColor   PrivateColor? @relation("PrivateColorRequirements", fields: [privateColorId], references: [id], onDelete: Restrict)
@@ -237,6 +247,7 @@ model OrderRequirement {
   @@index([privateColorId])
   @@index([profileId])
   @@index([createdAt])
+  @@index([status])
   @@map("order_requirements")
 }
 
@@ -584,9 +595,12 @@ model SchucoDelivery {
   isWarehouseItem    Boolean           @default(false) @map("is_warehouse_item")
   extractedOrderNums String?           @map("extracted_order_nums")
   archivedAt         DateTime?         @map("archived_at") // Data archiwizacji - zrealizowane zamówienia > 3 miesiące
+  itemsFetchedAt     DateTime?         @map("items_fetched_at") // Kiedy ostatnio pobrano pozycje zamówienia
   orderLinks         OrderSchucoLink[]
+  items              SchucoOrderItem[]
 
   @@index([fetchedAt])
+  @@index([itemsFetchedAt])
   @@index([archivedAt])
   @@index([orderNumber])
   @@index([orderDate])
@@ -617,6 +631,43 @@ model SchucoFetchLog {
   @@index([startedAt])
   @@index([triggerType])
   @@map("schuco_fetch_logs")
+}
+
+// Pozycje zamówienia Schüco - artykuły w zamówieniu
+model SchucoOrderItem {
+  id                 Int            @id @default(autoincrement())
+  schucoDeliveryId   Int            @map("schuco_delivery_id")
+  position           Int            // Pozycja w zamówieniu (1, 2, 3...)
+  articleNumber      String         @map("article_number") // Nr artykułu (np. 19411460)
+  articleDescription String         @map("article_description") // Opis artykułu
+  orderedQty         Int            @map("ordered_qty") // Zamówiona ilość
+  shippedQty         Int            @map("shipped_qty") // Wysłana ilość
+  unit               String         @default("szt.") // Jednostka
+  dimensions         String? // Wymiary (np. 6000 mm)
+  configuration      String? // Konfiguracja
+  deliveryWeek       String?        @map("delivery_week") // Tydzień dostawy (np. 2026/7)
+  tracking           String? // Śledzenie
+  comment            String? // Komentarz
+
+  // Change tracking
+  changeType         String?        @map("change_type") // "new" | "updated" | null
+  changedAt          DateTime?      @map("changed_at")
+  changedFields      String?        @map("changed_fields") // JSON array pól które się zmieniły
+  previousValues     String?        @map("previous_values") // JSON poprzednie wartości
+
+  // Timestamps
+  fetchedAt          DateTime       @default(now()) @map("fetched_at")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  schucoDelivery     SchucoDelivery @relation(fields: [schucoDeliveryId], references: [id], onDelete: Cascade)
+
+  @@unique([schucoDeliveryId, position])
+  @@index([schucoDeliveryId])
+  @@index([articleNumber])
+  @@index([changeType, changedAt])
+  @@map("schuco_order_items")
 }
 
 model MonthlyReport {
@@ -919,6 +970,11 @@ model OkucArticle {
   // Lokalizacja magazynowa
   locationId Int? @map("location_id")
 
+  // Zastępstwa artykułów (wygaszanie)
+  isPhaseOut          Boolean   @default(false) @map("is_phase_out") // Artykuł wygaszany - nie zamawiaj
+  replacedByArticleId Int?      @map("replaced_by_article_id")       // FK do artykułu zastępującego
+  demandTransferredAt DateTime? @map("demand_transferred_at")        // Data przeniesienia zapotrzebowania
+
   // Audit
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -934,12 +990,18 @@ model OkucArticle {
   orderItems        OkucOrderItem[]
   historyEntries    OkucHistory[]
 
+  // Self-relation dla zastępstw
+  replacedByArticle OkucArticle?  @relation("ArticleReplacement", fields: [replacedByArticleId], references: [id], onDelete: SetNull)
+  replacesArticles  OkucArticle[] @relation("ArticleReplacement")
+
   @@index([usedInPvc])
   @@index([usedInAlu])
   @@index([orderClass, sizeClass])
   @@index([articleId])
   @@index([deletedAt])
   @@index([locationId])
+  @@index([isPhaseOut])
+  @@index([replacedByArticleId])
   @@map("okuc_articles")
 }
 
@@ -1219,33 +1281,63 @@ model AkrobudVerificationList {
   updatedAt    DateTime  @updatedAt @map("updated_at")
   deletedAt    DateTime? @map("deleted_at")
 
+  // Wersjonowanie list
+  version       Int       @default(1)           // Numer wersji listy (v1, v2, v3...)
+  parentId      Int?      @map("parent_id")     // ID poprzedniej wersji
+  rawInput      String?   @map("raw_input")     // Oryginalny tekst maila
+  suggestedDate DateTime? @map("suggested_date") // Wykryta data z "na DD.MM"
+
   delivery Delivery?                 @relation(fields: [deliveryId], references: [id])
   items    AkrobudVerificationItem[]
+  parent   AkrobudVerificationList?  @relation("ListVersions", fields: [parentId], references: [id])
+  children AkrobudVerificationList[] @relation("ListVersions")
 
   @@index([deliveryDate])
   @@index([deletedAt])
   @@index([status])
+  @@index([parentId])
+  @@index([version])
   @@map("akrobud_verification_lists")
 }
 
 model AkrobudVerificationItem {
   id                Int      @id @default(autoincrement())
   listId            Int      @map("list_id")
-  orderNumberInput  String   @map("order_number_input")
-  orderNumberBase   String?  @map("order_number_base")
-  orderNumberSuffix String?  @map("order_number_suffix")
-  matchedOrderId    Int?     @map("matched_order_id")
+  orderNumberInput  String   @map("order_number_input")  // Legacy: numer zlecenia
+  orderNumberBase   String?  @map("order_number_base")   // Legacy
+  orderNumberSuffix String?  @map("order_number_suffix") // Legacy
+  matchedOrderId    Int?     @map("matched_order_id")    // Legacy: pojedyncze zlecenie
   matchStatus       String   @default("pending") @map("match_status") // pending | found | not_found | variant_match
   position          Int
   createdAt         DateTime @default(now()) @map("created_at")
 
-  list         AkrobudVerificationList @relation(fields: [listId], references: [id], onDelete: Cascade)
-  matchedOrder Order?                  @relation(fields: [matchedOrderId], references: [id])
+  // Nowe pola dla projektów
+  projectNumber String? @map("project_number") // Numer projektu (np. "D3455")
+
+  list          AkrobudVerificationList    @relation(fields: [listId], references: [id], onDelete: Cascade)
+  matchedOrder  Order?                     @relation(fields: [matchedOrderId], references: [id])
+  matchedOrders VerificationItemOrder[]    // Relacja 1:N - projekt może mieć wiele zleceń
 
   @@unique([listId, orderNumberInput])
   @@index([listId])
   @@index([matchStatus])
+  @@index([projectNumber])
   @@map("akrobud_verification_items")
+}
+
+// Tabela łącząca projekty z zleceniami (relacja N:M)
+model VerificationItemOrder {
+  id      Int @id @default(autoincrement())
+  itemId  Int @map("item_id")
+  orderId Int @map("order_id")
+
+  item  AkrobudVerificationItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  order Order                   @relation(fields: [orderId], references: [id])
+
+  @@unique([itemId, orderId])
+  @@index([itemId])
+  @@index([orderId])
+  @@map("verification_item_orders")
 }
 
 // =============================================================================
@@ -1729,6 +1821,7 @@ model OrderSteelRequirement {
   beamsCount Int      @map("beams_count")
   meters     Float
   restMm     Int      @map("rest_mm")
+  status     String   @default("pending") // pending | completed (dla RW)
   createdAt  DateTime @default(now()) @map("created_at")
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -1736,6 +1829,7 @@ model OrderSteelRequirement {
 
   @@unique([orderId, steelId])
   @@index([steelId])
+  @@index([status])
   @@map("order_steel_requirements")
 }
 
@@ -1788,4 +1882,76 @@ model LabelCheckResult {
   @@index([orderId])
   @@index([status])
   @@map("label_check_results")
+}
+
+// ============================================================================
+// MODUŁ LOGISTYKI - Parsowanie maili z listami dostaw od Akrobud
+// ============================================================================
+
+// Lista mailowa - reprezentuje jeden mail z listą projektów na dostawę
+// Każda aktualizacja listy tworzy nową wersję (v1, v2, v3...)
+model LogisticsMailList {
+  id            Int       @id @default(autoincrement())
+  deliveryDate  DateTime  @map("delivery_date") // Data dostawy (np. 2026-02-16)
+  deliveryIndex Int       @map("delivery_index") // Index dostawy (_I = 1, _II = 2, _III = 3)
+  deliveryCode  String    @map("delivery_code") // Kod dostawy np. "16.02.2026_I"
+  version       Int       @default(1) // Wersja listy (v1, v2, v3...)
+  isUpdate      Boolean   @default(false) @map("is_update") // Czy to aktualizacja (vs nowa lista)
+  rawMailText   String    @map("raw_mail_text") // Oryginalny tekst maila
+  parsedAt      DateTime  @default(now()) @map("parsed_at") // Kiedy sparsowano
+  createdAt     DateTime  @default(now()) @map("created_at")
+  deletedAt     DateTime? @map("deleted_at") // Soft delete
+
+  items LogisticsMailItem[]
+
+  @@unique([deliveryCode, version]) // Unikalność: kod dostawy + wersja
+  @@index([deliveryDate])
+  @@index([deliveryCode])
+  @@index([deletedAt])
+  @@map("logistics_mail_lists")
+}
+
+// Pozycja z maila - jeden projekt na liście
+model LogisticsMailItem {
+  id              Int     @id @default(autoincrement())
+  mailListId      Int     @map("mail_list_id")
+  position        Int // Kolejność na liście (Lp.)
+  projectNumber   String  @map("project_number") // Numer projektu (D6086, C8748)
+  quantity        Int     @default(1) // Ilość (x2 = 2)
+  rawNotes        String? @map("raw_notes") // Oryginalne adnotacje z maila
+  requiresMesh    Boolean @default(false) @map("requires_mesh") // Flaga: poproszę o siatkę
+
+  // Flagi blokujące - powodują status 'blocked'
+  missingFile           Boolean @default(false) @map("missing_file") // brak pliku
+  unconfirmed           Boolean @default(false) // niepotwierdzone
+  dimensionsUnconfirmed Boolean @default(false) @map("dimensions_unconfirmed") // wymiary niepotwierdzone
+  drawingUnconfirmed    Boolean @default(false) @map("drawing_unconfirmed") // rysunek niepotwierdzony
+
+  // Flagi specjalne
+  excludeFromProduction Boolean @default(false) @map("exclude_from_production") // bez okna
+  specialHandle         Boolean @default(false) @map("special_handle") // klamka alu z kluczem
+  customColor           String? @map("custom_color") // RAL XXXX (jeśli wykryto)
+
+  // Powiązanie z Order (nullable - może nie istnieć w bazie)
+  orderId Int?   @map("order_id")
+  order   Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  // Status wyliczany: ok | blocked | waiting | excluded
+  // blocked = missingFile OR unconfirmed OR dimensionsUnconfirmed OR drawingUnconfirmed
+  // waiting = requiresMesh AND NOT blocked
+  // excluded = excludeFromProduction
+  // ok = brak flag
+  itemStatus String @default("ok") @map("item_status")
+
+  // Metadata dla systemu decyzji diff
+  confirmedAt DateTime? @map("confirmed_at") // Kiedy użytkownik potwierdził pozycję
+  deletedAt   DateTime? @map("deleted_at")   // Soft delete - pozycja usunięta przez użytkownika
+
+  mailList LogisticsMailList @relation(fields: [mailListId], references: [id], onDelete: Cascade)
+
+  @@index([mailListId])
+  @@index([projectNumber])
+  @@index([orderId])
+  @@index([itemStatus])
+  @@map("logistics_mail_items")
 }

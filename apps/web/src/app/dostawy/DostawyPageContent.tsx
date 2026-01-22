@@ -343,8 +343,8 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
           open={variantCheckWrapper.variantDialog.state?.open ?? false}
           onOpenChange={variantCheckWrapper.variantDialog.onClose}
           orderNumber={variantCheckWrapper.variantDialog.state?.orderNumber ?? ''}
-          conflictingOrderNumber={variantCheckWrapper.variantDialog.state?.conflictingOrderNumber ?? ''}
-          originalDelivery={variantCheckWrapper.variantDialog.state?.originalDelivery ?? { deliveryId: 0, deliveryNumber: '' }}
+          conflictingOrderNumber={variantCheckWrapper.variantDialog.state?.conflictingOrderNumber ?? null}
+          originalDelivery={variantCheckWrapper.variantDialog.state?.originalDelivery ?? null}
           targetDeliveryId={variantCheckWrapper.variantDialog.state?.targetDeliveryId ?? 0}
           onConfirm={variantCheckWrapper.variantDialog.onConfirm}
           isLoading={variantCheckWrapper.variantDialog.isLoading}

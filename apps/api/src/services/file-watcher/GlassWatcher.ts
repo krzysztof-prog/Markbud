@@ -7,28 +7,20 @@ import { logger } from '../../utils/logger.js';
 import { archiveFile, moveToSkipped, shouldSkipImport } from './utils.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
 import { DEFAULT_WATCHER_CONFIG } from './types.js';
-
-// Typ dla zadań w kolejce
-type QueueTask = {
-  type: 'glass_order' | 'glass_order_correction' | 'glass_delivery';
-  filePath: string;
-};
+import { importQueue } from '../import/ImportQueueService.js';
 
 /**
  * Watcher odpowiedzialny za monitorowanie folderów szyb:
  * - Zamówienia szyb (.txt) - nowe i korekty
  * - Dostawy szyb (.csv)
  *
- * Używa kolejki do sekwencyjnego przetwarzania - SQLite nie radzi sobie z równoległymi transakcjami
+ * Używa GLOBALNEJ kolejki importQueue do sekwencyjnego przetwarzania
+ * wszystkich importów w systemie - zapobiega timeoutom SQLite
  */
 export class GlassWatcher implements IFileWatcher {
   private prisma: PrismaClient;
   private watchers: FSWatcher[] = [];
   private config: WatcherConfig;
-
-  // Kolejka do sekwencyjnego przetwarzania (SQLite limitation)
-  private queue: QueueTask[] = [];
-  private isProcessing = false;
 
   constructor(prisma: PrismaClient, config: WatcherConfig = DEFAULT_WATCHER_CONFIG) {
     this.prisma = prisma;
@@ -61,58 +53,52 @@ export class GlassWatcher implements IFileWatcher {
   }
 
   /**
-   * Dodaje zadanie do kolejki i uruchamia przetwarzanie
-   * Zapewnia sekwencyjne przetwarzanie - SQLite nie radzi sobie z równoległymi transakcjami
+   * Dodaje zadanie do GLOBALNEJ kolejki importów
+   * Używa importQueue singleton dla sekwencyjnego przetwarzania wszystkich importów w systemie
    */
-  private enqueue(task: QueueTask): void {
-    this.queue.push(task);
-    // Rozpocznij przetwarzanie jeśli nie jest w toku
-    if (!this.isProcessing) {
-      this.processQueue();
-    }
-  }
-
-  /**
-   * Przetwarza kolejkę sekwencyjnie - jeden plik na raz
-   */
-  private async processQueue(): Promise<void> {
-    if (this.isProcessing || this.queue.length === 0) {
+  private enqueueToGlobalQueue(
+    type: 'glass_order' | 'glass_order_correction' | 'glass_delivery',
+    filePath: string
+  ): void {
+    // Sprawdź czy plik nie jest już w kolejce
+    if (importQueue.isFileInQueue(filePath)) {
+      logger.debug(`Plik juz w kolejce, pomijam: ${path.basename(filePath)}`);
       return;
     }
 
-    this.isProcessing = true;
-
-    while (this.queue.length > 0) {
-      const task = this.queue.shift();
-      if (!task) break;
-
-      try {
-        switch (task.type) {
-          case 'glass_order':
-            await this.processGlassOrder(task.filePath);
-            break;
-          case 'glass_order_correction':
-            await this.processCorrectionGlassOrder(task.filePath);
-            break;
-          case 'glass_delivery':
-            await this.processGlassDelivery(task.filePath);
-            break;
+    importQueue.enqueue({
+      type,
+      filePath,
+      priority: type === 'glass_order_correction' ? 5 : 10, // Korekty mają wyższy priorytet
+      execute: async () => {
+        try {
+          switch (type) {
+            case 'glass_order':
+              await this.processGlassOrder(filePath);
+              break;
+            case 'glass_order_correction':
+              await this.processCorrectionGlassOrder(filePath);
+              break;
+            case 'glass_delivery':
+              await this.processGlassDelivery(filePath);
+              break;
+          }
+          return { success: true };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          // Sprawdź czy to błąd timeout - wtedy retry ma sens
+          const isTimeoutError =
+            errorMessage.includes('Transaction') ||
+            errorMessage.includes('timeout') ||
+            errorMessage.includes('SQLITE_BUSY');
+          return {
+            success: false,
+            error: errorMessage,
+            shouldRetry: isTimeoutError,
+          };
         }
-      } catch (error) {
-        // Błąd już zalogowany w metodach process*
-        logger.error(`Blad przetwarzania kolejki: ${error instanceof Error ? error.message : 'Unknown'}`);
-      }
-
-      // Mały delay między plikami żeby SQLite miał czas na commit
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    this.isProcessing = false;
-
-    // Sprawdź czy w międzyczasie nie pojawiły się nowe zadania
-    if (this.queue.length > 0) {
-      this.processQueue();
-    }
+      },
+    });
   }
 
   /**
@@ -147,11 +133,11 @@ export class GlassWatcher implements IFileWatcher {
 
         const isCorrection = /korekta|correction/i.test(filename);
 
-        // Dodaj do kolejki zamiast przetwarzać bezpośrednio (SQLite limitation)
+        // Dodaj do GLOBALNEJ kolejki importów
         if (isCorrection) {
-          this.enqueue({ type: 'glass_order_correction', filePath });
+          this.enqueueToGlobalQueue('glass_order_correction', filePath);
         } else {
-          this.enqueue({ type: 'glass_order', filePath });
+          this.enqueueToGlobalQueue('glass_order', filePath);
         }
       })
       .on('error', (error) => {
@@ -190,8 +176,8 @@ export class GlassWatcher implements IFileWatcher {
         if (!filename.endsWith('.csv')) {
           return;
         }
-        // Dodaj do kolejki zamiast przetwarzać bezpośrednio (SQLite limitation)
-        this.enqueue({ type: 'glass_delivery', filePath });
+        // Dodaj do GLOBALNEJ kolejki importów
+        this.enqueueToGlobalQueue('glass_delivery', filePath);
       })
       .on('error', (error) => {
         logger.error(`Blad File Watcher dla dostaw szyb ${basePath}: ${error}`);

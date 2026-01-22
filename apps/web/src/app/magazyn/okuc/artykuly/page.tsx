@@ -40,7 +40,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Plus, Search, Package, Upload, ChevronDown } from 'lucide-react';
+import { Plus, Search, Package, Upload, ChevronDown, AlertCircle } from 'lucide-react';
+import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 import { ArticlesTable } from '@/features/okuc/components/ArticlesTable';
 import { ArticleForm } from '@/features/okuc/components/ArticleForm';
 import { DeleteArticleDialog } from '@/features/okuc/components/DeleteArticleDialog';
@@ -395,19 +396,16 @@ export default function OkucArticlesPage() {
 
         {/* Loading state */}
         {isLoading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center space-y-2">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
-              <p className="text-sm text-muted-foreground">Ładowanie artykułów...</p>
-            </div>
-          </div>
+          <TableSkeleton rows={10} columns={8} label="Ładowanie artykułów..." />
         )}
 
         {/* Error state */}
         {error && (
-          <div className="bg-destructive/10 border border-destructive rounded-lg p-4 mb-4">
-            <p className="text-sm text-destructive">
-              <strong>Błąd:</strong> {(error as Error).message}
+          <div className="rounded-lg border p-8 text-center">
+            <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" aria-hidden="true" />
+            <h3 className="text-lg font-semibold text-destructive mb-2">Błąd ładowania artykułów</h3>
+            <p className="text-sm text-muted-foreground">
+              {(error as Error).message || 'Nie udało się pobrać listy artykułów. Spróbuj odświeżyć stronę.'}
             </p>
           </div>
         )}

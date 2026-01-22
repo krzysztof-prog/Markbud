@@ -357,7 +357,7 @@ function RequirementsTable({ items }: { items: ImportDataItem[] }) {
           </thead>
           <tbody>
             {items.map((req, i) => (
-              <tr key={i} className={`border-t hover:bg-slate-200 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
+              <tr key={i} className={`border-t hover:bg-slate-50 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                 <td className="px-3 py-2 font-mono">{req.articleNumber}</td>
                 <td className="px-3 py-2">{req.profileNumber}</td>
                 <td className="px-3 py-2">{req.colorCode}</td>
@@ -390,7 +390,7 @@ function WindowsTable({ items }: { items: ImportDataItem[] }) {
           </thead>
           <tbody>
             {items.map((win, i) => (
-              <tr key={i} className={`border-t hover:bg-slate-200 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
+              <tr key={i} className={`border-t hover:bg-slate-50 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                 <td className="px-3 py-2 text-center">{win.lp}</td>
                 <td className="px-3 py-2 text-center">{win.szer} mm</td>
                 <td className="px-3 py-2 text-center">{win.wys} mm</td>

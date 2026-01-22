@@ -15,7 +15,14 @@ import { logger } from '../../utils/logger.js';
 import { EventEmitter } from 'events';
 
 // Typy zadań w kolejce
-export type ImportJobType = 'uzyte_bele' | 'uzyte_bele_prywatne' | 'ceny_pdf' | 'okucia';
+export type ImportJobType =
+  | 'uzyte_bele'
+  | 'uzyte_bele_prywatne'
+  | 'ceny_pdf'
+  | 'okucia'
+  | 'glass_order'
+  | 'glass_order_correction'
+  | 'glass_delivery';
 
 export interface ImportJob {
   id: string;

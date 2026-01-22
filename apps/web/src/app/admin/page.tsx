@@ -9,7 +9,7 @@
 import Link from 'next/link';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, Settings, FileText, Clock } from 'lucide-react';
+import { Users, Settings, FileText, Clock, Palette } from 'lucide-react';
 
 export default function AdminDashboardPage() {
   return (
@@ -95,6 +95,24 @@ export default function AdminDashboardPage() {
                       <p className="font-semibold">Oczekujące ceny</p>
                       <p className="text-sm text-muted-foreground">
                         Ceny czekające na zlecenia
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+
+            <Link href="/admin/private-colors">
+              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-pink-100">
+                      <Palette className="h-6 w-6 text-pink-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold">Kolory prywatne</p>
+                      <p className="text-sm text-muted-foreground">
+                        Kolory spoza palety Akrobud
                       </p>
                     </div>
                   </div>

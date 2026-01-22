@@ -5,3 +5,4 @@ export { useProfileMutations } from './useSettingsMutations';
 export { useFileWatcher } from './useSettingsMutations';
 export { useUserFolderPath } from './useSettingsMutations';
 export { useDocumentAuthorMappingMutations } from './useSettingsMutations';
+export { useSteelMutations } from './useSettingsMutations';

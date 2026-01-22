@@ -44,6 +44,7 @@ export class GlassOrderService {
     }
 
     // Use transaction for atomicity (delete + create in same transaction)
+    // Zwiększony timeout (60s) - przy wielu pozycjach transakcja może trwać dłużej
     return this.prisma.$transaction(async (tx) => {
       // If replacing, delete the old one first (WITHIN transaction for atomicity)
       if (existing && replaceExisting) {
@@ -80,6 +81,9 @@ export class GlassOrderService {
       await this.matchWithProductionOrdersTx(tx, glassOrder.id, glassOrder.expectedDeliveryDate);
 
       return glassOrder;
+    }, {
+      timeout: 60000, // 60 sekund - przy wielu pozycjach transakcja może trwać dłużej
+      maxWait: 10000, // max 10 sekund czekania na dostępność połączenia
     });
   }
 
@@ -248,6 +252,9 @@ export class GlassOrderService {
     // Use transaction for atomicity
     await this.prisma.$transaction(async (tx) => {
       await this.deleteTx(tx, id, glassOrder.items);
+    }, {
+      timeout: 60000, // 60 sekund timeout
+      maxWait: 10000,
     });
   }
 

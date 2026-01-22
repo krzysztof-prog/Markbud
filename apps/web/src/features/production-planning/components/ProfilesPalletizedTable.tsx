@@ -69,7 +69,7 @@ export function ProfilesPalletizedTable() {
               {filteredProfiles.map((profile, index) => (
                 <tr
                   key={profile.id}
-                  className={`border-t hover:bg-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
+                  className={`border-t hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
                 >
                   <td className="px-4 py-2 text-center">
                     {updateMutation.isPending && updateMutation.variables?.id === profile.id ? (

@@ -22,7 +22,7 @@ export interface ParseResultItem extends ParsedItem {
     orderNumber: string;
     client: string | null;
     project: string | null;
-    status: string;
+    status: string | null;
   };
   orderNotFound?: boolean;
 }
@@ -61,16 +61,40 @@ export interface SaveMailListInput {
   }[];
 }
 
-// Typy dla diff między wersjami
+// Typy dla diff między wersjami (rozszerzone o dane zleceń)
+export interface DiffOrderInfo {
+  id: number;
+  orderNumber: string;
+  client: string | null;
+}
+
+export interface DiffAddedItem {
+  projectNumber: string;
+  notes?: string;
+  itemId: number;
+  order?: DiffOrderInfo;
+}
+
+export interface DiffRemovedItem {
+  projectNumber: string;
+  notes?: string;
+  itemId: number;
+  order?: DiffOrderInfo;
+}
+
+export interface DiffChangedItem {
+  projectNumber: string;
+  field: string;
+  oldValue: string;
+  newValue: string;
+  itemId: number;
+  order?: DiffOrderInfo;
+}
+
 export interface VersionDiff {
-  added: { projectNumber: string; notes?: string }[];
-  removed: { projectNumber: string; notes?: string }[];
-  changed: {
-    projectNumber: string;
-    field: string;
-    oldValue: string;
-    newValue: string;
-  }[];
+  added: DiffAddedItem[];
+  removed: DiffRemovedItem[];
+  changed: DiffChangedItem[];
 }
 
 class LogisticsMailService {
@@ -86,9 +110,10 @@ class LogisticsMailService {
       d.items.map((i) => i.projectNumber)
     );
 
-    // 3. Znajdź odpowiadające Orders w bazie
+    // 3. Znajdź odpowiadające Orders w bazie (szukamy po polu `project`)
     const orders = await logisticsRepository.findOrdersByProjectNumbers(allProjectNumbers);
-    const orderMap = new Map(orders.map((o) => [o.orderNumber.toUpperCase(), o]));
+    // Mapujemy po polu project (np. "D3995"), nie orderNumber (np. "53642")
+    const orderMap = new Map(orders.map((o) => [o.project?.toUpperCase() ?? '', o]));
 
     // 4. Wzbogać wynik o matchowane Orders i statusy
     const enrichedDeliveries: ParseResultDelivery[] = parsed.deliveries.map((delivery) => {
@@ -205,16 +230,62 @@ class LogisticsMailService {
 
   /**
    * Pobiera najnowszą wersję listy dla kodu dostawy
+   * Zwraca MailListWithStatus (z deliveryStatus i blockedItems)
    */
   async getLatestVersion(deliveryCode: string) {
-    return logisticsRepository.getLatestVersionByDeliveryCode(deliveryCode);
+    const list = await logisticsRepository.getLatestVersionByDeliveryCode(deliveryCode);
+
+    if (!list) {
+      return null;
+    }
+
+    // Wylicz status dostawy i zblokowane pozycje
+    const itemStatuses = list.items.map(
+      (i) => i.itemStatus as 'ok' | 'blocked' | 'waiting' | 'excluded'
+    );
+    const deliveryStatus = calculateDeliveryStatus(itemStatuses);
+
+    const blockedItems = list.items
+      .filter((i) => i.itemStatus === 'blocked')
+      .map((i) => ({
+        projectNumber: i.projectNumber,
+        reason: i.rawNotes || 'brak szczegółów',
+      }));
+
+    return {
+      ...list,
+      deliveryStatus,
+      blockedItems,
+    };
   }
 
   /**
    * Pobiera wszystkie wersje dla kodu dostawy
+   * Zwraca MailListWithStatus[] (z deliveryStatus i blockedItems)
    */
   async getAllVersions(deliveryCode: string) {
-    return logisticsRepository.getAllVersionsByDeliveryCode(deliveryCode);
+    const lists = await logisticsRepository.getAllVersionsByDeliveryCode(deliveryCode);
+
+    // Wzbogać każdą wersję o status dostawy
+    return lists.map((list) => {
+      const itemStatuses = list.items.map(
+        (i) => i.itemStatus as 'ok' | 'blocked' | 'waiting' | 'excluded'
+      );
+      const deliveryStatus = calculateDeliveryStatus(itemStatuses);
+
+      const blockedItems = list.items
+        .filter((i) => i.itemStatus === 'blocked')
+        .map((i) => ({
+          projectNumber: i.projectNumber,
+          reason: i.rawNotes || 'brak szczegółów',
+        }));
+
+      return {
+        ...list,
+        deliveryStatus,
+        blockedItems,
+      };
+    });
   }
 
   /**
@@ -247,6 +318,7 @@ class LogisticsMailService {
 
   /**
    * Oblicza diff między dwiema wersjami listy
+   * Zwraca rozszerzone dane z informacjami o zleceniach (orderId, orderNumber, client)
    */
   async getVersionDiff(deliveryCode: string, versionFrom: number, versionTo: number): Promise<VersionDiff> {
     const versions = await logisticsRepository.getAllVersionsByDeliveryCode(deliveryCode);
@@ -258,22 +330,37 @@ class LogisticsMailService {
       throw new Error(`Nie znaleziono wersji ${versionFrom} lub ${versionTo} dla ${deliveryCode}`);
     }
 
-    const itemsFrom = new Map(listFrom.items.map((i) => [i.projectNumber, i]));
-    const itemsTo = new Map(listTo.items.map((i) => [i.projectNumber, i]));
+    // Typ dla pozycji z załadowanym zleceniem
+    type ItemWithOrder = (typeof listFrom.items)[0];
 
-    const added: VersionDiff['added'] = [];
-    const removed: VersionDiff['removed'] = [];
-    const changed: VersionDiff['changed'] = [];
+    const itemsFrom = new Map<string, ItemWithOrder>(listFrom.items.map((i) => [i.projectNumber, i]));
+    const itemsTo = new Map<string, ItemWithOrder>(listTo.items.map((i) => [i.projectNumber, i]));
+
+    const added: DiffAddedItem[] = [];
+    const removed: DiffRemovedItem[] = [];
+    const changed: DiffChangedItem[] = [];
+
+    // Helper: wyciąga dane zlecenia z pozycji
+    const getOrderInfo = (item: ItemWithOrder): DiffOrderInfo | undefined => {
+      if (!item.order) return undefined;
+      return {
+        id: item.order.id,
+        orderNumber: item.order.orderNumber,
+        client: item.order.client,
+      };
+    };
 
     // Sprawdź dodane i zmienione
     for (const [projectNumber, itemTo] of itemsTo) {
       const itemFrom = itemsFrom.get(projectNumber);
 
       if (!itemFrom) {
-        // Dodane
+        // Dodane - pozycja jest w nowej wersji, ale nie w starej
         added.push({
           projectNumber,
           notes: itemTo.rawNotes || undefined,
+          itemId: itemTo.id,
+          order: getOrderInfo(itemTo),
         });
       } else {
         // Sprawdź zmiany
@@ -283,6 +370,8 @@ class LogisticsMailService {
             field: 'status',
             oldValue: this.statusToPolish(itemFrom.itemStatus),
             newValue: this.statusToPolish(itemTo.itemStatus),
+            itemId: itemTo.id,
+            order: getOrderInfo(itemTo),
           });
         }
 
@@ -292,17 +381,21 @@ class LogisticsMailService {
             field: 'quantity',
             oldValue: itemFrom.quantity.toString(),
             newValue: itemTo.quantity.toString(),
+            itemId: itemTo.id,
+            order: getOrderInfo(itemTo),
           });
         }
       }
     }
 
-    // Sprawdź usunięte
+    // Sprawdź usunięte - pozycje są w starej wersji, ale nie w nowej
     for (const [projectNumber, itemFrom] of itemsFrom) {
       if (!itemsTo.has(projectNumber)) {
         removed.push({
           projectNumber,
           notes: itemFrom.rawNotes || undefined,
+          itemId: itemFrom.id,
+          order: getOrderInfo(itemFrom),
         });
       }
     }
@@ -345,6 +438,73 @@ class LogisticsMailService {
     }
 
     return logisticsRepository.updateMailItem(id, updateData);
+  }
+
+  // ========== AKCJE NA POZYCJACH (dla systemu decyzji diff) ==========
+
+  /**
+   * Usuwa pozycję z dostawy (soft delete)
+   * Używane gdy pozycja została usunięta z maila i użytkownik potwierdza usunięcie
+   */
+  async removeItemFromDelivery(itemId: number) {
+    return logisticsRepository.softDeleteMailItem(itemId);
+  }
+
+  /**
+   * Odrzuca dodaną pozycję (soft delete)
+   * Używane gdy nowa pozycja została dodana w mailu, ale użytkownik ją odrzuca
+   */
+  async rejectAddedItem(itemId: number) {
+    return logisticsRepository.softDeleteMailItem(itemId);
+  }
+
+  /**
+   * Potwierdza dodaną pozycję (oznacza jako zatwierdzoną)
+   * Używane gdy nowa pozycja została dodana w mailu i użytkownik ją akceptuje
+   */
+  async confirmAddedItem(itemId: number) {
+    return logisticsRepository.markItemAsConfirmed(itemId);
+  }
+
+  /**
+   * Przywraca poprzednią wartość pozycji
+   * Używane gdy pozycja została zmieniona, ale użytkownik chce przywrócić starą wartość
+   */
+  async restoreItemValue(
+    itemId: number,
+    field: string,
+    previousValue: string
+  ) {
+    const updateData: Parameters<typeof logisticsRepository.updateMailItem>[1] = {};
+
+    switch (field) {
+      case 'quantity':
+        updateData.itemStatus = undefined; // Nie zmieniamy statusu przy zmianie ilości
+        // Musimy zaktualizować quantity - ale to wymaga dodatkowej metody w repo
+        return logisticsRepository.updateMailItemQuantity(itemId, parseInt(previousValue, 10));
+
+      case 'status':
+        // Przywracamy poprzedni status
+        const statusMap: Record<string, string> = {
+          'OK': 'ok',
+          'BLOKUJE': 'blocked',
+          'OCZEKUJE': 'waiting',
+          'WYŁĄCZONE': 'excluded',
+        };
+        updateData.itemStatus = statusMap[previousValue] || previousValue;
+        return logisticsRepository.updateMailItem(itemId, updateData);
+
+      default:
+        throw new Error(`Nieznane pole do przywrócenia: ${field}`);
+    }
+  }
+
+  /**
+   * Akceptuje zmianę pozycji (oznacza jako zatwierdzoną)
+   * Używane gdy pozycja została zmieniona i użytkownik akceptuje nową wartość
+   */
+  async acceptItemChange(itemId: number) {
+    return logisticsRepository.markItemAsConfirmed(itemId);
   }
 
   // Helper: tłumaczenie powodu blokady

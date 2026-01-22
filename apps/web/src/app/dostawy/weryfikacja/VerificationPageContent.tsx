@@ -4,7 +4,7 @@
  * VerificationPageContent - Główny komponent strony weryfikacji
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
@@ -44,6 +44,8 @@ import {
   VerificationItemsInput,
   VerificationItemsList,
   VerificationResults,
+  VersionHistory,
+  VersionDiff,
   useVerificationLists,
   useVerificationList,
   useCreateVerificationList,
@@ -54,9 +56,19 @@ import {
   useClearListItems,
   useVerifyList,
   useApplyChanges,
+  useCreateListVersion,
+  useCompareVersions,
+  useVerifyProjectList,
 } from '@/features/akrobud-verification';
 
-import type { VerificationResult, CreateVerificationListData, UpdateVerificationListData, AkrobudVerificationList } from '@/types';
+import type {
+  VerificationResult,
+  CreateVerificationListData,
+  UpdateVerificationListData,
+  AkrobudVerificationList,
+  VersionDiff as VersionDiffType,
+  ProjectVerificationResult,
+} from '@/types';
 
 export const VerificationPageContent: React.FC = () => {
   const searchParams = useSearchParams();
@@ -68,7 +80,10 @@ export const VerificationPageContent: React.FC = () => {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
+  const [projectVerificationResult, setProjectVerificationResult] = useState<ProjectVerificationResult | null>(null);
   const [pendingDateForCreate, setPendingDateForCreate] = useState<string | null>(null);
+  const [versionDiff, setVersionDiff] = useState<VersionDiffType | null>(null);
+  const [showVersionDiff, setShowVersionDiff] = useState(false);
 
   // Pobierz listy
   const { data: lists = [], isLoading: isLoadingLists } = useVerificationLists();
@@ -126,7 +141,7 @@ export const VerificationPageContent: React.FC = () => {
     },
   });
 
-  const addItems = useAddItemsToList();
+  const _addItems = useAddItemsToList();
   const deleteItem = useDeleteItemFromList();
   const clearItems = useClearListItems();
 
@@ -142,6 +157,21 @@ export const VerificationPageContent: React.FC = () => {
       if (selectedListId) {
         verifyList.mutate({ listId: selectedListId });
       }
+    },
+  });
+
+  // Nowe hooki dla projektów
+  const createListVersion = useCreateListVersion({
+    onSuccess: (id) => {
+      setSelectedListId(id);
+    },
+  });
+
+  const compareVersions = useCompareVersions();
+
+  const verifyProjectList = useVerifyProjectList({
+    onSuccess: (result) => {
+      setProjectVerificationResult(result);
     },
   });
 
@@ -163,6 +193,81 @@ export const VerificationPageContent: React.FC = () => {
       }
     );
   };
+
+  // Handler weryfikacji projektów (nowy)
+  const handleVerifyProjects = () => {
+    if (!selectedListId) return;
+
+    verifyProjectList.mutate({
+      listId: selectedListId,
+      params: { createDeliveryIfMissing: true },
+    });
+  };
+
+  // Handler tworzenia nowej wersji (z projektami)
+  const handleCreateNewVersion = (data: {
+    rawInput: string;
+    projects: string[];
+    suggestedDate: Date | null;
+  }) => {
+    if (!selectedList) return;
+
+    const deliveryDate = data.suggestedDate
+      ? data.suggestedDate.toISOString().split('T')[0]
+      : selectedList.deliveryDate.split('T')[0];
+
+    createListVersion.mutate({
+      deliveryDate,
+      rawInput: data.rawInput,
+      projects: data.projects,
+      parentId: selectedList.id,
+    });
+  };
+
+  // Handler porównywania wersji
+  const handleCompareVersions = async (oldVersionId: number, newVersionId: number) => {
+    compareVersions.mutate(
+      { listId1: oldVersionId, listId2: newVersionId },
+      {
+        onSuccess: (diff) => {
+          setVersionDiff(diff);
+          setShowVersionDiff(true);
+        },
+      }
+    );
+  };
+
+  // Handler wyboru wersji z historii
+  const handleSelectVersion = (versionId: number) => {
+    setSelectedListId(versionId);
+    setVerificationResult(null);
+    setProjectVerificationResult(null);
+    setShowVersionDiff(false);
+  };
+
+  // Przygotuj dane wersji dla VersionHistory
+  const versionHistoryData = useMemo(() => {
+    if (!selectedList) return [];
+
+    // Znajdź wszystkie wersje dla tej daty dostawy
+    const deliveryDate = new Date(selectedList.deliveryDate);
+    const versionsForDate = lists.filter((list: AkrobudVerificationList) => {
+      const listDate = new Date(list.deliveryDate);
+      return (
+        listDate.getFullYear() === deliveryDate.getFullYear() &&
+        listDate.getMonth() === deliveryDate.getMonth() &&
+        listDate.getDate() === deliveryDate.getDate()
+      );
+    });
+
+    return versionsForDate.map((list: AkrobudVerificationList) => ({
+      id: list.id,
+      version: list.version,
+      createdAt: list.createdAt,
+      itemsCount: list._count?.items ?? list.items?.length ?? 0,
+      status: list.status,
+    }));
+  }, [selectedList, lists]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -229,6 +334,8 @@ export const VerificationPageContent: React.FC = () => {
                     onClick={() => {
                       setSelectedListId(list.id);
                       setVerificationResult(null);
+                      setProjectVerificationResult(null);
+                      setShowVersionDiff(false);
                     }}
                   >
                     <div className="flex items-center justify-between mb-1">
@@ -240,8 +347,10 @@ export const VerificationPageContent: React.FC = () => {
                     {list.title && (
                       <p className="text-sm text-muted-foreground">{list.title}</p>
                     )}
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {list._count?.items ?? list.items?.length ?? 0} elementów
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                      <span>v{list.version}</span>
+                      <span>•</span>
+                      <span>{list._count?.items ?? list.items?.length ?? 0} elementów</span>
                     </div>
                   </div>
                 ))}
@@ -273,6 +382,9 @@ export const VerificationPageContent: React.FC = () => {
                     <div>
                       <CardTitle className="flex items-center gap-2">
                         {format(new Date(selectedList.deliveryDate), 'PPP', { locale: pl })}
+                        <Badge variant="outline" className="font-normal">
+                          v{selectedList.version}
+                        </Badge>
                         {getStatusBadge(selectedList.status)}
                       </CardTitle>
                       {selectedList.title && (
@@ -316,17 +428,37 @@ export const VerificationPageContent: React.FC = () => {
                 </CardHeader>
               </Card>
 
-              {/* Dodawanie elementów - wklejanie treści maila */}
+              {/* Historia wersji */}
+              {versionHistoryData.length > 0 && (
+                <VersionHistory
+                  listId={selectedListId}
+                  currentVersion={selectedList.version}
+                  versions={versionHistoryData}
+                  onCreateNewVersion={() => {
+                    // Otwórz dialog lub wklej mail
+                    // Na razie pomiń - użytkownik wkleja mail poniżej
+                  }}
+                  onSelectVersion={handleSelectVersion}
+                  onCompareVersions={handleCompareVersions}
+                  isLoading={compareVersions.isPending}
+                />
+              )}
+
+              {/* Wyświetl diff jeśli porównujemy */}
+              {showVersionDiff && versionDiff && (
+                <VersionDiff
+                  diff={versionDiff}
+                  onClose={() => {
+                    setShowVersionDiff(false);
+                    setVersionDiff(null);
+                  }}
+                />
+              )}
+
+              {/* Dodawanie elementów - wklejanie treści maila (tworzy nową wersję) */}
               <VerificationItemsInput
-                onAddProjects={(data) => {
-                  // Przekształć projekty na format oczekiwany przez API
-                  const apiData = {
-                    items: data.projects.map((project) => ({ orderNumber: project })),
-                    inputMode: 'textarea' as const,
-                  };
-                  addItems.mutate({ listId: selectedListId, data: apiData });
-                }}
-                isPending={addItems.isPending}
+                onAddProjects={handleCreateNewVersion}
+                isPending={createListVersion.isPending}
               />
 
               {/* Lista elementów */}
@@ -366,6 +498,7 @@ export const VerificationPageContent: React.FC = () => {
                         </AlertDialog>
                       )}
                       <Button
+                        variant="outline"
                         onClick={handleVerify}
                         disabled={selectedList.items.length === 0 || verifyList.isPending}
                       >
@@ -377,7 +510,23 @@ export const VerificationPageContent: React.FC = () => {
                         ) : (
                           <>
                             <CheckCircle2 className="h-4 w-4 mr-2" />
-                            Weryfikuj
+                            Weryfikuj (zlecenia)
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={handleVerifyProjects}
+                        disabled={selectedList.items.length === 0 || verifyProjectList.isPending}
+                      >
+                        {verifyProjectList.isPending ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            Weryfikuję projekty...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                            Weryfikuj projekty
                           </>
                         )}
                       </Button>
@@ -395,15 +544,59 @@ export const VerificationPageContent: React.FC = () => {
                 </CardContent>
               </Card>
 
-              {/* Wyniki weryfikacji */}
-              {verificationResult && (
+              {/* Wyniki weryfikacji (legacy - zlecenia) */}
+              {verificationResult && !projectVerificationResult && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Wyniki weryfikacji</CardTitle>
+                    <CardTitle className="text-base">Wyniki weryfikacji (zlecenia)</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <VerificationResults
                       result={verificationResult}
+                      onApplyChanges={(params) =>
+                        applyChanges.mutate({ listId: selectedListId, params })
+                      }
+                      isPending={applyChanges.isPending}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Wyniki weryfikacji projektów */}
+              {projectVerificationResult && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Wyniki weryfikacji projektów</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <VerificationResults
+                      result={{
+                        listId: projectVerificationResult.listId,
+                        deliveryDate: projectVerificationResult.deliveryDate,
+                        delivery: projectVerificationResult.delivery,
+                        needsDeliveryCreation: projectVerificationResult.needsDeliveryCreation,
+                        // Pola legacy - puste, bo używamy projectResults
+                        matched: [],
+                        missing: [],
+                        excess: [],
+                        notFound: [],
+                        duplicates: [],
+                        // Nowe pole z projektami
+                        projectResults: projectVerificationResult.projectResults,
+                        summary: {
+                          totalItems: 0,
+                          matchedCount: 0,
+                          missingCount: 0,
+                          excessCount: 0,
+                          notFoundCount: 0,
+                          duplicatesCount: 0,
+                          totalProjects: projectVerificationResult.summary.totalProjects,
+                          allInDeliveryCount: projectVerificationResult.summary.allInDelivery,
+                          partialInDeliveryCount: projectVerificationResult.summary.partialInDelivery,
+                          noneInDeliveryCount: projectVerificationResult.summary.noneInDelivery,
+                          notFoundProjectsCount: projectVerificationResult.summary.notFound,
+                        },
+                      }}
                       onApplyChanges={(params) =>
                         applyChanges.mutate({ listId: selectedListId, params })
                       }

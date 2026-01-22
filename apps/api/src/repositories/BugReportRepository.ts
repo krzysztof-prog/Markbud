@@ -60,13 +60,19 @@ Screenshot: ${data.screenshot ? 'TAK (załączony)' : 'NIE'}
    * Pobierz wszystkie zgłoszenia z pliku
    */
   async getAll(_limit?: number): Promise<string> {
+    console.log('[BugReportRepository] Looking for file:', BUG_REPORTS_LOG);
+    console.log('[BugReportRepository] __dirname:', __dirname);
+
     try {
       await fs.access(BUG_REPORTS_LOG);
-    } catch {
+      console.log('[BugReportRepository] File exists!');
+    } catch (err) {
+      console.log('[BugReportRepository] File NOT found:', err);
       return 'Brak zgłoszeń.';
     }
 
     const content = await fs.readFile(BUG_REPORTS_LOG, 'utf-8');
+    console.log('[BugReportRepository] Content length:', content.length);
     return content;
   }
 }

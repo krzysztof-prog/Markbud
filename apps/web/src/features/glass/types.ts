@@ -43,6 +43,7 @@ export interface GlassDelivery {
   _count?: {
     items: number;
   };
+  totalQuantity?: number; // Suma wszystkich quantity z items
 }
 
 export interface GlassDeliveryItem {
@@ -60,7 +61,28 @@ export interface GlassDeliveryItem {
   clientCode: string | null;
   matchStatus: 'pending' | 'matched' | 'conflict' | 'unmatched';
   matchedItemId: number | null;
+  // Nowe pola - per item (mogą różnić się od parent GlassDelivery)
+  customerOrderNumber: string | null;
+  rackNumber: string | null;
   createdAt: string;
+}
+
+/**
+ * Pogrupowana dostawa szyb - grupowanie po customerOrderNumber + rackNumber
+ * Używane w widoku tabeli dostaw
+ */
+export interface GroupedGlassDelivery {
+  // Klucz grupowania
+  customerOrderNumber: string;
+  rackNumber: string;
+  // Data dostawy
+  deliveryDate: string;
+  // Suma szyb w tej grupie
+  totalQuantity: number;
+  // ID parent delivery (do usuwania)
+  glassDeliveryId: number;
+  // Szyby należące do tej grupy
+  items: GlassDeliveryItem[];
 }
 
 export interface GlassOrderValidation {

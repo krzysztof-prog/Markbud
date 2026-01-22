@@ -87,7 +87,7 @@ export default function ArchiwumPage() {
                   </thead>
                   <tbody>
                     {filteredOrders.map((order: Order, index: number) => (
-                      <tr key={order.id} className={`border-t hover:bg-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
+                      <tr key={order.id} className={`border-t hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                         <td className="px-4 py-3">
                           <span className="font-mono font-medium">{order.orderNumber}</span>
                         </td>

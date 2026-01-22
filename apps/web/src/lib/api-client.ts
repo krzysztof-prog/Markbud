@@ -63,7 +63,8 @@ export async function fetchApi<T>(endpoint: string, options?: RequestInit): Prom
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
-      const error: ApiError = new Error(data.error || `HTTP Error: ${response.status}`);
+      // API zwraca `message` jako główny komunikat błędu, `error` to tylko nazwa kategorii
+      const error: ApiError = new Error(data.message || data.error || `HTTP Error: ${response.status}`);
       error.status = response.status;
       error.data = data;
 
@@ -143,7 +144,8 @@ export async function uploadFile<T>(endpoint: string, file: File): Promise<T> {
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
-      const error: ApiError = new Error(data.error || `HTTP Error: ${response.status}`);
+      // API zwraca `message` jako główny komunikat błędu, `error` to tylko nazwa kategorii
+      const error: ApiError = new Error(data.message || data.error || `HTTP Error: ${response.status}`);
       error.status = response.status;
       error.data = data;
 
@@ -199,7 +201,8 @@ export async function fetchBlob(endpoint: string): Promise<Blob> {
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
-      const error: ApiError = new Error(data.error || `HTTP Error: ${response.status}`);
+      // API zwraca `message` jako główny komunikat błędu, `error` to tylko nazwa kategorii
+      const error: ApiError = new Error(data.message || data.error || `HTTP Error: ${response.status}`);
       error.status = response.status;
       error.data = data;
 

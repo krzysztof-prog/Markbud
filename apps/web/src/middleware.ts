@@ -94,19 +94,16 @@ export async function middleware(request: NextRequest) {
 
 /**
  * Konfiguracja matchera - które ścieżki mają być chronione
- * Wszystkie oprócz /login, /_next (Next.js internals), /api
+ * Używamy prostszego matchera dla lepszej kompatybilności z Next.js 15
  */
 export const config = {
   matcher: [
     /*
      * Match all request paths except:
-     * - /login (public)
      * - /_next (Next.js internals)
      * - /api (API routes - chronione przez backend)
-     * - /_vercel (Vercel internals)
-     * - Static files (favicon.ico, images, etc)
-     * - Files with extensions (css, js, png, jpg, svg, etc)
+     * - Static files
      */
-    '/((?!_next/static|_next/image|_next/webpack-hmr|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js)$|login|api|_vercel).*)',
+    '/((?!_next|api|favicon.ico|.*\\.[\\w]+$).*)',
   ],
 };

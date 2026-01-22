@@ -13,6 +13,10 @@ export type {
   SchucoDeliveriesResponse,
   SchucoDeliveryLink,
   SchucoSyncLinksResponse,
+  // Typy dla pozycji zamówień
+  SchucoOrderItem,
+  SchucoItemsStats,
+  SchucoItemsFetchResult,
 } from '@/types/schuco';
 
 /**
@@ -89,4 +93,39 @@ export interface PaginationProps {
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+}
+
+/**
+ * Zarchiwizowana dostawa Schuco
+ */
+export interface ArchivedDelivery {
+  id: number;
+  orderDate: string;
+  orderNumber: string;
+  projectNumber: string;
+  orderName: string;
+  shippingStatus: string;
+  deliveryWeek: string | null;
+  totalAmount: string | null;
+  archivedAt: string;
+}
+
+/**
+ * Odpowiedź z API dla archiwum
+ */
+export interface ArchiveResponse {
+  items: ArchivedDelivery[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/**
+ * Statystyki archiwum
+ */
+export interface ArchiveStats {
+  totalArchived: number;
+  oldestArchived: string | null;
+  newestArchived: string | null;
 }

@@ -115,7 +115,7 @@ export class SchucoService {
 
   /**
    * Pobierz ustawienie liczby dni dla filtra Schuco z bazy
-   * Domyślnie 90 dni
+   * Domyślnie 15 dni (zmniejszono z 90 - zbyt dużo danych do pobrania)
    */
   private async getFilterDaysSetting(): Promise<number> {
     try {
@@ -131,7 +131,29 @@ export class SchucoService {
     } catch {
       logger.warn('[SchucoService] Failed to get schuco_filter_days setting, using default');
     }
-    return 90; // Domyślna wartość
+    return 15; // Domyślna wartość (zmniejszono z 90 - zbyt dużo danych)
+  }
+
+  /**
+   * Pobierz ustawienie konkretnej daty filtra Schuco z bazy
+   * Zwraca null jeśli nie ustawiono (wtedy użyjemy filterDays)
+   */
+  private async getFilterDateSetting(): Promise<string | null> {
+    try {
+      const setting = await this.prisma.setting.findUnique({
+        where: { key: 'schuco_filter_date' },
+      });
+      if (setting?.value) {
+        // Walidacja formatu YYYY-MM-DD
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (dateRegex.test(setting.value)) {
+          return setting.value;
+        }
+      }
+    } catch {
+      logger.warn('[SchucoService] Failed to get schuco_filter_date setting');
+    }
+    return null;
   }
 
   /**
@@ -156,15 +178,21 @@ export class SchucoService {
     this.activeLogId = logId;
 
     try {
-      // Pobierz ustawienie liczby dni z bazy
+      // Pobierz ustawienia filtra z bazy - filterDate ma priorytet nad filterDays
       const filterDays = await this.getFilterDaysSetting();
-      logger.info(`[SchucoService] Starting fetch process (trigger: ${triggerType}, headless: ${headless}, filterDays: ${filterDays})...`);
+      const filterDate = await this.getFilterDateSetting();
+
+      const filterInfo = filterDate
+        ? `filterDate: ${filterDate}`
+        : `filterDays: ${filterDays}`;
+      logger.info(`[SchucoService] Starting fetch process (trigger: ${triggerType}, headless: ${headless}, ${filterInfo})...`);
 
       // Emit start event - frontend może zaktualizować UI
       emitSchucoFetchStarted({
         logId,
         triggerType,
         filterDays,
+        filterDate: filterDate || undefined,
         step: 'started',
         message: 'Rozpoczęto pobieranie danych Schuco',
       });
@@ -172,7 +200,7 @@ export class SchucoService {
       // Step 1: Clear old change markers (older than 24 hours)
       await this.clearOldChangeMarkers();
 
-      // Step 2: Scrape website and download CSV - create scraper with headless setting and filterDays
+      // Step 2: Scrape website and download CSV - create scraper with headless setting and filter
       emitSchucoFetchProgress({
         logId,
         step: 'scraping',
@@ -180,7 +208,12 @@ export class SchucoService {
         progress: 10,
       });
 
-      const scraper = new SchucoScraper({ headless, filterDays });
+      // filterDate ma priorytet nad filterDays
+      const scraper = new SchucoScraper({
+        headless,
+        filterDays,
+        filterDate: filterDate || undefined,
+      });
       this.activeScraper = scraper; // Zapisz referencję do możliwości anulowania
       const csvFilePath = await scraper.scrapeDeliveries();
 

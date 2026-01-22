@@ -40,6 +40,8 @@ export interface PalletStockDay {
   closedAt: string | null;
   entries: PalletStockEntry[];
   alerts: PalletAlert[];
+  canEdit: boolean; // Czy dzień można edytować (poprzedni zamknięty lub pierwszy po stanie początkowym)
+  editBlockReason?: string; // Powód blokady edycji
   createdAt: string;
   updatedAt: string;
 }
@@ -99,4 +101,18 @@ export interface PalletCalendarSummary {
   year: number;
   month: number;
   days: PalletCalendarDay[];
+}
+
+// Stan początkowy palet
+export interface PalletInitialStock {
+  type: ProductionPalletType;
+  initialStock: number;
+  startDate: string;
+  updatedAt: string;
+}
+
+// Input do ustawienia stanów początkowych
+export interface SetInitialStocksInput {
+  startDate: string;
+  stocks: Array<{ type: ProductionPalletType; initialStock: number }>;
 }

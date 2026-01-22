@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -277,8 +277,8 @@ export default function DeliveriesTable({
               const isExpanded = expandedRows.has(row.original.id);
 
               return (
-                <>
-                  <TableRow key={row.id}>
+                <React.Fragment key={row.id}>
+                  <TableRow>
                     {row.getVisibleCells().map((cell) => (
                       <TableCell key={cell.id}>
                         {flexRender(
@@ -300,7 +300,7 @@ export default function DeliveriesTable({
                       </TableCell>
                     </TableRow>
                   )}
-                </>
+                </React.Fragment>
               );
             })
           )}

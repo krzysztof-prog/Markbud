@@ -112,7 +112,7 @@ export function DeliveryCalendar({
                 <Calendar className="h-4 w-4 mr-2" />
                 Zmien daty
               </Button>
-              <Button onClick={onShowNewDeliveryDialog}>
+              <Button onClick={() => { console.log('Nowa dostawa clicked'); onShowNewDeliveryDialog(); }}>
                 <Plus className="h-4 w-4 mr-2" />
                 Nowa dostawa
               </Button>

@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, CheckCircle2, Upload, FileText, AlertTriangle } from 'lucide-react';
-import { okucStockApi } from '../api/okucApi';
+import { okucStockApi } from '../api';
 import { useToast } from '@/components/ui/use-toast';
 import type {
   ImportStockPreviewResponse,

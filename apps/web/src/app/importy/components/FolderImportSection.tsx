@@ -305,7 +305,7 @@ function FolderScanResultView({
                   return (
                     <tr
                       key={i}
-                      className={`border-t hover:bg-slate-200 ${isDuplicate ? 'bg-red-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
+                      className={`border-t hover:bg-slate-50 ${isDuplicate ? 'bg-red-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
                     >
                       <td className="px-3 py-2">
                         <div className="flex flex-col gap-0.5">

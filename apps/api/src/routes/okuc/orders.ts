@@ -203,4 +203,66 @@ export const okucOrderRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
   }, okucOrderHandler.delete);
+
+  // ========================
+  // IMPORT Z XLSX
+  // ========================
+
+  /**
+   * POST /api/okuc/orders/import/parse
+   * Parsuje plik XLSX i zwraca podgląd danych do zatwierdzenia
+   * Multipart file upload - plik XLSX w polu 'file'
+   */
+  fastify.post('/import/parse', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Parsuje plik XLSX i zwraca podgląd danych do zatwierdzenia',
+      tags: ['okuc-orders'],
+      consumes: ['multipart/form-data'],
+    },
+  }, okucOrderHandler.parseImport);
+
+  /**
+   * POST /api/okuc/orders/import/confirm
+   * Zatwierdza import i tworzy zamówienie
+   */
+  fastify.post('/import/confirm', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Zatwierdza import i tworzy zamówienie',
+      tags: ['okuc-orders'],
+      body: {
+        type: 'object',
+        required: ['items', 'expectedDeliveryDate'],
+        properties: {
+          items: {
+            type: 'array',
+            minItems: 1,
+            items: {
+              type: 'object',
+              required: ['articleId', 'quantity', 'priceEur'],
+              properties: {
+                articleId: { type: 'string' },
+                quantity: { type: 'number', minimum: 1 },
+                priceEur: { type: 'number', minimum: 0 },
+              },
+            },
+          },
+          expectedDeliveryDate: { type: 'string', format: 'date' },
+          createMissingArticles: { type: 'boolean', default: false },
+          missingArticlesToCreate: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['articleId', 'name'],
+              properties: {
+                articleId: { type: 'string' },
+                name: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, okucOrderHandler.confirmImport);
 };

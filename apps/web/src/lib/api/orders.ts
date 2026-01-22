@@ -110,6 +110,13 @@ export const ordersApi = {
   // P1-R4: Get production readiness checklist (System Brain)
   getReadiness: (id: number) => fetchApi<ReadinessResult>(`/api/orders/${id}/readiness`),
 
+  // Aktualizuj ręczny status zlecenia (NIE CIĄĆ, Anulowane, Wstrzymane)
+  updateManualStatus: (id: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) =>
+    fetchApi<Order>(`/api/orders/${id}/manual-status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ manualStatus }),
+    }),
+
   // ==========================================
   // Archive endpoints
   // ==========================================

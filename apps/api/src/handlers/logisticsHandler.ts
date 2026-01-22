@@ -138,12 +138,22 @@ export class LogisticsHandler {
     const { versionFrom, versionTo } = versionDiffQuerySchema.parse(request.query);
 
     const diff = await logisticsMailService.getVersionDiff(code, versionFrom, versionTo);
-    return reply.send(diff);
+
+    // Zwracamy wrapper VersionDiffResponse zgodny z frontendem
+    return reply.send({
+      deliveryCode: code,
+      versionFrom,
+      versionTo,
+      diff,
+    });
   }
 
   /**
    * GET /logistics/calendar
    * Pobiera kalendarz dostaw (pogrupowane po datach)
+   *
+   * Zwraca obiekt CalendarResponse:
+   * { entries: CalendarEntry[], dateFrom: string, dateTo: string }
    */
   async getCalendar(
     request: FastifyRequest<{ Querystring: { from: string; to: string } }>,
@@ -151,12 +161,17 @@ export class LogisticsHandler {
   ) {
     const { from, to } = calendarQuerySchema.parse(request.query);
 
-    const calendar = await logisticsMailService.getDeliveryCalendar(
+    const entries = await logisticsMailService.getDeliveryCalendar(
       new Date(from),
       new Date(to)
     );
 
-    return reply.send(calendar);
+    // Zwróć obiekt CalendarResponse zgodny z oczekiwaniami frontendu
+    return reply.send({
+      entries,
+      dateFrom: from,
+      dateTo: to,
+    });
   }
 
   /**
@@ -174,6 +189,85 @@ export class LogisticsHandler {
       orderId: data.orderId,
       flags: data.flags,
     });
+
+    return reply.send(item);
+  }
+
+  // ========== AKCJE DLA SYSTEMU DECYZJI DIFF ==========
+
+  /**
+   * DELETE /logistics/items/:id/remove
+   * Usuwa pozycję z dostawy (soft delete)
+   * Używane dla pozycji usuniętych z maila - użytkownik potwierdza usunięcie
+   */
+  async removeItemFromDelivery(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = mailItemParamsSchema.parse(request.params);
+    await logisticsMailService.removeItemFromDelivery(parseInt(id, 10));
+    return reply.status(204).send();
+  }
+
+  /**
+   * POST /logistics/items/:id/confirm
+   * Potwierdza dodaną pozycję
+   * Używane dla nowych pozycji w mailu - użytkownik akceptuje
+   */
+  async confirmAddedItem(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = mailItemParamsSchema.parse(request.params);
+    const item = await logisticsMailService.confirmAddedItem(parseInt(id, 10));
+    return reply.send(item);
+  }
+
+  /**
+   * DELETE /logistics/items/:id/reject
+   * Odrzuca dodaną pozycję (soft delete)
+   * Używane dla nowych pozycji w mailu - użytkownik odrzuca
+   */
+  async rejectAddedItem(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = mailItemParamsSchema.parse(request.params);
+    await logisticsMailService.rejectAddedItem(parseInt(id, 10));
+    return reply.status(204).send();
+  }
+
+  /**
+   * POST /logistics/items/:id/accept-change
+   * Akceptuje zmianę pozycji (oznacza jako potwierdzone)
+   * Używane dla zmienionych pozycji - użytkownik akceptuje nową wartość
+   */
+  async acceptItemChange(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = mailItemParamsSchema.parse(request.params);
+    const item = await logisticsMailService.acceptItemChange(parseInt(id, 10));
+    return reply.send(item);
+  }
+
+  /**
+   * POST /logistics/items/:id/restore
+   * Przywraca poprzednią wartość pozycji
+   * Używane dla zmienionych pozycji - użytkownik chce przywrócić starą wartość
+   */
+  async restoreItemValue(
+    request: FastifyRequest<{ Params: { id: string }; Body: { field: string; previousValue: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = mailItemParamsSchema.parse(request.params);
+    const { field, previousValue } = request.body;
+
+    const item = await logisticsMailService.restoreItemValue(
+      parseInt(id, 10),
+      field,
+      previousValue
+    );
 
     return reply.send(item);
   }

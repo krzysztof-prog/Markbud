@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { importsApi } from '../api/importsApi';
+import { toast } from '@/hooks/useToast';
 
 export const IMPORTS_QUERY_KEY = ['imports'] as const;
 
@@ -28,6 +29,18 @@ export function useImportMutations() {
     mutationFn: importsApi.upload,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: IMPORTS_QUERY_KEY });
+      toast({
+        title: 'Plik przesłany',
+        description: 'Plik został pomyślnie przesłany i oczekuje na zatwierdzenie.',
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd przesyłania pliku',
+        description: error.message || 'Nie udało się przesłać pliku.',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -36,6 +49,18 @@ export function useImportMutations() {
       importsApi.approve(id, action),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: IMPORTS_QUERY_KEY });
+      toast({
+        title: 'Import zatwierdzony',
+        description: 'Dane z importu zostały dodane do systemu.',
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd zatwierdzania importu',
+        description: error.message || 'Nie udało się zatwierdzić importu.',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -43,6 +68,18 @@ export function useImportMutations() {
     mutationFn: importsApi.reject,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: IMPORTS_QUERY_KEY });
+      toast({
+        title: 'Import odrzucony',
+        description: 'Import został odrzucony.',
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd odrzucania importu',
+        description: error.message || 'Nie udało się odrzucić importu.',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -51,6 +88,18 @@ export function useImportMutations() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: IMPORTS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast({
+        title: 'Import usunięty',
+        description: 'Import został usunięty z systemu.',
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd usuwania importu',
+        description: error.message || 'Nie udało się usunąć importu.',
+        variant: 'destructive',
+      });
     },
   });
 

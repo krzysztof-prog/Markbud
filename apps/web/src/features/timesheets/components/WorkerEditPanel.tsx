@@ -369,8 +369,8 @@ export const WorkerEditPanel: React.FC<WorkerEditPanelProps> = ({
             <CardTitle className="text-base">
               {worker.firstName} {worker.lastName}
             </CardTitle>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="h-4 w-4" />
+            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Zamknij panel edycji pracownika">
+              <X className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
         </CardHeader>

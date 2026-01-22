@@ -35,7 +35,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type React from 'react';
 import { UserMenu } from '@/features/auth/components/UserMenu';
 import { useAuth } from '@/features/auth/context/AuthContext';
-import { UserRole, hasPermission } from '@markbud/shared';
+import { UserRole, hasPermission, type Permission } from '@markbud/shared';
 import { useConflictsCount } from '@/features/moja-praca';
 import { WeatherWidget } from '@/features/weather';
 
@@ -44,7 +44,7 @@ type NavigationItem = {
   href: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   requiredRoles?: UserRole[];  // Role wymagane do wyświetlenia tej pozycji
-  requiredPermission?: keyof ReturnType<typeof hasPermission>; // Uprawnienie wymagane (alternatywa)
+  requiredPermission?: Permission; // Uprawnienie wymagane (alternatywa)
   badge?: 'conflicts'; // Specjalny badge dla dynamicznej liczby
   subItems?: {
     name: string;
@@ -104,6 +104,7 @@ const navigation: NavigationItem[] = [
     subItems: [
       { name: 'Magazyn Akrobud', href: '/magazyn/akrobud', icon: Warehouse },
       { name: 'Kalendarz dostaw', href: '/dostawy', icon: Calendar },
+      { name: 'Logistyka (maile)', href: '/logistyka', icon: Truck },
       { name: 'Weryfikacja listy', href: '/dostawy/weryfikacja', icon: ListChecks },
       { name: 'Profile na dostawy', href: '/magazyn/akrobud/profile-na-dostawy', icon: Box },
       { name: 'Kontrola etykiet', href: '/kontrola-etykiet', icon: ScanLine },
@@ -207,7 +208,7 @@ export function Sidebar() {
     }
 
     // Sprawdź requiredPermission
-    if (item.requiredPermission && user && !hasPermission(user.role, item.requiredPermission as keyof typeof PERMISSIONS)) {
+    if (item.requiredPermission && user && !hasPermission(user.role, item.requiredPermission)) {
       return false;
     }
 

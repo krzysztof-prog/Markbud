@@ -22,7 +22,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { ArrowLeft, Truck, Calendar, Clock, RefreshCw, Download, Timer } from 'lucide-react';
+import { ArrowLeft, Truck, Calendar, Clock, RefreshCw, Download, Timer, Archive } from 'lucide-react';
 
 // Import z modułu Schuco
 import {
@@ -30,6 +30,7 @@ import {
   UpcomingDeliveriesTab,
   DeliveryHistoryTab,
   FetchLogsTab,
+  ArchiveTab,
   StatusCard,
   CriticalErrorAlert,
   useDeliveryPagination,
@@ -262,6 +263,12 @@ export default function DostawySchucoPageContent() {
                   </Badge>
                 )}
               </TabsTrigger>
+
+              {/* Zakładka: Archiwum */}
+              <TabsTrigger value="archive">
+                <Archive className="h-4 w-4 mr-1" />
+                Archiwum
+              </TabsTrigger>
             </TabsList>
 
             {/* Zawartość zakładki: Dostawy */}
@@ -303,6 +310,11 @@ export default function DostawySchucoPageContent() {
                 isCleaningUp={isCleaningUp}
                 onCleanupPending={handleCleanupPending}
               />
+            </TabsContent>
+
+            {/* Zawartość zakładki: Archiwum */}
+            <TabsContent value="archive" className="space-y-4">
+              <ArchiveTab />
             </TabsContent>
           </Tabs>
         </div>

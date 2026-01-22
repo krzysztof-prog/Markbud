@@ -25,3 +25,7 @@ export { DeleteDemandDialog } from './DeleteDemandDialog';
 export { OrdersTable } from './OrdersTable';
 export { OrderForm } from './OrderForm';
 export { OrderItemsTable } from './OrderItemsTable';
+export { ImportOrderDialog } from './ImportOrderDialog';
+
+// Replacements (Zastępstwa artykułów)
+export { AddReplacementDialog } from './AddReplacementDialog';

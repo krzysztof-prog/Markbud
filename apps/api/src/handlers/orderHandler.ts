@@ -130,7 +130,8 @@ export class OrderHandler {
     const orders = await this.service.bulkUpdateStatus(
       validated.orderIds,
       validated.status,
-      validated.productionDate
+      validated.productionDate,
+      validated.skipWarehouseValidation
     );
     return reply.status(200).send(orders);
   }
@@ -310,10 +311,14 @@ export class OrderHandler {
     const { colorId } = request.params;
     const parsedColorId = parseIntParam(colorId, 'colorId');
 
+    // Pobierz tylko profile z isAkrobud=true (widok magazynu Akrobud)
     const visibleProfiles = await prisma.profileColor.findMany({
       where: {
         colorId: parsedColorId,
         isVisible: true,
+        profile: {
+          isAkrobud: true,
+        },
       },
       select: {
         profileId: true,
@@ -330,12 +335,16 @@ export class OrderHandler {
       orderBy: { profile: { number: 'asc' } },
     });
 
+    // Pobierz tylko zamówienia z wymaganiami dla profili Akrobud
     const orders = await prisma.order.findMany({
       where: {
         archivedAt: null,
         requirements: {
           some: {
             colorId: parsedColorId,
+            profile: {
+              isAkrobud: true,
+            },
           },
         },
       },
@@ -346,6 +355,9 @@ export class OrderHandler {
         requirements: {
           where: {
             colorId: parsedColorId,
+            profile: {
+              isAkrobud: true,
+            },
           },
           select: {
             id: true,

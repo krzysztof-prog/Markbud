@@ -98,6 +98,8 @@ export const bulkUpdateStatusSchema = z.object({
       },
       { message: 'Data produkcji nie może być starsza niż 60 dni' }
     ),
+  // Opcja pominięcia walidacji magazynu - gdy użytkownik potwierdzi mimo braków
+  skipWarehouseValidation: z.boolean().optional().default(false),
 });
 
 // For production query schema

@@ -14,6 +14,10 @@ import {
   emitOrderDeleted,
 } from './event-emitter.js';
 import { ReadinessOrchestrator } from './readinessOrchestrator.js';
+import { OkucRwService } from './okuc/OkucRwService.js';
+import { WarehouseRwService } from './warehouse/WarehouseRwService.js';
+import { SteelRwService } from './SteelRwService.js';
+import { logger } from '../utils/logger.js';
 
 export class OrderService {
   constructor(private repository: OrderRepository) {}
@@ -138,6 +142,25 @@ export class OrderService {
     return order;
   }
 
+  /**
+   * Aktualizuj ręczny status zlecenia (NIE CIĄĆ, Anulowane, Wstrzymane)
+   * @param id - ID zlecenia
+   * @param manualStatus - nowy status lub null (aby usunąć)
+   */
+  async updateManualStatus(id: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) {
+    // Verify order exists
+    await this.getOrderById(id);
+
+    const order = await this.repository.updateManualStatus(id, manualStatus);
+
+    // Jeśli zlecenie ma status 'cancelled', nie cofamy automatycznie okuć z zapotrzebowania
+    // - to robi scheduler/użytkownik ręcznie przy archiwizacji
+
+    logger.info(`Order ${id} manual status updated to: ${manualStatus}`);
+
+    return order;
+  }
+
   async unarchiveOrder(id: number) {
     // Verify order exists
     await this.getOrderById(id);
@@ -152,7 +175,8 @@ export class OrderService {
   async bulkUpdateStatus(
     orderIds: number[],
     status: string,
-    productionDate?: string
+    productionDate?: string,
+    skipWarehouseValidation = false
   ) {
     // Validate that all orders exist
     const orders = await Promise.all(
@@ -172,7 +196,7 @@ export class OrderService {
       if (order) {
         try {
           validateStatusTransition(order.status, status);
-        } catch (error) {
+        } catch {
           invalidTransitions.push({
             id: order.id,
             orderNumber: order.orderNumber,
@@ -199,7 +223,8 @@ export class OrderService {
     // CRITICAL: Validate warehouse stock for ALL orders if starting production
     // Check BEFORE transaction to fail fast
     // Fixed: ignoruje requirements z beamsCount = 0
-    if (status === ORDER_STATUSES.IN_PROGRESS) {
+    // Można pominąć walidację gdy użytkownik potwierdził mimo braków
+    if (status === ORDER_STATUSES.IN_PROGRESS && !skipWarehouseValidation) {
       for (const order of orders) {
         if (order) {
           await validateSufficientStock(prisma, order.id);
@@ -217,7 +242,156 @@ export class OrderService {
     // Emit update events for all orders
     updatedOrders.forEach(order => emitOrderUpdated(order));
 
+    // Automatyczne RW gdy status = completed
+    // Wykonuj ASYNCHRONICZNIE aby nie blokować odpowiedzi API
+    if (status === ORDER_STATUSES.COMPLETED) {
+      this.processOkucRwAsync(orderIds);
+      this.processProfileRwAsync(orderIds);
+      this.processSteelRwAsync(orderIds);
+    }
+
     return updatedOrders;
+  }
+
+  /**
+   * Przetworz RW dla okuć asynchronicznie
+   * Nie blokuje głównego flow zmiany statusu
+   */
+  private async processOkucRwAsync(orderIds: number[]): Promise<void> {
+    try {
+      const rwService = new OkucRwService(prisma);
+      const results = await rwService.processRwForOrders(orderIds);
+
+      // Loguj wyniki
+      const summary = results.reduce(
+        (acc, r) => ({
+          totalProcessed: acc.totalProcessed + r.processed,
+          totalSkipped: acc.totalSkipped + r.skipped,
+          totalErrors: acc.totalErrors + r.errors.length,
+        }),
+        { totalProcessed: 0, totalSkipped: 0, totalErrors: 0 }
+      );
+
+      if (summary.totalProcessed > 0) {
+        logger.info('Automatyczne RW dla okuć przetworzone', {
+          ordersCount: orderIds.length,
+          processed: summary.totalProcessed,
+          skipped: summary.totalSkipped,
+          errors: summary.totalErrors,
+        });
+      }
+
+      // Loguj błędy jeśli występują
+      results.forEach(result => {
+        if (result.errors.length > 0) {
+          logger.warn('Błędy podczas RW dla zlecenia', {
+            orderId: result.orderId,
+            orderNumber: result.orderNumber,
+            errors: result.errors,
+          });
+        }
+      });
+    } catch (error) {
+      // Nie rzucaj błędu - RW nie powinno blokować głównego flow
+      logger.error('Błąd podczas automatycznego RW dla okuć', {
+        orderIds,
+        error: error instanceof Error ? error.message : 'Nieznany błąd',
+      });
+    }
+  }
+
+  /**
+   * Przetworz RW dla profili asynchronicznie
+   * Nie blokuje głównego flow zmiany statusu
+   */
+  private async processProfileRwAsync(orderIds: number[]): Promise<void> {
+    try {
+      const rwService = new WarehouseRwService(prisma);
+      const results = await rwService.processRwForOrders(orderIds);
+
+      // Loguj wyniki
+      const summary = results.reduce(
+        (acc, r) => ({
+          totalProcessed: acc.totalProcessed + r.processed,
+          totalSkipped: acc.totalSkipped + r.skipped,
+          totalErrors: acc.totalErrors + r.errors.length,
+        }),
+        { totalProcessed: 0, totalSkipped: 0, totalErrors: 0 }
+      );
+
+      if (summary.totalProcessed > 0) {
+        logger.info('Automatyczne RW dla profili przetworzone', {
+          ordersCount: orderIds.length,
+          processed: summary.totalProcessed,
+          skipped: summary.totalSkipped,
+          errors: summary.totalErrors,
+        });
+      }
+
+      // Loguj błędy jeśli występują
+      results.forEach(result => {
+        if (result.errors.length > 0) {
+          logger.warn('Błędy podczas RW profili dla zlecenia', {
+            orderId: result.orderId,
+            orderNumber: result.orderNumber,
+            errors: result.errors,
+          });
+        }
+      });
+    } catch (error) {
+      // Nie rzucaj błędu - RW nie powinno blokować głównego flow
+      logger.error('Błąd podczas automatycznego RW dla profili', {
+        orderIds,
+        error: error instanceof Error ? error.message : 'Nieznany błąd',
+      });
+    }
+  }
+
+  /**
+   * Przetworz RW dla stali asynchronicznie
+   * Nie blokuje głównego flow zmiany statusu
+   */
+  private async processSteelRwAsync(orderIds: number[]): Promise<void> {
+    try {
+      const rwService = new SteelRwService(prisma);
+      const results = await rwService.processRwForOrders(orderIds);
+
+      // Loguj wyniki
+      const summary = results.reduce(
+        (acc, r) => ({
+          totalProcessed: acc.totalProcessed + r.processed,
+          totalSkipped: acc.totalSkipped + r.skipped,
+          totalErrors: acc.totalErrors + r.errors.length,
+        }),
+        { totalProcessed: 0, totalSkipped: 0, totalErrors: 0 }
+      );
+
+      if (summary.totalProcessed > 0) {
+        logger.info('Automatyczne RW dla stali przetworzone', {
+          ordersCount: orderIds.length,
+          processed: summary.totalProcessed,
+          skipped: summary.totalSkipped,
+          errors: summary.totalErrors,
+        });
+      }
+
+      // Loguj błędy jeśli występują
+      results.forEach(result => {
+        if (result.errors.length > 0) {
+          logger.warn('Błędy podczas RW stali dla zlecenia', {
+            orderId: result.orderId,
+            orderNumber: result.orderNumber,
+            errors: result.errors,
+          });
+        }
+      });
+    } catch (error) {
+      // Nie rzucaj błędu - RW nie powinno blokować głównego flow
+      logger.error('Błąd podczas automatycznego RW dla stali', {
+        orderIds,
+        error: error instanceof Error ? error.message : 'Nieznany błąd',
+      });
+    }
   }
 
   async getForProduction(params: {

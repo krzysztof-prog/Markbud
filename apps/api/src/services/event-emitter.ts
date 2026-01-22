@@ -110,6 +110,12 @@ export const emitOkucRwImported = (data: EventData) => eventEmitter.emitDataChan
   timestamp: new Date(),
 });
 
+export const emitOkucRwProcessed = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'okuc:rw_processed',
+  data,
+  timestamp: new Date(),
+});
+
 export const emitOkucDemandImported = (data: EventData) => eventEmitter.emitDataChange({
   type: 'okuc:demand_imported',
   data,
@@ -131,6 +137,51 @@ export const emitPriceImported = (data: EventData) => eventEmitter.emitDataChang
 
 export const emitPricePending = (data: EventData) => eventEmitter.emitDataChange({
   type: 'price:pending',
+  data,
+  timestamp: new Date(),
+});
+
+// Schuco scraper events - real-time status updates
+export const emitSchucoFetchStarted = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'schuco:fetch_started',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitSchucoFetchProgress = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'schuco:fetch_progress',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitSchucoFetchCompleted = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'schuco:fetch_completed',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitSchucoFetchFailed = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'schuco:fetch_failed',
+  data,
+  timestamp: new Date(),
+});
+
+// Profile RW events
+export const emitProfileRwProcessed = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'warehouse:rw_processed',
+  data,
+  timestamp: new Date(),
+});
+
+// Steel events
+export const emitSteelStockUpdated = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'steel:stock_updated',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitSteelRwProcessed = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'steel:rw_processed',
   data,
   timestamp: new Date(),
 });

@@ -3,12 +3,14 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { palletStockApi } from '../api/palletStockApi';
+import { palletStockApi, palletInitialStockApi } from '../api/palletStockApi';
+import { toast } from '@/hooks/useToast';
 import type {
   UpdatePalletDayEntry,
   CorrectMorningStockInput,
   ProductionPalletType,
   PalletAlertConfig,
+  SetInitialStocksInput,
 } from '../types/index';
 
 // ============================================
@@ -26,7 +28,13 @@ export const palletStockKeys = {
     summary: (year: number, month: number) =>
       ['palletStock', 'month', 'summary', { year, month }] as const,
   },
+  calendar: {
+    all: ['palletStock', 'calendar'] as const,
+    month: (year: number, month: number) =>
+      ['palletStock', 'calendar', { year, month }] as const,
+  },
   alertConfig: ['palletStock', 'alertConfig'] as const,
+  initialStock: ['palletStock', 'initialStock'] as const,
 };
 
 // ============================================
@@ -61,6 +69,18 @@ export function usePalletDayMutation() {
       queryClient.invalidateQueries({
         queryKey: palletStockKeys.month.all,
       });
+      toast({
+        title: 'Dane zapisane',
+        description: 'Wpisy dnia zostały zaktualizowane.',
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd zapisu',
+        description: error.message || 'Nie udało się zapisać wpisów dnia.',
+        variant: 'destructive',
+      });
     },
   });
 }
@@ -84,6 +104,22 @@ export function useCloseDayMutation() {
       // Invaliduj podsumowania miesięcy
       queryClient.invalidateQueries({
         queryKey: palletStockKeys.month.all,
+      });
+      // Invaliduj kalendarz (status dni się zmienił)
+      queryClient.invalidateQueries({
+        queryKey: palletStockKeys.calendar.all,
+      });
+      toast({
+        title: 'Dzień zamknięty',
+        description: `Dzień ${date} został pomyślnie zamknięty.`,
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd zamykania dnia',
+        description: error.message || 'Nie udało się zamknąć dnia.',
+        variant: 'destructive',
       });
     },
   });
@@ -113,6 +149,18 @@ export function useCorrectionMutation() {
       queryClient.invalidateQueries({
         queryKey: palletStockKeys.month.all,
       });
+      toast({
+        title: 'Korekta zapisana',
+        description: 'Stan poranny został skorygowany.',
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd korekty',
+        description: error.message || 'Nie udało się zapisać korekty.',
+        variant: 'destructive',
+      });
     },
   });
 }
@@ -137,7 +185,7 @@ export function usePalletMonth(year: number, month: number, enabled = true) {
  */
 export function usePalletCalendar(year: number, month: number, enabled = true) {
   return useQuery({
-    queryKey: ['palletStock', 'calendar', { year, month }],
+    queryKey: palletStockKeys.calendar.month(year, month),
     queryFn: () => palletStockApi.month.getCalendar(year, month),
     enabled: enabled && year > 0 && month > 0 && month <= 12,
   });
@@ -174,6 +222,70 @@ export function useAlertConfigMutation() {
       // Invaliduj wszystkie dni (alerty mogą się zmienić)
       queryClient.invalidateQueries({
         queryKey: palletStockKeys.day.all,
+      });
+      toast({
+        title: 'Alerty zaktualizowane',
+        description: 'Konfiguracja alertów została zapisana.',
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd aktualizacji alertów',
+        description: error.message || 'Nie udało się zaktualizować konfiguracji alertów.',
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+// ============================================
+// INITIAL STOCK HOOKS
+// ============================================
+
+/**
+ * Pobierz stany początkowe palet
+ */
+export function usePalletInitialStocks(enabled = true) {
+  return useQuery({
+    queryKey: palletStockKeys.initialStock,
+    queryFn: () => palletInitialStockApi.getInitialStocks(),
+    enabled,
+  });
+}
+
+/**
+ * Mutacja do ustawienia stanów początkowych (tylko admin)
+ */
+export function useSetInitialStocksMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SetInitialStocksInput) =>
+      palletInitialStockApi.setInitialStocks(input),
+    onSuccess: () => {
+      // Invaliduj stany początkowe
+      queryClient.invalidateQueries({
+        queryKey: palletStockKeys.initialStock,
+      });
+      // Invaliduj wszystkie dni (stan poranny może się zmienić)
+      queryClient.invalidateQueries({
+        queryKey: palletStockKeys.day.all,
+      });
+      // Invaliduj podsumowania miesięcy
+      queryClient.invalidateQueries({
+        queryKey: palletStockKeys.month.all,
+      });
+      toast({
+        title: 'Stany początkowe zapisane',
+        description: 'Stany początkowe palet zostały ustawione.',
+        variant: 'success',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd zapisu stanów początkowych',
+        description: error.message || 'Nie udało się ustawić stanów początkowych.',
+        variant: 'destructive',
       });
     },
   });

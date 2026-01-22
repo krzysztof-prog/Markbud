@@ -27,7 +27,7 @@ export {
   okucProportionsApi,
 } from './warehouse';
 
-// Settings (Colors, Profiles, Working Days, Currency, Profile Depths, etc.)
+// Settings (Colors, Profiles, Working Days, Currency, Profile Depths, Steel, etc.)
 export {
   colorsApi,
   profilesApi,
@@ -35,6 +35,7 @@ export {
   settingsApi,
   currencyConfigApi,
   profileDepthsApi,
+  steelApi,
 } from './settings';
 export type {
   ProfileDepth,

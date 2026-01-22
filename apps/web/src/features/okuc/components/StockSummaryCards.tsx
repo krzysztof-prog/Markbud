@@ -109,10 +109,10 @@ export const StockSummaryCards: React.FC<StockSummaryCardsProps> = ({
                 </Badge>
               </div>
 
-              {/* Opcjonalnie: Zarezerwowane (jeśli będzie potrzebne) */}
+              {/* Opcjonalnie: Zapotrzebowanie (jeśli będzie potrzebne) */}
               {item.reservedTotal > 0 && (
                 <div className="flex items-center justify-between pt-2 border-t">
-                  <span className="text-sm text-gray-600">Zarezerwowane:</span>
+                  <span className="text-sm text-gray-600">Zapotrzebowanie:</span>
                   <Badge variant="outline" className="font-mono">
                     {item.reservedTotal}
                   </Badge>

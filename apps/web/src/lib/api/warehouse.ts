@@ -60,4 +60,4 @@ export {
   okucDemandApi,
   okucOrdersApi,
   okucProportionsApi,
-} from '@/features/okuc/api/okucApi';
+} from '@/features/okuc/api';

@@ -48,7 +48,7 @@ export function ColorsTab({ colors, onAdd, onEdit, onDelete }: ColorsTabProps) {
               {colors?.map((color, index: number) => (
                 <tr
                   key={color.id}
-                  className={`border-t hover:bg-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
+                  className={`border-t hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
                 >
                   <td className="px-4 py-3">
                     <div

@@ -87,3 +87,47 @@ export interface SchucoSyncLinksResponse {
   linksCreated: number;
   warehouseItems: number;
 }
+
+/**
+ * Pozycja zamówienia Schüco (artykuł)
+ */
+export interface SchucoOrderItem {
+  id: number;
+  position: number;
+  articleNumber: string;
+  articleDescription: string;
+  orderedQty: number;
+  shippedQty: number;
+  unit: string;
+  dimensions: string | null;
+  configuration: string | null;
+  deliveryWeek: string | null;
+  tracking: string | null;
+  comment: string | null;
+  changeType: 'new' | 'updated' | null;
+  changedAt: string | null;
+  changedFields: string | null;
+  fetchedAt: string;
+}
+
+/**
+ * Statystyki pozycji zamówień
+ */
+export interface SchucoItemsStats {
+  totalDeliveries: number;
+  withItems: number;
+  withoutItems: number;
+  totalItems: number;
+}
+
+/**
+ * Wynik pobierania pozycji
+ */
+export interface SchucoItemsFetchResult {
+  totalDeliveries: number;
+  processedDeliveries: number;
+  newItems: number;
+  updatedItems: number;
+  unchangedItems: number;
+  errors: number;
+}

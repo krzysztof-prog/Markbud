@@ -9,6 +9,7 @@ import type { IFileWatcher, WatcherConfig } from './types.js';
 import { DEFAULT_WATCHER_CONFIG } from './types.js';
 import { parse } from 'csv-parse/sync';
 import { stripBOM } from '../../utils/string-utils.js';
+import { importQueue } from '../import/ImportQueueService.js';
 
 /**
  * Format pliku CSV:
@@ -48,16 +49,13 @@ interface ImportResult {
  * - Automatyczne przypisanie do zlecenia (nr zlecenia w nazwie pliku)
  * - Wykrywanie nietypowych okuć (orderClass = 'atypical')
  *
- * Używa kolejki do sekwencyjnego przetwarzania - SQLite nie radzi sobie z równoległymi transakcjami
+ * Używa GLOBALNEJ kolejki importQueue do sekwencyjnego przetwarzania
+ * wszystkich importów w systemie - zapobiega timeoutom SQLite
  */
 export class OkucZapotrzebowaWatcher implements IFileWatcher {
   private prisma: PrismaClient;
   private watchers: FSWatcher[] = [];
   private config: WatcherConfig;
-
-  // Kolejka do sekwencyjnego przetwarzania (SQLite limitation)
-  private queue: string[] = [];
-  private isProcessing = false;
 
   constructor(prisma: PrismaClient, config: WatcherConfig = DEFAULT_WATCHER_CONFIG) {
     this.prisma = prisma;
@@ -85,45 +83,38 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
   }
 
   /**
-   * Dodaje plik do kolejki i uruchamia przetwarzanie
-   * Zapewnia sekwencyjne przetwarzanie - SQLite nie radzi sobie z równoległymi transakcjami
+   * Dodaje plik do GLOBALNEJ kolejki importów
+   * Używa importQueue singleton dla sekwencyjnego przetwarzania wszystkich importów w systemie
    */
-  private enqueue(filePath: string): void {
-    this.queue.push(filePath);
-    if (!this.isProcessing) {
-      this.processQueue();
-    }
-  }
-
-  /**
-   * Przetwarza kolejkę sekwencyjnie - jeden plik na raz
-   */
-  private async processQueue(): Promise<void> {
-    if (this.isProcessing || this.queue.length === 0) {
+  private enqueueToGlobalQueue(filePath: string): void {
+    // Sprawdź czy plik nie jest już w kolejce
+    if (importQueue.isFileInQueue(filePath)) {
+      logger.debug(`Plik juz w kolejce, pomijam: ${path.basename(filePath)}`);
       return;
     }
 
-    this.isProcessing = true;
-
-    while (this.queue.length > 0) {
-      const filePath = this.queue.shift();
-      if (!filePath) break;
-
-      try {
-        await this.processOkucZapCsv(filePath);
-      } catch (error) {
-        logger.error(`Blad przetwarzania kolejki okuc: ${error instanceof Error ? error.message : 'Unknown'}`);
-      }
-
-      // Mały delay między plikami żeby SQLite miał czas na commit
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    this.isProcessing = false;
-
-    if (this.queue.length > 0) {
-      this.processQueue();
-    }
+    importQueue.enqueue({
+      type: 'okucia',
+      filePath,
+      priority: 12, // Okucia mają średni priorytet
+      execute: async () => {
+        try {
+          await this.processOkucZapCsv(filePath);
+          return { success: true };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          const isTimeoutError =
+            errorMessage.includes('Transaction') ||
+            errorMessage.includes('timeout') ||
+            errorMessage.includes('SQLITE_BUSY');
+          return {
+            success: false,
+            error: errorMessage,
+            shouldRetry: isTimeoutError,
+          };
+        }
+      },
+    });
   }
 
   /**
@@ -154,8 +145,8 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
         if (!lowerName.endsWith('.csv')) {
           return;
         }
-        // Dodaj do kolejki zamiast przetwarzać bezpośrednio (SQLite limitation)
-        this.enqueue(filePath);
+        // Dodaj do GLOBALNEJ kolejki importów
+        this.enqueueToGlobalQueue(filePath);
       })
       .on('error', (error) => {
         logger.error(`Blad File Watcher dla okuc zapotrzebowania ${basePath}: ${error}`);

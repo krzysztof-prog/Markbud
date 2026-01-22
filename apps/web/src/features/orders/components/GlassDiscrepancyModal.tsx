@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Modal pokazujący rozbieżności w dostawie szyb dla zlecenia
- * Wyświetla listę problemów: brakujące szyby, nadwyżki, konflikty
+ * Modal pokazujący szczegółowe rozbieżności w dostawie szyb dla zlecenia
+ * Wyświetla porównanie per wymiar: zamówiono vs dostarczono z info o dostawach
  */
 
 import React from 'react';
@@ -14,7 +14,15 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle,
+  AlertCircle,
+  Plus,
+  Minus,
+  Package,
+  Truck,
+} from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchApi } from '@/lib/api-client';
 
@@ -22,18 +30,41 @@ import { fetchApi } from '@/lib/api-client';
 // Typy
 // ================================
 
-interface GlassValidation {
+interface DimensionComparison {
+  dimension: string;
+  widthMm: number;
+  heightMm: number;
+  ordered: number;
+  delivered: number;
+  difference: number;
+  status: 'ok' | 'surplus' | 'shortage' | 'missing' | 'extra';
+  orderedPositions: string[];
+  deliveries: {
+    deliveryId: number;
+    deliveryDate: string;
+    rackNumber: string | null;
+    quantity: number;
+  }[];
+  glassType: string | null;
+}
+
+interface DeliveryInfo {
   id: number;
+  deliveryDate: string;
+  rackNumber: string | null;
+  customerOrderNumber: string | null;
+}
+
+interface DetailedDiscrepancies {
   orderNumber: string;
-  validationType: string;
-  severity: 'info' | 'warning' | 'error';
-  expectedQuantity: number | null;
-  orderedQuantity: number | null;
-  deliveredQuantity: number | null;
-  message: string;
-  details: string | null;
-  resolved: boolean;
-  createdAt: string;
+  summary: {
+    totalOrdered: number;
+    totalDelivered: number;
+    difference: number;
+    status: 'ok' | 'surplus' | 'shortage';
+  };
+  comparison: DimensionComparison[];
+  deliveries: DeliveryInfo[];
 }
 
 interface GlassDiscrepancyModalProps {
@@ -46,44 +77,59 @@ interface GlassDiscrepancyModalProps {
 // Pomocnicze funkcje
 // ================================
 
-const getSeverityIcon = (severity: string) => {
-  switch (severity) {
-    case 'error':
-      return <XCircle className="h-4 w-4 text-red-500" />;
-    case 'warning':
-      return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-    case 'info':
-      return <AlertCircle className="h-4 w-4 text-blue-500" />;
-    default:
+const formatDate = (dateStr: string): string => {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('pl-PL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+};
+
+const getStatusIcon = (status: DimensionComparison['status']) => {
+  switch (status) {
+    case 'ok':
       return <CheckCircle className="h-4 w-4 text-green-500" />;
+    case 'surplus':
+    case 'extra':
+      return <Plus className="h-4 w-4 text-orange-500" />;
+    case 'shortage':
+    case 'missing':
+      return <Minus className="h-4 w-4 text-red-500" />;
+    default:
+      return <AlertCircle className="h-4 w-4 text-slate-400" />;
   }
 };
 
-const getSeverityBadge = (severity: string) => {
-  switch (severity) {
-    case 'error':
-      return <Badge variant="destructive">Błąd</Badge>;
-    case 'warning':
-      return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Ostrzeżenie</Badge>;
-    case 'info':
-      return <Badge variant="secondary">Info</Badge>;
+const getStatusBadge = (status: DimensionComparison['status']) => {
+  switch (status) {
+    case 'ok':
+      return <Badge className="bg-green-100 text-green-800">OK</Badge>;
+    case 'surplus':
+      return <Badge className="bg-orange-100 text-orange-800">Nadwyżka</Badge>;
+    case 'extra':
+      return <Badge className="bg-orange-100 text-orange-800">Nie zamówiono</Badge>;
+    case 'shortage':
+      return <Badge className="bg-red-100 text-red-800">Brak</Badge>;
+    case 'missing':
+      return <Badge className="bg-red-100 text-red-800">Nie dostarczono</Badge>;
     default:
       return <Badge variant="outline">Nieznany</Badge>;
   }
 };
 
-const getValidationTypeLabel = (type: string) => {
-  switch (type) {
-    case 'suffix_mismatch':
-      return 'Konflikt suffiksu';
-    case 'unmatched_delivery':
-      return 'Brak dopasowania';
-    case 'quantity_mismatch':
-      return 'Różnica ilości';
-    case 'missing_order':
-      return 'Brak zamówienia';
+const getStatusRowColor = (status: DimensionComparison['status']) => {
+  switch (status) {
+    case 'ok':
+      return 'bg-green-50 border-green-200';
+    case 'surplus':
+    case 'extra':
+      return 'bg-orange-50 border-orange-200';
+    case 'shortage':
+    case 'missing':
+      return 'bg-red-50 border-red-200';
     default:
-      return type;
+      return 'bg-slate-50 border-slate-200';
   }
 };
 
@@ -96,34 +142,29 @@ export function GlassDiscrepancyModal({
   onOpenChange,
   orderNumber,
 }: GlassDiscrepancyModalProps) {
-  // Pobierz walidacje dla zlecenia
-  const { data: validations, isLoading, error } = useQuery<GlassValidation[]>({
-    queryKey: ['glass-validations', orderNumber],
-    queryFn: () => fetchApi(`/api/glass-validations/order/${orderNumber}`),
+  // Pobierz szczegółowe rozbieżności
+  const { data, isLoading, error } = useQuery<DetailedDiscrepancies>({
+    queryKey: ['glass-discrepancies-details', orderNumber],
+    queryFn: () => fetchApi(`/api/glass-validations/order/${orderNumber}/details`),
     enabled: open && !!orderNumber,
   });
 
   if (!orderNumber) return null;
 
-  // Grupuj walidacje po severity
-  const groupedValidations = {
-    errors: validations?.filter(v => v.severity === 'error') || [],
-    warnings: validations?.filter(v => v.severity === 'warning') || [],
-    info: validations?.filter(v => v.severity === 'info') || [],
-  };
-
-  const hasIssues = (validations?.length ?? 0) > 0;
+  const hasIssues = data?.comparison.some((c) => c.status !== 'ok') ?? false;
+  const problemItems = data?.comparison.filter((c) => c.status !== 'ok') ?? [];
+  const okItems = data?.comparison.filter((c) => c.status === 'ok') ?? [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-orange-500" />
             Rozbieżności szyb - Zlecenie {orderNumber}
           </DialogTitle>
           <DialogDescription>
-            Lista problemów wykrytych podczas dopasowywania dostaw szyb do zamówienia.
+            Szczegółowe porównanie zamówionych i dostarczonych szyb.
           </DialogDescription>
         </DialogHeader>
 
@@ -140,58 +181,138 @@ export function GlassDiscrepancyModal({
             </div>
           )}
 
-          {!isLoading && !error && !hasIssues && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              <span className="text-green-700">
-                Brak wykrytych rozbieżności dla tego zlecenia.
-              </span>
-            </div>
-          )}
-
-          {/* Błędy (najważniejsze) */}
-          {groupedValidations.errors.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="font-medium text-red-700 flex items-center gap-2">
-                <XCircle className="h-4 w-4" />
-                Błędy ({groupedValidations.errors.length})
-              </h3>
-              <div className="space-y-2">
-                {groupedValidations.errors.map((validation) => (
-                  <ValidationCard key={validation.id} validation={validation} />
-                ))}
+          {data && !isLoading && !error && (
+            <>
+              {/* Podsumowanie */}
+              <div
+                className={`border rounded-lg p-4 ${
+                  data.summary.status === 'ok'
+                    ? 'bg-green-50 border-green-200'
+                    : data.summary.status === 'surplus'
+                    ? 'bg-orange-50 border-orange-200'
+                    : 'bg-red-50 border-red-200'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {data.summary.status === 'ok' ? (
+                      <CheckCircle className="h-6 w-6 text-green-600" />
+                    ) : data.summary.status === 'surplus' ? (
+                      <Plus className="h-6 w-6 text-orange-600" />
+                    ) : (
+                      <Minus className="h-6 w-6 text-red-600" />
+                    )}
+                    <div>
+                      <div className="font-medium text-lg">
+                        {data.summary.status === 'ok'
+                          ? 'Wszystkie szyby dostarczone'
+                          : data.summary.status === 'surplus'
+                          ? `Nadwyżka: +${data.summary.difference} szt.`
+                          : `Brak: ${data.summary.difference} szt.`}
+                      </div>
+                      <div className="text-sm text-slate-600">
+                        Zamówiono: {data.summary.totalOrdered} szt. | Dostarczono:{' '}
+                        {data.summary.totalDelivered} szt.
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
 
-          {/* Ostrzeżenia */}
-          {groupedValidations.warnings.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="font-medium text-yellow-700 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                Ostrzeżenia ({groupedValidations.warnings.length})
-              </h3>
-              <div className="space-y-2">
-                {groupedValidations.warnings.map((validation) => (
-                  <ValidationCard key={validation.id} validation={validation} />
-                ))}
-              </div>
-            </div>
-          )}
+              {/* Informacja o dostawach */}
+              {data.deliveries.length > 0 && (
+                <div className="border rounded-lg p-3 bg-slate-50">
+                  <div className="flex items-center gap-2 mb-2 text-sm font-medium text-slate-700">
+                    <Truck className="h-4 w-4" />
+                    Dostawy dla tego zlecenia ({data.deliveries.length})
+                  </div>
+                  <div className="space-y-1">
+                    {data.deliveries.map((delivery) => (
+                      <div
+                        key={delivery.id}
+                        className="text-xs text-slate-600 flex gap-3"
+                      >
+                        <span className="font-mono">#{delivery.id}</span>
+                        <span>{formatDate(delivery.deliveryDate)}</span>
+                        {delivery.rackNumber && (
+                          <span>Rack: {delivery.rackNumber}</span>
+                        )}
+                        {delivery.customerOrderNumber && (
+                          <span className="text-slate-400 truncate max-w-[200px]">
+                            {delivery.customerOrderNumber}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-          {/* Informacje */}
-          {groupedValidations.info.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="font-medium text-blue-700 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4" />
-                Informacje ({groupedValidations.info.length})
-              </h3>
-              <div className="space-y-2">
-                {groupedValidations.info.map((validation) => (
-                  <ValidationCard key={validation.id} validation={validation} />
-                ))}
-              </div>
-            </div>
+              {/* Lista problemów (rozbieżności) */}
+              {problemItems.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="font-medium text-slate-700 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-orange-500" />
+                    Rozbieżności ({problemItems.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {problemItems.map((item, idx) => (
+                      <DimensionCard key={idx} item={item} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Szyby OK (zwinięte domyślnie) */}
+              {okItems.length > 0 && (
+                <details className="border rounded-lg">
+                  <summary className="p-3 cursor-pointer hover:bg-slate-50 flex items-center gap-2 text-sm font-medium text-slate-600">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    Szyby dostarczone prawidłowo ({okItems.length} pozycji)
+                  </summary>
+                  <div className="p-3 pt-0 space-y-2">
+                    {okItems.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="text-xs text-slate-600 flex items-center gap-3 py-1 border-b border-slate-100 last:border-0"
+                      >
+                        <span className="font-mono font-medium">
+                          {item.widthMm}x{item.heightMm}
+                        </span>
+                        <span>
+                          {item.ordered} szt.
+                        </span>
+                        {item.orderedPositions.length > 0 && (
+                          <span className="text-slate-400">
+                            ({item.orderedPositions.join(', ')})
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+
+              {/* Brak problemów */}
+              {!hasIssues && data.comparison.length > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <span className="text-green-700">
+                    Wszystkie szyby zostały dostarczone prawidłowo.
+                  </span>
+                </div>
+              )}
+
+              {/* Brak danych */}
+              {data.comparison.length === 0 && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 flex items-center gap-3">
+                  <Package className="h-5 w-5 text-slate-400" />
+                  <span className="text-slate-600">
+                    Brak danych o szybach dla tego zlecenia.
+                  </span>
+                </div>
+              )}
+            </>
           )}
         </div>
       </DialogContent>
@@ -200,75 +321,75 @@ export function GlassDiscrepancyModal({
 }
 
 // ================================
-// Komponent karty walidacji
+// Komponent karty wymiaru
 // ================================
 
-interface ValidationCardProps {
-  validation: GlassValidation;
+interface DimensionCardProps {
+  item: DimensionComparison;
 }
 
-function ValidationCard({ validation }: ValidationCardProps) {
-  // Parsuj details jeśli to JSON
-  let details: Record<string, unknown> | null = null;
-  if (validation.details) {
-    try {
-      details = JSON.parse(validation.details);
-    } catch {
-      // Nie jest JSON - zostaw null
-    }
-  }
-
+function DimensionCard({ item }: DimensionCardProps) {
   return (
-    <div className={`border rounded-lg p-3 ${
-      validation.severity === 'error'
-        ? 'bg-red-50 border-red-200'
-        : validation.severity === 'warning'
-        ? 'bg-yellow-50 border-yellow-200'
-        : 'bg-blue-50 border-blue-200'
-    }`}>
+    <div className={`border rounded-lg p-3 ${getStatusRowColor(item.status)}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2">
-          {getSeverityIcon(validation.severity)}
-          <div>
+          {getStatusIcon(item.status)}
+          <div className="space-y-1">
+            {/* Wymiar i status */}
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-medium text-sm">
-                {getValidationTypeLabel(validation.validationType)}
+              <span className="font-mono font-medium text-sm">
+                {item.widthMm} x {item.heightMm} mm
               </span>
-              {getSeverityBadge(validation.severity)}
-              {validation.resolved && (
-                <Badge variant="outline" className="bg-green-50 text-green-700">
-                  Rozwiązane
-                </Badge>
-              )}
+              {getStatusBadge(item.status)}
             </div>
-            <p className="text-sm text-slate-600 mt-1">
-              {validation.message}
-            </p>
 
-            {/* Szczegóły ilości */}
-            {(validation.orderedQuantity !== null || validation.deliveredQuantity !== null) && (
-              <div className="mt-2 text-xs text-slate-500 flex gap-4">
-                {validation.orderedQuantity !== null && (
-                  <span>Zamówiono: <strong>{validation.orderedQuantity}</strong></span>
-                )}
-                {validation.deliveredQuantity !== null && (
-                  <span>Dostarczono: <strong>{validation.deliveredQuantity}</strong></span>
-                )}
-                {validation.expectedQuantity !== null && (
-                  <span>Oczekiwano: <strong>{validation.expectedQuantity}</strong></span>
-                )}
+            {/* Porównanie ilości */}
+            <div className="text-xs text-slate-600 flex gap-4">
+              <span>
+                Zamówiono: <strong>{item.ordered}</strong> szt.
+              </span>
+              <span>
+                Dostarczono: <strong>{item.delivered}</strong> szt.
+              </span>
+              <span
+                className={
+                  item.difference > 0
+                    ? 'text-orange-600 font-medium'
+                    : item.difference < 0
+                    ? 'text-red-600 font-medium'
+                    : 'text-green-600'
+                }
+              >
+                Różnica: {item.difference > 0 ? '+' : ''}
+                {item.difference} szt.
+              </span>
+            </div>
+
+            {/* Pozycje z zamówienia */}
+            {item.orderedPositions.length > 0 && (
+              <div className="text-xs text-slate-500">
+                Pozycje: {item.orderedPositions.join(', ')}
               </div>
             )}
 
-            {/* Dodatkowe szczegóły z JSON */}
-            {details && (
-              <div className="mt-2 text-xs text-slate-500">
-                {typeof details.widthMm === 'number' && typeof details.heightMm === 'number' && (
-                  <span>Wymiary: {details.widthMm} x {details.heightMm} mm</span>
-                )}
-                {typeof details.glassComposition === 'string' && (
-                  <span className="ml-3">Zespolenie: {details.glassComposition}</span>
-                )}
+            {/* Info o dostawach dla tego wymiaru */}
+            {item.deliveries.length > 0 && (
+              <div className="text-xs text-slate-500 mt-1">
+                <span className="font-medium">Dostawy:</span>{' '}
+                {item.deliveries.map((d, idx) => (
+                  <span key={d.deliveryId}>
+                    {idx > 0 && ', '}
+                    <span className="font-mono">#{d.deliveryId}</span> ({d.quantity}{' '}
+                    szt. - {formatDate(d.deliveryDate)})
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Typ szkła */}
+            {item.glassType && (
+              <div className="text-xs text-slate-400">
+                Typ: {item.glassType}
               </div>
             )}
           </div>

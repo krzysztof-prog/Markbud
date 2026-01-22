@@ -530,60 +530,60 @@ export function ProfileDeliveryTable() {
             </div>
 
             {colorGroup.profiles.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="bg-white" style={{ tableLayout: 'fixed', width: `${440 + deliveries.length * 100}px` }}>
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-300">
-                      <th className="px-3 py-2 text-left font-semibold text-xs text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-50 z-20" style={{ width: '140px' }}></th>
-                      <th className="px-3 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200 sticky left-[140px] bg-slate-50 z-20" style={{ width: '100px' }}></th>
-                      <th className="px-3 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200 sticky left-[240px] bg-slate-50 z-20" style={{ width: '100px' }}></th>
-                      <th className="px-2 py-2 text-center border-r border-slate-200 sticky left-[340px] bg-slate-50 z-20" style={{ width: '100px' }}>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={sumColumns}
-                          onChange={(e) => setSumColumns(Math.max(1, parseInt(e.target.value) || 1))}
-                          className="w-16 h-7 text-center text-sm font-semibold border-slate-300 bg-white focus:border-blue-500 focus:ring-blue-500"
-                        />
-                      </th>
-                      {deliveries.map((delivery) => (
-                        <th key={`header-date-${delivery.deliveryId}`} className="px-2 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200 whitespace-nowrap relative" style={{ width: '100px', zIndex: 1 }}>
-                          <div>{delivery.date}</div>
-                          {delivery.deliveryNumber && <div className="text-[10px] text-slate-500">({delivery.deliveryNumber})</div>}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(event) => handleDragEnd(event, colorGroup.id)}
+              >
+                <div className="overflow-x-auto">
+                  <table className="bg-white" style={{ tableLayout: 'fixed', width: `${440 + deliveries.length * 100}px` }}>
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-300">
+                        <th className="px-3 py-2 text-left font-semibold text-xs text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-50 z-20" style={{ width: '140px' }}></th>
+                        <th className="px-3 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200 sticky left-[140px] bg-slate-50 z-20" style={{ width: '100px' }}></th>
+                        <th className="px-3 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200 sticky left-[240px] bg-slate-50 z-20" style={{ width: '100px' }}></th>
+                        <th className="px-2 py-2 text-center border-r border-slate-200 sticky left-[340px] bg-slate-50 z-20" style={{ width: '100px' }}>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={sumColumns}
+                            onChange={(e) => setSumColumns(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-16 h-7 text-center text-sm font-semibold border-slate-300 bg-white focus:border-blue-500 focus:ring-blue-500"
+                          />
                         </th>
-                      ))}
-                    </tr>
-                    <tr className="bg-slate-50/50 border-b border-slate-200">
-                      <th className="px-3 py-2 text-left text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-0 bg-slate-50/50 z-20" style={{ width: '140px' }}>
-                        PROFIL
-                      </th>
-                      <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[140px] bg-slate-50/50 z-20" style={{ width: '100px' }}>
-                        MAG
-                      </th>
-                      <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[240px] bg-slate-50/50 z-20" style={{ width: '100px' }}>
-                        SUM
-                      </th>
-                      <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[340px] bg-slate-50/50 z-20" style={{ width: '100px' }}>
-                        <div className="text-xs font-semibold text-slate-700">SUMA {sumColumns}</div>
-                      </th>
-                      {deliveries.map((delivery) => (
-                        <th key={`header-week-${delivery.deliveryId}`} className="px-2 py-2 text-center border-r border-slate-200 whitespace-nowrap relative" style={{ width: '100px', zIndex: 1 }}>
-                          <div className="text-xs text-slate-600">tyg. {delivery.week}</div>
-                          <div className="text-xs text-slate-500">{delivery.day}</div>
+                        {deliveries.map((delivery) => (
+                          <th key={`header-date-${delivery.deliveryId}`} className="px-2 py-2 text-center font-semibold text-xs text-slate-700 border-r border-slate-200 whitespace-nowrap relative" style={{ width: '100px', zIndex: 1 }}>
+                            <div>{delivery.date}</div>
+                            {delivery.deliveryNumber && <div className="text-[10px] text-slate-500">({delivery.deliveryNumber})</div>}
+                          </th>
+                        ))}
+                      </tr>
+                      <tr className="bg-slate-50/50 border-b border-slate-200">
+                        <th className="px-3 py-2 text-left text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-0 bg-slate-50/50 z-20" style={{ width: '140px' }}>
+                          PROFIL
                         </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={(event) => handleDragEnd(event, colorGroup.id)}
-                  >
-                    <SortableContext
-                      items={colorGroup.profiles.map((p) => p.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <tbody>
+                        <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[140px] bg-slate-50/50 z-20" style={{ width: '100px' }}>
+                          MAG
+                        </th>
+                        <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[240px] bg-slate-50/50 z-20" style={{ width: '100px' }}>
+                          SUM
+                        </th>
+                        <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[340px] bg-slate-50/50 z-20" style={{ width: '100px' }}>
+                          <div className="text-xs font-semibold text-slate-700">SUMA {sumColumns}</div>
+                        </th>
+                        {deliveries.map((delivery) => (
+                          <th key={`header-week-${delivery.deliveryId}`} className="px-2 py-2 text-center border-r border-slate-200 whitespace-nowrap relative" style={{ width: '100px', zIndex: 1 }}>
+                            <div className="text-xs text-slate-600">tyg. {delivery.week}</div>
+                            <div className="text-xs text-slate-500">{delivery.day}</div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <SortableContext
+                        items={colorGroup.profiles.map((p) => p.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
                         {colorGroup.profiles
                           .filter((profile) => profile.deliveries.reduce((sum, d) => sum + d.quantity, 0) > 0)
                           .map((profile, idx) => (
@@ -598,11 +598,11 @@ export function ProfileDeliveryTable() {
                               handleQuantityChange={handleQuantityChange}
                             />
                           ))}
-                      </tbody>
-                    </SortableContext>
-                  </DndContext>
-                </table>
-              </div>
+                      </SortableContext>
+                    </tbody>
+                  </table>
+                </div>
+              </DndContext>
             ) : (
               <div className="px-4 py-8 text-sm text-slate-500 text-center">
                 Brak profili dla tego koloru

@@ -12,6 +12,13 @@
  * - GET /deliveries/:code/diff - diff między wersjami
  * - GET /calendar - kalendarz dostaw
  * - PATCH /items/:id - aktualizuj pozycję
+ *
+ * Akcje dla systemu decyzji diff:
+ * - DELETE /items/:id/remove - usuń pozycję z dostawy (soft delete)
+ * - POST /items/:id/confirm - potwierdź dodaną pozycję
+ * - DELETE /items/:id/reject - odrzuć dodaną pozycję (soft delete)
+ * - POST /items/:id/accept-change - zaakceptuj zmianę
+ * - POST /items/:id/restore - przywróć poprzednią wartość
  */
 
 import type { FastifyPluginAsync } from 'fastify';
@@ -103,4 +110,51 @@ export const logisticsRoutes: FastifyPluginAsync = async (fastify) => {
    * Aktualizuje pozycję mailową (np. ręczne przypisanie Order)
    */
   fastify.patch<{ Params: { id: string }; Body: unknown }>('/items/:id', logisticsHandler.updateMailItem.bind(logisticsHandler));
+
+  // ========== AKCJE DLA SYSTEMU DECYZJI DIFF ==========
+
+  /**
+   * DELETE /logistics/items/:id/remove
+   * Usuwa pozycję z dostawy (soft delete)
+   */
+  fastify.delete<{ Params: { id: string } }>(
+    '/items/:id/remove',
+    logisticsHandler.removeItemFromDelivery.bind(logisticsHandler)
+  );
+
+  /**
+   * POST /logistics/items/:id/confirm
+   * Potwierdza dodaną pozycję
+   */
+  fastify.post<{ Params: { id: string } }>(
+    '/items/:id/confirm',
+    logisticsHandler.confirmAddedItem.bind(logisticsHandler)
+  );
+
+  /**
+   * DELETE /logistics/items/:id/reject
+   * Odrzuca dodaną pozycję (soft delete)
+   */
+  fastify.delete<{ Params: { id: string } }>(
+    '/items/:id/reject',
+    logisticsHandler.rejectAddedItem.bind(logisticsHandler)
+  );
+
+  /**
+   * POST /logistics/items/:id/accept-change
+   * Akceptuje zmianę pozycji
+   */
+  fastify.post<{ Params: { id: string } }>(
+    '/items/:id/accept-change',
+    logisticsHandler.acceptItemChange.bind(logisticsHandler)
+  );
+
+  /**
+   * POST /logistics/items/:id/restore
+   * Przywraca poprzednią wartość pozycji
+   */
+  fastify.post<{ Params: { id: string }; Body: { field: string; previousValue: string } }>(
+    '/items/:id/restore',
+    logisticsHandler.restoreItemValue.bind(logisticsHandler)
+  );
 };

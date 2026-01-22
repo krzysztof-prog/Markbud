@@ -11,23 +11,21 @@ import { ImportValidationService } from '../import/importValidationService.js';
 import { ImportTransactionService } from '../import/importTransactionService.js';
 import { CenyProcessor } from '../import/CenyProcessor.js';
 import { emitPriceImported, emitPricePending } from '../event-emitter.js';
+import { importQueue } from '../import/ImportQueueService.js';
 
 /**
  * Watcher odpowiedzialny za monitorowanie folderu cen:
  * - Pliki PDF z cenami zleceń
  * - Automatyczny import i aktualizacja Order.valuePln/valueEur
  *
- * Używa kolejki do sekwencyjnego przetwarzania - SQLite nie radzi sobie z równoległymi transakcjami
+ * Używa GLOBALNEJ kolejki importQueue do sekwencyjnego przetwarzania
+ * wszystkich importów w systemie - zapobiega timeoutom SQLite
  */
 export class CenyWatcher implements IFileWatcher {
   private prisma: PrismaClient;
   private watchers: FSWatcher[] = [];
   private config: WatcherConfig;
   private cenyProcessor: CenyProcessor;
-
-  // Kolejka do sekwencyjnego przetwarzania (SQLite limitation)
-  private queue: string[] = [];
-  private isProcessing = false;
 
   constructor(prisma: PrismaClient, config: WatcherConfig = DEFAULT_WATCHER_CONFIG) {
     this.prisma = prisma;
@@ -61,44 +59,38 @@ export class CenyWatcher implements IFileWatcher {
   }
 
   /**
-   * Dodaje plik do kolejki i uruchamia przetwarzanie
+   * Dodaje plik do GLOBALNEJ kolejki importów
+   * Używa importQueue singleton dla sekwencyjnego przetwarzania wszystkich importów w systemie
    */
-  private enqueue(filePath: string): void {
-    this.queue.push(filePath);
-    if (!this.isProcessing) {
-      this.processQueue();
-    }
-  }
-
-  /**
-   * Przetwarza kolejkę sekwencyjnie - jeden plik na raz
-   */
-  private async processQueue(): Promise<void> {
-    if (this.isProcessing || this.queue.length === 0) {
+  private enqueueToGlobalQueue(filePath: string): void {
+    // Sprawdź czy plik nie jest już w kolejce
+    if (importQueue.isFileInQueue(filePath)) {
+      logger.debug(`Plik juz w kolejce, pomijam: ${path.basename(filePath)}`);
       return;
     }
 
-    this.isProcessing = true;
-
-    while (this.queue.length > 0) {
-      const filePath = this.queue.shift();
-      if (!filePath) break;
-
-      try {
-        await this.processCenyPdf(filePath);
-      } catch (error) {
-        logger.error(`Blad przetwarzania kolejki cen: ${error instanceof Error ? error.message : 'Unknown'}`);
-      }
-
-      // Mały delay między plikami żeby SQLite miał czas na commit
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    this.isProcessing = false;
-
-    if (this.queue.length > 0) {
-      this.processQueue();
-    }
+    importQueue.enqueue({
+      type: 'ceny_pdf',
+      filePath,
+      priority: 15, // Ceny mają niższy priorytet niż zamówienia
+      execute: async () => {
+        try {
+          await this.processCenyPdf(filePath);
+          return { success: true };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          const isTimeoutError =
+            errorMessage.includes('Transaction') ||
+            errorMessage.includes('timeout') ||
+            errorMessage.includes('SQLITE_BUSY');
+          return {
+            success: false,
+            error: errorMessage,
+            shouldRetry: isTimeoutError,
+          };
+        }
+      },
+    });
   }
 
   /**
@@ -129,8 +121,8 @@ export class CenyWatcher implements IFileWatcher {
         if (!filename.endsWith('.pdf')) {
           return;
         }
-        // Dodaj do kolejki zamiast przetwarzać bezpośrednio (SQLite limitation)
-        this.enqueue(filePath);
+        // Dodaj do GLOBALNEJ kolejki importów
+        this.enqueueToGlobalQueue(filePath);
       })
       .on('error', (error) => {
         logger.error(`Błąd File Watcher dla cen ${basePath}: ${error}`);

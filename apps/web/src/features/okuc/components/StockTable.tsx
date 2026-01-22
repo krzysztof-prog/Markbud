@@ -22,7 +22,7 @@ interface StockTableProps {
   isUpdatingId?: number;
 }
 
-type SortColumn = 'articleId' | 'warehouse' | 'quantity' | 'updatedAt';
+type SortColumn = 'articleId' | 'warehouse' | 'quantity' | 'reserved' | 'available' | 'updatedAt';
 type SortDirection = 'asc' | 'desc';
 
 /**
@@ -111,6 +111,14 @@ export const StockTable: React.FC<StockTableProps> = ({
         case 'quantity':
           aValue = a.currentQuantity;
           bValue = b.currentQuantity;
+          break;
+        case 'reserved':
+          aValue = a.reservedQty ?? 0;
+          bValue = b.reservedQty ?? 0;
+          break;
+        case 'available':
+          aValue = a.currentQuantity - (a.reservedQty ?? 0);
+          bValue = b.currentQuantity - (b.reservedQty ?? 0);
           break;
         case 'updatedAt':
           aValue = new Date(a.updatedAt).getTime();
@@ -228,6 +236,8 @@ export const StockTable: React.FC<StockTableProps> = ({
             <SortableHeader column="warehouse">Magazyn</SortableHeader>
             <TableHead>Podmagazyn</TableHead>
             <SortableHeader column="quantity">Ilość</SortableHeader>
+            <SortableHeader column="reserved">Zapotrzebowanie</SortableHeader>
+            <SortableHeader column="available">Dostępne</SortableHeader>
             <TableHead>Min / Max</TableHead>
             <SortableHeader column="updatedAt">Ostatnia zmiana</SortableHeader>
             <TableHead className="text-right">Akcje</TableHead>
@@ -309,6 +319,40 @@ export const StockTable: React.FC<StockTableProps> = ({
                   ) : (
                     getQuantityBadge(stock)
                   )}
+                </TableCell>
+
+                {/* Zapotrzebowanie */}
+                <TableCell>
+                  {(stock.reservedQty ?? 0) > 0 ? (
+                    <Badge variant="secondary" className="bg-orange-100 text-orange-800 font-mono">
+                      {stock.reservedQty}
+                    </Badge>
+                  ) : (
+                    <span className="text-gray-400 font-mono">0</span>
+                  )}
+                </TableCell>
+
+                {/* Dostępne (stan po rezerwacji) */}
+                <TableCell>
+                  {(() => {
+                    const available = stock.currentQuantity - (stock.reservedQty ?? 0);
+                    const minStock = stock.minStock ?? 0;
+
+                    // Badge kolorystyczny: czerwony gdy dostępne < min, zielony gdy OK
+                    if (available < minStock && minStock > 0) {
+                      return (
+                        <Badge variant="destructive" className="font-mono">
+                          {available}
+                        </Badge>
+                      );
+                    }
+
+                    return (
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-800 font-mono">
+                        {available}
+                      </Badge>
+                    );
+                  })()}
                 </TableCell>
 
                 {/* Min / Max */}

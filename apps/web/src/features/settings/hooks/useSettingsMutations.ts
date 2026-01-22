@@ -3,8 +3,9 @@
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { settingsApi, colorsApi, profilesApi } from '@/lib/api';
-import type { UpdateColorData, UpdateProfileData, PalletType } from '@/types';
+import { settingsApi, colorsApi, profilesApi, steelApi } from '@/lib/api';
+import { toast } from '@/hooks/useToast';
+import type { UpdateColorData, UpdateProfileData, UpdateSteelData, PalletType } from '@/types';
 import { getAuthToken } from '@/lib/auth-token';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -159,7 +160,19 @@ export function useFileWatcher(callbacks?: { onRestartSuccess?: () => void }) {
       return res.json();
     },
     onSuccess: () => {
+      toast({
+        title: 'File watcher zrestartowany',
+        description: 'Obserwator plików został pomyślnie zrestartowany.',
+        variant: 'success',
+      });
       callbacks?.onRestartSuccess?.();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd restartu file watchera',
+        description: error.message || 'Nie udało się zrestartować obserwatora plików.',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -215,6 +228,48 @@ export function useDocumentAuthorMappingMutations(callbacks?: {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['document-author-mappings'] });
       callbacks?.onDeleteSuccess?.();
+    },
+  });
+
+  return { createMutation, updateMutation, deleteMutation };
+}
+
+/**
+ * Hook for steel (wzmocnienia stalowe) mutations
+ */
+export function useSteelMutations(callbacks?: {
+  onCreateSuccess?: () => void;
+  onUpdateSuccess?: () => void;
+  onDeleteSuccess?: () => void;
+  onDeleteError?: (error: Error) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  const createMutation = useMutation({
+    mutationFn: steelApi.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['steels'] });
+      callbacks?.onCreateSuccess?.();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: UpdateSteelData }) =>
+      steelApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['steels'] });
+      callbacks?.onUpdateSuccess?.();
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: steelApi.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['steels'] });
+      callbacks?.onDeleteSuccess?.();
+    },
+    onError: (error: Error) => {
+      callbacks?.onDeleteError?.(error);
     },
   });
 

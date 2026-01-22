@@ -23,13 +23,13 @@ interface VariantTypeSelectionDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Numer zlecenia wariantu który próbujemy dodać (np. "53335-a") */
   orderNumber: string;
-  /** Numer zlecenia oryginału (np. "53335") */
-  conflictingOrderNumber: string;
-  /** Dostawa do której przypisany jest oryginał */
+  /** Numer zlecenia oryginału (np. "53335") - null gdy zlecenie nie jest nigdzie przypisane */
+  conflictingOrderNumber: string | null;
+  /** Dostawa do której przypisany jest oryginał - null gdy zlecenie nie jest nigdzie przypisane */
   originalDelivery: {
     deliveryId: number;
     deliveryNumber: string;
-  };
+  } | null;
   /** Dostawa do której próbujemy dodać wariant */
   targetDeliveryId: number;
   /** Callback wywołany po wyborze typu wariantu */
@@ -60,8 +60,11 @@ export const VariantTypeSelectionDialog: React.FC<VariantTypeSelectionDialogProp
 }) => {
   const [selectedType, setSelectedType] = useState<VariantType | null>(null);
 
+  // Czy mamy informacje o oryginalnej dostawie (dla VARIANT_TYPE_REQUIRED)
+  const hasOriginalDeliveryInfo = originalDelivery !== null && conflictingOrderNumber !== null;
+
   // Sprawdź czy próbujemy dodać do tej samej dostawy co oryginał
-  const isSameDelivery = originalDelivery.deliveryId === targetDeliveryId;
+  const isSameDelivery = hasOriginalDeliveryInfo && originalDelivery.deliveryId === targetDeliveryId;
 
   const handleConfirm = async () => {
     if (!selectedType) return;
@@ -86,23 +89,34 @@ export const VariantTypeSelectionDialog: React.FC<VariantTypeSelectionDialogProp
             <div className="flex-1">
               <DialogTitle>Wybierz typ wariantu zlecenia</DialogTitle>
               <DialogDescription className="mt-1">
-                Zlecenie <span className="font-semibold">{orderNumber}</span> jest wariantem zlecenia{' '}
-                <span className="font-semibold">{conflictingOrderNumber}</span>.
+                {hasOriginalDeliveryInfo ? (
+                  <>
+                    Zlecenie <span className="font-semibold">{orderNumber}</span> jest wariantem zlecenia{' '}
+                    <span className="font-semibold">{conflictingOrderNumber}</span>.
+                  </>
+                ) : (
+                  <>
+                    Zlecenie <span className="font-semibold">{orderNumber}</span> ma sufix wskazujący że jest wariantem.
+                    Wybierz typ wariantu przed dodaniem do dostawy.
+                  </>
+                )}
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Info o oryginalnym zleceniu */}
-          <Alert>
-            <Info className="h-4 w-4" aria-hidden="true" />
-            <AlertDescription>
-              Zlecenie bazowe <span className="font-semibold">{conflictingOrderNumber}</span>{' '}
-              jest przypisane do dostawy{' '}
-              <span className="font-semibold">{originalDelivery.deliveryNumber}</span>.
-            </AlertDescription>
-          </Alert>
+          {/* Info o oryginalnym zleceniu - tylko gdy mamy te dane */}
+          {hasOriginalDeliveryInfo && (
+            <Alert>
+              <Info className="h-4 w-4" aria-hidden="true" />
+              <AlertDescription>
+                Zlecenie bazowe <span className="font-semibold">{conflictingOrderNumber}</span>{' '}
+                jest przypisane do dostawy{' '}
+                <span className="font-semibold">{originalDelivery.deliveryNumber}</span>.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Radio group do wyboru typu */}
           <RadioGroup value={selectedType || ''} onValueChange={(value) => setSelectedType(value as VariantType)}>
@@ -134,8 +148,8 @@ export const VariantTypeSelectionDialog: React.FC<VariantTypeSelectionDialogProp
                       To jest poprawiona wersja zlecenia bazowego. Korekty muszą być w tej samej dostawie co oryginał.
                     </p>
 
-                    {/* Warning gdy próbujemy dodać korekję do innej dostawy */}
-                    {selectedType === 'correction' && !isSameDelivery && (
+                    {/* Warning gdy próbujemy dodać korekję do innej dostawy (tylko gdy znamy oryginalną dostawę) */}
+                    {selectedType === 'correction' && hasOriginalDeliveryInfo && !isSameDelivery && (
                       <Alert variant="destructive" className="mt-3">
                         <AlertTriangle className="h-4 w-4" aria-hidden="true" />
                         <AlertDescription>
@@ -193,16 +207,23 @@ export const VariantTypeSelectionDialog: React.FC<VariantTypeSelectionDialogProp
                   <>
                     <p className="font-semibold">Co się stanie po potwierdzeniu:</p>
                     <ul className="mt-2 space-y-1 text-sm">
-                      {isSameDelivery ? (
-                        <>
-                          <li>• Zlecenie {orderNumber} zostanie dodane do dostawy {originalDelivery.deliveryNumber}</li>
-                          <li>• Będzie oznaczone jako "korekta" zlecenia {conflictingOrderNumber}</li>
-                        </>
+                      {hasOriginalDeliveryInfo ? (
+                        isSameDelivery ? (
+                          <>
+                            <li>• Zlecenie {orderNumber} zostanie dodane do dostawy {originalDelivery.deliveryNumber}</li>
+                            <li>• Będzie oznaczone jako "korekta" zlecenia {conflictingOrderNumber}</li>
+                          </>
+                        ) : (
+                          <li className="text-red-600">
+                            • <strong>Błąd</strong>: Nie można dodać korekty do innej dostawy.
+                            Wybierz "Dodatkowy plik" lub zmień dostawę docelową na {originalDelivery.deliveryNumber}.
+                          </li>
+                        )
                       ) : (
-                        <li className="text-red-600">
-                          • <strong>Błąd</strong>: Nie można dodać korekty do innej dostawy.
-                          Wybierz "Dodatkowy plik" lub zmień dostawę docelową na {originalDelivery.deliveryNumber}.
-                        </li>
+                        <>
+                          <li>• Zlecenie {orderNumber} zostanie dodane do wybranej dostawy</li>
+                          <li>• Będzie oznaczone jako "korekta"</li>
+                        </>
                       )}
                     </ul>
                   </>
@@ -211,7 +232,7 @@ export const VariantTypeSelectionDialog: React.FC<VariantTypeSelectionDialogProp
                     <p className="font-semibold">Co się stanie po potwierdzeniu:</p>
                     <ul className="mt-2 space-y-1 text-sm">
                       <li>• Zlecenie {orderNumber} zostanie dodane do wybranej dostawy</li>
-                      <li>• Będzie oznaczone jako "dodatkowy plik" do zlecenia {conflictingOrderNumber}</li>
+                      <li>• Będzie oznaczone jako "dodatkowy plik"{conflictingOrderNumber ? ` do zlecenia ${conflictingOrderNumber}` : ''}</li>
                       <li>• Może być w innej dostawie niż oryginał</li>
                     </ul>
                   </>
@@ -232,7 +253,7 @@ export const VariantTypeSelectionDialog: React.FC<VariantTypeSelectionDialogProp
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={!selectedType || isLoading || (selectedType === 'correction' && !isSameDelivery)}
+            disabled={!selectedType || isLoading || (selectedType === 'correction' && hasOriginalDeliveryInfo && !isSameDelivery)}
             className="bg-blue-600 hover:bg-blue-700 text-white"
           >
             {isLoading ? 'Zapisuję...' : 'Potwierdź wybór'}

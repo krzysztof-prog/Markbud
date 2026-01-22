@@ -5,12 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { FolderBrowser } from '@/components/ui/folder-browser';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
 import {
   RefreshCw,
   CheckCircle2,
   AlertCircle,
   FileText,
   Package,
+  Target,
 } from 'lucide-react';
 
 interface FileWatcherStatus {
@@ -92,6 +94,41 @@ export function GlassWatchTab({
             placeholder="C:\\dostawy_szyb"
             description="Automatyczny import plikow CSV z dostawami szyb"
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="h-5 w-5" />
+            Automatyczne dopasowanie szyb
+          </CardTitle>
+          <CardDescription>
+            Próg tolerancji dla automatycznego dopasowywania dostaw do zamówień
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <label className="text-sm font-medium block mb-1">
+              Tolerancja wymiarów (mm)
+            </label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min="0"
+                max="10"
+                step="1"
+                value={settings.glassMatchToleranceMm || '2'}
+                onChange={(e) => onSettingChange('glassMatchToleranceMm', e.target.value)}
+                className="w-24"
+              />
+              <span className="text-sm text-muted-foreground">mm</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Maksymalna różnica wymiarów (szerokość, wysokość) przy automatycznym dopasowaniu
+              dostawy szyby do zamówienia. Wartość 0 oznacza dokładne dopasowanie.
+            </p>
+          </div>
         </CardContent>
       </Card>
 

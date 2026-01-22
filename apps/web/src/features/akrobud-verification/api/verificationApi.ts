@@ -15,6 +15,10 @@ import type {
   VerificationListFilters,
   VerifyListParams,
   ApplyChangesParams,
+  ParsedMailContent,
+  ProjectMatchResult,
+  VersionDiff,
+  ProjectVerificationResult,
 } from '@/types';
 
 export const verificationApi = {
@@ -129,4 +133,85 @@ export const verificationApi = {
       method: 'POST',
       body: JSON.stringify(params),
     }),
+
+  // ===================
+  // Project-based Operations (NEW)
+  // ===================
+
+  /**
+   * Parsuj treść maila - wykryj datę i projekty
+   */
+  parseMailContent: (rawInput: string) =>
+    fetchApi<ParsedMailContent>('/api/akrobud-verification/parse-mail', {
+      method: 'POST',
+      body: JSON.stringify({ rawInput }),
+    }),
+
+  /**
+   * Preview projektów - sprawdź ile zleceń dla każdego projektu
+   */
+  previewProjects: (projects: string[]) =>
+    fetchApi<{ results: ProjectMatchResult[] }>(
+      '/api/akrobud-verification/preview-projects',
+      {
+        method: 'POST',
+        body: JSON.stringify({ projects }),
+      }
+    ),
+
+  /**
+   * Utwórz nową wersję listy (z projektami)
+   */
+  createListVersion: (data: {
+    deliveryDate: string;
+    rawInput?: string;
+    projects: string[];
+    parentId?: number;
+    title?: string;
+    notes?: string;
+  }) =>
+    fetchApi<AkrobudVerificationList>('/api/akrobud-verification/versions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * Pobierz wszystkie wersje dla danej daty dostawy
+   */
+  getListVersions: (deliveryDate: string) =>
+    fetchApi<AkrobudVerificationList[]>(
+      `/api/akrobud-verification/versions?deliveryDate=${deliveryDate}`
+    ),
+
+  /**
+   * Pobierz historię wersji dla listy
+   */
+  getListVersionHistory: (listId: number) =>
+    fetchApi<AkrobudVerificationList[]>(
+      `/api/akrobud-verification/${listId}/versions`
+    ),
+
+  /**
+   * Porównaj dwie wersje listy
+   */
+  compareVersions: (listId1: number, listId2: number) =>
+    fetchApi<VersionDiff>('/api/akrobud-verification/compare-versions', {
+      method: 'POST',
+      body: JSON.stringify({ listId1, listId2 }),
+    }),
+
+  /**
+   * Weryfikuj listę projektów (projekt → zlecenia vs dostawa)
+   */
+  verifyProjectList: (
+    listId: number,
+    params?: { createDeliveryIfMissing?: boolean }
+  ) =>
+    fetchApi<ProjectVerificationResult>(
+      `/api/akrobud-verification/${listId}/verify-projects`,
+      {
+        method: 'POST',
+        body: JSON.stringify(params ?? {}),
+      }
+    ),
 };

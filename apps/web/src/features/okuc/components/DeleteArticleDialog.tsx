@@ -19,6 +19,7 @@ import type { OkucArticle } from '@/types/okuc';
 
 interface DeleteArticleDialogProps {
   article: OkucArticle | null;
+  open: boolean;
   onClose: () => void;
   onConfirm: (id: number) => void;
   isPending: boolean;
@@ -26,6 +27,7 @@ interface DeleteArticleDialogProps {
 
 export function DeleteArticleDialog({
   article,
+  open,
   onClose,
   onConfirm,
   isPending,
@@ -33,7 +35,7 @@ export function DeleteArticleDialog({
   if (!article) return null;
 
   return (
-    <Dialog open={!!article} onOpenChange={(open: boolean) => !open && onClose()}>
+    <Dialog open={open} onOpenChange={(isOpen: boolean) => !isOpen && onClose()}>
       <DialogContent>
         <DialogHeader>
           <div className="flex items-start gap-3">
@@ -42,22 +44,22 @@ export function DeleteArticleDialog({
             </div>
             <div className="flex-1">
               <DialogTitle>Czy na pewno usunąć artykuł?</DialogTitle>
-              <DialogDescription className="mt-2">
-                <div className="space-y-2">
-                  <p>
+              <DialogDescription asChild className="mt-2">
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <span className="block">
                     Usuwasz artykuł:{' '}
                     <strong className="text-foreground">{article.articleId}</strong> -{' '}
                     <strong className="text-foreground">{article.name}</strong>
-                  </p>
-                  <p className="text-sm text-muted-foreground">
+                  </span>
+                  <span className="block">
                     Artykuł zostanie oznaczony jako usunięty (soft delete) i nie będzie widoczny na
                     listach, ale pozostanie w bazie danych dla historii.
-                  </p>
+                  </span>
                   {(article.stocks?.length ?? 0) > 0 && (
-                    <p className="text-sm text-amber-600 dark:text-amber-500">
+                    <span className="block text-amber-600 dark:text-amber-500">
                       <strong>Uwaga:</strong> Artykuł ma powiązane stany magazynowe. Upewnij się,
                       że nie jest używany w aktywnych zamówieniach.
-                    </p>
+                    </span>
                   )}
                 </div>
               </DialogDescription>

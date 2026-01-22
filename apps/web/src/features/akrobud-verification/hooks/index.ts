@@ -20,4 +20,10 @@ export {
   useVerifyList,
   useApplyChanges,
   useParseTextarea,
+  // Project-based hooks (NEW)
+  useParseMailContent,
+  usePreviewProjects,
+  useCreateListVersion,
+  useCompareVersions,
+  useVerifyProjectList,
 } from './useVerificationMutations';

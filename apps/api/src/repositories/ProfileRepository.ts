@@ -24,6 +24,7 @@ export class ProfileRepository {
         name: true,
         description: true,
         sortOrder: true,
+        isAkrobud: true,
         createdAt: true,
         updatedAt: true,
         profileColors: {
@@ -64,7 +65,7 @@ export class ProfileRepository {
     });
   }
 
-  async update(id: number, data: { name?: string; description?: string | null; articleNumber?: string | null }): Promise<Profile> {
+  async update(id: number, data: { name?: string; description?: string | null; articleNumber?: string | null; isAkrobud?: boolean }): Promise<Profile> {
     return this.prisma.profile.update({
       where: { id },
       data,

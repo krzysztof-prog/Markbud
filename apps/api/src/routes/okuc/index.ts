@@ -9,3 +9,4 @@ export { okucDemandRoutes } from './demand.js';
 export { okucOrderRoutes } from './orders.js';
 export { okucProportionRoutes } from './proportions.js';
 export { okucLocationRoutes } from './locations.js';
+export { okucReplacementRoutes } from './replacements.js';

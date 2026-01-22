@@ -17,6 +17,8 @@ export interface BulkUpdateStatusData {
   orderIds: number[];
   status: 'new' | 'in_progress' | 'completed' | 'archived';
   productionDate?: string;
+  /** Pomiń walidację magazynu - gdy użytkownik potwierdził mimo braków */
+  skipWarehouseValidation?: boolean;
 }
 
 /**

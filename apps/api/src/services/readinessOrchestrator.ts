@@ -102,7 +102,12 @@ export class ReadinessOrchestrator {
     }
 
     // 1. Warehouse Stock Check
-    const warehouseSignal = await this.checkWarehouseStock(orderId, order.requirements);
+    // Filtrujemy requirements aby brać tylko te z colorId (nie prywatne kolory)
+    const akrobudRequirements = order.requirements.filter(
+      (req): req is typeof req & { colorId: number; color: NonNullable<typeof req.color> } =>
+        req.colorId !== null && req.color !== null
+    );
+    const warehouseSignal = await this.checkWarehouseStock(orderId, akrobudRequirements);
     signals.push(warehouseSignal);
     checklist.push({
       id: 'warehouse_stock',

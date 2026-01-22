@@ -1,12 +1,14 @@
 import { FastifyInstance } from 'fastify';
 import { SchucoHandler } from '../handlers/schucoHandler.js';
 import { SchucoService } from '../services/schuco/schucoService.js';
+import { SchucoItemService } from '../services/schuco/schucoItemService.js';
 import { verifyAuth } from '../middleware/auth.js';
 
 
 export default async function schucoRoutes(fastify: FastifyInstance) {
   const schucoService = new SchucoService(fastify.prisma);
   const schucoHandler = new SchucoHandler(schucoService);
+  const schucoItemService = new SchucoItemService(fastify.prisma);
 
   // GET /api/schuco/deliveries - Get deliveries with pagination
   fastify.get('/deliveries', {
@@ -612,9 +614,291 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
         update: { value: days.toString() },
         create: { key: 'schuco_filter_days', value: days.toString() },
       });
+      // Wyczyść filterDate gdy ustawiamy dni - dni mają wtedy priorytet
+      await fastify.prisma.setting.deleteMany({
+        where: { key: 'schuco_filter_date' },
+      });
       return reply.send({
         days,
         message: `Filtr daty zamówień ustawiony na ${days} dni`,
+      });
+    },
+  });
+
+  // GET /api/schuco/settings/filter-date - Get filter date setting
+  fastify.get('/settings/filter-date', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get the specific date for Schuco date filter',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            date: { type: 'string', nullable: true },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const setting = await fastify.prisma.setting.findUnique({
+        where: { key: 'schuco_filter_date' },
+      });
+      return reply.send({ date: setting?.value || null });
+    },
+  });
+
+  // PUT /api/schuco/settings/filter-date - Update filter date setting
+  fastify.put('/settings/filter-date', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Update the specific date for Schuco date filter (format: YYYY-MM-DD)',
+      tags: ['schuco'],
+      body: {
+        type: 'object',
+        required: ['date'],
+        properties: {
+          date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            date: { type: 'string' },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { date } = request.body as { date: string };
+      // Walidacja - sprawdź czy data jest poprawna
+      const parsedDate = new Date(date);
+      if (isNaN(parsedDate.getTime())) {
+        return reply.status(400).send({ error: 'Nieprawidłowy format daty. Użyj YYYY-MM-DD' });
+      }
+      await fastify.prisma.setting.upsert({
+        where: { key: 'schuco_filter_date' },
+        update: { value: date },
+        create: { key: 'schuco_filter_date', value: date },
+      });
+      // Formatuj datę do wyświetlenia (D.M.YYYY)
+      const day = parsedDate.getDate();
+      const month = parsedDate.getMonth() + 1;
+      const year = parsedDate.getFullYear();
+      return reply.send({
+        date,
+        message: `Filtr daty ustawiony od ${day}.${month}.${year}`,
+      });
+    },
+  });
+
+  // DELETE /api/schuco/settings/filter-date - Clear filter date (use days instead)
+  fastify.delete('/settings/filter-date', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Clear the specific filter date (will use filter-days instead)',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      await fastify.prisma.setting.deleteMany({
+        where: { key: 'schuco_filter_date' },
+      });
+      return reply.send({
+        message: 'Filtr daty wyczyszczony - użyty zostanie filtr dni',
+      });
+    },
+  });
+
+  // ============================================
+  // ENDPOINTY DLA POZYCJI ZAMÓWIEŃ (ITEMS)
+  // ============================================
+
+  // GET /api/schuco/items/:deliveryId - Get items for a specific delivery
+  fastify.get('/items/:deliveryId', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get order items for a specific Schuco delivery',
+      tags: ['schuco'],
+      params: {
+        type: 'object',
+        required: ['deliveryId'],
+        properties: {
+          deliveryId: { type: 'integer' },
+        },
+      },
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'integer' },
+              position: { type: 'integer' },
+              articleNumber: { type: 'string' },
+              articleDescription: { type: 'string' },
+              orderedQty: { type: 'integer' },
+              shippedQty: { type: 'integer' },
+              unit: { type: 'string' },
+              dimensions: { type: 'string', nullable: true },
+              configuration: { type: 'string', nullable: true },
+              deliveryWeek: { type: 'string', nullable: true },
+              tracking: { type: 'string', nullable: true },
+              comment: { type: 'string', nullable: true },
+              changeType: { type: 'string', nullable: true },
+              changedAt: { type: 'string', format: 'date-time', nullable: true },
+              changedFields: { type: 'string', nullable: true },
+              fetchedAt: { type: 'string', format: 'date-time' },
+            },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { deliveryId } = request.params as { deliveryId: number };
+      const items = await schucoItemService.getItemsForDelivery(deliveryId);
+      return reply.send(items);
+    },
+  });
+
+  // GET /api/schuco/items/stats - Get items statistics
+  fastify.get('/items/stats', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get statistics about order items',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            totalDeliveries: { type: 'integer' },
+            withItems: { type: 'integer' },
+            withoutItems: { type: 'integer' },
+            totalItems: { type: 'integer' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const stats = await schucoItemService.getItemsStats();
+      return reply.send(stats);
+    },
+  });
+
+  // POST /api/schuco/items/fetch - Trigger manual fetch of order items
+  fastify.post('/items/fetch', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Trigger manual fetch of order items from Schuco',
+      tags: ['schuco'],
+      body: {
+        type: 'object',
+        properties: {
+          limit: { type: 'integer', default: 100, minimum: 1, maximum: 500 },
+          deliveryIds: {
+            type: 'array',
+            items: { type: 'integer' },
+          },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            totalDeliveries: { type: 'integer' },
+            processedDeliveries: { type: 'integer' },
+            newItems: { type: 'integer' },
+            updatedItems: { type: 'integer' },
+            unchangedItems: { type: 'integer' },
+            errors: { type: 'integer' },
+          },
+        },
+        409: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { limit, deliveryIds } = request.body as { limit?: number; deliveryIds?: number[] };
+
+      // Sprawdź czy nie ma aktywnego pobierania
+      if (schucoItemService.isItemFetchRunning()) {
+        return reply.status(409).send({ error: 'Pobieranie pozycji jest już w trakcie' });
+      }
+
+      try {
+        let result;
+        if (deliveryIds && deliveryIds.length > 0) {
+          // Pobierz dla konkretnych zamówień
+          result = await schucoItemService.fetchItemsByDeliveryIds(deliveryIds);
+        } else {
+          // Pobierz brakujące
+          result = await schucoItemService.fetchMissingItems(limit || 100);
+        }
+        return reply.send(result);
+      } catch (error) {
+        return reply.status(500).send({ error: (error as Error).message });
+      }
+    },
+  });
+
+  // GET /api/schuco/items/is-running - Check if item fetch is running
+  fastify.get('/items/is-running', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Check if order items fetch is currently running',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            isRunning: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      return reply.send({
+        isRunning: schucoItemService.isItemFetchRunning(),
+      });
+    },
+  });
+
+  // POST /api/schuco/items/clear-old-changes - Clear old change markers
+  fastify.post('/items/clear-old-changes', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Clear change markers older than 72 hours',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            cleared: { type: 'integer' },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const cleared = await schucoItemService.clearOldChangeMarkers();
+      return reply.send({
+        cleared,
+        message: cleared > 0
+          ? `Wyczyszczono markery zmian z ${cleared} pozycji`
+          : 'Brak starych markerów do wyczyszczenia',
       });
     },
   });

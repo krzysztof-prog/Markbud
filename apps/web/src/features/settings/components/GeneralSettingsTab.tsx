@@ -3,7 +3,25 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Save, DollarSign, Package, Archive } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Save, DollarSign, Package, Archive, Home, Trash2 } from 'lucide-react';
+
+// Dostępne strony startowe
+const availableHomePages = [
+  { value: '/', label: 'Strona główna (Dashboard)' },
+  { value: '/zlecenia', label: 'Zlecenia' },
+  { value: '/dostawy', label: 'Dostawy' },
+  { value: '/magazyn/akrobud/stock', label: 'Magazyn - Stock' },
+  { value: '/magazyn/akrobud/remanent', label: 'Magazyn - Remanent' },
+  { value: '/magazyn/okuc/artykuly', label: 'Magazyn - Okucia' },
+  { value: '/manager', label: 'Panel kierownika' },
+] as const;
 
 interface GeneralSettingsTabProps {
   settings: Record<string, string>;
@@ -22,6 +40,35 @@ export function GeneralSettingsTab({
 }: GeneralSettingsTabProps) {
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Home className="h-5 w-5" />
+            Strona startowa
+          </CardTitle>
+          <CardDescription>
+            Strona, na którą użytkownik zostanie przekierowany po zalogowaniu
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Select
+            value={settings.defaultHomePage || '/'}
+            onValueChange={(value) => onSettingChange('defaultHomePage', value)}
+          >
+            <SelectTrigger className="w-80">
+              <SelectValue placeholder="Wybierz stronę startową" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableHomePages.map((page) => (
+                <SelectItem key={page.value} value={page.value}>
+                  {page.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -96,6 +143,40 @@ export function GeneralSettingsTab({
             <p className="text-xs text-muted-foreground mt-1">
               Zlecenia oznaczone jako wyprodukowane będą automatycznie archiwizowane po upływie tej liczby dni.
               Archiwizacja uruchamiana jest codziennie o 2:30 w nocy.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Trash2 className="h-5 w-5" />
+            Retencja usuniętych danych
+          </CardTitle>
+          <CardDescription>
+            Okres przechowywania danych oznaczonych jako usunięte (soft delete)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <label className="text-sm font-medium block mb-1">
+              Trwałe usuwanie po (dni)
+            </label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min="7"
+                max="365"
+                value={settings.softDeleteRetentionDays || '90'}
+                onChange={(e) => onSettingChange('softDeleteRetentionDays', e.target.value)}
+                className="w-24"
+              />
+              <span className="text-sm text-muted-foreground">dni</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Dane oznaczone jako usunięte (soft delete) będą trwale usunięte z bazy po upływie tej liczby dni.
+              Zalecana wartość: 90 dni. Minimum: 7 dni.
             </p>
           </div>
         </CardContent>

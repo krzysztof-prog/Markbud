@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/header';
-import { settingsApi, colorsApi, profilesApi, usersApi } from '@/lib/api';
+import { settingsApi, colorsApi, profilesApi, usersApi, steelApi } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useFormValidation } from '@/hooks/useFormValidation';
 import {
@@ -13,11 +13,13 @@ import {
   PalletTypesTab,
   ColorsTab,
   ProfilesTab,
+  SteelTab,
   OkucLocationsTab,
   DocumentAuthorMappingsTab,
   PalletDialog,
   ColorDialog,
   ProfileDialog,
+  SteelDialog,
   DeleteConfirmDialog,
   DocumentAuthorMappingDialog,
 } from '@/features/settings/components';
@@ -26,6 +28,7 @@ import {
   usePalletTypeMutations,
   useColorMutations,
   useProfileMutations,
+  useSteelMutations,
   useFileWatcher,
   useUserFolderPath,
   useDocumentAuthorMappingMutations,
@@ -54,6 +57,12 @@ interface Profile {
   name: string;
   description?: string | null;
   articleNumber?: string | null;
+  isAkrobud?: boolean;
+  isLiving?: boolean;
+  isBlok?: boolean;
+  isVlak?: boolean;
+  isCt70?: boolean;
+  isFocusing?: boolean;
 }
 
 interface DocumentAuthorMapping {
@@ -67,6 +76,14 @@ interface DocumentAuthorMapping {
   };
 }
 
+interface Steel {
+  id: number;
+  number: string;
+  articleNumber?: string | null;
+  name: string;
+  description?: string | null;
+  sortOrder: number;
+}
 
 type DialogState<T> = {
   open: boolean;
@@ -76,7 +93,7 @@ type DialogState<T> = {
 
 type DeleteDialogState = {
   open: boolean;
-  type: 'pallet' | 'color' | 'profile' | 'author-mapping';
+  type: 'pallet' | 'color' | 'profile' | 'author-mapping' | 'steel';
   id: number;
   name: string;
 } | null;
@@ -104,6 +121,11 @@ export default function UstawieniaPage() {
     data: null,
   });
   const [authorMappingDialog, setAuthorMappingDialog] = useState<DialogState<DocumentAuthorMapping>>({
+    open: false,
+    mode: 'add',
+    data: null,
+  });
+  const [steelDialog, setSteelDialog] = useState<DialogState<Steel>>({
     open: false,
     mode: 'add',
     data: null,
@@ -181,6 +203,21 @@ export default function UstawieniaPage() {
     userId: [{ validate: (v: number) => v > 0, message: 'Wybierz użytkownika' }],
   });
 
+  const {
+    errors: steelErrors,
+    touched: steelTouched,
+    validate: validateSteelField,
+    validateAll: validateSteelForm,
+    touch: touchSteelField,
+    reset: resetSteelValidation,
+  } = useFormValidation({
+    number: [{ validate: (v: string) => !!v?.trim(), message: 'Numer jest wymagany' }],
+    name: [
+      { validate: (v: string) => !!v?.trim(), message: 'Nazwa jest wymagana' },
+      { validate: (v: string) => v?.trim().length >= 2, message: 'Nazwa musi mieć min. 2 znaki' },
+    ],
+  });
+
   // Queries
   const { data: initialSettings, isLoading, error: settingsError } = useQuery({
     queryKey: ['settings'],
@@ -205,6 +242,11 @@ export default function UstawieniaPage() {
   const { data: authorMappings, error: authorMappingsError } = useQuery({
     queryKey: ['document-author-mappings'],
     queryFn: settingsApi.getDocumentAuthorMappings,
+  });
+
+  const { data: steels, error: steelsError } = useQuery({
+    queryKey: ['steels'],
+    queryFn: steelApi.getAll,
   });
 
   const { data: users } = useQuery({
@@ -295,6 +337,25 @@ export default function UstawieniaPage() {
         resetAuthorMappingValidation();
       },
       onDeleteSuccess: () => setDeleteDialog(null),
+    });
+
+  const { createMutation: createSteelMutation, updateMutation: updateSteelMutation, deleteMutation: deleteSteelMutation } =
+    useSteelMutations({
+      onCreateSuccess: () => {
+        setSteelDialog({ open: false, mode: 'add', data: null });
+        resetSteelValidation();
+      },
+      onUpdateSuccess: () => {
+        setSteelDialog({ open: false, mode: 'add', data: null });
+        resetSteelValidation();
+      },
+      onDeleteSuccess: () => {
+        setDeleteDialog(null);
+        setDeleteError(null);
+      },
+      onDeleteError: (error) => {
+        setDeleteError(error.message || 'Nie można usunąć stali');
+      },
     });
 
   const { restartMutation: restartFileWatcherMutation } = useFileWatcher({
@@ -417,6 +478,15 @@ export default function UstawieniaPage() {
     }
   };
 
+  const handleToggleAkrobud = (profile: Profile, isAkrobud: boolean) => {
+    updateProfileMutation.mutate({ id: profile.id, data: { isAkrobud } });
+  };
+
+  // Handler do aktualizacji dowolnego pola profilu (inline edycja)
+  const handleUpdateProfile = (profile: Profile, data: Partial<Profile>) => {
+    updateProfileMutation.mutate({ id: profile.id, data });
+  };
+
   // Author mapping handlers
   const handleSaveAuthorMapping = () => {
     const data = authorMappingDialog.data;
@@ -439,6 +509,35 @@ export default function UstawieniaPage() {
     }
   };
 
+  // Steel handlers
+  const handleSaveSteel = () => {
+    const data = steelDialog.data;
+    if (!data) return;
+
+    const formData = {
+      number: data.number || '',
+      name: data.name || '',
+    };
+
+    if (!validateSteelForm(formData)) {
+      Object.keys(formData).forEach((field) => touchSteelField(field as keyof typeof formData));
+      return;
+    }
+
+    const steelData = {
+      number: formData.number,
+      name: formData.name,
+      description: data.description || undefined,
+      articleNumber: data.articleNumber || undefined,
+    };
+
+    if (steelDialog.mode === 'add') {
+      createSteelMutation.mutate(steelData);
+    } else if (data.id) {
+      updateSteelMutation.mutate({ id: data.id, data: steelData });
+    }
+  };
+
   const handleDelete = () => {
     if (!deleteDialog) return;
 
@@ -450,6 +549,8 @@ export default function UstawieniaPage() {
       deleteProfileMutation.mutate(deleteDialog.id);
     } else if (deleteDialog.type === 'author-mapping') {
       deleteAuthorMappingMutation.mutate(deleteDialog.id);
+    } else if (deleteDialog.type === 'steel') {
+      deleteSteelMutation.mutate(deleteDialog.id);
     }
   };
 
@@ -466,8 +567,15 @@ export default function UstawieniaPage() {
   }
 
   // Handle errors from any query
-  const hasError = settingsError || palletTypesError || colorsError || profilesError || authorMappingsError;
-  if (hasError) {
+  const firstError = settingsError || palletTypesError || colorsError || profilesError || authorMappingsError || steelsError;
+  if (firstError) {
+    // Sprawdź czy to błąd autoryzacji
+    const errorMessage = (firstError as Error)?.message || '';
+    const isAuthError = errorMessage.toLowerCase().includes('autorycz') ||
+                        errorMessage.toLowerCase().includes('unauthorized') ||
+                        errorMessage.toLowerCase().includes('401') ||
+                        errorMessage.toLowerCase().includes('token');
+
     return (
       <div className="flex flex-col h-full">
         <Header title="Ustawienia" />
@@ -478,20 +586,31 @@ export default function UstawieniaPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">Błąd wczytywania ustawień</h3>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">
+              {isAuthError ? 'Brak autoryzacji' : 'Błąd wczytywania ustawień'}
+            </h3>
             <p className="text-sm text-slate-500 mb-4">
-              {(settingsError as Error)?.message ||
-               (palletTypesError as Error)?.message ||
-               (colorsError as Error)?.message ||
-               (profilesError as Error)?.message ||
-               'Nie udało się pobrać danych'}
+              {isAuthError
+                ? 'Sesja wygasła lub nie jesteś zalogowany. Zaloguj się ponownie.'
+                : errorMessage || 'Nie udało się pobrać danych'}
             </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Odśwież stronę
-            </button>
+            <div className="flex gap-2 justify-center">
+              {isAuthError ? (
+                <a
+                  href="/login"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Zaloguj się
+                </a>
+              ) : (
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Odśwież stronę
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -511,6 +630,7 @@ export default function UstawieniaPage() {
             <TabsTrigger value="pallets">Palety</TabsTrigger>
             <TabsTrigger value="colors">Kolory</TabsTrigger>
             <TabsTrigger value="profiles">Profile PVC</TabsTrigger>
+            <TabsTrigger value="steel">Stal</TabsTrigger>
             <TabsTrigger value="author-mappings">Autorzy dokumentów</TabsTrigger>
             <TabsTrigger value="okuc-locations">Magazyny OKUC</TabsTrigger>
           </TabsList>
@@ -600,6 +720,25 @@ export default function UstawieniaPage() {
               onEdit={(profile) => setProfileDialog({ open: true, mode: 'edit', data: profile })}
               onDelete={(profile) =>
                 setDeleteDialog({ open: true, type: 'profile', id: profile.id, name: profile.name })
+              }
+              onToggleAkrobud={handleToggleAkrobud}
+              onUpdateProfile={handleUpdateProfile}
+            />
+          </TabsContent>
+
+          <TabsContent value="steel">
+            <SteelTab
+              steels={steels}
+              onAdd={() =>
+                setSteelDialog({
+                  open: true,
+                  mode: 'add',
+                  data: { number: '', name: '', description: '' },
+                })
+              }
+              onEdit={(steel) => setSteelDialog({ open: true, mode: 'edit', data: steel })}
+              onDelete={(steel) =>
+                setDeleteDialog({ open: true, type: 'steel', id: steel.id, name: steel.name })
               }
             />
           </TabsContent>
@@ -705,6 +844,25 @@ export default function UstawieniaPage() {
         onTouchField={touchAuthorMappingField}
       />
 
+      <SteelDialog
+        open={steelDialog.open}
+        mode={steelDialog.mode}
+        data={steelDialog.data}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSteelDialog({ open: false, mode: 'add', data: null });
+            resetSteelValidation();
+          }
+        }}
+        onDataChange={(data) => setSteelDialog((prev) => ({ ...prev, data }))}
+        onSave={handleSaveSteel}
+        isPending={createSteelMutation.isPending || updateSteelMutation.isPending}
+        errors={steelErrors}
+        touched={steelTouched}
+        onValidateField={validateSteelField}
+        onTouchField={touchSteelField}
+      />
+
       <DeleteConfirmDialog
         open={!!deleteDialog}
         name={deleteDialog?.name || ''}
@@ -720,7 +878,8 @@ export default function UstawieniaPage() {
           deletePalletMutation.isPending ||
           deleteColorMutation.isPending ||
           deleteProfileMutation.isPending ||
-          deleteAuthorMappingMutation.isPending
+          deleteAuthorMappingMutation.isPending ||
+          deleteSteelMutation.isPending
         }
       />
     </div>

@@ -74,7 +74,7 @@ export function EfficiencyConfigsTable() {
               {configs?.map((config, index) => (
                 <tr
                   key={config.id}
-                  className={`border-t hover:bg-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
+                  className={`border-t hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
                 >
                   <td className="px-4 py-3 font-medium">{config.name}</td>
                   <td className="px-4 py-3 text-right">

@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/header';
-import { settingsApi, colorsApi, profilesApi } from '@/lib/api';
+import { settingsApi, colorsApi, profilesApi, steelApi, usersApi } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useFormValidation } from '@/hooks/useFormValidation';
@@ -15,10 +15,15 @@ import {
   ColorsTab,
   ProfilesTab,
   OkucLocationsTab,
+  ProfileDepthsTab,
+  SteelTab,
+  DocumentAuthorMappingsTab,
   PalletDialog,
   ColorDialog,
   ProfileDialog,
+  SteelDialog,
   DeleteConfirmDialog,
+  DocumentAuthorMappingDialog,
 } from '@/features/settings/components';
 import {
   useUpdateSettings,
@@ -27,6 +32,8 @@ import {
   useProfileMutations,
   useFileWatcher,
   useUserFolderPath,
+  useSteelMutations,
+  useDocumentAuthorMappingMutations,
 } from '@/features/settings/hooks';
 import { toast } from '@/hooks/useToast';
 
@@ -52,6 +59,32 @@ interface Profile {
   name: string;
   description?: string | null;
   articleNumber?: string | null;
+  isAkrobud?: boolean;
+  isLiving?: boolean;
+  isBlok?: boolean;
+  isVlak?: boolean;
+  isCt70?: boolean;
+  isFocusing?: boolean;
+}
+
+interface Steel {
+  id: number;
+  number: string;
+  articleNumber?: string | null;
+  name: string;
+  description?: string | null;
+  sortOrder: number;
+}
+
+interface DocumentAuthorMapping {
+  id: number;
+  authorName: string;
+  userId: number;
+  user: {
+    id: number;
+    email: string;
+    name: string;
+  };
 }
 
 type DialogState<T> = {
@@ -62,7 +95,7 @@ type DialogState<T> = {
 
 type DeleteDialogState = {
   open: boolean;
-  type: 'pallet' | 'color' | 'profile';
+  type: 'pallet' | 'color' | 'profile' | 'steel' | 'documentAuthorMapping';
   id: number;
   name: string;
 } | null;
@@ -85,6 +118,16 @@ export default function UstawieniaPage() {
     data: null,
   });
   const [profileDialog, setProfileDialog] = useState<DialogState<Profile>>({
+    open: false,
+    mode: 'add',
+    data: null,
+  });
+  const [steelDialog, setSteelDialog] = useState<DialogState<Steel>>({
+    open: false,
+    mode: 'add',
+    data: null,
+  });
+  const [documentAuthorMappingDialog, setDocumentAuthorMappingDialog] = useState<DialogState<DocumentAuthorMapping>>({
     open: false,
     mode: 'add',
     data: null,
@@ -147,6 +190,33 @@ export default function UstawieniaPage() {
     ],
   });
 
+  const {
+    errors: steelErrors,
+    touched: steelTouched,
+    validate: validateSteelField,
+    validateAll: validateSteelForm,
+    touch: touchSteelField,
+    reset: resetSteelValidation,
+  } = useFormValidation({
+    number: [{ validate: (v: string) => !!v?.trim(), message: 'Numer jest wymagany' }],
+    name: [
+      { validate: (v: string) => !!v?.trim(), message: 'Nazwa jest wymagana' },
+      { validate: (v: string) => v?.trim().length >= 2, message: 'Nazwa musi mieć min. 2 znaki' },
+    ],
+  });
+
+  const {
+    errors: documentAuthorMappingErrors,
+    touched: documentAuthorMappingTouched,
+    validate: validateDocumentAuthorMappingField,
+    validateAll: validateDocumentAuthorMappingForm,
+    touch: touchDocumentAuthorMappingField,
+    reset: resetDocumentAuthorMappingValidation,
+  } = useFormValidation({
+    authorName: [{ validate: (v: string) => !!v?.trim(), message: 'Nazwa autora jest wymagana' }],
+    userId: [{ validate: (v: number) => v > 0, message: 'Użytkownik jest wymagany' }],
+  });
+
   // Queries
   const { data: initialSettings, isLoading, error: settingsError } = useQuery({
     queryKey: ['settings'],
@@ -166,6 +236,21 @@ export default function UstawieniaPage() {
   const { data: profiles, error: profilesError } = useQuery({
     queryKey: ['profiles'],
     queryFn: profilesApi.getAll,
+  });
+
+  const { data: steels, error: steelsError } = useQuery({
+    queryKey: ['steels'],
+    queryFn: steelApi.getAll,
+  });
+
+  const { data: documentAuthorMappings, error: documentAuthorMappingsError } = useQuery({
+    queryKey: ['document-author-mappings'],
+    queryFn: settingsApi.getDocumentAuthorMappings,
+  });
+
+  const { data: users } = useQuery({
+    queryKey: ['users'],
+    queryFn: usersApi.getAll,
   });
 
   const { data: fileWatcherStatus, refetch: refetchFileWatcherStatus } = useQuery({
@@ -265,6 +350,32 @@ export default function UstawieniaPage() {
       });
     },
   });
+
+  const { createMutation: createSteelMutation, updateMutation: updateSteelMutation, deleteMutation: deleteSteelMutation } =
+    useSteelMutations({
+      onCreateSuccess: () => {
+        setSteelDialog({ open: false, mode: 'add', data: null });
+        resetSteelValidation();
+      },
+      onUpdateSuccess: () => {
+        setSteelDialog({ open: false, mode: 'add', data: null });
+        resetSteelValidation();
+      },
+      onDeleteSuccess: () => setDeleteDialog(null),
+    });
+
+  const { createMutation: createDocumentAuthorMappingMutation, updateMutation: updateDocumentAuthorMappingMutation, deleteMutation: deleteDocumentAuthorMappingMutation } =
+    useDocumentAuthorMappingMutations({
+      onCreateSuccess: () => {
+        setDocumentAuthorMappingDialog({ open: false, mode: 'add', data: null });
+        resetDocumentAuthorMappingValidation();
+      },
+      onUpdateSuccess: () => {
+        setDocumentAuthorMappingDialog({ open: false, mode: 'add', data: null });
+        resetDocumentAuthorMappingValidation();
+      },
+      onDeleteSuccess: () => setDeleteDialog(null),
+    });
 
   // Handlers
   const handleSettingChange = (key: string, value: string) => {
@@ -371,6 +482,68 @@ export default function UstawieniaPage() {
     }
   };
 
+  // Handler do aktualizacji checkboxa Akrobud
+  const handleToggleAkrobud = (profile: Profile, isAkrobud: boolean) => {
+    updateProfileMutation.mutate({ id: profile.id, data: { isAkrobud } });
+  };
+
+  // Handler do aktualizacji dowolnego pola profilu (inline edycja)
+  const handleUpdateProfile = (profile: Profile, data: Partial<Profile>) => {
+    updateProfileMutation.mutate({ id: profile.id, data });
+  };
+
+  // Steel handlers
+  const handleSaveSteel = () => {
+    const data = steelDialog.data;
+    if (!data) return;
+
+    const formData = {
+      number: data.number || '',
+      name: data.name || '',
+    };
+
+    if (!validateSteelForm(formData)) {
+      Object.keys(formData).forEach((field) => touchSteelField(field as keyof typeof formData));
+      return;
+    }
+
+    const steelData = {
+      number: formData.number,
+      name: formData.name,
+      articleNumber: data.articleNumber || undefined,
+      description: data.description || undefined,
+      sortOrder: data.sortOrder || 0,
+    };
+
+    if (steelDialog.mode === 'add') {
+      createSteelMutation.mutate(steelData);
+    } else if (data.id) {
+      updateSteelMutation.mutate({ id: data.id, data: steelData });
+    }
+  };
+
+  // Document Author Mapping handlers
+  const handleSaveDocumentAuthorMapping = () => {
+    const data = documentAuthorMappingDialog.data;
+    if (!data) return;
+
+    const formData = {
+      authorName: data.authorName || '',
+      userId: data.userId || 0,
+    };
+
+    if (!validateDocumentAuthorMappingForm(formData)) {
+      Object.keys(formData).forEach((field) => touchDocumentAuthorMappingField(field as keyof typeof formData));
+      return;
+    }
+
+    if (documentAuthorMappingDialog.mode === 'add') {
+      createDocumentAuthorMappingMutation.mutate(formData);
+    } else if (data.id) {
+      updateDocumentAuthorMappingMutation.mutate({ id: data.id, data: formData });
+    }
+  };
+
   const handleDelete = () => {
     if (!deleteDialog) return;
 
@@ -380,6 +553,10 @@ export default function UstawieniaPage() {
       deleteColorMutation.mutate(deleteDialog.id);
     } else if (deleteDialog.type === 'profile') {
       deleteProfileMutation.mutate(deleteDialog.id);
+    } else if (deleteDialog.type === 'steel') {
+      deleteSteelMutation.mutate(deleteDialog.id);
+    } else if (deleteDialog.type === 'documentAuthorMapping') {
+      deleteDocumentAuthorMappingMutation.mutate(deleteDialog.id);
     }
   };
 
@@ -396,7 +573,7 @@ export default function UstawieniaPage() {
   }
 
   // Handle errors from any query
-  const hasError = settingsError || palletTypesError || colorsError || profilesError;
+  const hasError = settingsError || palletTypesError || colorsError || profilesError || steelsError || documentAuthorMappingsError;
   if (hasError) {
     return (
       <div className="flex flex-col h-full">
@@ -414,6 +591,8 @@ export default function UstawieniaPage() {
                (palletTypesError as Error)?.message ||
                (colorsError as Error)?.message ||
                (profilesError as Error)?.message ||
+               (steelsError as Error)?.message ||
+               (documentAuthorMappingsError as Error)?.message ||
                'Nie udało się pobrać danych'}
             </p>
             <button
@@ -441,6 +620,9 @@ export default function UstawieniaPage() {
             <TabsTrigger value="pallets">Palety</TabsTrigger>
             <TabsTrigger value="colors">Kolory</TabsTrigger>
             <TabsTrigger value="profiles">Profile PVC</TabsTrigger>
+            <TabsTrigger value="steel">Stal</TabsTrigger>
+            <TabsTrigger value="profile-depths">Głębokości</TabsTrigger>
+            <TabsTrigger value="document-author-mappings">Autorzy</TabsTrigger>
             <TabsTrigger value="okuc-locations">Magazyny OKUC</TabsTrigger>
           </TabsList>
 
@@ -530,6 +712,46 @@ export default function UstawieniaPage() {
               onDelete={(profile) =>
                 setDeleteDialog({ open: true, type: 'profile', id: profile.id, name: profile.name })
               }
+              onToggleAkrobud={handleToggleAkrobud}
+              onUpdateProfile={handleUpdateProfile}
+            />
+          </TabsContent>
+
+          <TabsContent value="steel">
+            <SteelTab
+              steels={steels}
+              onAdd={() =>
+                setSteelDialog({
+                  open: true,
+                  mode: 'add',
+                  data: { number: '', name: '', description: '', sortOrder: 0 },
+                })
+              }
+              onEdit={(steel) => setSteelDialog({ open: true, mode: 'edit', data: steel })}
+              onDelete={(steel) =>
+                setDeleteDialog({ open: true, type: 'steel', id: steel.id, name: steel.name })
+              }
+            />
+          </TabsContent>
+
+          <TabsContent value="profile-depths">
+            <ProfileDepthsTab />
+          </TabsContent>
+
+          <TabsContent value="document-author-mappings">
+            <DocumentAuthorMappingsTab
+              mappings={documentAuthorMappings}
+              onAdd={() =>
+                setDocumentAuthorMappingDialog({
+                  open: true,
+                  mode: 'add',
+                  data: { authorName: '', userId: 0 } as Partial<DocumentAuthorMapping>,
+                })
+              }
+              onEdit={(mapping) => setDocumentAuthorMappingDialog({ open: true, mode: 'edit', data: mapping })}
+              onDelete={(mapping) =>
+                setDeleteDialog({ open: true, type: 'documentAuthorMapping', id: mapping.id, name: mapping.authorName })
+              }
             />
           </TabsContent>
 
@@ -597,6 +819,45 @@ export default function UstawieniaPage() {
         onTouchField={touchProfileField}
       />
 
+      <SteelDialog
+        open={steelDialog.open}
+        mode={steelDialog.mode}
+        data={steelDialog.data}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSteelDialog({ open: false, mode: 'add', data: null });
+            resetSteelValidation();
+          }
+        }}
+        onDataChange={(data) => setSteelDialog((prev) => ({ ...prev, data }))}
+        onSave={handleSaveSteel}
+        isPending={createSteelMutation.isPending || updateSteelMutation.isPending}
+        errors={steelErrors}
+        touched={steelTouched}
+        onValidateField={validateSteelField}
+        onTouchField={touchSteelField}
+      />
+
+      <DocumentAuthorMappingDialog
+        open={documentAuthorMappingDialog.open}
+        mode={documentAuthorMappingDialog.mode}
+        data={documentAuthorMappingDialog.data}
+        users={users}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDocumentAuthorMappingDialog({ open: false, mode: 'add', data: null });
+            resetDocumentAuthorMappingValidation();
+          }
+        }}
+        onDataChange={(data) => setDocumentAuthorMappingDialog((prev) => ({ ...prev, data }))}
+        onSave={handleSaveDocumentAuthorMapping}
+        isPending={createDocumentAuthorMappingMutation.isPending || updateDocumentAuthorMappingMutation.isPending}
+        errors={documentAuthorMappingErrors}
+        touched={documentAuthorMappingTouched}
+        onValidateField={validateDocumentAuthorMappingField}
+        onTouchField={touchDocumentAuthorMappingField}
+      />
+
       <DeleteConfirmDialog
         open={!!deleteDialog}
         name={deleteDialog?.name || ''}
@@ -611,7 +872,9 @@ export default function UstawieniaPage() {
         isPending={
           deletePalletMutation.isPending ||
           deleteColorMutation.isPending ||
-          deleteProfileMutation.isPending
+          deleteProfileMutation.isPending ||
+          deleteSteelMutation.isPending ||
+          deleteDocumentAuthorMappingMutation.isPending
         }
       />
     </div>

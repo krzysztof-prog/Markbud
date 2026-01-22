@@ -59,6 +59,7 @@ const FLAG_PATTERNS: { pattern: RegExp; flag: ItemFlag }[] = [
   { pattern: /niepotwierdzone?/i, flag: 'UNCONFIRMED' },
   { pattern: /plik\s*przesłany\s*\/?\s*wymiary?\s*niepotwierdzone?/i, flag: 'DIMENSIONS_UNCONFIRMED' },
   { pattern: /bez\s*okna/i, flag: 'EXCLUDE_FROM_PRODUCTION' },
+  { pattern: /brak\s*okna/i, flag: 'EXCLUDE_FROM_PRODUCTION' },
   { pattern: /klamka\s*alu\s*z\s*kluczem/i, flag: 'SPECIAL_HANDLE' },
 ];
 
@@ -73,6 +74,9 @@ const DATE_PATTERN = /na\s+(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?/gi;
 
 // Wzorzec "Klient nr X"
 const CLIENT_PATTERN = /Klient\s*nr\s*(\d+)/gi;
+
+// Wzorzec "ZALEGŁE (klient nr X)" - pozycje zaległe należą do tego samego klienta
+const BACKLOG_PATTERN = /ZALEG[ŁL]E\s*\(?\s*klient\s*nr\s*(\d+)\s*\)?/gi;
 
 // Wzorzec ilości: x2, x 2, x3 itp.
 const QUANTITY_PATTERN = /x\s*(\d+)/i;
@@ -123,8 +127,8 @@ function parseDate(text: string): ParsedDate {
   if (!year) {
     const now = new Date();
     const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
-    const currentDay = now.getDate();
+    const _currentMonth = now.getMonth() + 1;
+    const _currentDay = now.getDate();
 
     // Jeśli data jest >60 dni wstecz, użyj następnego roku
     const testDate = new Date(currentYear, month - 1, day);
@@ -185,21 +189,36 @@ function parseQuantity(text: string): number {
   return match ? parseInt(match[1], 10) : 1;
 }
 
-// Wykrywanie sekcji "Klient nr X"
-function findClientSections(text: string): { clientNumber: number; startIndex: number }[] {
-  const sections: { clientNumber: number; startIndex: number }[] = [];
-  let match;
+// Wykrywanie sekcji "Klient nr X" oraz "ZALEGŁE (klient nr X)"
+// Sekcja ZALEGŁE należy do tego samego klienta co odpowiadający "Klient nr X"
+function findClientSections(text: string): { clientNumber: number; startIndex: number; isBacklog: boolean }[] {
+  const allSections: { clientNumber: number; startIndex: number; isBacklog: boolean }[] = [];
 
+  // Znajdź wszystkie sekcje "Klient nr X"
   CLIENT_PATTERN.lastIndex = 0;
-
+  let match;
   while ((match = CLIENT_PATTERN.exec(text)) !== null) {
-    sections.push({
+    allSections.push({
       clientNumber: parseInt(match[1], 10),
       startIndex: match.index,
+      isBacklog: false,
     });
   }
 
-  return sections;
+  // Znajdź wszystkie sekcje "ZALEGŁE (klient nr X)"
+  BACKLOG_PATTERN.lastIndex = 0;
+  while ((match = BACKLOG_PATTERN.exec(text)) !== null) {
+    allSections.push({
+      clientNumber: parseInt(match[1], 10),
+      startIndex: match.index,
+      isBacklog: true,
+    });
+  }
+
+  // Sortuj po pozycji w tekście
+  allSections.sort((a, b) => a.startIndex - b.startIndex);
+
+  return allSections;
 }
 
 // Parsowanie pozycji z tekstu
@@ -294,7 +313,11 @@ export function parseLogisticsMail(mailText: string): ParsedMail {
       items,
     });
   } else {
-    // Wiele sekcji "Klient nr X"
+    // Wiele sekcji - grupuj ZALEGŁE z odpowiadającym "Klient nr X"
+    // Mapa: clientNumber -> wszystkie pozycje (z ZALEGŁE + z głównej sekcji)
+    const clientItems = new Map<number, ParsedItem[]>();
+    const clientOrder: number[] = []; // Kolejność klientów (dla zachowania porządku)
+
     for (let i = 0; i < clientSections.length; i++) {
       const section = clientSections[i];
       const nextSection = clientSections[i + 1];
@@ -306,7 +329,34 @@ export function parseLogisticsMail(mailText: string): ParsedMail {
 
       const items = parseItems(sectionText);
 
-      const deliveryIndex = i + 1;
+      // Dodaj do mapy pozycji dla tego klienta
+      const existing = clientItems.get(section.clientNumber) || [];
+      clientItems.set(section.clientNumber, [...existing, ...items]);
+
+      // Zapamiętaj kolejność klientów (tylko dla nie-ZALEGŁE sekcji)
+      if (!section.isBacklog && !clientOrder.includes(section.clientNumber)) {
+        clientOrder.push(section.clientNumber);
+      }
+    }
+
+    // Dla klientów z ZALEGŁE ale bez głównej sekcji - dodaj do kolejności
+    for (const section of clientSections) {
+      if (section.isBacklog && !clientOrder.includes(section.clientNumber)) {
+        clientOrder.push(section.clientNumber);
+      }
+    }
+
+    // Utwórz dostawy w kolejności klientów
+    let deliveryIndex = 0;
+    for (const clientNumber of clientOrder) {
+      deliveryIndex++;
+      const items = clientItems.get(clientNumber) || [];
+
+      // Przenumeruj pozycje (position) bo mogły być z różnych sekcji
+      items.forEach((item, idx) => {
+        item.position = idx + 1;
+      });
+
       const deliveryCode =
         deliveryDate.source === 'parsed'
           ? formatDeliveryCode(new Date(deliveryDate.suggested), deliveryIndex)
@@ -315,7 +365,7 @@ export function parseLogisticsMail(mailText: string): ParsedMail {
       deliveries.push({
         deliveryCode,
         deliveryIndex,
-        clientLabel: `Klient nr ${section.clientNumber}`,
+        clientLabel: `Klient nr ${clientNumber}`,
         items,
       });
     }

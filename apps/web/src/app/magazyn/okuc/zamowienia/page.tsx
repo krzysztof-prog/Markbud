@@ -27,14 +27,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Filter, ShoppingCart, ArrowLeft } from 'lucide-react';
+import { Plus, Filter, ShoppingCart, ArrowLeft, Upload } from 'lucide-react';
 import { OrdersTable } from '@/features/okuc/components/OrdersTable';
 import { OrderForm } from '@/features/okuc/components/OrderForm';
+import { ImportOrderDialog } from '@/features/okuc/components/ImportOrderDialog';
 import {
   useOkucOrders,
   useCreateOkucOrder,
   useUpdateOkucOrder,
   useSendOkucOrder,
+  useDeleteOkucOrder,
 } from '@/features/okuc/hooks';
 import type { OkucOrder, OkucOrderStatus, BasketType, CreateOkucOrderInput, UpdateOkucOrderInput } from '@/types/okuc';
 
@@ -45,6 +47,7 @@ export default function OkucOrdersPage() {
   // === STATE ===
   const [selectedOrder, setSelectedOrder] = useState<OkucOrder | null>(null);
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
 
   // Filtry
   const [filterStatus, setFilterStatus] = useState<OkucOrderStatus | 'all'>('all');
@@ -66,6 +69,12 @@ export default function OkucOrdersPage() {
   });
 
   const sendMutation = useSendOkucOrder({
+    onSuccess: () => {
+      // Toast wyświetlany przez hook
+    },
+  });
+
+  const deleteMutation = useDeleteOkucOrder({
     onSuccess: () => {
       // Toast wyświetlany przez hook
     },
@@ -110,6 +119,15 @@ export default function OkucOrdersPage() {
 
   const handleSend = (orderId: number) => {
     sendMutation.mutate(orderId);
+  };
+
+  const handleDelete = (orderId: number) => {
+    deleteMutation.mutate(orderId);
+  };
+
+  const handleImportSuccess = () => {
+    setIsImportDialogOpen(false);
+    // Dane odświeżą się automatycznie przez cache invalidation w hooku
   };
 
   const handleFormSubmit = (data: CreateOkucOrderInput) => {
@@ -189,10 +207,16 @@ export default function OkucOrdersPage() {
               { label: 'Zamówienia', icon: <ShoppingCart className="h-4 w-4" /> },
             ]}
           />
-          <Button onClick={handleAddNew}>
-            <Plus className="h-4 w-4 mr-2" />
-            Dodaj zamówienie
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsImportDialogOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Importuj z XLSX
+            </Button>
+            <Button onClick={handleAddNew}>
+              <Plus className="h-4 w-4 mr-2" />
+              Dodaj zamówienie
+            </Button>
+          </div>
         </div>
 
         {/* Filtry */}
@@ -315,10 +339,19 @@ export default function OkucOrdersPage() {
             onView={handleView}
             onEdit={handleEdit}
             onSend={handleSend}
+            onDelete={handleDelete}
             isSendingId={sendMutation.isPending ? selectedOrder?.id : undefined}
+            isDeletingId={deleteMutation.isPending ? undefined : undefined}
           />
         )}
       </div>
+
+      {/* Import Dialog */}
+      <ImportOrderDialog
+        open={isImportDialogOpen}
+        onOpenChange={setIsImportDialogOpen}
+        onSuccess={handleImportSuccess}
+      />
     </div>
   );
 }

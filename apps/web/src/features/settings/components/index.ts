@@ -8,12 +8,14 @@ export { ProfilesTab } from './ProfilesTab';
 export { ProfileDepthsTab } from './ProfileDepthsTab';
 export { OkucLocationsTab } from './OkucLocationsTab';
 export { DocumentAuthorMappingsTab } from './DocumentAuthorMappingsTab';
+export { SteelTab } from './SteelTab';
 
 // Settings Dialog Components
 export {
   PalletDialog,
   ColorDialog,
   ProfileDialog,
+  SteelDialog,
   DeleteConfirmDialog,
 } from './SettingsDialogs';
 export { DocumentAuthorMappingDialog } from './DocumentAuthorMappingDialog';

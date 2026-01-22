@@ -7,6 +7,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/use-toast';
+import { fetchApi } from '@/lib/api-client';
 import type {
   OkucDemand,
   CreateDemandInput,
@@ -16,7 +17,7 @@ import type {
 } from '@/types/okuc';
 
 // ============================================================================
-// API CLIENT
+// API CLIENT - używa fetchApi z autoryzacją
 // ============================================================================
 
 const API_BASE = '/api/okuc/demand';
@@ -35,9 +36,7 @@ const okucDemandApi = {
     if (filters?.isManualEdit !== undefined) params.set('isManualEdit', filters.isManualEdit.toString());
 
     const url = params.toString() ? `${API_BASE}?${params}` : API_BASE;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Nie udało się pobrać zapotrzebowań');
-    return res.json();
+    return fetchApi<OkucDemand[]>(url);
   },
 
   /** GET /api/okuc/demand/summary - Get demand summary grouped by week */
@@ -47,44 +46,33 @@ const okucDemandApi = {
     if (toWeek) params.set('toWeek', toWeek);
 
     const url = params.toString() ? `${API_BASE}/summary?${params}` : `${API_BASE}/summary`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Nie udało się pobrać podsumowania zapotrzebowań');
-    return res.json();
+    return fetchApi<WeeklyDemandSummary[]>(url);
   },
 
   /** GET /api/okuc/demand/:id - Get demand by ID */
   async getById(id: number): Promise<OkucDemand> {
-    const res = await fetch(`${API_BASE}/${id}`);
-    if (!res.ok) throw new Error('Nie udało się pobrać zapotrzebowania');
-    return res.json();
+    return fetchApi<OkucDemand>(`${API_BASE}/${id}`);
   },
 
   /** POST /api/okuc/demand - Create a new demand */
   async create(data: CreateDemandInput): Promise<OkucDemand> {
-    const res = await fetch(API_BASE, {
+    return fetchApi<OkucDemand>(API_BASE, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Nie udało się utworzyć zapotrzebowania');
-    return res.json();
   },
 
-  /** PATCH /api/okuc/demand/:id - Update demand */
+  /** PUT /api/okuc/demand/:id - Update demand */
   async update(id: number, data: UpdateDemandInput): Promise<OkucDemand> {
-    const res = await fetch(`${API_BASE}/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+    return fetchApi<OkucDemand>(`${API_BASE}/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Nie udało się zaktualizować zapotrzebowania');
-    return res.json();
   },
 
   /** DELETE /api/okuc/demand/:id - Delete demand */
   async delete(id: number): Promise<void> {
-    const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Nie udało się usunąć zapotrzebowania');
+    return fetchApi<void>(`${API_BASE}/${id}`, { method: 'DELETE' });
   },
 };
 

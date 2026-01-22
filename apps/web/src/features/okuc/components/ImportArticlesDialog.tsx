@@ -43,8 +43,8 @@ import {
   AlertCircle,
   ArrowRight,
 } from 'lucide-react';
-import { okucArticlesApi } from '@/features/okuc/api/okucApi';
-import { toast } from '@/hooks/useToast';
+import { okucArticlesApi } from '@/features/okuc/api';
+import { useToast } from '@/components/ui/use-toast';
 import type {
   ImportArticlePreviewItem,
   ImportArticleConflict,
@@ -66,6 +66,8 @@ export function ImportArticlesDialog({
   onOpenChange,
   onSuccess,
 }: ImportArticlesDialogProps) {
+  const { toast } = useToast();
+
   // Stan procesu importu
   const [step, setStep] = useState<ImportStep>('upload');
   const [isLoading, setIsLoading] = useState(false);

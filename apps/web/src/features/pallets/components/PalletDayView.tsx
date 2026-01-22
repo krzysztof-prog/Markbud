@@ -11,6 +11,7 @@ import {
   Info,
   ChevronDown,
   Calendar,
+  Package,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +22,8 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { PalletRow } from './PalletRow';
 import { AlertSettingsDialog } from './AlertSettingsDialog';
+import { InitialStockDialog } from './InitialStockDialog';
+import { useRoleCheck } from '@/features/auth/hooks/useRoleCheck';
 import {
   usePalletDay,
   usePalletDayMutation,
@@ -94,7 +97,11 @@ export const PalletDayView: React.FC<PalletDayViewProps> = ({
 
   // Stan dialogów i paneli
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isInitialStockOpen, setIsInitialStockOpen] = useState(false);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
+
+  // Sprawdzenie uprawnień
+  const { isAdmin } = useRoleCheck();
 
   // Queries
   const { data: dayData, isLoading, error } = usePalletDay(date);
@@ -104,10 +111,18 @@ export const PalletDayView: React.FC<PalletDayViewProps> = ({
   const saveMutation = usePalletDayMutation();
   const closeMutation = useCloseDayMutation();
 
-  // Czy dzień można edytować (tylko status OPEN)
+  // Czy dzień można edytować (status OPEN + poprzedni dzień zamknięty)
   const isEditable = useMemo(() => {
     if (!dayData) return false;
-    return dayData.status === 'OPEN';
+    return dayData.status === 'OPEN' && dayData.canEdit;
+  }, [dayData]);
+
+  // Powód blokady edycji
+  const editBlockReason = useMemo(() => {
+    if (!dayData) return null;
+    if (dayData.status === 'CLOSED') return null; // Osobny komunikat dla zamkniętych
+    if (!dayData.canEdit) return dayData.editBlockReason;
+    return null;
   }, [dayData]);
 
   // Mapa progów alertów
@@ -334,6 +349,18 @@ export const PalletDayView: React.FC<PalletDayViewProps> = ({
                 <span className="hidden sm:inline">Progi alertów</span>
               </Button>
 
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsInitialStockOpen(true)}
+                  className="gap-1"
+                >
+                  <Package className="h-4 w-4" />
+                  <span className="hidden sm:inline">Stan początkowy</span>
+                </Button>
+              )}
+
               {onShowMonthView && (
                 <Button
                   variant="outline"
@@ -505,6 +532,17 @@ export const PalletDayView: React.FC<PalletDayViewProps> = ({
                   </span>
                 </div>
               )}
+
+              {/* Info dla dni zablokowanych (poprzedni dzień niezamknięty) */}
+              {editBlockReason && (
+                <div className="mt-4 text-sm text-center p-3 bg-amber-50 border border-amber-200 rounded-md">
+                  <div className="flex items-center justify-center gap-2 text-amber-700">
+                    <Lock className="h-4 w-4" />
+                    <span className="font-medium">Edycja zablokowana</span>
+                  </div>
+                  <p className="text-amber-600 mt-1">{editBlockReason}</p>
+                </div>
+              )}
             </>
           )}
         </CardContent>
@@ -515,6 +553,14 @@ export const PalletDayView: React.FC<PalletDayViewProps> = ({
         open={isSettingsOpen}
         onOpenChange={setIsSettingsOpen}
       />
+
+      {/* Dialog stanu początkowego (tylko admin) */}
+      {isAdmin && (
+        <InitialStockDialog
+          open={isInitialStockOpen}
+          onOpenChange={setIsInitialStockOpen}
+        />
+      )}
     </TooltipProvider>
   );
 };

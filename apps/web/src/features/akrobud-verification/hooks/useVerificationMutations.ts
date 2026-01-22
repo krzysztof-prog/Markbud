@@ -12,6 +12,7 @@ import type {
   AddItemsData,
   VerifyListParams,
   ApplyChangesParams,
+  ProjectVerificationResult,
 } from '@/types';
 
 // ===================
@@ -287,5 +288,117 @@ export function useParseTextarea() {
   return useMutation({
     mutationFn: ({ listId, text }: { listId: number; text: string }) =>
       verificationApi.parseTextarea(listId, text),
+  });
+}
+
+// ===================
+// Project-based Mutations (NEW)
+// ===================
+
+/**
+ * Hook do parsowania treści maila (wykrywa datę i projekty)
+ */
+export function useParseMailContent() {
+  return useMutation({
+    mutationFn: (rawInput: string) => verificationApi.parseMailContent(rawInput),
+  });
+}
+
+/**
+ * Hook do preview projektów (ile zleceń dla każdego)
+ */
+export function usePreviewProjects() {
+  return useMutation({
+    mutationFn: (projects: string[]) => verificationApi.previewProjects(projects),
+  });
+}
+
+/**
+ * Hook do tworzenia nowej wersji listy z projektami
+ */
+export function useCreateListVersion(callbacks?: {
+  onSuccess?: (id: number) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      deliveryDate: string;
+      rawInput?: string;
+      projects: string[];
+      parentId?: number;
+      title?: string;
+      notes?: string;
+    }) => verificationApi.createListVersion(data),
+
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: VERIFICATION_LIST_KEYS.lists() });
+      showSuccessToast(
+        'Wersja utworzona',
+        `Utworzono wersję ${data.version} z ${data.items.length} projektami`
+      );
+      callbacks?.onSuccess?.(data.id);
+    },
+
+    onError: (error) => {
+      showErrorToast('Błąd tworzenia wersji', getErrorMessage(error));
+    },
+  });
+}
+
+/**
+ * Hook do porównywania wersji
+ */
+export function useCompareVersions() {
+  return useMutation({
+    mutationFn: ({ listId1, listId2 }: { listId1: number; listId2: number }) =>
+      verificationApi.compareVersions(listId1, listId2),
+
+    onError: (error) => {
+      showErrorToast('Błąd porównywania', getErrorMessage(error));
+    },
+  });
+}
+
+/**
+ * Hook do weryfikacji listy projektów
+ */
+export function useVerifyProjectList(callbacks?: {
+  onSuccess?: (result: ProjectVerificationResult) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      listId,
+      params,
+    }: {
+      listId: number;
+      params?: { createDeliveryIfMissing?: boolean };
+    }) => verificationApi.verifyProjectList(listId, params),
+
+    onSuccess: (result, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: VERIFICATION_LIST_KEYS.list(variables.listId),
+      });
+
+      const { summary } = result;
+      const message = `Zgodne: ${summary.allInDelivery}, Częściowe: ${summary.partialInDelivery}, Brakujące: ${summary.noneInDelivery}, Nieznalezione: ${summary.notFound}`;
+
+      if (result.needsDeliveryCreation) {
+        showSuccessToast(
+          'Weryfikacja zakończona',
+          `${message}. Brak dostawy na ten dzień - zostanie utworzona automatycznie.`
+        );
+      } else {
+        showSuccessToast('Weryfikacja zakończona', message);
+      }
+
+      callbacks?.onSuccess?.(result);
+    },
+
+    onError: (error) => {
+      showErrorToast('Błąd weryfikacji', getErrorMessage(error));
+    },
   });
 }

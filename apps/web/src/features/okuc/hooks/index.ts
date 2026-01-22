@@ -96,3 +96,18 @@ export {
   useConfirmOkucOrderDelivery,
   useDeleteOkucOrder,
 } from './useOkucOrders';
+
+// ============================================================================
+// REPLACEMENTS (Zastępstwa artykułów - wygaszanie)
+// ============================================================================
+export {
+  // Query keys
+  okucReplacementsKeys,
+
+  // Replacements hooks
+  useOkucReplacements,
+  useSetReplacement,
+  useRemoveReplacement,
+  useTransferDemand,
+  useOkucReplacementMutations,
+} from './useOkucReplacements';

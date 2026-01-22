@@ -30,6 +30,7 @@ export function Header({ title, alertsCount = 0, children }: HeaderProps) {
   });
 
   // Zamknij dropdown po kliknięciu poza nim lub naciśnięciu ESC
+  // UWAGA: Dodano warunkowe usuwanie event listenerów aby uniknąć leaków
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -54,13 +55,18 @@ export function Header({ title, alertsCount = 0, children }: HeaderProps) {
       }
     }
 
+    // Dodaj mousedown listener tylko gdy dropdown jest otwarty
     if (isDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
+    // Keydown listener jest zawsze potrzebny (Ctrl+K)
     document.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      // Usuwaj mousedown listener tylko gdy był dodany (gdy dropdown był otwarty)
+      if (isDropdownOpen) {
+        document.removeEventListener('mousedown', handleClickOutside);
+      }
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isDropdownOpen, isSearchOpen]);

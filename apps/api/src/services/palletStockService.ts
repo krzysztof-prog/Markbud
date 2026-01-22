@@ -37,6 +37,8 @@ export interface PalletStockEntryWithPrevious extends PalletStockEntry {
 
 export interface PalletStockDayWithEntries extends PalletStockDay {
   entries: PalletStockEntryWithPrevious[];
+  canEdit: boolean; // Czy dzień można edytować (poprzedni zamknięty lub pierwszy po stanie początkowym)
+  editBlockReason?: string; // Powód blokady edycji
 }
 
 export interface MonthSummary {
@@ -74,7 +76,9 @@ export interface Alert {
 }
 
 /**
- * Pomocnicza funkcja do normalizacji daty (tylko dzień, bez czasu)
+ * Pomocnicza funkcja do normalizacji daty (tylko dzień, bez czasu).
+ * Ustawia czas na midnight w LOKALNEJ strefie czasowej.
+ * UWAGA: Prisma/SQLite zapisuje to jako UTC z przesunięciem (np. 23:00 UTC dla CET).
  */
 function normalizeDate(date: Date): Date {
   const normalized = new Date(date);
@@ -83,9 +87,129 @@ function normalizeDate(date: Date): Date {
 }
 
 /**
+ * Porównuje daty ignorując czas - sprawdza czy to ten sam dzień.
+ */
+function isSameDay(date1: Date, date2: Date): boolean {
+  return (
+    date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate()
+  );
+}
+
+/**
+ * Sprawdza czy date1 jest dniem przed date2.
+ * @internal - Currently unused but kept for future use
+ */
+function _isDayBefore(date1: Date, date2: Date): boolean {
+  const d1 = new Date(date1);
+  d1.setHours(0, 0, 0, 0);
+  const d2 = new Date(date2);
+  d2.setHours(0, 0, 0, 0);
+  // Różnica w dniach
+  const diffMs = d2.getTime() - d1.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  return diffDays === 1;
+}
+
+/**
+ * Pobiera stan początkowy dla danego typu palety.
+ * Zwraca null jeśli nie ustawiono stanu początkowego.
+ */
+export async function getInitialStock(type: string): Promise<{
+  initialStock: number;
+  startDate: Date;
+} | null> {
+  const initialConfig = await prisma.palletInitialStock.findUnique({
+    where: { type },
+  });
+
+  if (!initialConfig) {
+    return null;
+  }
+
+  return {
+    initialStock: initialConfig.initialStock,
+    startDate: initialConfig.startDate,
+  };
+}
+
+/**
+ * Pobiera wszystkie stany początkowe.
+ */
+export async function getAllInitialStocks(): Promise<Array<{
+  type: string;
+  initialStock: number;
+  startDate: Date;
+  updatedAt: Date;
+}>> {
+  const configs = await prisma.palletInitialStock.findMany({
+    orderBy: { type: 'asc' },
+  });
+
+  return configs.map((c) => ({
+    type: c.type,
+    initialStock: c.initialStock,
+    startDate: c.startDate,
+    updatedAt: c.updatedAt,
+  }));
+}
+
+/**
+ * Ustawia lub aktualizuje stan początkowy dla wszystkich typów palet.
+ * Data początkowa jest wspólna dla wszystkich typów.
+ */
+export async function setInitialStocks(
+  startDate: Date,
+  stocks: Array<{ type: string; initialStock: number }>,
+  updatedById?: number
+): Promise<void> {
+  const normalizedStartDate = normalizeDate(startDate);
+
+  // Waliduj typy palet
+  for (const stock of stocks) {
+    if (!PALLET_TYPES.includes(stock.type as PalletType)) {
+      throw new ValidationError(`Nieprawidłowy typ palety: ${stock.type}`);
+    }
+    if (stock.initialStock < 0) {
+      throw new ValidationError('Stan początkowy nie może być ujemny');
+    }
+  }
+
+  // Upsert dla każdego typu
+  await prisma.$transaction(
+    stocks.map((stock) =>
+      prisma.palletInitialStock.upsert({
+        where: { type: stock.type },
+        update: {
+          startDate: normalizedStartDate,
+          initialStock: stock.initialStock,
+          updatedById,
+        },
+        create: {
+          type: stock.type,
+          startDate: normalizedStartDate,
+          initialStock: stock.initialStock,
+          updatedById,
+        },
+      })
+    )
+  );
+
+  logger.info('Ustawiono stany początkowe palet', {
+    startDate: normalizedStartDate.toISOString(),
+    stocks,
+    updatedById,
+  });
+}
+
+/**
  * Pobiera dane poprzedniego dnia dla danego typu palety.
  * Zwraca obiekt z morningStock i used poprzedniego dnia.
  * Domyślny stan poranny dla nowego dnia = previousMorningStock - previousUsed
+ *
+ * NOWA LOGIKA: Jeśli nie ma poprzedniego dnia, ale jest ustawiony stan początkowy
+ * i data jest >= startDate, użyj stanu początkowego jako morningStock.
  */
 export async function getPreviousDayData(
   date: Date,
@@ -107,7 +231,22 @@ export async function getPreviousDayData(
   });
 
   if (!previousDay || previousDay.entries.length === 0) {
-    logger.debug('Brak poprzedniego dnia - stan początkowy = 0', { type, date: normalizedDate.toISOString() });
+    // Sprawdź czy jest ustawiony stan początkowy
+    const initialStock = await getInitialStock(type);
+
+    if (initialStock && normalizedDate >= normalizeDate(initialStock.startDate)) {
+      // Jeśli nie ma poprzedniego dnia, ale jest stan początkowy i data >= startDate,
+      // użyj stanu początkowego jako "poprzedni poranny" z used = 0
+      logger.debug('Brak poprzedniego dnia - używam stanu początkowego', {
+        type,
+        date: normalizedDate.toISOString(),
+        initialStock: initialStock.initialStock,
+        startDate: initialStock.startDate.toISOString(),
+      });
+      return { morningStock: initialStock.initialStock, used: 0 };
+    }
+
+    logger.debug('Brak poprzedniego dnia i brak stanu początkowego - stan = 0', { type, date: normalizedDate.toISOString() });
     return { morningStock: 0, used: 0 };
   }
 
@@ -121,6 +260,140 @@ export async function getPreviousDayData(
   });
 
   return { morningStock: entry.morningStock, used: entry.used };
+}
+
+/**
+ * Sprawdza czy dzień można edytować.
+ * Warunki:
+ * - Dzień musi mieć status OPEN
+ * - Poprzedni dzień musi być zamknięty (CLOSED) LUB
+ * - To jest pierwszy dzień po dacie stanu początkowego (brak poprzedniego dnia)
+ *
+ * Zwraca: { canEdit: boolean, reason?: string }
+ */
+export async function checkCanEditDay(date: Date): Promise<{
+  canEdit: boolean;
+  reason?: string;
+}> {
+  const normalizedDate = normalizeDate(date);
+
+  logger.debug('checkCanEditDay - start', {
+    inputDate: date.toISOString(),
+    normalizedDate: normalizedDate.toISOString(),
+  });
+
+  // Sprawdź czy istnieje dzień w bazie
+  const existingDay = await prisma.palletStockDay.findUnique({
+    where: { date: normalizedDate },
+  });
+
+  // Jeśli dzień jest zamknięty - nie można edytować
+  if (existingDay && existingDay.status === DAY_STATUS.CLOSED) {
+    logger.debug('checkCanEditDay - dzień zamknięty');
+    return {
+      canEdit: false,
+      reason: 'Ten dzień jest zamknięty',
+    };
+  }
+
+  // Pobierz stan początkowy
+  const initialStock = await prisma.palletInitialStock.findFirst();
+
+  if (!initialStock) {
+    logger.debug('checkCanEditDay - brak stanu początkowego');
+    return {
+      canEdit: false,
+      reason: 'Najpierw ustaw stan początkowy palet',
+    };
+  }
+
+  const startDate = normalizeDate(initialStock.startDate);
+
+  logger.debug('checkCanEditDay - daty', {
+    normalizedDate: normalizedDate.toISOString(),
+    startDate: startDate.toISOString(),
+    isSameOrAfterStart: normalizedDate >= startDate,
+    isSameDay: isSameDay(normalizedDate, startDate),
+  });
+
+  // Jeśli data jest przed datą stanu początkowego - nie można edytować
+  if (normalizedDate < startDate) {
+    return {
+      canEdit: false,
+      reason: `Data jest przed datą stanu początkowego (${startDate.toLocaleDateString('pl-PL')})`,
+    };
+  }
+
+  // Jeśli to jest dzień stanu początkowego - można edytować bez sprawdzania poprzedniego
+  if (isSameDay(normalizedDate, startDate)) {
+    logger.debug('checkCanEditDay - to jest dzień stanu początkowego, można edytować');
+    return { canEdit: true };
+  }
+
+  // Znajdź poprzedni dzień (tylko dni >= startDate)
+  const previousDay = await prisma.palletStockDay.findFirst({
+    where: {
+      date: {
+        lt: normalizedDate,
+        gte: startDate, // Nie szukaj przed datą stanu początkowego
+      },
+    },
+    orderBy: { date: 'desc' },
+  });
+
+  logger.debug('checkCanEditDay - poprzedni dzień', {
+    previousDay: previousDay
+      ? { date: previousDay.date.toISOString(), status: previousDay.status }
+      : null,
+  });
+
+  // Jeśli nie ma poprzedniego dnia w bazie (ale data > startDate)
+  // To znaczy że poprzedni dzień to startDate lub nie został utworzony
+  if (!previousDay) {
+    // Sprawdź czy dzień tuż przed jest datą startową
+    const dayBefore = new Date(normalizedDate);
+    dayBefore.setDate(dayBefore.getDate() - 1);
+
+    if (isSameDay(dayBefore, startDate)) {
+      // Poprzedni dzień to startDate - OK, można edytować
+      logger.debug('checkCanEditDay - poprzedni dzień to startDate, można edytować');
+      return { canEdit: true };
+    }
+
+    // Poprzedni dzień powinien istnieć ale nie istnieje - trzeba najpierw wypełnić poprzedni
+    logger.debug('checkCanEditDay - brak poprzedniego dnia w bazie');
+    return {
+      canEdit: false,
+      reason: `Najpierw wypełnij poprzedni dzień (${dayBefore.toLocaleDateString('pl-PL')})`,
+    };
+  }
+
+  // Sprawdź czy poprzedni dzień to rzeczywiście dzień przed (nie ma przerwy)
+  const expectedPrevDay = new Date(normalizedDate);
+  expectedPrevDay.setDate(expectedPrevDay.getDate() - 1);
+
+  if (!isSameDay(previousDay.date, expectedPrevDay)) {
+    // Jest przerwa w dniach - poprzedni dzień w bazie nie jest dniem tuż przed
+    logger.debug('checkCanEditDay - przerwa w dniach');
+    return {
+      canEdit: false,
+      reason: `Najpierw wypełnij dzień ${expectedPrevDay.toLocaleDateString('pl-PL')}`,
+    };
+  }
+
+  // Jeśli poprzedni dzień jest zamknięty - można edytować
+  if (previousDay.status === DAY_STATUS.CLOSED) {
+    logger.debug('checkCanEditDay - poprzedni dzień zamknięty, można edytować');
+    return { canEdit: true };
+  }
+
+  // Poprzedni dzień nie jest zamknięty - blokuj
+  const previousDateStr = previousDay.date.toLocaleDateString('pl-PL');
+  logger.debug('checkCanEditDay - poprzedni dzień otwarty, blokada');
+  return {
+    canEdit: false,
+    reason: `Najpierw zamknij dzień ${previousDateStr}`,
+  };
 }
 
 /**
@@ -171,7 +444,16 @@ export async function getOrCreateDay(date: Date): Promise<PalletStockDayWithEntr
         return { ...entry, previousMorningStock: prevData.morningStock };
       })
     );
-    return { ...existingDay, entries: entriesWithPrevious };
+
+    // Sprawdź czy można edytować
+    const editCheck = await checkCanEditDay(normalizedDate);
+
+    return {
+      ...existingDay,
+      entries: entriesWithPrevious,
+      canEdit: editCheck.canEdit,
+      editBlockReason: editCheck.reason,
+    };
   }
 
   // Tworzymy nowy dzień z wpisami dla wszystkich typów
@@ -217,7 +499,15 @@ export async function getOrCreateDay(date: Date): Promise<PalletStockDayWithEntr
     })
   );
 
-  return { ...newDay, entries: entriesWithPrevious };
+  // Sprawdź czy można edytować nowo utworzony dzień
+  const editCheck = await checkCanEditDay(normalizedDate);
+
+  return {
+    ...newDay,
+    entries: entriesWithPrevious,
+    canEdit: editCheck.canEdit,
+    editBlockReason: editCheck.reason,
+  };
 }
 
 /**
@@ -237,6 +527,11 @@ export async function updateDayEntries(
   // Sprawdź czy dzień jest otwarty
   if (day.status === DAY_STATUS.CLOSED) {
     throw new ValidationError('Ten dzień jest zamknięty i nie można go edytować');
+  }
+
+  // Sprawdź czy dzień można edytować (poprzedni dzień musi być zamknięty)
+  if (!day.canEdit) {
+    throw new ValidationError(day.editBlockReason || 'Nie można edytować tego dnia');
   }
 
   // Waliduj typy palet i wartości
@@ -301,7 +596,15 @@ export async function updateDayEntries(
     })
   );
 
-  return { ...updatedDay, entries: entriesWithPrevious };
+  // Sprawdź czy można edytować (dla odpowiedzi)
+  const editCheck = await checkCanEditDay(normalizedDate);
+
+  return {
+    ...updatedDay,
+    entries: entriesWithPrevious,
+    canEdit: editCheck.canEdit,
+    editBlockReason: editCheck.reason,
+  };
 }
 
 /**
@@ -337,6 +640,11 @@ export async function correctMorningStock(
   // Sprawdź czy dzień jest otwarty
   if (day.status === DAY_STATUS.CLOSED) {
     throw new ValidationError('Ten dzień jest zamknięty i nie można go korygować');
+  }
+
+  // Sprawdź czy dzień można edytować (poprzedni dzień musi być zamknięty)
+  if (!day.canEdit) {
+    throw new ValidationError(day.editBlockReason || 'Nie można edytować tego dnia');
   }
 
   // Znajdź wpis
@@ -377,7 +685,7 @@ export async function correctMorningStock(
 /**
  * Zamyka dzień (ustawia status na CLOSED).
  */
-export async function closeDay(date: Date): Promise<PalletStockDay> {
+export async function closeDay(date: Date): Promise<PalletStockDayWithEntries> {
   const normalizedDate = normalizeDate(date);
 
   // Pobierz dzień
@@ -401,6 +709,7 @@ export async function closeDay(date: Date): Promise<PalletStockDay> {
       status: DAY_STATUS.CLOSED,
       closedAt: new Date(),
     },
+    include: { entries: true },
   });
 
   logger.info('Zamknięto dzień paletowy', {
@@ -408,7 +717,21 @@ export async function closeDay(date: Date): Promise<PalletStockDay> {
     date: normalizedDate.toISOString(),
   });
 
-  return closedDay;
+  // Dodaj previousMorningStock do każdego wpisu
+  const entriesWithPrevious = await Promise.all(
+    closedDay.entries.map(async (entry) => {
+      const prevData = await getPreviousDayData(normalizedDate, entry.type);
+      return { ...entry, previousMorningStock: prevData.morningStock };
+    })
+  );
+
+  // Zamknięty dzień - canEdit = false
+  return {
+    ...closedDay,
+    entries: entriesWithPrevious,
+    canEdit: false,
+    editBlockReason: undefined,
+  };
 }
 
 /**
@@ -764,7 +1087,15 @@ export async function getDayById(id: number): Promise<PalletStockDayWithEntries>
     })
   );
 
-  return { ...day, entries: entriesWithPrevious };
+  // Sprawdź czy można edytować
+  const editCheck = await checkCanEditDay(day.date);
+
+  return {
+    ...day,
+    entries: entriesWithPrevious,
+    canEdit: editCheck.canEdit,
+    editBlockReason: editCheck.reason,
+  };
 }
 
 /**
@@ -788,7 +1119,15 @@ export async function getDayByDate(date: Date): Promise<PalletStockDayWithEntrie
     })
   );
 
-  return { ...day, entries: entriesWithPrevious };
+  // Sprawdź czy można edytować
+  const editCheck = await checkCanEditDay(normalizedDate);
+
+  return {
+    ...day,
+    entries: entriesWithPrevious,
+    canEdit: editCheck.canEdit,
+    editBlockReason: editCheck.reason,
+  };
 }
 
 /**
@@ -812,7 +1151,7 @@ export async function getDaysInRange(
     orderBy: { date: 'asc' },
   });
 
-  // Dodaj previousMorningStock do każdego wpisu
+  // Dodaj previousMorningStock i canEdit do każdego dnia
   return Promise.all(
     days.map(async (day) => {
       const entriesWithPrevious = await Promise.all(
@@ -821,7 +1160,13 @@ export async function getDaysInRange(
           return { ...entry, previousMorningStock: prevData.morningStock };
         })
       );
-      return { ...day, entries: entriesWithPrevious };
+      const editCheck = await checkCanEditDay(day.date);
+      return {
+        ...day,
+        entries: entriesWithPrevious,
+        canEdit: editCheck.canEdit,
+        editBlockReason: editCheck.reason,
+      };
     })
   );
 }
@@ -857,7 +1202,6 @@ export async function getTodayWithAlerts(): Promise<{
  * Używana przez Handler i Routes (DI pattern)
  */
 export class PalletStockService {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   constructor(_prisma: unknown) {
     // Prisma jest używana przez funkcje serwisowe bezpośrednio
   }
@@ -902,7 +1246,7 @@ export class PalletStockService {
   /**
    * Zamyka dzień paletowy
    */
-  async closeDay(date: string): Promise<PalletStockDay> {
+  async closeDay(date: string): Promise<PalletStockDayWithEntries> {
     const parsedDate = new Date(date);
     if (isNaN(parsedDate.getTime())) {
       throw new ValidationError('Nieprawidłowy format daty');
@@ -955,5 +1299,39 @@ export class PalletStockService {
   ): Promise<PalletAlertConfig[]> {
     await updateAlertConfig(configs);
     return getAlertConfig();
+  }
+
+  /**
+   * Pobiera stany początkowe palet
+   */
+  async getInitialStocks(): Promise<Array<{
+    type: string;
+    initialStock: number;
+    startDate: Date;
+    updatedAt: Date;
+  }>> {
+    return getAllInitialStocks();
+  }
+
+  /**
+   * Ustawia stany początkowe palet
+   */
+  async setInitialStocks(
+    startDate: string,
+    stocks: Array<{ type: string; initialStock: number }>,
+    updatedById?: number
+  ): Promise<Array<{
+    type: string;
+    initialStock: number;
+    startDate: Date;
+    updatedAt: Date;
+  }>> {
+    const parsedDate = new Date(startDate);
+    if (isNaN(parsedDate.getTime())) {
+      throw new ValidationError('Nieprawidłowy format daty');
+    }
+
+    await setInitialStocks(parsedDate, stocks, updatedById);
+    return getAllInitialStocks();
   }
 }

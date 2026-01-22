@@ -5,6 +5,7 @@
 import { useState, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ordersApi } from '@/lib/api';
+import { toast } from '@/hooks/useToast';
 
 // ================================
 // Typy
@@ -44,10 +45,18 @@ export function useOrderEdit(): UseOrderEditReturn {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       setEditingCell(null);
       setEditValue('');
+      toast({
+        title: 'Zlecenie zaktualizowane',
+        description: 'Zmiany zostały zapisane.',
+        variant: 'success',
+      });
     },
-    onError: (error) => {
-      console.error('Błąd podczas aktualizacji zlecenia:', error);
-      alert('Nie udało się zaktualizować zlecenia');
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd aktualizacji zlecenia',
+        description: error.message || 'Nie udało się zaktualizować zlecenia.',
+        variant: 'destructive',
+      });
     },
   });
 
