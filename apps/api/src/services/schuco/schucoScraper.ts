@@ -691,13 +691,15 @@ export class SchucoScraper {
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Krok 4: Wciśnij Tab żeby wyjść z inputa (to powinno zatwierdzić wartość)
+      // UWAGA: NIE wciskamy Enter - to może otworzyć modal "Filtr"!
+      await this.page.keyboard.press('Tab');
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Krok 5: Jeszcze raz Tab żeby całkowicie wyjść z obszaru filtra
       await this.page.keyboard.press('Tab');
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      // Krok 5: Wciśnij Enter żeby zatwierdzić filtr (jeśli jest focus na czymś)
-      await this.page.keyboard.press('Enter');
-
-      logger.info('[SchucoScraper] Filter submitted via Tab + Enter (no modal click!)');
+      logger.info('[SchucoScraper] Filter submitted via Tab (no Enter - avoids modal!)');
 
       // ========================================
       // KROK 4: Czekaj na przefiltrowane dane - WAŻNE!
