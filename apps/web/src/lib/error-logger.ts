@@ -267,7 +267,7 @@ export function validateAndClearCorruptedCache(): void {
       // Próbujemy sparsować cache - jeśli się nie uda, jest uszkodzony
       JSON.parse(cache);
     }
-  } catch (e) {
+  } catch {
     console.warn('[Cache Validator] Uszkodzony cache React Query wykryty, czyszczenie...');
     try {
       localStorage.removeItem(cacheKey);

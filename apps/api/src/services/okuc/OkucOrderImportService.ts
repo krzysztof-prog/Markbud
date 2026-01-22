@@ -39,12 +39,10 @@ export class OkucOrderImportService {
     const items: ImportOrderItem[] = [];
     const articleIds = new Set<string>();
     const duplicateArticles: string[] = [];
-    const errors: string[] = [];
+    const _errors: string[] = [];
 
     // Iteruj po wierszach (pomijając nagłówek jeśli jest)
-    let rowIndex = 0;
     worksheet.eachRow((row, rowNumber) => {
-      rowIndex++;
 
       // Pomijamy pierwszy wiersz (nagłówek) lub puste wiersze
       if (rowNumber === 1) {

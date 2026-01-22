@@ -1,4 +1,4 @@
-import type { PrismaClient, Prisma } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { parseGlassDeliveryCsv } from '../parsers/glass-delivery-csv-parser.js';
 import { GlassDeliveryMatchingService } from './GlassDeliveryMatchingService.js';
 import type { GlassDeliveryWithItems } from './types.js';

@@ -8,7 +8,7 @@
  * - Aktualizuj status OkucDemand na 'completed'
  */
 
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { logger } from '../../utils/logger.js';
 import { emitOkucRwProcessed, emitOkucStockUpdated } from '../event-emitter.js';
 

@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OkucArticleService } from './OkucArticleService.js';
-import { NotFoundError, ValidationError } from '../../utils/errors.js';
+import { NotFoundError } from '../../utils/errors.js';
 import type { OkucArticleRepository } from '../../repositories/okuc/OkucArticleRepository.js';
 
 // Mock logger

@@ -128,7 +128,7 @@ export class SchucoService {
           return days;
         }
       }
-    } catch (error) {
+    } catch {
       logger.warn('[SchucoService] Failed to get schuco_filter_days setting, using default');
     }
     return 90; // Domyślna wartość

@@ -143,7 +143,7 @@ describe('SchucoOrderMatcher - Performance Tests', () => {
       }
 
       const start = performance.now();
-      const result = aggregateSchucoStatus(statuses);
+      const _result = aggregateSchucoStatus(statuses);
       const duration = performance.now() - start;
 
       expect(duration).toBeLessThan(100); // Should handle mixed efficiently

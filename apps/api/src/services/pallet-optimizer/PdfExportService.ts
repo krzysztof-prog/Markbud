@@ -5,7 +5,7 @@
 import PDFDocument from 'pdfkit';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { OptimizationResult, OptimizedPallet, OptimizedWindow } from './PalletOptimizerService.js';
+import type { OptimizationResult, OptimizedPallet } from './PalletOptimizerService.js';
 import { logger } from '../../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);

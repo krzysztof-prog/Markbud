@@ -2,7 +2,7 @@
  * ProfileService Unit Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ProfileService } from './profileService.js';
 import { ProfileRepository } from '../repositories/ProfileRepository.js';
 import { NotFoundError, ConflictError } from '../utils/errors.js';

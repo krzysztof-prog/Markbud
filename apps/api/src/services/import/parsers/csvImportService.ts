@@ -530,7 +530,7 @@ export class CsvImportService implements ICsvImportService {
    * - Re-match dostaw szkla
    * - Linkowanie do dostaw Schuco
    */
-  private async postProcessOrder(orderNumber: string, orderId: number): Promise<void> {
+  private async postProcessOrder(orderNumber: string, _orderId: number): Promise<void> {
     // Re-match niedopasowanych pozycji dostaw szkla
     try {
       // Dynamiczny import aby uniknac circular dependency

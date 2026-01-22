@@ -188,11 +188,9 @@ export class UzyteBeleProcessor {
     await this.transactionService.markAsProcessing(importId);
 
     try {
-      let result;
-
       // Parse the file to get order number and data
       const preview = await this.validationService.parseAndValidateCsv(fileImport.filepath);
-      const orderNumberParsed = this.conflictService.parseOrderNumber(preview.orderNumber);
+      const _orderNumberParsed = this.conflictService.parseOrderNumber(preview.orderNumber);
 
       logger.info('Processing import with variant resolution', {
         importId,
@@ -222,16 +220,11 @@ export class UzyteBeleProcessor {
       }
 
       // Determine import action based on resolution type
-      let action: 'overwrite' | 'add_new' = 'add_new';
-      let replaceBase = false;
-
-      if (resolution.type === 'replace') {
-        action = 'overwrite';
-        replaceBase = true;
-      }
+      const action: 'overwrite' | 'add_new' = resolution.type === 'replace' ? 'overwrite' : 'add_new';
+      const replaceBase = resolution.type === 'replace';
 
       // Process the import
-      result = await this.processUzyteBeleImport(fileImport, action, replaceBase);
+      const result = await this.processUzyteBeleImport(fileImport, action, replaceBase);
 
       // Mark as completed using transaction service
       await this.transactionService.markAsCompleted(importId, {

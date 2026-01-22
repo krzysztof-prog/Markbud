@@ -33,7 +33,7 @@ import { ImportValidationService } from './importValidationService.js';
 import { ImportTransactionService } from './importTransactionService.js';
 import { ImportConflictService } from './importConflictService.js';
 import { UzyteBeleProcessor, type FolderImportResult, type FolderScanResult } from './UzyteBeleProcessor.js';
-import { CenyProcessor, type PdfAutoImportResult } from './CenyProcessor.js';
+import { CenyProcessor } from './CenyProcessor.js';
 
 /**
  * Import Orchestrator

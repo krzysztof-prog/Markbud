@@ -70,9 +70,9 @@ export interface ParsedOkucDemand {
 // ============ CONSTANTS ============
 
 const RW_REQUIRED_HEADERS = ['ArticleId', 'Qty'];
-const RW_OPTIONAL_HEADERS = ['SubWarehouse', 'Reference'];
+const _RW_OPTIONAL_HEADERS = ['SubWarehouse', 'Reference'];
 const DEMAND_REQUIRED_HEADERS = ['ExpectedWeek', 'ArticleId', 'Qty'];
-const DEMAND_OPTIONAL_HEADERS = ['DemandId', 'Status'];
+const _DEMAND_OPTIONAL_HEADERS = ['DemandId', 'Status'];
 
 // Mapowanie aliasów nagłówków dla polskiej wersji
 const HEADER_ALIASES: Record<string, string[]> = {

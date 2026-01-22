@@ -211,7 +211,7 @@ total;1;1;1`;
   describe('Variant Conflict Detection', () => {
     it('should detect variant conflict when base order exists', async () => {
       // Arrange: Create base order 53337 in database
-      const baseOrder = await new OrderBuilder()
+      const _baseOrder = await new OrderBuilder()
         .withOrderNumber('53337')
         .withStatus('new')
         .create(prisma);

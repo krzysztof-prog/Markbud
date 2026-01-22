@@ -24,7 +24,7 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({ year, month }) => 
         title: 'Eksport zakończony',
         description: 'Plik Excel został pobrany.',
       });
-    } catch (_error) {
+    } catch {
       toast({
         title: 'Błąd eksportu',
         description: 'Nie udało się wyeksportować danych do Excel.',
@@ -43,7 +43,7 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({ year, month }) => 
         title: 'Eksport zakończony',
         description: 'Plik PDF został pobrany.',
       });
-    } catch (_error) {
+    } catch {
       toast({
         title: 'Błąd eksportu',
         description: 'Nie udało się wyeksportować danych do PDF.',

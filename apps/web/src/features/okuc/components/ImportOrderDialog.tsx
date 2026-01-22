@@ -53,8 +53,6 @@ import { okucOrdersApi } from '@/features/okuc/api';
 import { useToast } from '@/components/ui/use-toast';
 import type {
   ParsedOrderImport,
-  ImportOrderItem,
-  MissingArticle,
   ConfirmOrderImportResult,
   MissingArticleToCreate,
 } from '@/types/okuc';

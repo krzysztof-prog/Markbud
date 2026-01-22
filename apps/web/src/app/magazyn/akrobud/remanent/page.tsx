@@ -57,7 +57,7 @@ export default function RemanentPage() {
   // Pobierz dane magazynowe dla wybranego koloru
   const { data: warehouseData, isLoading: warehouseLoading } = useQuery({
     queryKey: ['warehouse', selectedColorId],
-    queryFn: () => selectedColorId ? warehouseApi.getByColor(selectedColorId) : Promise.resolve({ data: [] }),
+    queryFn: () => warehouseApi.getByColor(selectedColorId!),
     enabled: !!selectedColorId,
   });
 

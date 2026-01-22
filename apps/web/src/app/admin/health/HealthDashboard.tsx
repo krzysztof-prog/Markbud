@@ -8,10 +8,26 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 
+interface FolderStatus {
+  name: string;
+  status: string;
+}
+
+interface ImportStatus {
+  id: string;
+  type: string;
+  status: string;
+  createdAt: string;
+}
+
 interface HealthCheckResult {
   status: 'ok' | 'warning' | 'error';
   message?: string;
-  details?: Record<string, unknown>;
+  details?: {
+    folders?: FolderStatus[];
+    imports?: ImportStatus[];
+    [key: string]: unknown;
+  };
 }
 
 interface HealthData {
@@ -127,7 +143,7 @@ export function HealthDashboard() {
             Array.isArray(checks.networkFolders.details.folders) && (
               <ul className="text-xs space-y-1 mt-2">
                 {checks.networkFolders.details.folders.map(
-                  (folder: { name: string; status: string }, idx: number) => (
+                  (folder, idx) => (
                     <li key={idx} className="flex items-center gap-2">
                       <span
                         className={`inline-block w-2 h-2 rounded-full ${
@@ -155,7 +171,7 @@ export function HealthDashboard() {
               <ul className="text-xs space-y-1 mt-2">
                 {checks.lastImports.details.imports
                   .slice(0, 3)
-                  .map((imp: { id: string; type: string; status: string; createdAt: string }) => (
+                  .map((imp) => (
                     <li key={imp.id}>
                       {imp.type}: {imp.status} (
                       {new Date(imp.createdAt).toLocaleString('pl-PL', {

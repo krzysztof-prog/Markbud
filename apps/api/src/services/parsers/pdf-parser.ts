@@ -80,7 +80,7 @@ export class PdfParser {
 
     // Wyciągnij walutę (€ lub PLN)
     const isEur = text.includes('€') || text.includes('EUR');
-    const isPln = text.includes('PLN') || text.includes('zł');
+    const _isPln = text.includes('PLN') || text.includes('zł');
     const currency: 'EUR' | 'PLN' = isEur ? 'EUR' : 'PLN';
 
     // Wyciągnij sumę netto - szukaj w sekcji podsumowania

@@ -49,7 +49,6 @@ import { FileWatcherFactory } from './FileWatcherFactory.js';
 /**
  * @deprecated Użyj FileWatcherFactory zamiast FileWatcherService
  */
-// eslint-disable-next-line @typescript-eslint/no-redeclare
 export const FileWatcherService = FileWatcherFactory;
 
 /**

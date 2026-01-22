@@ -83,7 +83,7 @@ vi.mock('../readinessOrchestrator.js', () => ({
 import { OrderService } from '../orderService.js';
 import { OrderBuilder } from '../../tests/fixtures/orders.fixture.js';
 import { ValidationError } from '../../utils/errors.js';
-import { createMockPrisma, setupTransactionMock } from '../../tests/mocks/prisma.mock.js';
+import { _createMockPrisma, _setupTransactionMock } from '../../tests/mocks/prisma.mock.js';
 
 describe('OrderService - Critical Paths', () => {
   // ============================================================================
@@ -260,7 +260,7 @@ describe('OrderService - Critical Paths', () => {
     it('should detect variant order without base order', async () => {
       // Setup: Variant order number (12345-a) but base order (12345) doesn't exist
       const variantOrderNumber = '12345-a';
-      const baseOrderNumber = '12345';
+      const _baseOrderNumber = '12345';
 
       // Mock: Create variant order succeeds (no validation in current impl)
       const createdOrder = new OrderBuilder()

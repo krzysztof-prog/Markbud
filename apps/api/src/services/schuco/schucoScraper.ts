@@ -211,7 +211,7 @@ export class SchucoScraper {
               waitUntil: 'domcontentloaded',
               timeout: this.config.timeout,
             });
-          } catch (reloadError) {
+          } catch {
             logger.warn('[SchucoScraper] Page reload failed, continuing...');
           }
         }
@@ -308,7 +308,7 @@ export class SchucoScraper {
     try {
       await this.page.waitForSelector('#username', { hidden: true, timeout: 15000 });
       logger.info('[SchucoScraper] Login form disappeared - login successful');
-    } catch (error) {
+    } catch {
       // Check if we're on a different page (login might have succeeded)
       const currentUrl = this.page.url();
       if (currentUrl.includes('purchaseOrders') || currentUrl.includes('dashboard')) {
@@ -644,7 +644,7 @@ export class SchucoScraper {
         { timeout: 120000 } // Increased to 120 seconds - Schuco data loads very slowly
       );
       logger.info('[SchucoScraper] Loading spinner disappeared');
-    } catch (error) {
+    } catch {
       logger.warn('[SchucoScraper] Loading wait timed out, checking if data loaded anyway...');
     }
 
@@ -794,7 +794,7 @@ export class SchucoScraper {
           if (browserProcess) {
             browserProcess.kill('SIGKILL');
           }
-        } catch (killError) {
+        } catch {
           // Ignore kill errors
         }
       }

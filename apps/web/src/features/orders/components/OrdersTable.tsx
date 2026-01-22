@@ -114,7 +114,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                   <OrderTableHeader visibleColumns={visibleColumns} />
                 </thead>
                 <tbody>
-                  {sortedMissing.map((orderNumber, index) => (
+                  {sortedMissing.map((orderNumber) => (
                     <tr
                       key={orderNumber}
                       className="bg-slate-100 text-slate-400 italic"

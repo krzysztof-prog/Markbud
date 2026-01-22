@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import type { Prisma } from '@prisma/client';
 import { CsvParser, type ParsedUzyteBele } from './parsers/csv-parser.js';
 import { logger } from '../utils/logger.js';
 

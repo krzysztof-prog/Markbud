@@ -185,7 +185,7 @@ export class MonthlyReportExportService {
       doc.font('Roboto').fontSize(9);
       let currentY = tableTop + rowHeight;
 
-      reportData.items.forEach((item, index) => {
+      reportData.items.forEach((item) => {
         // Check if we need a new page
         if (currentY > 500) {
           doc.addPage({ layout: 'landscape', margin: 50 });

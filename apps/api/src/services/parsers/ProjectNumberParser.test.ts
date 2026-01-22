@@ -350,8 +350,6 @@ describe('ProjectNumberParser', () => {
   });
 
   describe('parseMailContent', () => {
-    const TEST_YEAR = 2026;
-
     describe('full mail parsing', () => {
       it('should parse mail with date and projects', () => {
         const mailContent = `Na 22.01 proszę o:
