@@ -1,9 +1,14 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { parseGlassOrderTxt } from './parsers/glass-order-txt-parser.js';
 import { ConflictError } from '../utils/errors.js';
+import { GlassDeliveryMatchingService } from './glass-delivery/GlassDeliveryMatchingService.js';
 
 export class GlassOrderService {
-  constructor(private prisma: PrismaClient) {}
+  private matchingService: GlassDeliveryMatchingService;
+
+  constructor(private prisma: PrismaClient) {
+    this.matchingService = new GlassDeliveryMatchingService(prisma);
+  }
 
   async importFromTxt(fileContent: string | Buffer, filename: string, replaceExisting = false) {
     const parsed = parseGlassOrderTxt(fileContent);
@@ -128,6 +133,17 @@ export class GlassOrderService {
             message: `Nie znaleziono zlecenia produkcyjnego ${orderNumber}`,
           },
         });
+      }
+    }
+
+    // Re-match unmatched delivery items for these orders
+    // (gdy dostawa szyb przyszła przed zamówieniem)
+    if (orderNumbers.length > 0) {
+      const rematchResult = await this.matchingService.rematchUnmatchedForOrders(orderNumbers);
+      if (rematchResult.rematched > 0) {
+        console.log(
+          `[GlassOrderService] Re-matched ${rematchResult.rematched} delivery items for orders: ${orderNumbers.join(', ')}`
+        );
       }
     }
   }
