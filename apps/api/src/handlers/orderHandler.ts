@@ -335,10 +335,12 @@ export class OrderHandler {
       orderBy: { profile: { number: 'asc' } },
     });
 
-    // Pobierz tylko zamówienia z wymaganiami dla profili Akrobud
+    // Pobierz tylko aktywne zamówienia z wymaganiami dla profili Akrobud
+    // (pomijamy completed i archived - te przechodzą do RW)
     const orders = await prisma.order.findMany({
       where: {
         archivedAt: null,
+        status: { in: ['new', 'in_progress'] },
         requirements: {
           some: {
             colorId: parsedColorId,
