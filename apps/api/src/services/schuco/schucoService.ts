@@ -1,8 +1,9 @@
 import { PrismaClient, SchucoDelivery } from '@prisma/client';
 import { SchucoScraper } from './schucoScraper.js';
 import { SchucoParser, SchucoDeliveryRow } from './schucoParser.js';
-import { SchucoOrderMatcher, extractOrderNumbers, isWarehouseItem } from './schucoOrderMatcher.js';
+import { SchucoOrderMatcher, extractOrderNumbers, isWarehouseItem, parseDeliveryWeek } from './schucoOrderMatcher.js';
 import { logger } from '../../utils/logger.js';
+import { withRetry } from '../../utils/prisma.js';
 import {
   emitSchucoFetchStarted,
   emitSchucoFetchProgress,
@@ -443,6 +444,9 @@ export class SchucoService {
           for (const item of batch) {
             const { delivery, orderDateParsed, extractedNums, isWarehouse } = item;
 
+            // Parsuj datę dostawy z tygodnia (poniedziałek danego tygodnia)
+            const deliveryDate = parseDeliveryWeek(delivery.deliveryWeek || null);
+
             const created = await tx.schucoDelivery.upsert({
               where: { orderNumber: delivery.orderNumber },
               create: {
@@ -453,6 +457,7 @@ export class SchucoService {
                 orderName: delivery.orderName,
                 shippingStatus: delivery.shippingStatus,
                 deliveryWeek: delivery.deliveryWeek || null,
+                deliveryDate: deliveryDate,
                 deliveryType: delivery.deliveryType || null,
                 tracking: delivery.tracking || null,
                 complaint: delivery.complaint || null,
@@ -473,6 +478,7 @@ export class SchucoService {
                 orderName: delivery.orderName,
                 shippingStatus: delivery.shippingStatus,
                 deliveryWeek: delivery.deliveryWeek || null,
+                deliveryDate: deliveryDate,
                 deliveryType: delivery.deliveryType || null,
                 tracking: delivery.tracking || null,
                 complaint: delivery.complaint || null,
@@ -508,6 +514,9 @@ export class SchucoService {
           for (const item of batch) {
             const { delivery, orderDateParsed, extractedNums, isWarehouse, existing, changes, shouldKeepNewStatus } = item;
 
+            // Parsuj datę dostawy z tygodnia (poniedziałek danego tygodnia)
+            const deliveryDate = parseDeliveryWeek(delivery.deliveryWeek || null);
+
             await tx.schucoDelivery.update({
               where: { id: existing!.id },
               data: {
@@ -517,6 +526,7 @@ export class SchucoService {
                 orderName: delivery.orderName,
                 shippingStatus: delivery.shippingStatus,
                 deliveryWeek: delivery.deliveryWeek || null,
+                deliveryDate: deliveryDate,
                 deliveryType: delivery.deliveryType || null,
                 tracking: delivery.tracking || null,
                 complaint: delivery.complaint || null,
@@ -554,34 +564,29 @@ export class SchucoService {
       // For unchanged, we can use updateMany which is much faster
       const unchangedIds = unchangedDeliveries.map(d => d.existing!.id);
 
-      // Update in batches of 25 (zmniejszono z 100 - SQLite timeout issues)
-      const UNCHANGED_BATCH_SIZE = 25;
+      // Update in batches of 10 (bardzo male - SQLite timeout issues z duzymi importami)
+      const UNCHANGED_BATCH_SIZE = 10;
       for (let i = 0; i < unchangedIds.length; i += UNCHANGED_BATCH_SIZE) {
         const batchIds = unchangedIds.slice(i, i + UNCHANGED_BATCH_SIZE);
+        const batchNum = Math.floor(i / UNCHANGED_BATCH_SIZE) + 1;
 
-        // Retry logic dla SQLite timeout
-        let retries = 3;
-        while (retries > 0) {
-          try {
-            await this.prisma.schucoDelivery.updateMany({
-              where: { id: { in: batchIds } },
-              data: { fetchedAt: now },
-            });
-            break; // Success - exit retry loop
-          } catch (error) {
-            retries--;
-            if (retries === 0) {
-              logger.error(`[SchucoService] Failed to update batch after 3 retries: ${(error as Error).message}`);
-              // Continue with next batch instead of failing completely
-            } else {
-              logger.warn(`[SchucoService] Batch update failed, retrying... (${retries} left)`);
-              await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
-            }
-          }
-        }
+        // Uzyj withRetry helper z exponential backoff
+        await withRetry(
+          () => this.prisma.schucoDelivery.updateMany({
+            where: { id: { in: batchIds } },
+            data: { fetchedAt: now },
+          }),
+          { maxRetries: 5, delayMs: 2000, operationName: `updateMany batch ${batchNum}` }
+        ).catch(error => {
+          // Kontynuuj z nastepnym batch zamiast failowac calosc
+          logger.error(`[SchucoService] Batch ${batchNum} failed permanently: ${(error as Error).message}`);
+        });
 
-        // Log progress co 100 rekordów
-        if ((i + UNCHANGED_BATCH_SIZE) % 100 === 0 || i + UNCHANGED_BATCH_SIZE >= unchangedIds.length) {
+        // Maly delay miedzy batchami zeby dac SQLite odetchnac
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Log progress co 50 rekordow
+        if ((i + UNCHANGED_BATCH_SIZE) % 50 === 0 || i + UNCHANGED_BATCH_SIZE >= unchangedIds.length) {
           const processed = Math.min(i + UNCHANGED_BATCH_SIZE, unchangedIds.length);
           logger.info(`[SchucoService] Unchanged progress: ${processed}/${unchangedIds.length}`);
         }
@@ -593,7 +598,10 @@ export class SchucoService {
 
     // Step 4: Create order links in batch
     logger.info('[SchucoService] Creating order links...');
-    await this.createOrderLinksBatch([...newDeliveries, ...updatedDeliveries, ...unchangedDeliveries]);
+    await withRetry(
+      () => this.createOrderLinksBatch([...newDeliveries, ...updatedDeliveries, ...unchangedDeliveries]),
+      { maxRetries: 3, delayMs: 3000, operationName: 'createOrderLinksBatch' }
+    );
 
     logger.info(`[SchucoService] Deliveries stored: new=${stats.newRecords}, updated=${stats.updatedRecords}, unchanged=${stats.unchangedRecords}`);
     return stats;
@@ -892,19 +900,23 @@ export class SchucoService {
     durationMs: number,
     changeStats?: ChangeStats
   ): Promise<void> {
-    await this.prisma.schucoFetchLog.update({
-      where: { id },
-      data: {
-        status,
-        recordsCount,
-        errorMessage,
-        durationMs,
-        completedAt: new Date(),
-        newRecords: changeStats?.newRecords ?? null,
-        updatedRecords: changeStats?.updatedRecords ?? null,
-        unchangedRecords: changeStats?.unchangedRecords ?? null,
-      },
-    });
+    // Uzyj withRetry - ta operacja czesto failuje przy duzym obciazeniu
+    await withRetry(
+      () => this.prisma.schucoFetchLog.update({
+        where: { id },
+        data: {
+          status,
+          recordsCount,
+          errorMessage,
+          durationMs,
+          completedAt: new Date(),
+          newRecords: changeStats?.newRecords ?? null,
+          updatedRecords: changeStats?.updatedRecords ?? null,
+          unchangedRecords: changeStats?.unchangedRecords ?? null,
+        },
+      }),
+      { maxRetries: 5, delayMs: 2000, operationName: 'updateFetchLog' }
+    );
   }
 
   /**

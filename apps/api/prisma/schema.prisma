@@ -45,6 +45,8 @@ model User {
   steelHistoryRecorded      SteelHistory[]          @relation("SteelHistoryRecordedBy")
   // Pallet initial stock relations
   palletInitialStockUpdates PalletInitialStock[]    @relation("PalletInitialStockUpdatedBy")
+  // Logistics decision logs
+  logisticsDecisionLogs     LogisticsDecisionLog[]
 
   @@map("users")
 }
@@ -401,6 +403,11 @@ model Delivery {
   verificationLists AkrobudVerificationList[]
   labelChecks       LabelCheck[]
 
+  // Agregowany status gotowości dostawy
+  readiness          DeliveryReadiness?
+  // Powiązane listy mailowe (logistyka)
+  logisticsMailLists LogisticsMailList[]
+
   @@index([status])
   @@index([deliveryDate])
   @@index([createdAt])
@@ -409,6 +416,40 @@ model Delivery {
   @@index([deletedAt])
   @@index([status, deletedAt])
   @@map("deliveries")
+}
+
+// Agregowany status gotowości dostawy
+// Przechowuje wyliczony status z wszystkich modułów sprawdzających
+// Status: ready (🟢) | conditional (🟠) | blocked (🔴) | pending
+model DeliveryReadiness {
+  id               Int      @id @default(autoincrement())
+  deliveryId       Int      @unique @map("delivery_id")
+
+  // Agregowany status: ready | conditional | blocked | pending
+  aggregatedStatus String   @default("pending") @map("aggregated_status")
+
+  // Timestamp ostatniego przeliczenia
+  lastCalculatedAt DateTime @default(now()) @map("last_calculated_at")
+
+  // Liczniki dla szybkiego dostępu w UI
+  blockingCount    Int      @default(0) @map("blocking_count")
+  warningCount     Int      @default(0) @map("warning_count")
+
+  // Szczegółowe wyniki z każdego modułu (JSON)
+  // Format: [{ module: string, status: 'ok'|'warning'|'blocking', message: string }]
+  moduleResults    String?  @map("module_results")
+
+  // Powody blokady (JSON array of strings) - skrót dla UI
+  blockingReasons  String?  @map("blocking_reasons")
+
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  delivery         Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([aggregatedStatus])
+  @@index([lastCalculatedAt])
+  @@map("delivery_readiness")
 }
 
 model DeliveryOrder {
@@ -435,6 +476,7 @@ model DeliveryItem {
   createdAt   DateTime @default(now()) @map("created_at")
   delivery    Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
+  @@index([deliveryId]) // Dodano 2026-01-23 - brakujący indeks FK dla optymalizacji JOINów
   @@map("delivery_items")
 }
 
@@ -578,6 +620,7 @@ model SchucoDelivery {
   orderName          String            @map("order_name")
   shippingStatus     String            @map("shipping_status")
   deliveryWeek       String?           @map("delivery_week")
+  deliveryDate       DateTime?         @map("delivery_date") // Sparsowana data dostawy (poniedziałek tygodnia)
   deliveryType       String?           @map("delivery_type")
   tracking           String?
   complaint          String?
@@ -612,6 +655,7 @@ model SchucoDelivery {
   @@index([shippingStatus, orderDateParsed])
   @@index([isWarehouseItem])
   @@index([orderNumber, fetchedAt])
+  @@index([deliveryDate])
   @@map("schuco_deliveries")
 }
 
@@ -646,6 +690,7 @@ model SchucoOrderItem {
   dimensions         String? // Wymiary (np. 6000 mm)
   configuration      String? // Konfiguracja
   deliveryWeek       String?        @map("delivery_week") // Tydzień dostawy (np. 2026/7)
+  deliveryDate       DateTime?      @map("delivery_date") // Sparsowana data dostawy (poniedziałek tygodnia)
   tracking           String? // Śledzenie
   comment            String? // Komentarz
 
@@ -667,6 +712,7 @@ model SchucoOrderItem {
   @@index([schucoDeliveryId])
   @@index([articleNumber])
   @@index([changeType, changedAt])
+  @@index([deliveryDate])
   @@map("schuco_order_items")
 }
 
@@ -685,7 +731,7 @@ model MonthlyReport {
   reportItems   MonthlyReportItem[]
 
   @@unique([year, month])
-  @@index([year, month])
+  // Usunięto @@index([year, month]) - duplikat (@@unique automatycznie tworzy indeks)
   @@index([reportDate])
   @@map("monthly_reports")
 }
@@ -738,6 +784,7 @@ model GlassDelivery {
   @@index([deliveryDate])
   @@index([customerOrderNumber])
   @@index([rackNumber])
+  @@index([fileImportId]) // Dodano 2026-01-23 - brakujący indeks FK dla optymalizacji JOINów
   @@map("glass_deliveries")
 }
 
@@ -843,7 +890,7 @@ model GlassOrder {
   @@index([expectedDeliveryDate])
   @@index([status])
   @@index([orderDate])
-  @@index([glassOrderNumber])
+  // Usunięto @@index([glassOrderNumber]) - duplikat (@unique automatycznie tworzy indeks)
   @@index([deletedAt])
   @@map("glass_orders")
 }
@@ -997,7 +1044,7 @@ model OkucArticle {
   @@index([usedInPvc])
   @@index([usedInAlu])
   @@index([orderClass, sizeClass])
-  @@index([articleId])
+  // Usunięto @@index([articleId]) - duplikat (@unique automatycznie tworzy indeks)
   @@index([deletedAt])
   @@index([locationId])
   @@index([isPhaseOut])
@@ -1416,7 +1463,7 @@ model TimeEntry {
   @@index([date])
   @@index([workerId])
   @@index([positionId])
-  @@index([date, workerId])
+  // Usunięto @@index([date, workerId]) - duplikat (@@unique automatycznie tworzy indeks)
   @@index([absenceType])
   @@map("time_entries")
 }
@@ -1582,7 +1629,7 @@ model ProductionReport {
   items      ProductionReportItem[]
 
   @@unique([year, month])
-  @@index([year, month])
+  // Usunięto @@index([year, month]) - duplikat (@@unique automatycznie tworzy indeks)
   @@index([status])
   @@map("production_reports")
 }
@@ -1902,12 +1949,17 @@ model LogisticsMailList {
   createdAt     DateTime  @default(now()) @map("created_at")
   deletedAt     DateTime? @map("deleted_at") // Soft delete
 
+  // Powiązanie z dostawą (auto-linking po dacie lub ręczne)
+  deliveryId    Int?      @map("delivery_id")
+  delivery      Delivery? @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+
   items LogisticsMailItem[]
 
   @@unique([deliveryCode, version]) // Unikalność: kod dostawy + wersja
   @@index([deliveryDate])
   @@index([deliveryCode])
   @@index([deletedAt])
+  @@index([deliveryId])
   @@map("logistics_mail_lists")
 }
 
@@ -1949,9 +2001,54 @@ model LogisticsMailItem {
 
   mailList LogisticsMailList @relation(fields: [mailListId], references: [id], onDelete: Cascade)
 
+  // Relacja do logów decyzji
+  decisionLogs LogisticsDecisionLog[]
+
   @@index([mailListId])
   @@index([projectNumber])
   @@index([orderId])
   @@index([itemStatus])
   @@map("logistics_mail_items")
+}
+
+// Log decyzji użytkownika - AUDYT
+// Zapisuje kto, kiedy, co zrobił z pozycją/dostawą
+// Pozwala odtworzyć historię zmian i rozstrzygać spory
+model LogisticsDecisionLog {
+  id          Int      @id @default(autoincrement())
+
+  // Typ encji: 'item' (pozycja) lub 'delivery' (cała lista/dostawa)
+  entityType  String   @map("entity_type") // 'item' | 'delivery'
+  entityId    Int      @map("entity_id")   // ID pozycji lub listy
+
+  // Akcja podjęta przez użytkownika
+  // item: confirm | reject | remove | accept_change | restore
+  // delivery: save | delete
+  action      String   // confirm | reject | remove | accept_change | restore | save | delete
+
+  // Kontekst wersji (dla diff)
+  fromVersion Int?     @map("from_version") // Z której wersji (null dla nowych)
+  toVersion   Int?     @map("to_version")   // Do której wersji
+
+  // Dodatkowe dane (JSON) - np. co dokładnie się zmieniło
+  // Dla restore: { field: "quantity", oldValue: "1", newValue: "2" }
+  // Dla confirm: { projectNumber: "D6086" }
+  metadata    String?  // JSON string z dodatkowymi danymi
+
+  // Kto podjął decyzję
+  userId      Int      @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  // Kiedy
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Opcjonalna relacja do pozycji (tylko dla entityType='item')
+  mailItemId  Int?     @map("mail_item_id")
+  mailItem    LogisticsMailItem? @relation(fields: [mailItemId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("logistics_decision_logs")
 }

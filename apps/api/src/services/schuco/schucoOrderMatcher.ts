@@ -44,8 +44,10 @@ export function isWarehouseItem(schucoOrderNumber: string): boolean {
 }
 
 /**
- * Parsuje tydzień dostawy z formatu Schuco na datę
- * Format: "KW 03/2026" → Date (poniedziałek tego tygodnia)
+ * Parsuje tydzień dostawy do daty (poniedziałek danego tygodnia)
+ * Obsługuje formaty:
+ * - "2026/5" lub "2026/05" (rok/tydzień) - główny format w bazie
+ * - "KW 03/2026" lub "KW3/2026" (tydzień/rok) - alternatywny format
  *
  * @param deliveryWeek - tydzień dostawy w formacie Schuco
  * @returns Date lub null jeśli nie można sparsować
@@ -55,15 +57,23 @@ export function parseDeliveryWeek(deliveryWeek: string | null): Date | null {
     return null;
   }
 
-  // Format: "KW 03/2026" lub "KW3/2026" lub "03/2026" lub "KW  03 / 2026" (extra spaces)
-  const match = deliveryWeek.match(/(?:KW\s*)?(\d{1,2})\s*\/\s*(\d{4})/i);
+  let week: number;
+  let year: number;
 
-  if (!match) {
-    return null;
+  // Format 1: "2026/5" lub "2026/05" (rok/tydzień) - główny format
+  const yearWeekMatch = deliveryWeek.match(/^(\d{4})\s*\/\s*(\d{1,2})$/);
+  if (yearWeekMatch) {
+    year = parseInt(yearWeekMatch[1], 10);
+    week = parseInt(yearWeekMatch[2], 10);
+  } else {
+    // Format 2: "KW 03/2026" lub "KW3/2026" lub "03/2026" (tydzień/rok)
+    const kwMatch = deliveryWeek.match(/(?:KW\s*)?(\d{1,2})\s*\/\s*(\d{4})/i);
+    if (!kwMatch) {
+      return null;
+    }
+    week = parseInt(kwMatch[1], 10);
+    year = parseInt(kwMatch[2], 10);
   }
-
-  const week = parseInt(match[1], 10);
-  const year = parseInt(match[2], 10);
 
   if (week < 1 || week > 53 || year < 2020 || year > 2100) {
     return null;
