@@ -223,19 +223,21 @@ function findClientSections(text: string): { clientNumber: number; startIndex: n
 
 // Parsowanie pozycji z tekstu
 function parseItems(text: string): ParsedItem[] {
-  const items: ParsedItem[] = [];
   const lines = text.split('\n');
 
-  let position = 0;
+  // Mapa do deduplikacji: projectNumber -> item
+  const itemsMap = new Map<string, ParsedItem>();
+  let tempPosition = 0;
 
   for (const line of lines) {
     // Szukaj numerów projektów w linii
     const projectMatches = line.match(PROJECT_NUMBER_PATTERN);
 
     if (projectMatches) {
-      for (const projectNumber of projectMatches) {
-        position++;
+      // Deduplikacja w ramach linii - każdy numer projektu tylko raz
+      const uniqueProjects = [...new Set(projectMatches)];
 
+      for (const projectNumber of uniqueProjects) {
         // Cała linia jako adnotacje (do analizy flag)
         const rawNotes = line.trim();
 
@@ -251,17 +253,38 @@ function parseItems(text: string): ParsedItem[] {
         // Parsuj ilość
         const quantity = parseQuantity(rawNotes);
 
-        items.push({
-          position,
-          projectNumber,
-          quantity,
-          rawNotes,
-          flags,
-          customColor,
-        });
+        // Sprawdź czy już mamy ten numer projektu
+        const existing = itemsMap.get(projectNumber);
+
+        if (existing) {
+          // Scalamy flagi (unikalne) i zachowujemy większą ilość
+          const mergedFlags = [...new Set([...existing.flags, ...flags])] as ItemFlag[];
+          existing.flags = mergedFlags;
+          existing.quantity = Math.max(existing.quantity, quantity);
+          // Zachowujemy customColor jeśli istnieje
+          if (customColor && !existing.customColor) {
+            existing.customColor = customColor;
+          }
+        } else {
+          tempPosition++;
+          itemsMap.set(projectNumber, {
+            position: tempPosition,
+            projectNumber,
+            quantity,
+            rawNotes,
+            flags,
+            customColor,
+          });
+        }
       }
     }
   }
+
+  // Konwersja mapy na tablicę i przenumerowanie pozycji
+  const items = Array.from(itemsMap.values());
+  items.forEach((item, index) => {
+    item.position = index + 1;
+  });
 
   return items;
 }
@@ -276,16 +299,16 @@ export function parseLogisticsMail(mailText: string): ParsedMail {
   const deliveryDate = parseDate(mailText);
 
   if (deliveryDate.source === 'not_found') {
-    warnings.push('date_not_found');
+    warnings.push('Nie znaleziono daty dostawy');
   } else if (deliveryDate.confidence === 'low') {
-    warnings.push('multiple_dates_detected');
+    warnings.push('Wykryto wiele dat - sprawdź poprawność');
   }
 
   // 2. Sprawdź czy to aktualizacja
   const isUpdate = /aktualizacj[ęa]/i.test(mailText);
 
   if (isUpdate) {
-    warnings.push('update_detected');
+    warnings.push('To jest aktualizacja listy');
   }
 
   // 3. Znajdź sekcje "Klient nr X"
@@ -299,7 +322,7 @@ export function parseLogisticsMail(mailText: string): ParsedMail {
     const items = parseItems(mailText);
 
     if (items.length === 0) {
-      warnings.push('no_items_found');
+      warnings.push('Nie znaleziono żadnych pozycji');
     }
 
     const deliveryCode =
@@ -386,7 +409,7 @@ export function parseLogisticsMail(mailText: string): ParsedMail {
         .trim();
 
       if (notesWithoutProjectNumber.length > 5 && item.flags.length === 0) {
-        warnings.push(`unrecognized_notes_in_${item.projectNumber}`);
+        warnings.push(`Nierozpoznane adnotacje w pozycji ${item.projectNumber}`);
       }
     }
   }
