@@ -367,9 +367,12 @@ export class OrderRepository {
         status,
       };
 
-      // If status is 'completed' and productionDate is provided, set it
-      if (status === 'completed' && productionDate) {
-        updateData.productionDate = new Date(productionDate);
+      // If status is 'completed', set completedAt and optionally productionDate
+      if (status === 'completed') {
+        updateData.completedAt = new Date();
+        if (productionDate) {
+          updateData.productionDate = new Date(productionDate);
+        }
       }
 
       // Update all orders
@@ -501,12 +504,13 @@ export class OrderRepository {
       where: {
         deliveryDate: params.deliveryDate,
         status: params.status,
-        // Pokaż tylko dostawy które mają przynajmniej jedno zlecenie NIE dodane do produkcji
-        // (czyli bez productionDate)
+        // Pokaż tylko dostawy które mają przynajmniej jedno zlecenie gotowe do dodania do produkcji
+        // (status = 'new' i bez productionDate)
         deliveryOrders: {
           some: {
             order: {
               productionDate: null,
+              status: 'new',
             },
           },
         },
@@ -518,6 +522,13 @@ export class OrderRepository {
         status: true,
         notes: true,
         deliveryOrders: {
+          // Filtruj zlecenia w dostawie - pokazuj tylko te NIE dodane do produkcji
+          where: {
+            order: {
+              productionDate: null,
+              status: 'new',
+            },
+          },
           select: {
             id: true,
             position: true,
