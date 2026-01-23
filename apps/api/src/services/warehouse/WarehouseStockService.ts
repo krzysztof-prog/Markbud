@@ -22,9 +22,12 @@ export class WarehouseStockService {
   async getColorWarehouseData(colorId: number) {
     // Wykonaj wszystkie zapytania rownolegle dla lepszej wydajnosci
     const [stocks, demands, allWarehouseOrders, lowThreshold, color] = await Promise.all([
-      // 1. Stany magazynowe dla koloru
+      // 1. Stany magazynowe dla koloru - tylko profile AKROBUD
       prisma.warehouseStock.findMany({
-        where: { colorId },
+        where: {
+          colorId,
+          profile: { isAkrobud: true },
+        },
         select: {
           id: true,
           profileId: true,

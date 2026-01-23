@@ -125,7 +125,10 @@ export class WarehouseUsageService {
    * @returns Array of history records sorted by date (newest first)
    */
   async getHistoryByColor(colorId?: number, limit: number = 100) {
-    const where = colorId ? { colorId } : {};
+    // Filtruj tylko profile AKROBUD
+    const where = colorId
+      ? { colorId, profile: { isAkrobud: true } }
+      : { profile: { isAkrobud: true } };
 
     const history = await prisma.warehouseHistory.findMany({
       where,
