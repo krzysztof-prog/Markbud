@@ -231,10 +231,48 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
       // Parsuj CSV - usun BOM jesli istnieje (pliki eksportowane z Excela)
       const rawContent = await readFile(filePath, 'utf-8');
       const content = stripBOM(rawContent);
+
+      // Sprawdź czy plik ma jakąkolwiek zawartość (pomijając BOM i białe znaki)
+      const trimmedContent = content.trim();
+      if (trimmedContent.length === 0) {
+        // Plik całkowicie pusty - nieprawidłowy format
+        throw new Error('Plik CSV jest pusty - brak jakiejkolwiek zawartości');
+      }
+
       const rows = this.parseCsv(content);
 
+      // Plik ma nagłówki ale brak wierszy z danymi = zlecenie bez okuć
       if (rows.length === 0) {
-        throw new Error('Plik CSV jest pusty lub ma nieprawidlowy format');
+        logger.info(`   📋 Plik ${filename} nie zawiera pozycji okuć - zlecenie bez okuć`);
+
+        // Zaktualizuj status zlecenia jeśli istnieje
+        if (order) {
+          await this.prisma.order.update({
+            where: { id: order.id },
+            data: { okucDemandStatus: 'no_okuc' },
+          });
+          logger.info(`   ✅ Zlecenie ${orderNumber} oznaczone jako "bez okuć"`);
+        }
+
+        // Zaktualizuj status importu jako completed
+        await this.prisma.fileImport.update({
+          where: { id: fileImport.id },
+          data: {
+            status: 'completed',
+            processedAt: new Date(),
+            metadata: JSON.stringify({
+              orderNumber,
+              orderId: order?.id ?? null,
+              orderExists: !!order,
+              itemsCount: 0,
+              noOkuc: true, // Oznaczenie że to zamierzone - zlecenie bez okuć
+            }),
+          },
+        });
+
+        // Archiwizuj plik - to jest sukces (zamierzone zachowanie)
+        await archiveFile(filePath);
+        return;
       }
 
       // Jeśli zlecenie istnieje, sprawdź czy już ma zapotrzebowanie okuć
@@ -321,33 +359,40 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
         `   ❌ Blad importu okuc ${filename}: ${error instanceof Error ? error.message : 'Unknown'}`
       );
 
-      // Znajdz istniejacy import lub utworz nowy
-      const existingImport = await this.prisma.fileImport.findFirst({
-        where: { filepath: filePath },
-      });
+      // Zapisz do FileImport jako failed (ale nie blokuj propagacji błędu)
+      try {
+        const existingImport = await this.prisma.fileImport.findFirst({
+          where: { filepath: filePath },
+        });
 
-      if (existingImport) {
-        await this.prisma.fileImport.update({
-          where: { id: existingImport.id },
-          data: {
-            status: 'failed',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          },
-        });
-      } else {
-        await this.prisma.fileImport.create({
-          data: {
-            filename,
-            filepath: filePath,
-            fileType: 'okuc_zapotrzebowanie',
-            status: 'failed',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          },
-        });
+        if (existingImport) {
+          await this.prisma.fileImport.update({
+            where: { id: existingImport.id },
+            data: {
+              status: 'failed',
+              errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            },
+          });
+        } else {
+          await this.prisma.fileImport.create({
+            data: {
+              filename,
+              filepath: filePath,
+              fileType: 'okuc_zapotrzebowanie',
+              status: 'failed',
+              errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            },
+          });
+        }
+      } catch (fileImportError) {
+        logger.warn(`Nie udalo sie zapisac FileImport dla ${filename}`);
       }
 
       // NIE archiwizuj pliku jesli byl blad
       logger.warn(`   ⚠️ Plik NIE zostal zarchiwizowany - blad importu`);
+
+      // WAŻNE: Propaguj błąd do kolejki aby mogła retry
+      throw error;
     }
   }
 

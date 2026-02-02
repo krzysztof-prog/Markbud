@@ -166,8 +166,8 @@ model Order {
   orderedGlassCount     Int?                      @default(0) @map("ordered_glass_count")
   deliveredGlassCount   Int?                      @default(0) @map("delivered_glass_count")
   glassOrderStatus      String?                   @default("not_ordered") @map("glass_order_status")
-  // Status okuć dla zlecenia: 'none' | 'imported' | 'has_atypical' | 'pending'
-  // none - brak zapotrzebowania, imported - zaimportowano, has_atypical - są nietypowe, pending - czeka na zlecenie
+  // Status okuć dla zlecenia: 'none' | 'no_okuc' | 'imported' | 'has_atypical' | 'pending'
+  // none - brak zapotrzebowania, no_okuc - zlecenie bez okuć (pusty plik), imported - zaimportowano, has_atypical - są nietypowe, pending - czeka na zlecenie
   okucDemandStatus      String?                   @default("none") @map("okuc_demand_status")
   // P1-2: Typ wariantu zlecenia
   // 'correction' - korekta oryginału (musi być w tej samej dostawie co oryginał)

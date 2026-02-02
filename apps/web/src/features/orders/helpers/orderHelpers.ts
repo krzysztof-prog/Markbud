@@ -225,7 +225,8 @@ export const getColumnValue = (order: ExtendedOrder, columnId: ColumnId): string
     case 'totalSashes':
       return String(order.totalSashes || 0);
     case 'glasses':
-      return String(order.totalGlasses || 0);
+      // Używamy orderedGlassCount (zamówione szyby u dostawcy) zamiast totalGlasses (stara wartość z importu)
+      return String(order.orderedGlassCount || 0);
     case 'glassDeliveryDate': {
       const ordered = order.orderedGlassCount || 0;
       const delivered = order.deliveredGlassCount || 0;
@@ -239,6 +240,7 @@ export const getColumnValue = (order: ExtendedOrder, columnId: ColumnId): string
       const status = order.okucDemandStatus || 'none';
       switch (status) {
         case 'none': return '';
+        case 'no_okuc': return 'Bez okuć';
         case 'imported': return 'OK';
         case 'has_atypical': return 'Nietypowe!';
         case 'pending': return 'Oczekuje';

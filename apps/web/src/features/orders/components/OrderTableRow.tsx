@@ -574,9 +574,10 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           );
 
         case 'glasses':
+          // Używamy orderedGlassCount (szyby zamówione u dostawcy) zamiast totalGlasses (stara wartość z importu)
           return (
             <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
-              {order.totalGlasses || '-'}
+              {order.orderedGlassCount || '-'}
             </td>
           );
 
@@ -614,6 +615,10 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
             case 'none':
               okucLabel = '-';
               okucColorClass = 'text-slate-400';
+              break;
+            case 'no_okuc':
+              okucLabel = 'Bez okuć';
+              okucColorClass = 'bg-slate-100 text-slate-600';
               break;
             case 'imported':
               okucLabel = 'OK';
