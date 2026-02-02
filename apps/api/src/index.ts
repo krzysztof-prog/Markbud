@@ -3,7 +3,7 @@ import './types/fastify.js';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 // import compress from '@fastify/compress'; // DISABLED - causes empty responses
-import rateLimit from '@fastify/rate-limit';
+// import rateLimit from '@fastify/rate-limit'; // DISABLED
 import { config as dotenvConfig } from 'dotenv';
 import { prisma, initializeSQLiteOptimizations } from './utils/prisma.js';
 
@@ -43,16 +43,22 @@ import { steelRoutes } from './routes/steel.js';
 import { labelCheckRoutes } from './routes/label-checks.js';
 import { attendanceRoutes } from './routes/attendance.js';
 import { logisticsRoutes } from './routes/logistics.js';
+import { pvcWarehouseRoutes } from './routes/pvc-warehouse.js';
+import { helpRoutes } from './routes/help.js';
 
 // Services
 import { FileWatcherService } from './services/file-watcher/index.js';
 import { startSchucoScheduler, stopSchucoScheduler } from './services/schuco/schucoScheduler.js';
+import { SchucoItemService } from './services/schuco/schucoItemService.js';
 import { startPendingPriceCleanupScheduler, stopPendingPriceCleanupScheduler } from './services/pendingOrderPriceCleanupScheduler.js';
 import { startImportLockCleanupScheduler, stopImportLockCleanupScheduler } from './services/importLockCleanupScheduler.js';
 import { startOrderArchiveScheduler, stopOrderArchiveScheduler } from './services/orderArchiveScheduler.js';
 import { startSoftDeleteCleanupScheduler, stopSoftDeleteCleanupScheduler } from './services/softDeleteCleanupScheduler.js';
+import { DeliveryAlertScheduler } from './services/alerts/DeliveryAlertScheduler.js';
+import { LabelCheckScheduler } from './services/alerts/LabelCheckScheduler.js';
 import { setupWebSocket } from './plugins/websocket.js';
 import { seedDefaultWorkers } from './services/seedDefaultWorkers.js';
+import { initializeImportWebSocketBridge } from './services/import/ImportWebSocketBridge.js';
 
 // Utils and middleware
 import { logger } from './utils/logger.js';
@@ -69,6 +75,9 @@ export { prisma } from "./utils/prisma.js";
 
 // FileWatcher - eksportowany do restartu z API
 export let fileWatcher: FileWatcherService | null = null;
+
+// SchucoItemService - eksportowany do globalnego dostępu (scheduler)
+export let schucoItemService: SchucoItemService | null = null;
 
 // Inicjalizacja Fastify
 const fastify = Fastify({
@@ -109,26 +118,27 @@ await fastify.register(multipart, {
 // For 5-10 users on local network, compression is not critical
 // await fastify.register(compress, { ... });
 
-// Rate Limiting - protect from abuse
-await fastify.register(rateLimit, {
-  global: true,
-  max: 100, // Max 100 requests per window
-  timeWindow: '15 minutes', // 15-minute window
-  cache: 10000, // Cache 10k IPs
-  allowList: ['127.0.0.1'], // Whitelist localhost (for dev)
-  redis: undefined, // Can be replaced with Redis for distributed systems
-  skipOnError: true, // Don't fail if rate limiter fails
-  addHeadersOnExceeding: {
-    'x-ratelimit-limit': true,
-    'x-ratelimit-remaining': true,
-    'x-ratelimit-reset': true,
-  },
-  addHeaders: {
-    'x-ratelimit-limit': true,
-    'x-ratelimit-remaining': true,
-    'x-ratelimit-reset': true,
-  },
-});
+// Rate Limiting - DISABLED (was causing issues with login)
+// Dla 5-10 użytkowników w sieci lokalnej rate limiting nie jest krytyczny
+// await fastify.register(rateLimit, {
+//   global: true,
+//   max: 100, // Max 100 requests per window
+//   timeWindow: '15 minutes', // 15-minute window
+//   cache: 10000, // Cache 10k IPs
+//   allowList: ['127.0.0.1'], // Whitelist localhost (for dev)
+//   redis: undefined, // Can be replaced with Redis for distributed systems
+//   skipOnError: true, // Don't fail if rate limiter fails
+//   addHeadersOnExceeding: {
+//     'x-ratelimit-limit': true,
+//     'x-ratelimit-remaining': true,
+//     'x-ratelimit-reset': true,
+//   },
+//   addHeaders: {
+//     'x-ratelimit-limit': true,
+//     'x-ratelimit-remaining': true,
+//     'x-ratelimit-reset': true,
+//   },
+// });
 
 // Dekoratory - dodaj Prisma do kontekstu
 fastify.decorate('prisma', prisma);
@@ -153,6 +163,9 @@ fastify.addHook('onSend', async (request, reply) => {
 
 // Setup WebSocket
 await setupWebSocket(fastify);
+
+// Initialize Import WebSocket Bridge (łączy eventy kolejek z WebSocket)
+initializeImportWebSocketBridge();
 
 // Rejestracja routów
 await fastify.register(authRoutes, { prefix: '/api/auth' });
@@ -217,6 +230,12 @@ await fastify.register(attendanceRoutes, { prefix: '/api/attendance' });
 
 // Logistics Routes (Parsowanie maili z listami dostaw)
 await fastify.register(logisticsRoutes, { prefix: '/api/logistics' });
+
+// PVC Warehouse Routes (Magazyn PVC - wszystkie profile i kolory)
+await fastify.register(pvcWarehouseRoutes, { prefix: '/api/pvc-warehouse' });
+
+// Help Routes (Instrukcje obsługi - generowanie PDF)
+await fastify.register(helpRoutes, { prefix: '/api/help' });
 
 // Health checks (basic - must be before extended health routes)
 fastify.get('/api/health', {
@@ -298,6 +317,12 @@ const closeGracefully = async (signal: string) => {
   stopImportLockCleanupScheduler();
   stopOrderArchiveScheduler();
   stopSoftDeleteCleanupScheduler();
+  DeliveryAlertScheduler.stop();
+  LabelCheckScheduler.stop();
+  // Zatrzymaj Schuco Item Scheduler
+  if (schucoItemService) {
+    schucoItemService.stopAutoFetchScheduler();
+  }
   await fastify.close();
   await prisma.$disconnect();
   process.exit(0);
@@ -318,7 +343,7 @@ const start = async () => {
     // Seed domyślnych pracowników (przed startem serwera HTTP)
     await seedDefaultWorkers(prisma);
 
-    await fastify.listen({ port: config.api.port, host: '127.0.0.1' });
+    await fastify.listen({ port: config.api.port, host: '0.0.0.0' });
 
     logger.info(`Server started`, {
       url: `http://${config.api.host}:${config.api.port}`,
@@ -343,6 +368,17 @@ const start = async () => {
 
     // Uruchom Soft Delete Cleanup Scheduler (trwałe usuwanie soft-deleted rekordów w niedziele o 3:00)
     startSoftDeleteCleanupScheduler(prisma);
+
+    // Uruchom Delivery Alert Scheduler (sprawdzanie zablokowanych dostaw codziennie o 8:00)
+    DeliveryAlertScheduler.start();
+
+    // Uruchom Label Check Scheduler (automatyczne sprawdzanie etykiet codziennie o 7:00 dla dostaw na najbliższe 14 dni)
+    LabelCheckScheduler.start();
+
+    // Uruchom Schuco Item Scheduler (automatyczne pobieranie pozycji co 45 minut)
+    // WYŁĄCZONE - scheduler powodował problemy ze współbieżnością
+    schucoItemService = new SchucoItemService(prisma);
+    // schucoItemService.startAutoFetchScheduler();
 
   } catch (err) {
     logger.error('Failed to start server', err);

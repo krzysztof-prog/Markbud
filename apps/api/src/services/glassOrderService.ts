@@ -2,6 +2,8 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { parseGlassOrderTxt } from './parsers/glass-order-txt-parser.js';
 import { ConflictError } from '../utils/errors.js';
 import { GlassDeliveryMatchingService } from './glass-delivery/GlassDeliveryMatchingService.js';
+import { matchingQueue } from './import/MatchingQueueService.js';
+import { logger } from '../utils/logger.js';
 
 export class GlassOrderService {
   private matchingService: GlassDeliveryMatchingService;
@@ -45,7 +47,7 @@ export class GlassOrderService {
 
     // Use transaction for atomicity (delete + create in same transaction)
     // Zwiększony timeout (60s) - przy wielu pozycjach transakcja może trwać dłużej
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // If replacing, delete the old one first (WITHIN transaction for atomicity)
       if (existing && replaceExisting) {
         await this.deleteTx(tx, existing.id, existing.items);
@@ -78,21 +80,84 @@ export class GlassOrderService {
       });
 
       // Match with production orders and update counts (within transaction)
-      await this.matchWithProductionOrdersTx(tx, glassOrder.id, glassOrder.expectedDeliveryDate);
+      // This only does BASIC matching - heavy re-matching is queued separately
+      const orderNumbers = await this.matchWithProductionOrdersTx(tx, glassOrder.id, glassOrder.expectedDeliveryDate);
 
-      return glassOrder;
+      return { glassOrder, orderNumbers };
     }, {
       timeout: 60000, // 60 sekund - przy wielu pozycjach transakcja może trwać dłużej
       maxWait: 10000, // max 10 sekund czekania na dostępność połączenia
     });
+
+    // AFTER transaction completes: queue heavy matching (re-match unmatched delivery items)
+    // This is done OUTSIDE the transaction to avoid nested transaction deadlocks
+    if (result.orderNumbers.length > 0) {
+      this.enqueueHeavyMatching(result.glassOrder.id, result.orderNumbers);
+    }
+
+    return result.glassOrder;
   }
 
-  // Transaction-aware version for import
+  /**
+   * Queue heavy matching operation to MatchingQueue.
+   * Runs OUTSIDE transaction to avoid SQLite nested transaction deadlocks.
+   */
+  private enqueueHeavyMatching(glassOrderId: number, orderNumbers: string[]): void {
+    if (orderNumbers.length === 0) return;
+
+    matchingQueue.enqueue({
+      type: 'glass_order_matching',
+      priority: 10, // Normal priority
+      metadata: {
+        glassOrderId,
+        orderNumbers,
+        source: 'glass_order_import',
+      },
+      execute: async () => {
+        try {
+          const result = await this.matchingService.rematchUnmatchedForOrdersStandalone(orderNumbers);
+          logger.info(`[GlassOrderService] Heavy matching completed`, {
+            glassOrderId,
+            rematched: result.rematched,
+            stillUnmatched: result.stillUnmatched,
+            orderNumbers: orderNumbers.slice(0, 5), // Log first 5 for brevity
+          });
+          return {
+            success: true,
+            matchedCount: result.rematched,
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          logger.error(`[GlassOrderService] Heavy matching failed`, {
+            glassOrderId,
+            error: errorMessage,
+            orderNumbers: orderNumbers.slice(0, 5),
+          });
+          return {
+            success: false,
+            error: errorMessage,
+            shouldRetry: true, // Retry on failure
+          };
+        }
+      },
+    });
+
+    logger.info(`[GlassOrderService] Queued heavy matching for glass order`, {
+      glassOrderId,
+      orderCount: orderNumbers.length,
+    });
+  }
+
+  /**
+   * Transaction-aware basic matching for import.
+   * Only updates Order counts - does NOT do heavy re-matching (queued separately).
+   * Returns orderNumbers for subsequent queued matching.
+   */
   private async matchWithProductionOrdersTx(
     tx: Prisma.TransactionClient,
     glassOrderId: number,
     expectedDeliveryDate: Date | null
-  ) {
+  ): Promise<string[]> {
     const items = await tx.glassOrderItem.findMany({
       where: { glassOrderId },
     });
@@ -140,16 +205,9 @@ export class GlassOrderService {
       }
     }
 
-    // Re-match unmatched delivery items for these orders
-    // (gdy dostawa szyb przyszła przed zamówieniem)
-    if (orderNumbers.length > 0) {
-      const rematchResult = await this.matchingService.rematchUnmatchedForOrders(orderNumbers);
-      if (rematchResult.rematched > 0) {
-        console.log(
-          `[GlassOrderService] Re-matched ${rematchResult.rematched} delivery items for orders: ${orderNumbers.join(', ')}`
-        );
-      }
-    }
+    // Return orderNumbers for subsequent queued matching
+    // (re-match unmatched delivery items is done OUTSIDE transaction via MatchingQueue)
+    return orderNumbers;
   }
 
   // Legacy non-transaction version (kept for compatibility)

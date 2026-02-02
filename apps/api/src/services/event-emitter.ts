@@ -185,3 +185,83 @@ export const emitSteelRwProcessed = (data: EventData) => eventEmitter.emitDataCh
   data,
   timestamp: new Date(),
 });
+
+// ============================================================================
+// Import Queue Events - postęp importu plików
+// ============================================================================
+
+export interface ImportProgressData {
+  jobId: string;
+  jobType: string;
+  filePath?: string;
+  orderId?: number;
+  error?: string;
+  retryCount?: number;
+  retryInMs?: number;
+  [key: string]: unknown; // Index signature dla zgodności z EventData
+}
+
+export const emitImportStarted = (data: ImportProgressData) => eventEmitter.emitDataChange({
+  type: 'import:started',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitImportCompleted = (data: ImportProgressData) => eventEmitter.emitDataChange({
+  type: 'import:completed',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitImportFailed = (data: ImportProgressData) => eventEmitter.emitDataChange({
+  type: 'import:failed',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitImportRetry = (data: ImportProgressData) => eventEmitter.emitDataChange({
+  type: 'import:retry',
+  data,
+  timestamp: new Date(),
+});
+
+// ============================================================================
+// Matching Queue Events - postęp matchingu (glass orders ↔ deliveries)
+// ============================================================================
+
+export interface MatchingProgressData {
+  jobId: string;
+  jobType: string;
+  matchedCount?: number;
+  glassOrderId?: number;
+  glassDeliveryId?: number;
+  orderNumbers?: string[];
+  error?: string;
+  retryCount?: number;
+  retryInMs?: number;
+  [key: string]: unknown; // Index signature dla zgodności z EventData
+}
+
+export const emitMatchingStarted = (data: MatchingProgressData) => eventEmitter.emitDataChange({
+  type: 'matching:started',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitMatchingCompleted = (data: MatchingProgressData) => eventEmitter.emitDataChange({
+  type: 'matching:completed',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitMatchingFailed = (data: MatchingProgressData) => eventEmitter.emitDataChange({
+  type: 'matching:failed',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitMatchingRetry = (data: MatchingProgressData) => eventEmitter.emitDataChange({
+  type: 'matching:retry',
+  data,
+  timestamp: new Date(),
+});

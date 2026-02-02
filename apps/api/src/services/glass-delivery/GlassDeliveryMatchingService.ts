@@ -293,15 +293,23 @@ export class GlassDeliveryMatchingService {
   }
 
   /**
-   * Re-match unmatched delivery items after orders are imported
-   * Called automatically when orders are created/updated via uzyte_bele import
+   * Re-match unmatched delivery items after orders are imported.
+   * Backward-compatible alias for rematchUnmatchedForOrdersStandalone.
    */
   async rematchUnmatchedForOrders(orderNumbers: string[]): Promise<RematchResult> {
+    return this.rematchUnmatchedForOrdersStandalone(orderNumbers);
+  }
+
+  /**
+   * Re-match with own transaction and explicit timeout.
+   * Use this when calling from OUTSIDE a transaction (e.g., from MatchingQueue).
+   */
+  async rematchUnmatchedForOrdersStandalone(orderNumbers: string[]): Promise<RematchResult> {
     if (orderNumbers.length === 0) {
       return { rematched: 0, stillUnmatched: 0 };
     }
 
-    // 1. Find all unmatched delivery items for these orders
+    // Prefetch data OUTSIDE transaction to minimize lock time
     const unmatchedItems = await this.prisma.glassDeliveryItem.findMany({
       where: {
         matchStatus: 'unmatched',
@@ -313,12 +321,65 @@ export class GlassDeliveryMatchingService {
       return { rematched: 0, stillUnmatched: 0 };
     }
 
-    // 2. Batch fetch GlassOrderItems for these orders
     const allOrderItems = await this.prisma.glassOrderItem.findMany({
       where: { orderNumber: { in: orderNumbers } },
     });
 
-    // 3. Group by orderNumber for quick lookup
+    // Execute matching in transaction with explicit timeout
+    return this.prisma.$transaction(
+      async (tx) => {
+        return this.rematchUnmatchedForOrdersTxCore(tx, orderNumbers, unmatchedItems, allOrderItems);
+      },
+      {
+        timeout: 120000, // 2 minuty dla ciężkich operacji matchingu
+        maxWait: 30000, // 30s czekania na lock
+      }
+    );
+  }
+
+  /**
+   * Re-match within an existing transaction.
+   * Use this when calling from INSIDE another transaction (e.g., from GlassOrderService.importFromTxt).
+   * IMPORTANT: This does NOT create a new transaction - caller must provide tx.
+   */
+  async rematchUnmatchedForOrdersTx(
+    tx: TransactionClient,
+    orderNumbers: string[]
+  ): Promise<RematchResult> {
+    if (orderNumbers.length === 0) {
+      return { rematched: 0, stillUnmatched: 0 };
+    }
+
+    // Fetch data using the provided transaction
+    const unmatchedItems = await tx.glassDeliveryItem.findMany({
+      where: {
+        matchStatus: 'unmatched',
+        orderNumber: { in: orderNumbers },
+      },
+    });
+
+    if (unmatchedItems.length === 0) {
+      return { rematched: 0, stillUnmatched: 0 };
+    }
+
+    const allOrderItems = await tx.glassOrderItem.findMany({
+      where: { orderNumber: { in: orderNumbers } },
+    });
+
+    return this.rematchUnmatchedForOrdersTxCore(tx, orderNumbers, unmatchedItems, allOrderItems);
+  }
+
+  /**
+   * Core rematch logic - shared between Standalone and Tx versions.
+   * Operates within provided transaction client.
+   */
+  private async rematchUnmatchedForOrdersTxCore(
+    tx: TransactionClient,
+    orderNumbers: string[],
+    unmatchedItems: Awaited<ReturnType<typeof this.prisma.glassDeliveryItem.findMany>>,
+    allOrderItems: Awaited<ReturnType<typeof this.prisma.glassOrderItem.findMany>>
+  ): Promise<RematchResult> {
+    // Group by orderNumber for quick lookup
     const orderItemsByNumber = new Map<string, typeof allOrderItems>();
     for (const item of allOrderItems) {
       if (!orderItemsByNumber.has(item.orderNumber)) {
@@ -330,183 +391,181 @@ export class GlassDeliveryMatchingService {
     let rematched = 0;
     let stillUnmatched = 0;
 
-    // 4. Process in transaction for atomicity
-    await this.prisma.$transaction(async (tx) => {
-      for (const deliveryItem of unmatchedItems) {
-        const candidates = orderItemsByNumber.get(deliveryItem.orderNumber) || [];
+    // Process matching logic (already inside transaction via tx)
+    for (const deliveryItem of unmatchedItems) {
+      const candidates = orderItemsByNumber.get(deliveryItem.orderNumber) || [];
 
-        // STEP 1: Try exact match
-        const exactMatch = candidates.find(
-          (c) =>
-            c.orderSuffix === deliveryItem.orderSuffix &&
-            c.widthMm === deliveryItem.widthMm &&
-            c.heightMm === deliveryItem.heightMm
-        );
+      // STEP 1: Try exact match
+      const exactMatch = candidates.find(
+        (c) =>
+          c.orderSuffix === deliveryItem.orderSuffix &&
+          c.widthMm === deliveryItem.widthMm &&
+          c.heightMm === deliveryItem.heightMm
+      );
 
-        if (exactMatch) {
-          await tx.glassDeliveryItem.update({
-            where: { id: deliveryItem.id },
-            data: {
-              matchStatus: 'matched',
-              matchedItemId: exactMatch.id,
-              glassOrderId: exactMatch.glassOrderId,
-            },
-          });
-
-          // Update Order.deliveredGlassCount
-          await tx.order.updateMany({
-            where: { orderNumber: deliveryItem.orderNumber },
-            data: { deliveredGlassCount: { increment: deliveryItem.quantity } },
-          });
-
-          // Mark validation as resolved
-          await tx.glassOrderValidation.updateMany({
-            where: {
-              orderNumber: deliveryItem.orderNumber,
-              validationType: 'unmatched_delivery',
-              resolved: false,
-              message: { contains: `${deliveryItem.widthMm}x${deliveryItem.heightMm}` },
-            },
-            data: { resolved: true, resolvedAt: new Date() },
-          });
-
-          rematched++;
-          continue;
-        }
-
-        // STEP 2: Check for suffix conflict match
-        const conflictMatch = candidates.find(
-          (c) =>
-            c.orderSuffix !== deliveryItem.orderSuffix &&
-            c.widthMm === deliveryItem.widthMm &&
-            c.heightMm === deliveryItem.heightMm
-        );
-
-        if (conflictMatch) {
-          await tx.glassDeliveryItem.update({
-            where: { id: deliveryItem.id },
-            data: {
-              matchStatus: 'conflict',
-              matchedItemId: conflictMatch.id,
-              glassOrderId: conflictMatch.glassOrderId,
-            },
-          });
-
-          // Create conflict validation
-          await tx.glassOrderValidation.create({
-            data: {
-              glassOrderId: conflictMatch.glassOrderId,
-              orderNumber: deliveryItem.orderNumber,
-              validationType: 'suffix_mismatch',
-              severity: 'warning',
-              message: `Konflikt suffixu (re-match): zamówione '${conflictMatch.orderSuffix || 'brak'}', dostarczone '${deliveryItem.orderSuffix || 'brak'}'`,
-              details: JSON.stringify({
-                dimensions: `${deliveryItem.widthMm}x${deliveryItem.heightMm}`,
-                deliveryItemId: deliveryItem.id,
-                orderItemId: conflictMatch.id,
-              }),
-            },
-          });
-
-          // Mark old unmatched validation as resolved
-          await tx.glassOrderValidation.updateMany({
-            where: {
-              orderNumber: deliveryItem.orderNumber,
-              validationType: 'unmatched_delivery',
-              resolved: false,
-              message: { contains: `${deliveryItem.widthMm}x${deliveryItem.heightMm}` },
-            },
-            data: { resolved: true, resolvedAt: new Date() },
-          });
-
-          await tx.order.updateMany({
-            where: { orderNumber: deliveryItem.orderNumber },
-            data: { deliveredGlassCount: { increment: deliveryItem.quantity } },
-          });
-
-          rematched++;
-          continue;
-        }
-
-        // No match found - still unmatched
-        stillUnmatched++;
-      }
-
-      // 5. Update Order statuses + twórz walidacje nadwyżek/braków
-      const uniqueOrders = [...new Set(unmatchedItems.map((i) => i.orderNumber))];
-      const surplusValidations: ValidationCreateInput[] = [];
-      const shortageValidations: ValidationCreateInput[] = [];
-
-      for (const orderNumber of uniqueOrders) {
-        const order = await tx.order.findUnique({ where: { orderNumber } });
-        if (!order) continue;
-
-        const ordered = order.orderedGlassCount || 0;
-        const delivered = order.deliveredGlassCount || 0;
-
-        let newStatus = 'not_ordered';
-        if (ordered === 0) {
-          newStatus = 'not_ordered';
-        } else if (delivered === 0) {
-          newStatus = 'ordered';
-        } else if (delivered < ordered) {
-          newStatus = 'partially_delivered';
-          shortageValidations.push({
-            glassOrderId: null,
-            orderNumber,
-            validationType: 'quantity_shortage',
-            severity: 'warning',
-            message: `Brak szyb: zamówiono ${ordered} szt., dostarczono ${delivered} szt. (brakuje ${ordered - delivered} szt.)`,
-            details: null,
-            orderedQuantity: ordered,
-            deliveredQuantity: delivered,
-            expectedQuantity: ordered,
-            resolvedBy: null,
-          });
-        } else if (delivered === ordered) {
-          newStatus = 'delivered';
-        } else {
-          newStatus = 'over_delivered';
-          surplusValidations.push({
-            glassOrderId: null,
-            orderNumber,
-            validationType: 'quantity_surplus',
-            severity: 'warning',
-            message: `Nadwyżka szyb: zamówiono ${ordered} szt., dostarczono ${delivered} szt. (nadwyżka ${delivered - ordered} szt.)`,
-            details: null,
-            orderedQuantity: ordered,
-            deliveredQuantity: delivered,
-            expectedQuantity: ordered,
-            resolvedBy: null,
-          });
-        }
-
-        await tx.order.update({
-          where: { orderNumber },
-          data: { glassOrderStatus: newStatus },
+      if (exactMatch) {
+        await tx.glassDeliveryItem.update({
+          where: { id: deliveryItem.id },
+          data: {
+            matchStatus: 'matched',
+            matchedItemId: exactMatch.id,
+            glassOrderId: exactMatch.glassOrderId,
+          },
         });
-      }
 
-      // Usuń stare nierozwiązane walidacje nadwyżek/braków
-      if (uniqueOrders.length > 0) {
+        // Update Order.deliveredGlassCount
+        await tx.order.updateMany({
+          where: { orderNumber: deliveryItem.orderNumber },
+          data: { deliveredGlassCount: { increment: deliveryItem.quantity } },
+        });
+
+        // Mark validation as resolved
         await tx.glassOrderValidation.updateMany({
           where: {
-            orderNumber: { in: uniqueOrders },
-            validationType: { in: ['quantity_surplus', 'quantity_shortage'] },
+            orderNumber: deliveryItem.orderNumber,
+            validationType: 'unmatched_delivery',
             resolved: false,
+            message: { contains: `${deliveryItem.widthMm}x${deliveryItem.heightMm}` },
           },
           data: { resolved: true, resolvedAt: new Date() },
         });
+
+        rematched++;
+        continue;
       }
 
-      // Utwórz nowe walidacje
-      if (surplusValidations.length > 0) {
-        await tx.glassOrderValidation.createMany({ data: surplusValidations });
+      // STEP 2: Check for suffix conflict match
+      const conflictMatch = candidates.find(
+        (c) =>
+          c.orderSuffix !== deliveryItem.orderSuffix &&
+          c.widthMm === deliveryItem.widthMm &&
+          c.heightMm === deliveryItem.heightMm
+      );
+
+      if (conflictMatch) {
+        await tx.glassDeliveryItem.update({
+          where: { id: deliveryItem.id },
+          data: {
+            matchStatus: 'conflict',
+            matchedItemId: conflictMatch.id,
+            glassOrderId: conflictMatch.glassOrderId,
+          },
+        });
+
+        // Create conflict validation
+        await tx.glassOrderValidation.create({
+          data: {
+            glassOrderId: conflictMatch.glassOrderId,
+            orderNumber: deliveryItem.orderNumber,
+            validationType: 'suffix_mismatch',
+            severity: 'warning',
+            message: `Konflikt suffixu (re-match): zamówione '${conflictMatch.orderSuffix || 'brak'}', dostarczone '${deliveryItem.orderSuffix || 'brak'}'`,
+            details: JSON.stringify({
+              dimensions: `${deliveryItem.widthMm}x${deliveryItem.heightMm}`,
+              deliveryItemId: deliveryItem.id,
+              orderItemId: conflictMatch.id,
+            }),
+          },
+        });
+
+        // Mark old unmatched validation as resolved
+        await tx.glassOrderValidation.updateMany({
+          where: {
+            orderNumber: deliveryItem.orderNumber,
+            validationType: 'unmatched_delivery',
+            resolved: false,
+            message: { contains: `${deliveryItem.widthMm}x${deliveryItem.heightMm}` },
+          },
+          data: { resolved: true, resolvedAt: new Date() },
+        });
+
+        await tx.order.updateMany({
+          where: { orderNumber: deliveryItem.orderNumber },
+          data: { deliveredGlassCount: { increment: deliveryItem.quantity } },
+        });
+
+        rematched++;
+        continue;
       }
-      if (shortageValidations.length > 0) {
-        await tx.glassOrderValidation.createMany({ data: shortageValidations });
+
+      // No match found - still unmatched
+      stillUnmatched++;
+    }
+
+    // 5. Update Order statuses + twórz walidacje nadwyżek/braków
+    const uniqueOrders = [...new Set(unmatchedItems.map((i) => i.orderNumber))];
+    const surplusValidations: ValidationCreateInput[] = [];
+    const shortageValidations: ValidationCreateInput[] = [];
+
+    for (const orderNumber of uniqueOrders) {
+      const order = await tx.order.findUnique({ where: { orderNumber } });
+      if (!order) continue;
+
+      const ordered = order.orderedGlassCount || 0;
+      const delivered = order.deliveredGlassCount || 0;
+
+      let newStatus = 'not_ordered';
+      if (ordered === 0) {
+        newStatus = 'not_ordered';
+      } else if (delivered === 0) {
+        newStatus = 'ordered';
+      } else if (delivered < ordered) {
+        newStatus = 'partially_delivered';
+        shortageValidations.push({
+          glassOrderId: null,
+          orderNumber,
+          validationType: 'quantity_shortage',
+          severity: 'warning',
+          message: `Brak szyb: zamówiono ${ordered} szt., dostarczono ${delivered} szt. (brakuje ${ordered - delivered} szt.)`,
+          details: null,
+          orderedQuantity: ordered,
+          deliveredQuantity: delivered,
+          expectedQuantity: ordered,
+          resolvedBy: null,
+        });
+      } else if (delivered === ordered) {
+        newStatus = 'delivered';
+      } else {
+        newStatus = 'over_delivered';
+        surplusValidations.push({
+          glassOrderId: null,
+          orderNumber,
+          validationType: 'quantity_surplus',
+          severity: 'warning',
+          message: `Nadwyżka szyb: zamówiono ${ordered} szt., dostarczono ${delivered} szt. (nadwyżka ${delivered - ordered} szt.)`,
+          details: null,
+          orderedQuantity: ordered,
+          deliveredQuantity: delivered,
+          expectedQuantity: ordered,
+          resolvedBy: null,
+        });
       }
-    });
+
+      await tx.order.update({
+        where: { orderNumber },
+        data: { glassOrderStatus: newStatus },
+      });
+    }
+
+    // Usuń stare nierozwiązane walidacje nadwyżek/braków
+    if (uniqueOrders.length > 0) {
+      await tx.glassOrderValidation.updateMany({
+        where: {
+          orderNumber: { in: uniqueOrders },
+          validationType: { in: ['quantity_surplus', 'quantity_shortage'] },
+          resolved: false,
+        },
+        data: { resolved: true, resolvedAt: new Date() },
+      });
+    }
+
+    // Utwórz nowe walidacje
+    if (surplusValidations.length > 0) {
+      await tx.glassOrderValidation.createMany({ data: surplusValidations });
+    }
+    if (shortageValidations.length > 0) {
+      await tx.glassOrderValidation.createMany({ data: shortageValidations });
+    }
 
     return { rematched, stillUnmatched };
   }
