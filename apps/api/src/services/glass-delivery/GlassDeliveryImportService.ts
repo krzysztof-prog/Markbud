@@ -145,19 +145,25 @@ export class GlassDeliveryImportService {
 
   /**
    * Deduplikuje kategoryzowane szyby (loose/aluminum/reclamation)
-   * Klucz: orderNumber + wymiary + quantity
+   * Klucz: customerOrderNumber + orderNumber + wymiary + quantity + glassComposition
+   *
+   * UWAGA: customerOrderNumber i glassComposition są kluczowe dla aluminiowych szyb,
+   * bo orderNumber to często tylko numer pozycji (np. "2")
    */
   private deduplicateCategorizedItems<T extends {
+    customerOrderNumber: string;
     orderNumber: string;
     widthMm: number;
     heightMm: number;
     quantity: number;
+    glassComposition: string;
   }>(items: T[], categoryName: string): T[] {
     const seen = new Set<string>();
     const unique: T[] = [];
 
     for (const item of items) {
-      const key = `${item.orderNumber}|${item.widthMm}|${item.heightMm}|${item.quantity}`;
+      // Pełny klucz z customerOrderNumber i glassComposition
+      const key = `${item.customerOrderNumber}|${item.orderNumber}|${item.widthMm}|${item.heightMm}|${item.quantity}|${item.glassComposition || ''}`;
       if (!seen.has(key)) {
         seen.add(key);
         unique.push(item);
@@ -172,7 +178,135 @@ export class GlassDeliveryImportService {
   }
 
   /**
+   * Sprawdza czy szyba (kategoryzowana) już istnieje w bazie
+   * Zwraca tylko te które NIE istnieją (nowe do zapisania)
+   */
+  private async filterExistingLooseGlasses<T extends {
+    orderNumber: string;
+    widthMm: number;
+    heightMm: number;
+    quantity: number;
+    glassComposition: string;
+  }>(tx: PrismaTx, items: T[]): Promise<T[]> {
+    if (items.length === 0) return [];
+
+    // Pobierz wszystkie istniejące szyby luzem (optymalizacja: pobierz raz)
+    const existing = await tx.looseGlass.findMany({
+      where: {
+        orderNumber: { in: items.map(i => i.orderNumber) }
+      },
+      select: {
+        orderNumber: true,
+        widthMm: true,
+        heightMm: true,
+        quantity: true,
+        glassComposition: true,
+      }
+    });
+
+    // Stwórz Set kluczy dla szybkiego lookup
+    const existingKeys = new Set(
+      existing.map(e => `${e.orderNumber}|${e.widthMm}|${e.heightMm}|${e.quantity}|${e.glassComposition || ''}`)
+    );
+
+    // Filtruj - zostaw tylko nowe
+    const newItems = items.filter(item => {
+      const key = `${item.orderNumber}|${item.widthMm}|${item.heightMm}|${item.quantity}|${item.glassComposition || ''}`;
+      return !existingKeys.has(key);
+    });
+
+    if (newItems.length < items.length) {
+      console.log(`[GlassDeliveryImportService] Pominięto ${items.length - newItems.length} szyb luzem (już istnieją w bazie)`);
+    }
+
+    return newItems;
+  }
+
+  /**
+   * Sprawdza czy szyba aluminiowa już istnieje w bazie
+   */
+  private async filterExistingAluminumGlasses<T extends {
+    orderNumber: string;
+    widthMm: number;
+    heightMm: number;
+    quantity: number;
+    glassComposition: string;
+  }>(tx: PrismaTx, items: T[]): Promise<T[]> {
+    if (items.length === 0) return [];
+
+    const existing = await tx.aluminumGlass.findMany({
+      where: {
+        orderNumber: { in: items.map(i => i.orderNumber) }
+      },
+      select: {
+        orderNumber: true,
+        widthMm: true,
+        heightMm: true,
+        quantity: true,
+        glassComposition: true,
+      }
+    });
+
+    const existingKeys = new Set(
+      existing.map(e => `${e.orderNumber}|${e.widthMm}|${e.heightMm}|${e.quantity}|${e.glassComposition || ''}`)
+    );
+
+    const newItems = items.filter(item => {
+      const key = `${item.orderNumber}|${item.widthMm}|${item.heightMm}|${item.quantity}|${item.glassComposition || ''}`;
+      return !existingKeys.has(key);
+    });
+
+    if (newItems.length < items.length) {
+      console.log(`[GlassDeliveryImportService] Pominięto ${items.length - newItems.length} szyb aluminiowych (już istnieją w bazie)`);
+    }
+
+    return newItems;
+  }
+
+  /**
+   * Sprawdza czy szyba reklamacyjna już istnieje w bazie
+   */
+  private async filterExistingReclamationGlasses<T extends {
+    orderNumber: string;
+    widthMm: number;
+    heightMm: number;
+    quantity: number;
+    glassComposition: string;
+  }>(tx: PrismaTx, items: T[]): Promise<T[]> {
+    if (items.length === 0) return [];
+
+    const existing = await tx.reclamationGlass.findMany({
+      where: {
+        orderNumber: { in: items.map(i => i.orderNumber) }
+      },
+      select: {
+        orderNumber: true,
+        widthMm: true,
+        heightMm: true,
+        quantity: true,
+        glassComposition: true,
+      }
+    });
+
+    const existingKeys = new Set(
+      existing.map(e => `${e.orderNumber}|${e.widthMm}|${e.heightMm}|${e.quantity}|${e.glassComposition || ''}`)
+    );
+
+    const newItems = items.filter(item => {
+      const key = `${item.orderNumber}|${item.widthMm}|${item.heightMm}|${item.quantity}|${item.glassComposition || ''}`;
+      return !existingKeys.has(key);
+    });
+
+    if (newItems.length < items.length) {
+      console.log(`[GlassDeliveryImportService] Pominięto ${items.length - newItems.length} szyb reklamacyjnych (już istnieją w bazie)`);
+    }
+
+    return newItems;
+  }
+
+  /**
    * Zapisuje skategoryzowane szyby do odpowiednich tabel
+   * UWAGA: Sprawdza czy szyba już istnieje w bazie - zapobiega duplikatom między importami
    */
   private async saveCategorizedGlasses(
     tx: PrismaTx,
@@ -207,15 +341,20 @@ export class GlassDeliveryImportService {
       }>;
     }
   ): Promise<void> {
-    // Deduplikacja przed zapisem
+    // Deduplikacja wewnątrz pliku CSV
     const uniqueLoose = this.deduplicateCategorizedItems(categorized.loose, 'loose');
     const uniqueAluminum = this.deduplicateCategorizedItems(categorized.aluminum, 'aluminum');
     const uniqueReclamation = this.deduplicateCategorizedItems(categorized.reclamation, 'reclamation');
 
-    // Szyby luzem
-    if (uniqueLoose.length > 0) {
+    // Deduplikacja między importami - sprawdź co już jest w bazie
+    const newLoose = await this.filterExistingLooseGlasses(tx, uniqueLoose);
+    const newAluminum = await this.filterExistingAluminumGlasses(tx, uniqueAluminum);
+    const newReclamation = await this.filterExistingReclamationGlasses(tx, uniqueReclamation);
+
+    // Szyby luzem - tylko nowe
+    if (newLoose.length > 0) {
       await tx.looseGlass.createMany({
-        data: uniqueLoose.map(item => ({
+        data: newLoose.map(item => ({
           glassDeliveryId,
           customerOrderNumber: item.customerOrderNumber,
           clientName: item.clientName,
@@ -228,10 +367,10 @@ export class GlassDeliveryImportService {
       });
     }
 
-    // Szyby aluminiowe
-    if (uniqueAluminum.length > 0) {
+    // Szyby aluminiowe - tylko nowe
+    if (newAluminum.length > 0) {
       await tx.aluminumGlass.createMany({
-        data: uniqueAluminum.map(item => ({
+        data: newAluminum.map(item => ({
           glassDeliveryId,
           customerOrderNumber: item.customerOrderNumber,
           clientName: item.clientName,
@@ -244,10 +383,10 @@ export class GlassDeliveryImportService {
       });
     }
 
-    // Szyby reklamacyjne
-    if (uniqueReclamation.length > 0) {
+    // Szyby reklamacyjne - tylko nowe
+    if (newReclamation.length > 0) {
       await tx.reclamationGlass.createMany({
-        data: uniqueReclamation.map(item => ({
+        data: newReclamation.map(item => ({
           glassDeliveryId,
           customerOrderNumber: item.customerOrderNumber,
           clientName: item.clientName,
