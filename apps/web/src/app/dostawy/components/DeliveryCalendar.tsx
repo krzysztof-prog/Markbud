@@ -10,6 +10,7 @@ import {
   BarChart3,
   Calendar,
   X,
+  Zap,
 } from 'lucide-react';
 import { getErrorMessage } from '@/lib/toast-helpers';
 import { DayCell } from './DayCell';
@@ -20,6 +21,7 @@ import type {
   DateRange,
   UseDeliveryStatsReturn,
 } from '../hooks';
+import type { ReadinessResult } from '@/lib/api/orders';
 
 const DAY_NAMES = ['Pon', 'Wt', 'Sr', 'Czw', 'Pt', 'Sob', 'Niedz'];
 
@@ -46,9 +48,13 @@ interface DeliveryCalendarProps {
   onDayRightClick: (e: React.MouseEvent, date: Date) => void;
   onDeliveryClick: (delivery: Delivery) => void;
   onShowNewDeliveryDialog: () => void;
+  onShowQuickDeliveryDialog: () => void;
   onShowWindowStatsDialog: () => void;
   onShowBulkUpdateDatesDialog: () => void;
   onRefresh: () => void;
+
+  /** QW-1: Mapa statusów readiness z batch query (optymalizacja N+1) */
+  readinessMap?: Record<number, ReadinessResult>;
 }
 
 export function DeliveryCalendar({
@@ -67,9 +73,11 @@ export function DeliveryCalendar({
   onDayRightClick,
   onDeliveryClick,
   onShowNewDeliveryDialog,
+  onShowQuickDeliveryDialog,
   onShowWindowStatsDialog,
   onShowBulkUpdateDatesDialog,
   onRefresh,
+  readinessMap,
 }: DeliveryCalendarProps) {
   return (
     <div className="flex-1 p-6 overflow-auto">
@@ -116,6 +124,10 @@ export function DeliveryCalendar({
                 <Plus className="h-4 w-4 mr-2" />
                 Nowa dostawa
               </Button>
+              <Button variant="secondary" onClick={onShowQuickDeliveryDialog}>
+                <Zap className="h-4 w-4 mr-2" />
+                Szybka dostawa
+              </Button>
             </div>
           </div>
 
@@ -159,6 +171,7 @@ export function DeliveryCalendar({
               onDayClick={onDayClick}
               onDayRightClick={onDayRightClick}
               onDeliveryClick={onDeliveryClick}
+              readinessMap={readinessMap}
             />
           )}
         </CardContent>
@@ -199,6 +212,8 @@ interface CalendarGridProps {
   onDayClick: (date: Date) => void;
   onDayRightClick: (e: React.MouseEvent, date: Date) => void;
   onDeliveryClick: (delivery: Delivery) => void;
+  /** QW-1: Mapa statusów readiness z batch query */
+  readinessMap?: Record<number, ReadinessResult>;
 }
 
 function CalendarGrid({
@@ -208,6 +223,7 @@ function CalendarGrid({
   onDayClick,
   onDayRightClick,
   onDeliveryClick,
+  readinessMap,
 }: CalendarGridProps) {
   if (viewMode === 'week') {
     return (
@@ -217,6 +233,7 @@ function CalendarGrid({
         onDayClick={onDayClick}
         onDayRightClick={onDayRightClick}
         onDeliveryClick={onDeliveryClick}
+        readinessMap={readinessMap}
       />
     );
   }
@@ -228,6 +245,7 @@ function CalendarGrid({
       onDayClick={onDayClick}
       onDayRightClick={onDayRightClick}
       onDeliveryClick={onDeliveryClick}
+      readinessMap={readinessMap}
     />
   );
 }
@@ -239,6 +257,8 @@ interface ViewGridProps {
   onDayClick: (date: Date) => void;
   onDayRightClick: (e: React.MouseEvent, date: Date) => void;
   onDeliveryClick: (delivery: Delivery) => void;
+  /** QW-1: Mapa statusów readiness z batch query */
+  readinessMap?: Record<number, ReadinessResult>;
 }
 
 function WeekViewGrid({
@@ -247,6 +267,7 @@ function WeekViewGrid({
   onDayClick,
   onDayRightClick,
   onDeliveryClick,
+  readinessMap,
 }: ViewGridProps) {
   return (
     <div className="space-y-4">
@@ -302,6 +323,7 @@ function WeekViewGrid({
                     onDayClick={onDayClick}
                     onDayRightClick={onDayRightClick}
                     onDeliveryClick={onDeliveryClick}
+                    readinessMap={readinessMap}
                   />
                 );
               })}
@@ -329,6 +351,7 @@ function MonthViewGrid({
   onDayClick,
   onDayRightClick,
   onDeliveryClick,
+  readinessMap,
 }: ViewGridProps) {
   // Split days into weeks for summary
   const weeks: Date[][] = [];
@@ -377,6 +400,7 @@ function MonthViewGrid({
               onDayClick={onDayClick}
               onDayRightClick={onDayRightClick}
               onDeliveryClick={onDeliveryClick}
+              readinessMap={readinessMap}
             />
           );
         })}

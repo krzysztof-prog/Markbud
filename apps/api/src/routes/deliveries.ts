@@ -7,6 +7,7 @@ import { DeliveryProtocolService } from '../services/delivery-protocol-service.j
 import { verifyAuth } from '../middleware/auth.js';
 import { parseIntParam } from '../utils/errors.js';
 import { ReadinessOrchestrator } from '../services/readinessOrchestrator.js';
+import { DeliveryReadinessAggregator } from '../services/readiness/index.js';
 import { getLatestForDelivery } from '../handlers/labelCheckHandler.js';
 
 
@@ -17,6 +18,97 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
   const protocolService = new DeliveryProtocolService();
   const handler = new DeliveryHandler(deliveryService, protocolService);
 
+  // === Quick Delivery Routes (Szybka dostawa) ===
+  // UWAGA: Te route'y muszą być PRZED /:id aby nie być interpretowane jako parametr
+
+  // POST /api/deliveries/validate-orders - walidacja listy numerów zleceń
+  fastify.post<{ Body: { orderNumbers: string } }>('/validate-orders', {
+    preHandler: verifyAuth,
+  }, handler.validateOrderNumbers.bind(handler));
+
+  // POST /api/deliveries/bulk-assign - masowe przypisanie zleceń
+  fastify.post<{
+    Body: {
+      orderIds: number[];
+      deliveryId?: number;
+      deliveryDate?: string;
+      reassignOrderIds?: number[];
+    };
+  }>('/bulk-assign', {
+    preHandler: verifyAuth,
+  }, handler.bulkAssignOrders.bind(handler));
+
+  // GET /api/deliveries/for-date - lista dostaw na datę
+  fastify.get<{ Querystring: { date: string } }>('/for-date', {
+    preHandler: verifyAuth,
+  }, handler.getDeliveriesForDate.bind(handler));
+
+  // GET /api/deliveries/preview-number - podgląd numeru następnej dostawy
+  fastify.get<{ Querystring: { date: string } }>('/preview-number', {
+    preHandler: verifyAuth,
+  }, handler.previewDeliveryNumber.bind(handler));
+
+  // GET /api/deliveries/readiness/batch - batch readiness dla wielu dostaw (QW-1)
+  // Optymalizacja: 1 request zamiast N requestów z frontendu
+  fastify.get<{ Querystring: { ids: string; refresh?: string } }>('/readiness/batch', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get aggregated readiness status for multiple deliveries',
+      tags: ['deliveries', 'readiness'],
+      querystring: {
+        type: 'object',
+        required: ['ids'],
+        properties: {
+          ids: { type: 'string', description: 'Comma-separated delivery IDs (e.g., "1,2,3")' },
+          refresh: { type: 'string', description: 'Force recalculation (true/false)' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          additionalProperties: {
+            type: 'object',
+            properties: {
+              status: { type: 'string', enum: ['ready', 'conditional', 'blocked', 'pending'] },
+              blocking: { type: 'array' },
+              warnings: { type: 'array' },
+              passed: { type: 'array' },
+              checklist: { type: 'array' },
+              lastCalculatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { ids, refresh } = request.query;
+
+    // Parsuj IDs z query stringa
+    const deliveryIds = ids
+      .split(',')
+      .map((id) => parseInt(id.trim(), 10))
+      .filter((id) => !isNaN(id) && id > 0);
+
+    if (deliveryIds.length === 0) {
+      return reply.send({});
+    }
+
+    // Limit do 100 dostaw na jeden request
+    if (deliveryIds.length > 100) {
+      return reply.status(400).send({
+        error: 'Too many IDs requested. Maximum is 100.',
+      });
+    }
+
+    const aggregator = new DeliveryReadinessAggregator(prisma);
+    const results = await aggregator.getBatchReadiness(deliveryIds, {
+      refresh: refresh === 'true',
+    });
+
+    return reply.send(results);
+  });
+
+  // === Core CRUD routes ===
   // Core CRUD routes - delegate to handler - all require authentication
   fastify.get<{ Querystring: { from?: string; to?: string; status?: string } }>('/', {
     preHandler: verifyAuth,
@@ -112,10 +204,11 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
   }, handler.bulkUpdateDates.bind(handler));
 
   // P1-R4: GET /api/deliveries/:id/readiness - get shipping readiness checklist (System Brain)
-  fastify.get<{ Params: { id: string } }>('/:id/readiness', {
+  // Używa nowego DeliveryReadinessAggregator z modułami sprawdzającymi
+  fastify.get<{ Params: { id: string }; Querystring: { refresh?: string } }>('/:id/readiness', {
     preHandler: verifyAuth,
     schema: {
-      description: 'Get shipping readiness checklist for a delivery (System Brain)',
+      description: 'Get aggregated readiness status for a delivery',
       tags: ['deliveries', 'readiness'],
       params: {
         type: 'object',
@@ -124,57 +217,100 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
           id: { type: 'string', description: 'Delivery ID' },
         },
       },
+      querystring: {
+        type: 'object',
+        properties: {
+          refresh: { type: 'string', description: 'Force recalculation (true/false)' },
+        },
+      },
       response: {
         200: {
           type: 'object',
           properties: {
-            ready: { type: 'boolean', description: 'Whether delivery is ready for shipping' },
+            status: { type: 'string', enum: ['ready', 'conditional', 'blocked', 'pending'], description: 'Aggregated status' },
             blocking: {
               type: 'array',
+              description: 'Blocking issues (cause blocked status)',
               items: {
                 type: 'object',
                 properties: {
                   module: { type: 'string' },
-                  requirement: { type: 'string' },
                   status: { type: 'string' },
                   message: { type: 'string' },
-                  actionRequired: { type: 'string' },
+                  details: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        itemId: { type: 'string' },
+                        orderId: { type: 'number' },
+                        reason: { type: 'string' },
+                      },
+                    },
+                  },
                 },
               },
             },
             warnings: {
               type: 'array',
+              description: 'Warnings (cause conditional status)',
               items: {
                 type: 'object',
                 properties: {
                   module: { type: 'string' },
-                  requirement: { type: 'string' },
                   status: { type: 'string' },
                   message: { type: 'string' },
-                  actionRequired: { type: 'string' },
+                  details: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        itemId: { type: 'string' },
+                        orderId: { type: 'number' },
+                        reason: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            passed: {
+              type: 'array',
+              description: 'Passed checks',
+              items: {
+                type: 'object',
+                properties: {
+                  module: { type: 'string' },
+                  status: { type: 'string' },
+                  message: { type: 'string' },
                 },
               },
             },
             checklist: {
               type: 'array',
+              description: 'Checklist for UI display',
               items: {
                 type: 'object',
                 properties: {
-                  id: { type: 'string' },
+                  module: { type: 'string' },
                   label: { type: 'string' },
-                  checked: { type: 'boolean' },
-                  blocking: { type: 'boolean' },
+                  status: { type: 'string' },
+                  message: { type: 'string' },
                 },
               },
             },
+            lastCalculatedAt: { type: 'string', format: 'date-time' },
           },
         },
       },
     },
   }, async (request, reply) => {
     const { id } = request.params;
-    const orchestrator = new ReadinessOrchestrator(prisma);
-    const result = await orchestrator.canShipDelivery(parseIntParam(id, 'id'));
+    const { refresh } = request.query;
+    const aggregator = new DeliveryReadinessAggregator(prisma);
+    const result = await aggregator.getReadiness(parseIntParam(id, 'id'), {
+      refresh: refresh === 'true',
+    });
     return reply.send(result);
   });
 

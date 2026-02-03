@@ -57,3 +57,11 @@ export type {
 // Order-Delivery association management
 export { DeliveryOrderService } from './DeliveryOrderService.js';
 export type { VariantConflictResult } from './DeliveryOrderService.js';
+
+// Quick Delivery - szybkie tworzenie dostaw z listy zleceń
+export { QuickDeliveryService } from './QuickDeliveryService.js';
+export type {
+  ValidatedOrder,
+  ValidateOrdersResult,
+  BulkAssignResult,
+} from './QuickDeliveryService.js';

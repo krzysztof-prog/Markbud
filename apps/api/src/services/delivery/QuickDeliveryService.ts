@@ -241,7 +241,29 @@ export class QuickDeliveryService {
       } else {
         // Utwórz nową dostawę
         const parsedDate = parseDate(deliveryDate!);
-        const generatedNumber = await this.numberGenerator.generateDeliveryNumber(parsedDate);
+
+        // Generuj numer dostawy WEWNĄTRZ transakcji (używając tx zamiast this.prisma)
+        const datePrefix = parsedDate.toLocaleDateString('pl-PL', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        }).replace(/\//g, '.');
+
+        const dayStart = new Date(parsedDate);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(parsedDate);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        const existingDeliveriesCount = await tx.delivery.count({
+          where: {
+            deliveryDate: { gte: dayStart, lte: dayEnd },
+            deletedAt: null,
+          },
+        });
+
+        const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+        const suffix = romanNumerals[existingDeliveriesCount] || String(existingDeliveriesCount + 1);
+        const generatedNumber = `${datePrefix}_${suffix}`;
 
         const newDelivery = await tx.delivery.create({
           data: {

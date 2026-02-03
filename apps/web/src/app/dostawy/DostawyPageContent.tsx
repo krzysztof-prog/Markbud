@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { createDynamicComponent } from '@/lib/dynamic-import';
+import dynamic from 'next/dynamic';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
@@ -24,67 +24,73 @@ import {
   BulkUpdateDialogSkeleton,
 } from '@/components/loaders/DeliverySkeleton';
 
-// Komponenty z warunkowym lazy loading (eager w PROD, lazy w DEV)
-const DeliveriesListView = createDynamicComponent(
-  () => import('./components/DeliveriesListView').then((mod) => ({ default: mod.DeliveriesListView })),
-  { loading: () => <ListViewSkeleton /> }
+// Lazy loaded components
+const DeliveriesListView = dynamic(
+  () => import('./components/DeliveriesListView'),
+  { ssr: false, loading: () => <ListViewSkeleton /> }
 );
 
-const DeliveryCalendar = createDynamicComponent(
-  () => import('./components/DeliveryCalendar').then((mod) => ({ default: mod.DeliveryCalendar })),
-  { loading: () => <CalendarSkeleton /> }
+const DeliveryCalendar = dynamic(
+  () => import('./components/DeliveryCalendar'),
+  { ssr: false, loading: () => <CalendarSkeleton /> }
 );
 
-const UnassignedOrdersPanel = createDynamicComponent(
-  () => import('./components/UnassignedOrdersPanel').then((mod) => ({ default: mod.UnassignedOrdersPanel })),
-  { loading: () => <PanelSkeleton /> }
+const UnassignedOrdersPanel = dynamic(
+  () => import('./components/UnassignedOrdersPanel'),
+  { ssr: false, loading: () => <PanelSkeleton /> }
 );
 
-const BulkUpdateDatesDialog = createDynamicComponent(
-  () => import('./components/BulkUpdateDatesDialog').then((mod) => ({ default: mod.BulkUpdateDatesDialog })),
-  { loading: () => <BulkUpdateDialogSkeleton /> }
+const BulkUpdateDatesDialog = dynamic(
+  () => import('./components/BulkUpdateDatesDialog'),
+  { ssr: false, loading: () => <BulkUpdateDialogSkeleton /> }
 );
 
 // Individual dialog components
-const DestructiveDeleteDeliveryDialog = createDynamicComponent(
-  () => import('./components/dialogs').then((mod) => ({ default: mod.DeleteDeliveryConfirmDialog })),
-  { loading: () => <DialogSkeleton /> }
+const DestructiveDeleteDeliveryDialog = dynamic(
+  () => import('./components/dialogs').then((mod) => mod.DeleteDeliveryConfirmDialog),
+  { ssr: false, loading: () => <DialogSkeleton /> }
 );
 
-const AddItemDialog = createDynamicComponent(
-  () => import('./components/dialogs').then((mod) => ({ default: mod.AddItemDialog })),
-  { loading: () => <DialogSkeleton /> }
+const AddItemDialog = dynamic(
+  () => import('./components/dialogs').then((mod) => mod.AddItemDialog),
+  { ssr: false, loading: () => <DialogSkeleton /> }
 );
 
-const CompleteOrdersDialog = createDynamicComponent(
-  () => import('./components/dialogs').then((mod) => ({ default: mod.CompleteOrdersDialog })),
-  { loading: () => <DialogSkeleton /> }
+const CompleteOrdersDialog = dynamic(
+  () => import('./components/dialogs').then((mod) => mod.CompleteOrdersDialog),
+  { ssr: false, loading: () => <DialogSkeleton /> }
 );
 
-const DeliveryDetailsDialog = createDynamicComponent(
-  () => import('./components/dialogs').then((mod) => ({ default: mod.DeliveryDetailsDialog })),
-  { loading: () => <DialogSkeleton /> }
+const DeliveryDetailsDialog = dynamic(
+  () => import('./components/dialogs').then((mod) => mod.DeliveryDetailsDialog),
+  { ssr: false, loading: () => <DialogSkeleton /> }
 );
 
-const CreateDeliveryDialog = createDynamicComponent(
-  () => import('./components/dialogs').then((mod) => ({ default: mod.CreateDeliveryDialog })),
-  { loading: () => <DialogSkeleton /> }
+const CreateDeliveryDialog = dynamic(
+  () => import('./components/dialogs').then((mod) => mod.CreateDeliveryDialog),
+  { ssr: false, loading: () => <DialogSkeleton /> }
 );
 
-const OrderDetailModal = createDynamicComponent(
-  () => import('@/features/orders/components/OrderDetailModal').then((mod) => ({ default: mod.OrderDetailModal })),
-  { loading: () => <DialogSkeleton /> }
+const OrderDetailModal = dynamic(
+  () => import('@/features/orders/components/OrderDetailModal').then((mod) => mod.OrderDetailModal),
+  { ssr: false, loading: () => <DialogSkeleton /> }
 );
 
-const WindowStatsDialog = createDynamicComponent(
-  () => import('@/components/window-stats-dialog').then((mod) => ({ default: mod.WindowStatsDialog })),
-  { loading: () => <DialogSkeleton /> }
+const WindowStatsDialog = dynamic(
+  () => import('@/components/window-stats-dialog').then((mod) => mod.WindowStatsDialog),
+  { ssr: false, loading: () => <DialogSkeleton /> }
 );
 
 // P1-3: Variant Type Selection Dialog
-const VariantTypeSelectionDialog = createDynamicComponent(
-  () => import('@/components/ui/variant-type-selection-dialog').then((mod) => ({ default: mod.VariantTypeSelectionDialog })),
-  { loading: () => <DialogSkeleton /> }
+const VariantTypeSelectionDialog = dynamic(
+  () => import('@/components/ui/variant-type-selection-dialog').then((mod) => mod.VariantTypeSelectionDialog),
+  { ssr: false, loading: () => <DialogSkeleton /> }
+);
+
+// Quick Delivery Dialog - szybkie przypisywanie zleceń do dostaw
+const QuickDeliveryDialog = dynamic(
+  () => import('./components/QuickDeliveryDialog'),
+  { ssr: false, loading: () => <DialogSkeleton /> }
 );
 
 // Extracted hooks
@@ -96,6 +102,7 @@ import {
   useDeliveryExport,
 } from './hooks';
 import { useAddOrderWithVariantCheck } from './hooks/useAddOrderWithVariantCheck';
+import { useBatchReadiness } from '@/features/deliveries/hooks';
 
 interface DostawyPageContentProps {
   initialSelectedOrderId?: number | null;
@@ -123,6 +130,7 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
   const [productionDate, setProductionDate] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [selectedOrderNumber, setSelectedOrderNumber] = useState<string | null>(null);
+  const [showQuickDeliveryDialog, setShowQuickDeliveryDialog] = useState(false);
 
   // Form validation
   const validation = useFormValidation({
@@ -151,6 +159,12 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
   const unassignedOrders = data?.unassignedOrders || [];
   const workingDays = data?.workingDays || [];
   const holidays = data?.holidays || [];
+
+  // QW-1: Batch readiness - jeden request zamiast N (optymalizacja kalendarza)
+  const deliveryIds = deliveries.map((d) => d.id);
+  const { data: readinessMap } = useBatchReadiness(deliveryIds, {
+    enabled: deliveryIds.length > 0,
+  });
 
   // Statistics hook
   const stats = useDeliveryStats({ deliveries, workingDays, holidays });
@@ -257,7 +271,12 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
         </div>
 
         {filters.pageViewMode === 'list' ? (
-          <div className="flex-1 p-6 overflow-auto"><DeliveriesListView /></div>
+          <div className="flex-1 p-6 overflow-auto">
+            <DeliveriesListView
+              onShowNewDeliveryDialog={() => setShowNewDeliveryDialog(true)}
+              onShowQuickDeliveryDialog={() => setShowQuickDeliveryDialog(true)}
+            />
+          </div>
         ) : (
           <div className="flex flex-1 overflow-hidden">
             <DeliveryCalendar
@@ -265,8 +284,10 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
               isLoading={isLoading} error={error as Error | null} stats={stats}
               onGoToPrevious={filters.goToPrevious} onGoToNext={filters.goToNext} onGoToToday={filters.goToToday} onChangeViewMode={filters.changeViewMode}
               onDayClick={handleDayClick} onDayRightClick={handleDayRightClick} onDeliveryClick={setSelectedDelivery}
-              onShowNewDeliveryDialog={() => setShowNewDeliveryDialog(true)} onShowWindowStatsDialog={() => setShowWindowStatsDialog(true)}
-              onShowBulkUpdateDatesDialog={() => setShowBulkUpdateDatesDialog(true)} onRefresh={() => queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] })}
+              onShowNewDeliveryDialog={() => setShowNewDeliveryDialog(true)} onShowQuickDeliveryDialog={() => setShowQuickDeliveryDialog(true)}
+              onShowWindowStatsDialog={() => setShowWindowStatsDialog(true)} onShowBulkUpdateDatesDialog={() => setShowBulkUpdateDatesDialog(true)}
+              onRefresh={() => queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] })}
+              readinessMap={readinessMap}
             />
             <UnassignedOrdersPanel
               unassignedOrders={unassignedOrders} deliveries={deliveries} selectedDelivery={selectedDelivery} selectedOrderIds={selection.selectedOrderIds}
@@ -348,6 +369,12 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
           targetDeliveryId={variantCheckWrapper.variantDialog.state?.targetDeliveryId ?? 0}
           onConfirm={variantCheckWrapper.variantDialog.onConfirm}
           isLoading={variantCheckWrapper.variantDialog.isLoading}
+        />
+
+        {/* Quick Delivery Dialog - szybkie przypisywanie zleceń do dostaw */}
+        <QuickDeliveryDialog
+          open={showQuickDeliveryDialog}
+          onOpenChange={setShowQuickDeliveryDialog}
         />
       </div>
       <DragOverlay>

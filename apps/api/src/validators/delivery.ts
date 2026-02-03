@@ -72,3 +72,32 @@ export type AddItemInput = z.infer<typeof addItemSchema>;
 export type CompleteDeliveryInput = z.infer<typeof completeDeliverySchema>;
 export type BulkUpdateDatesInput = z.infer<typeof bulkUpdateDatesSchema>;
 export type CompleteAllOrdersInput = z.infer<typeof completeAllOrdersSchema>;
+
+// === QUICK DELIVERY (Szybka dostawa) ===
+
+/**
+ * Walidacja listy numerów zleceń
+ * Przyjmuje string z numerami oddzielonymi przecinkami, spacjami lub enterami
+ */
+export const validateOrderNumbersSchema = z.object({
+  orderNumbers: z.string().min(1, 'Lista numerów zleceń jest wymagana'),
+});
+
+/**
+ * Masowe przypisanie zleceń do dostawy
+ */
+export const bulkAssignOrdersSchema = z.object({
+  orderIds: z.array(z.number().int().positive()).min(1, 'Musisz podać co najmniej jedno zlecenie'),
+  // Opcja 1: Przypisz do istniejącej dostawy
+  deliveryId: z.number().int().positive().optional(),
+  // Opcja 2: Utwórz nową dostawę z datą
+  deliveryDate: dateSchema.optional(),
+  // Zlecenia do przepięcia (użytkownik potwierdził)
+  reassignOrderIds: z.array(z.number().int().positive()).optional(),
+}).refine(
+  (data) => data.deliveryId !== undefined || data.deliveryDate !== undefined,
+  { message: 'Musisz podać deliveryId (istniejąca dostawa) lub deliveryDate (nowa dostawa)' }
+);
+
+export type ValidateOrderNumbersInput = z.infer<typeof validateOrderNumbersSchema>;
+export type BulkAssignOrdersInput = z.infer<typeof bulkAssignOrdersSchema>;

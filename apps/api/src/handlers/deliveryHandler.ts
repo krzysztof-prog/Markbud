@@ -17,14 +17,23 @@ import {
   completeDeliverySchema,
   bulkUpdateDatesSchema,
   completeAllOrdersSchema,
+  validateOrderNumbersSchema,
+  bulkAssignOrdersSchema,
 } from '../validators/delivery.js';
+import { QuickDeliveryService } from '../services/delivery/QuickDeliveryService.js';
+import { prisma } from '../index.js';
+import { DeliveryRepository } from '../repositories/DeliveryRepository.js';
 import { ValidationError } from '../utils/errors.js';
 
 export class DeliveryHandler {
   private protocolService: DeliveryProtocolService;
+  private quickDeliveryService: QuickDeliveryService;
 
   constructor(private service: DeliveryService, protocolService?: DeliveryProtocolService) {
     this.protocolService = protocolService || new DeliveryProtocolService();
+    // QuickDeliveryService wymaga repository i prisma
+    const deliveryRepository = new DeliveryRepository(prisma);
+    this.quickDeliveryService = new QuickDeliveryService(deliveryRepository, prisma);
   }
 
   async getAll(
@@ -295,5 +304,97 @@ export class DeliveryHandler {
       validated.yearOffset
     );
     return reply.send(result);
+  }
+
+  // ===================
+  // Quick Delivery Operations (Szybka dostawa)
+  // ===================
+
+  /**
+   * POST /api/deliveries/validate-orders
+   * Waliduje listę numerów zleceń - sprawdza czy istnieją i czy są przypisane
+   */
+  async validateOrderNumbers(
+    request: FastifyRequest<{ Body: { orderNumbers: string } }>,
+    reply: FastifyReply
+  ) {
+    const validated = validateOrderNumbersSchema.parse(request.body);
+
+    // Parsuj string na tablicę numerów
+    const orderNumbers = this.quickDeliveryService.parseOrderNumbers(validated.orderNumbers);
+
+    if (orderNumbers.length === 0) {
+      throw new ValidationError('Lista numerów zleceń jest pusta');
+    }
+
+    // Waliduj numery
+    const result = await this.quickDeliveryService.validateOrderNumbers(orderNumbers);
+
+    return reply.send(result);
+  }
+
+  /**
+   * POST /api/deliveries/bulk-assign
+   * Masowo przypisuje zlecenia do dostawy (nowej lub istniejącej)
+   */
+  async bulkAssignOrders(
+    request: FastifyRequest<{
+      Body: {
+        orderIds: number[];
+        deliveryId?: number;
+        deliveryDate?: string;
+        reassignOrderIds?: number[];
+      };
+    }>,
+    reply: FastifyReply
+  ) {
+    const validated = bulkAssignOrdersSchema.parse(request.body);
+
+    const result = await this.quickDeliveryService.bulkAssignOrders({
+      orderIds: validated.orderIds,
+      deliveryId: validated.deliveryId,
+      deliveryDate: validated.deliveryDate,
+      reassignOrderIds: validated.reassignOrderIds,
+    });
+
+    return reply.status(201).send(result);
+  }
+
+  /**
+   * GET /api/deliveries/for-date?date=YYYY-MM-DD
+   * Pobiera listę dostaw na podaną datę (do wyboru w UI)
+   */
+  async getDeliveriesForDate(
+    request: FastifyRequest<{ Querystring: { date: string } }>,
+    reply: FastifyReply
+  ) {
+    const { date } = request.query;
+
+    if (!date) {
+      throw new ValidationError('Parametr date jest wymagany');
+    }
+
+    const deliveries = await this.quickDeliveryService.getDeliveriesForDate(date);
+
+    return reply.send(deliveries);
+  }
+
+  /**
+   * GET /api/deliveries/preview-number?date=YYYY-MM-DD
+   * Podgląd numeru następnej dostawy dla daty
+   */
+  async previewDeliveryNumber(
+    request: FastifyRequest<{ Querystring: { date: string } }>,
+    reply: FastifyReply
+  ) {
+    const { date } = request.query;
+
+    if (!date) {
+      throw new ValidationError('Parametr date jest wymagany');
+    }
+
+    const deliveryNumber = await this.quickDeliveryService.previewNextDeliveryNumber(date);
+
+    return reply.send({ deliveryNumber });
   }
 }
