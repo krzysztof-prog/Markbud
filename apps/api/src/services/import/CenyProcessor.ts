@@ -14,6 +14,7 @@ import type { PrismaClient, FileImport } from '@prisma/client';
 import { ImportRepository } from '../../repositories/ImportRepository.js';
 import { PdfParser } from '../parsers/pdf-parser.js';
 import { logger } from '../../utils/logger.js';
+import { plnToGrosze, eurToCenty } from '@markbud/shared';
 
 import { ImportValidationService } from './importValidationService.js';
 import { ImportTransactionService } from './importTransactionService.js';
@@ -117,12 +118,20 @@ export class CenyProcessor {
     }
   ): Promise<PdfAutoImportResult> {
     // Save price to pending_order_prices using transaction service
+    // WAŻNE: Konwertujemy do groszy/centów przed zapisem
+    const valueNettoInSmallestUnit = preview.currency === 'EUR'
+      ? eurToCenty(preview.valueNetto)
+      : plnToGrosze(preview.valueNetto);
+    const valueBruttoInSmallestUnit = preview.valueBrutto
+      ? (preview.currency === 'EUR' ? eurToCenty(preview.valueBrutto) : plnToGrosze(preview.valueBrutto))
+      : null;
+
     await this.transactionService.createPendingOrderPriceSimple({
       orderNumber: preview.orderNumber,
       reference: preview.reference || null,
       currency: preview.currency,
-      valueNetto: preview.valueNetto,
-      valueBrutto: preview.valueBrutto || null,
+      valueNetto: valueNettoInSmallestUnit,
+      valueBrutto: valueBruttoInSmallestUnit,
       filename,
       filepath,
       importId,
@@ -275,12 +284,20 @@ export class CenyProcessor {
     }
 
     // Order doesn't exist - save to PendingOrderPrice using transaction service
+    // WAŻNE: Konwertujemy do groszy/centów przed zapisem
+    const valueNettoConverted = preview.currency === 'EUR'
+      ? eurToCenty(preview.valueNetto)
+      : plnToGrosze(preview.valueNetto);
+    const valueBruttoConverted = preview.valueBrutto
+      ? (preview.currency === 'EUR' ? eurToCenty(preview.valueBrutto) : plnToGrosze(preview.valueBrutto))
+      : null;
+
     await this.transactionService.createPendingOrderPriceSimple({
       orderNumber: preview.orderNumber,
       reference: preview.reference || null,
       currency: preview.currency,
-      valueNetto: preview.valueNetto,
-      valueBrutto: preview.valueBrutto || null,
+      valueNetto: valueNettoConverted,
+      valueBrutto: valueBruttoConverted,
       filename: fileImport.filename,
       filepath: fileImport.filepath,
       importId: fileImport.id,

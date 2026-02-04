@@ -120,11 +120,22 @@ export function useRealtimeSync({ enabled = true }: UseRealtimeSyncOptions = {})
         'schuco:fetch_progress': [],
         'schuco:fetch_completed': ['schuco-deliveries', 'schuco-status', 'schuco-statistics', 'schuco-logs'],
         'schuco:fetch_failed': ['schuco-status', 'schuco-logs'],
+        // Gmail events
+        'gmail:fetch_started': ['gmail-status', 'gmail-logs'],
+        'gmail:fetch_completed': ['gmail-status', 'gmail-logs'],
+        'gmail:fetch_failed': ['gmail-status', 'gmail-logs'],
       };
 
       // Emituj custom event dla Schuco progress (używane przez useSchucoRealtimeProgress)
       if (event.type.startsWith('schuco:')) {
         window.dispatchEvent(new CustomEvent('schuco-progress', {
+          detail: { type: event.type, data: event.data },
+        }));
+      }
+
+      // Emituj custom event dla delivery alerts (używane przez DeliveryAlerts)
+      if (event.type === 'deliveryAlert') {
+        window.dispatchEvent(new CustomEvent('delivery-alert', {
           detail: { type: event.type, data: event.data },
         }));
       }

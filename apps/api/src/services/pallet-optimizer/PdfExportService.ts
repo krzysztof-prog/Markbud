@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { OptimizationResult, OptimizedPallet } from './PalletOptimizerService.js';
 import { logger } from '../../utils/logger.js';
+import { getTodayWarsaw } from '../../utils/date-helpers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -462,7 +463,7 @@ export class PdfExportService {
      * Generuj nazwę pliku PDF
      */
     generateFilename(deliveryId: number): string {
-        const date = new Date().toISOString().split('T')[0];
+        const date = getTodayWarsaw();
         return `palety_dostawa_${deliveryId}_${date}.pdf`;
     }
 }

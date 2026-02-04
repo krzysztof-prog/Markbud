@@ -166,6 +166,7 @@ export class LogisticsRepository {
                 client: true,
                 project: true,
                 status: true,
+                deliveryDate: true, // Potrzebne do walidacji zgodności dat
               },
             },
           },
@@ -194,6 +195,7 @@ export class LogisticsRepository {
                 id: true,
                 orderNumber: true,
                 client: true,
+                deliveryDate: true, // Potrzebne do walidacji daty w diff
               },
             },
           },
@@ -362,10 +364,10 @@ export class LogisticsRepository {
     const placeholders = upperProjectNumbers.map(() => '?').join(', ');
 
     const orders = await prisma.$queryRawUnsafe<
-      { id: number; orderNumber: string; client: string | null; project: string | null; status: string | null }[]
+      { id: number; orderNumber: string; client: string | null; project: string | null; status: string | null; deliveryDate: string | null }[]
     >(
       `
-      SELECT id, order_number as orderNumber, client, project, status
+      SELECT id, order_number as orderNumber, client, project, status, delivery_date as deliveryDate
       FROM orders
       WHERE UPPER(project) IN (${placeholders})
         AND archived_at IS NULL
@@ -411,6 +413,22 @@ export class LogisticsRepository {
   }
 
   /**
+   * Pobiera pojedynczą pozycję mailową po ID
+   */
+  async getMailItemById(id: number) {
+    return prisma.logisticsMailItem.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        projectNumber: true,
+        quantity: true,
+        itemStatus: true,
+        rawNotes: true,
+      },
+    });
+  }
+
+  /**
    * Soft delete pozycji mailowej
    */
   async softDeleteMailItem(id: number) {
@@ -428,6 +446,92 @@ export class LogisticsRepository {
     return prisma.logisticsMailItem.update({
       where: { id },
       data: { confirmedAt: new Date() },
+    });
+  }
+
+  // ========== DECISION LOGS (AUDYT) ==========
+
+  /**
+   * Tworzy log decyzji użytkownika
+   * Zapisuje kto, kiedy, co zrobił - dla audytu i rozstrzygania sporów
+   */
+  async createDecisionLog(data: {
+    entityType: 'item' | 'delivery';
+    entityId: number;
+    action: string;
+    fromVersion?: number;
+    toVersion?: number;
+    metadata?: Record<string, unknown>;
+    userId: number;
+    mailItemId?: number;
+  }) {
+    return prisma.logisticsDecisionLog.create({
+      data: {
+        entityType: data.entityType,
+        entityId: data.entityId,
+        action: data.action,
+        fromVersion: data.fromVersion,
+        toVersion: data.toVersion,
+        metadata: data.metadata ? JSON.stringify(data.metadata) : null,
+        userId: data.userId,
+        mailItemId: data.mailItemId,
+      },
+    });
+  }
+
+  /**
+   * Pobiera logi decyzji dla pozycji
+   */
+  async getDecisionLogsForItem(itemId: number) {
+    return prisma.logisticsDecisionLog.findMany({
+      where: {
+        entityType: 'item',
+        entityId: itemId,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+  }
+
+  /**
+   * Pobiera logi decyzji dla dostawy (deliveryCode)
+   */
+  async getDecisionLogsForDelivery(deliveryCode: string) {
+    // Najpierw pobierz wszystkie listy dla tego kodu
+    const lists = await prisma.logisticsMailList.findMany({
+      where: { deliveryCode },
+      select: { id: true },
+    });
+
+    const listIds = lists.map((l) => l.id);
+
+    return prisma.logisticsDecisionLog.findMany({
+      where: {
+        OR: [
+          // Logi dla samych list
+          { entityType: 'delivery', entityId: { in: listIds } },
+          // Logi dla pozycji w tych listach
+          {
+            entityType: 'item',
+            mailItem: {
+              mailListId: { in: listIds },
+            },
+          },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+        mailItem: {
+          select: { id: true, projectNumber: true },
+        },
+      },
     });
   }
 }

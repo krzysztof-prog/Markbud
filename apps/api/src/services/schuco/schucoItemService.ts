@@ -15,6 +15,17 @@ const COMPARABLE_FIELDS: (keyof SchucoOrderItemRow)[] = [
   'comment',
 ];
 
+// Statusy które oznaczają że zamówienie zostało dostarczone
+// Schuco CSV ma zawsze shippedQty=0, więc dla tych statusów ustawiamy shippedQty=orderedQty
+const DELIVERED_STATUSES = ['Całkowicie dostarczone', 'Potwierdzona dostawa'];
+
+// Typ dla delivery z opcjonalnym shippingStatus
+interface DeliveryToFetch {
+  id: number;
+  orderNumber: string;
+  shippingStatus?: string | null;
+}
+
 interface FetchItemsResult {
   totalDeliveries: number;
   processedDeliveries: number;
@@ -27,9 +38,171 @@ interface FetchItemsResult {
 export class SchucoItemService {
   private prisma: PrismaClient;
   private isRunning = false;
+  private lastAutoFetchTime: Date | null = null;
+  private schedulerInterval: NodeJS.Timeout | null = null;
 
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
+  }
+
+  /**
+   * Uruchamia scheduler automatycznego pobierania co 45 minut
+   */
+  startAutoFetchScheduler(): void {
+    if (this.schedulerInterval) {
+      logger.warn('[SchucoItemService] Scheduler already running');
+      return;
+    }
+
+    // Co 45 minut (45 * 60 * 1000 = 2700000 ms)
+    const intervalMs = 45 * 60 * 1000;
+
+    this.schedulerInterval = setInterval(async () => {
+      try {
+        await this.autoFetchChangedItems();
+      } catch (error) {
+        logger.error('[SchucoItemService] Auto-fetch error:', error);
+      }
+    }, intervalMs);
+
+    logger.info(`[SchucoItemService] Auto-fetch scheduler started (every 45 minutes)`);
+
+    // Uruchom pierwsze sprawdzenie za 5 minut (daj czas na start serwera)
+    setTimeout(async () => {
+      try {
+        await this.autoFetchChangedItems();
+      } catch (error) {
+        logger.error('[SchucoItemService] Initial auto-fetch error:', error);
+      }
+    }, 5 * 60 * 1000);
+  }
+
+  /**
+   * Zatrzymuje scheduler
+   */
+  stopAutoFetchScheduler(): void {
+    if (this.schedulerInterval) {
+      clearInterval(this.schedulerInterval);
+      this.schedulerInterval = null;
+      logger.info('[SchucoItemService] Auto-fetch scheduler stopped');
+    }
+  }
+
+  /**
+   * Automatyczne pobieranie pozycji dla zmienionych zamówień
+   * Wykrywa: nowe zamówienia, zmieniony status, zmieniona data, przypisanie do dostawy
+   */
+  async autoFetchChangedItems(): Promise<FetchItemsResult | null> {
+    if (this.isRunning) {
+      logger.info('[SchucoItemService] Skipping auto-fetch - already running');
+      return null;
+    }
+
+    // CRITICAL: Ustaw flagę PRZED jakimikolwiek operacjami async
+    this.isRunning = true;
+
+    const minDate = new Date('2025-10-01');
+    const now = new Date();
+
+    logger.info('[SchucoItemService] Starting auto-fetch for changed items...');
+
+    try {
+      // 1. Nowe zamówienia (itemsFetchedAt = null)
+      const newDeliveries = await this.prisma.schucoDelivery.findMany({
+        where: {
+          itemsFetchedAt: null,
+          archivedAt: null,
+          orderDateParsed: { gte: minDate },
+        },
+        select: { id: true, orderNumber: true, shippingStatus: true },
+        take: 50,
+      });
+
+      // 2. Zamówienia ze zmienionymi danymi (changeType = 'updated' i changedAt > itemsFetchedAt)
+      const updatedDeliveries = await this.prisma.schucoDelivery.findMany({
+        where: {
+          archivedAt: null,
+          orderDateParsed: { gte: minDate },
+          changeType: 'updated',
+          itemsFetchedAt: { not: null },
+          changedAt: { not: null },
+          // changedAt > itemsFetchedAt - musimy to sprawdzić ręcznie
+        },
+        select: { id: true, orderNumber: true, shippingStatus: true, changedAt: true, itemsFetchedAt: true },
+        take: 50,
+      });
+
+      // Filtruj tylko te gdzie changedAt > itemsFetchedAt
+      const needsRefresh = updatedDeliveries.filter((d) => {
+        if (!d.changedAt || !d.itemsFetchedAt) return false;
+        return d.changedAt > d.itemsFetchedAt;
+      });
+
+      // 3. Nowo przypisane do zamówienia (sprawdź OrderSchucoLink)
+      const recentLinks = await this.prisma.orderSchucoLink.findMany({
+        where: {
+          linkedAt: {
+            gte: this.lastAutoFetchTime || new Date(Date.now() - 45 * 60 * 1000),
+          },
+        },
+        select: {
+          schucoDeliveryId: true,
+          schucoDelivery: {
+            select: { id: true, orderNumber: true, shippingStatus: true, orderDateParsed: true, archivedAt: true },
+          },
+        },
+        take: 50,
+      });
+
+      const linkedDeliveries = recentLinks
+        .filter((link) => {
+          const sd = link.schucoDelivery;
+          return sd && !sd.archivedAt && sd.orderDateParsed && sd.orderDateParsed >= minDate;
+        })
+        .map((link) => ({
+          id: link.schucoDelivery.id,
+          orderNumber: link.schucoDelivery.orderNumber,
+          shippingStatus: link.schucoDelivery.shippingStatus,
+        }));
+
+      // Połącz wszystkie i usuń duplikaty
+      const allDeliveries = [...newDeliveries, ...needsRefresh, ...linkedDeliveries];
+      const uniqueDeliveries = Array.from(
+        new Map(allDeliveries.map((d) => [d.id, d])).values()
+      );
+
+      if (uniqueDeliveries.length === 0) {
+        logger.info('[SchucoItemService] No deliveries need item refresh');
+        this.lastAutoFetchTime = now;
+        return {
+          totalDeliveries: 0,
+          processedDeliveries: 0,
+          newItems: 0,
+          updatedItems: 0,
+          unchangedItems: 0,
+          errors: 0,
+        };
+      }
+
+      logger.info(
+        `[SchucoItemService] Auto-fetch found ${uniqueDeliveries.length} deliveries: ` +
+        `${newDeliveries.length} new, ${needsRefresh.length} updated, ${linkedDeliveries.length} linked`
+      );
+
+      // Pobierz pozycje (maksymalnie 50 na raz)
+      const toFetch = uniqueDeliveries.slice(0, 50);
+      const result = await this.fetchItemsForDeliveries(toFetch);
+
+      this.lastAutoFetchTime = now;
+      return result;
+    } catch (error) {
+      logger.error('[SchucoItemService] Auto-fetch error:', error);
+      throw error;
+    } finally {
+      // CRITICAL: Zawsze zwalniaj flagę - nawet przy błędzie
+      this.isRunning = false;
+      logger.info('[SchucoItemService] Auto-fetch completed, isRunning reset to false');
+    }
   }
 
   /**
@@ -69,6 +242,7 @@ export class SchucoItemService {
         select: {
           id: true,
           orderNumber: true,
+          shippingStatus: true,
         },
       });
 
@@ -87,7 +261,7 @@ export class SchucoItemService {
       logger.info(`[SchucoItemService] Found ${deliveriesWithoutItems.length} deliveries without items`);
 
       return await this.fetchItemsForDeliveries(
-        deliveriesWithoutItems.map((d) => ({ id: d.id, orderNumber: d.orderNumber }))
+        deliveriesWithoutItems.map((d) => ({ id: d.id, orderNumber: d.orderNumber, shippingStatus: d.shippingStatus }))
       );
     } finally {
       this.isRunning = false;
@@ -115,6 +289,7 @@ export class SchucoItemService {
         select: {
           id: true,
           orderNumber: true,
+          shippingStatus: true,
         },
       });
 
@@ -130,7 +305,7 @@ export class SchucoItemService {
       }
 
       return await this.fetchItemsForDeliveries(
-        deliveries.map((d) => ({ id: d.id, orderNumber: d.orderNumber }))
+        deliveries.map((d) => ({ id: d.id, orderNumber: d.orderNumber, shippingStatus: d.shippingStatus }))
       );
     } finally {
       this.isRunning = false;
@@ -138,10 +313,136 @@ export class SchucoItemService {
   }
 
   /**
+   * Pobiera pozycje dla WSZYSTKICH zamówień (nadpisuje istniejące)
+   * UWAGA: To może trwać bardzo długo! Używać tylko gdy potrzebne.
+   * @param limit Maksymalna liczba zamówień do przetworzenia (domyślnie 500)
+   */
+  async fetchAllItems(limit = 500): Promise<FetchItemsResult> {
+    if (this.isRunning) {
+      throw new Error('Item fetch already in progress');
+    }
+
+    this.isRunning = true;
+    const startTime = Date.now();
+
+    try {
+      // Pobierz wszystkie aktywne zamówienia od 10.2025
+      const minDate = new Date('2025-10-01');
+
+      const allDeliveries = await this.prisma.schucoDelivery.findMany({
+        where: {
+          archivedAt: null,
+          orderDateParsed: { gte: minDate },
+        },
+        orderBy: {
+          orderDateParsed: 'desc',
+        },
+        take: limit,
+        select: {
+          id: true,
+          orderNumber: true,
+          shippingStatus: true,
+        },
+      });
+
+      if (allDeliveries.length === 0) {
+        logger.info('[SchucoItemService] No deliveries found for fetchAllItems');
+        return {
+          totalDeliveries: 0,
+          processedDeliveries: 0,
+          newItems: 0,
+          updatedItems: 0,
+          unchangedItems: 0,
+          errors: 0,
+        };
+      }
+
+      logger.info(`[SchucoItemService] fetchAllItems: Processing ${allDeliveries.length} deliveries`);
+
+      return await this.fetchItemsForDeliveries(
+        allDeliveries.map((d) => ({ id: d.id, orderNumber: d.orderNumber, shippingStatus: d.shippingStatus }))
+      );
+    } finally {
+      this.isRunning = false;
+      const duration = Date.now() - startTime;
+      logger.info(`[SchucoItemService] fetchAllItems completed in ${duration}ms`);
+    }
+  }
+
+  /**
+   * Pobiera pozycje dla zamówień OD określonej daty (orderDateParsed)
+   * @param fromDate Data od której pobierać (włącznie)
+   * @param limit Maksymalna liczba zamówień do przetworzenia
+   */
+  async fetchItemsFromDate(fromDate: Date, limit = 500): Promise<FetchItemsResult> {
+    if (this.isRunning) {
+      throw new Error('Item fetch already in progress');
+    }
+
+    this.isRunning = true;
+    const startTime = Date.now();
+
+    try {
+      const deliveries = await this.prisma.schucoDelivery.findMany({
+        where: {
+          archivedAt: null,
+          orderDateParsed: { gte: fromDate },
+        },
+        orderBy: {
+          orderDateParsed: 'desc',
+        },
+        take: limit,
+        select: {
+          id: true,
+          orderNumber: true,
+          shippingStatus: true,
+        },
+      });
+
+      if (deliveries.length === 0) {
+        logger.info(`[SchucoItemService] No deliveries found from date ${fromDate.toISOString()}`);
+        return {
+          totalDeliveries: 0,
+          processedDeliveries: 0,
+          newItems: 0,
+          updatedItems: 0,
+          unchangedItems: 0,
+          errors: 0,
+        };
+      }
+
+      logger.info(
+        `[SchucoItemService] fetchItemsFromDate: Processing ${deliveries.length} deliveries from ${fromDate.toISOString()}`
+      );
+
+      return await this.fetchItemsForDeliveries(
+        deliveries.map((d) => ({ id: d.id, orderNumber: d.orderNumber, shippingStatus: d.shippingStatus }))
+      );
+    } finally {
+      this.isRunning = false;
+      const duration = Date.now() - startTime;
+      logger.info(`[SchucoItemService] fetchItemsFromDate completed in ${duration}ms`);
+    }
+  }
+
+  /**
+   * Zwraca status schedulera i ostatniego auto-fetch
+   */
+  getSchedulerStatus(): {
+    isSchedulerRunning: boolean;
+    lastAutoFetchTime: Date | null;
+  } {
+    return {
+      isSchedulerRunning: this.schedulerInterval !== null,
+      lastAutoFetchTime: this.lastAutoFetchTime,
+    };
+  }
+
+  /**
    * Wewnętrzna metoda pobierania pozycji dla listy zamówień
    */
   private async fetchItemsForDeliveries(
-    deliveries: { id: number; orderNumber: string }[]
+    deliveries: DeliveryToFetch[]
   ): Promise<FetchItemsResult> {
     const result: FetchItemsResult = {
       totalDeliveries: deliveries.length,
@@ -200,7 +501,12 @@ export class SchucoItemService {
 
           if (items && items.length > 0) {
             // Zapisz pozycje z change tracking
-            const storeResult = await this.storeItemsWithChangeTracking(delivery.id, items);
+            // Przekaż shippingStatus aby ustawić shippedQty=orderedQty dla dostarczonych zamówień
+            const storeResult = await this.storeItemsWithChangeTracking(
+              delivery.id,
+              items,
+              delivery.shippingStatus
+            );
             result.newItems += storeResult.newItems;
             result.updatedItems += storeResult.updatedItems;
             result.unchangedItems += storeResult.unchangedItems;
@@ -258,12 +564,18 @@ export class SchucoItemService {
 
   /**
    * Zapisuje pozycje zamówienia z change tracking
+   * @param shippingStatus - status zamówienia, używany do określenia czy ustawić shippedQty=orderedQty
    */
   private async storeItemsWithChangeTracking(
     schucoDeliveryId: number,
-    items: SchucoOrderItemRow[]
+    items: SchucoOrderItemRow[],
+    shippingStatus?: string | null
   ): Promise<{ newItems: number; updatedItems: number; unchangedItems: number }> {
     const stats = { newItems: 0, updatedItems: 0, unchangedItems: 0 };
+
+    // Sprawdź czy zamówienie jest dostarczone - wtedy ustawiamy shippedQty = orderedQty
+    // Schuco CSV zawsze pokazuje shippedQty=0 nawet dla dostarczonych zamówień
+    const isDelivered = shippingStatus && DELIVERED_STATUSES.includes(shippingStatus);
 
     // Pobierz istniejące pozycje
     const existingItems = await this.prisma.schucoOrderItem.findMany({
@@ -274,6 +586,9 @@ export class SchucoItemService {
 
     for (const item of items) {
       const existing = existingByPosition.get(item.position);
+
+      // Dla dostarczonych zamówień ustaw shippedQty = orderedQty
+      const effectiveShippedQty = isDelivered ? item.orderedQty : item.shippedQty;
 
       if (!existing) {
         // Nowa pozycja
@@ -287,7 +602,7 @@ export class SchucoItemService {
             articleNumber: item.articleNumber,
             articleDescription: item.articleDescription,
             orderedQty: item.orderedQty,
-            shippedQty: item.shippedQty,
+            shippedQty: effectiveShippedQty,
             unit: item.unit || 'szt.',
             dimensions: item.dimensions || null,
             configuration: item.configuration || null,
@@ -304,7 +619,7 @@ export class SchucoItemService {
         // Sprawdź czy są zmiany
         const changes = this.detectChanges(existing, item);
 
-        if (changes.hasChanges) {
+        if (changes.hasChanges || (isDelivered && existing.shippedQty !== effectiveShippedQty)) {
           // Parsuj datę dostawy z tygodnia (poniedziałek danego tygodnia)
           const deliveryDate = parseDeliveryWeek(item.deliveryWeek || null);
 
@@ -314,7 +629,7 @@ export class SchucoItemService {
               articleNumber: item.articleNumber,
               articleDescription: item.articleDescription,
               orderedQty: item.orderedQty,
-              shippedQty: item.shippedQty,
+              shippedQty: effectiveShippedQty,
               unit: item.unit || 'szt.',
               dimensions: item.dimensions || null,
               configuration: item.configuration || null,
@@ -484,6 +799,7 @@ export class SchucoItemService {
         select: {
           id: true,
           orderNumber: true,
+          shippingStatus: true,
           itemsFetchedAt: true,
         },
       });
@@ -505,7 +821,7 @@ export class SchucoItemService {
       );
 
       return await this.fetchItemsForDeliveries(
-        staleDeliveries.map((d) => ({ id: d.id, orderNumber: d.orderNumber }))
+        staleDeliveries.map((d) => ({ id: d.id, orderNumber: d.orderNumber, shippingStatus: d.shippingStatus }))
       );
     } finally {
       this.isRunning = false;

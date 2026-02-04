@@ -18,6 +18,7 @@ import { ValidationError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
 import { emitDeliveryCreated, emitOrderUpdated } from '../event-emitter.js';
 import type { VariantResolutionAction } from '../orderVariantService.js';
+import { formatDateWarsaw } from '../../utils/date-helpers.js';
 
 import { ImportFileSystemService, importFileSystemService, type CsvFileData } from './importFileSystemService.js';
 import { ImportValidationService } from './importValidationService.js';
@@ -503,7 +504,7 @@ export class UzyteBeleProcessor {
     const folderName = this.fileSystemService.getBaseName(normalizedFolder);
     const extractedDate = this.fileSystemService.extractDateFromFolderName(folderName);
 
-    const detectedDate = extractedDate ? extractedDate.toISOString().split('T')[0] : null;
+    const detectedDate = extractedDate ? formatDateWarsaw(extractedDate) : null;
 
     // Find CSV files recursively using file system service
     const csvFilesData = await this.fileSystemService.findCsvFilesRecursively(normalizedFolder, 3);
@@ -551,9 +552,7 @@ export class UzyteBeleProcessor {
           existingDeliveryInfo = {
             deliveryId: firstDeliveryOrder.delivery.id,
             deliveryNumber: firstDeliveryOrder.delivery.deliveryNumber,
-            deliveryDate: new Date(firstDeliveryOrder.delivery.deliveryDate)
-              .toISOString()
-              .split('T')[0],
+            deliveryDate: formatDateWarsaw(firstDeliveryOrder.delivery.deliveryDate),
           };
         }
 

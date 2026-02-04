@@ -10,6 +10,7 @@ export interface AuthenticatedRequest extends FastifyRequest {
   user?: {
     userId: string | number;
     email?: string;
+    role?: string;
   };
 }
 
@@ -30,10 +31,11 @@ export async function verifyAuth(request: AuthenticatedRequest, _reply: FastifyR
     throw new UnauthorizedError('Nieprawidłowy lub wygasły token');
   }
 
-  // Attach user to request
+  // Attach user to request (includes role for authorization)
   request.user = {
     userId: payload.userId,
     email: payload.email,
+    role: payload.role,
   };
 }
 

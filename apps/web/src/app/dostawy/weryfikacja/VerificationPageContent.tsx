@@ -212,6 +212,8 @@ export const VerificationPageContent: React.FC = () => {
   }) => {
     if (!selectedList) return;
 
+    // Używamy split('T')[0] bo selectedList.deliveryDate to string z API (może być ISO)
+    // a data.suggestedDate to Date - dla Date też używamy split bo toISOString jest bezpieczne dla dat bez czasu
     const deliveryDate = data.suggestedDate
       ? data.suggestedDate.toISOString().split('T')[0]
       : selectedList.deliveryDate.split('T')[0];

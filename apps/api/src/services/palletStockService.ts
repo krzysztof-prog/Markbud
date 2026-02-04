@@ -13,6 +13,7 @@
 import { prisma } from '../utils/prisma.js';
 import { logger } from '../utils/logger.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
+import { formatDateWarsaw } from '../utils/date-helpers.js';
 import type {
   PalletStockDay,
   PalletStockEntry,
@@ -775,7 +776,7 @@ export async function getCalendar(
   // Stwórz mapę dni z bazy
   const dayMap = new Map<string, PalletStockDay & { entries: PalletStockEntry[] }>();
   for (const day of existingDays) {
-    const dateStr = day.date.toISOString().split('T')[0];
+    const dateStr = formatDateWarsaw(day.date);
     dayMap.set(dateStr, day);
   }
 
@@ -790,7 +791,7 @@ export async function getCalendar(
   const days: CalendarDay[] = [];
   for (let d = 1; d <= daysInMonth; d++) {
     const date = new Date(year, month - 1, d);
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatDateWarsaw(date);
     const existingDay = dayMap.get(dateStr);
 
     let status: CalendarDayStatus = 'empty';

@@ -1,0 +1,1 @@
+export { PrivateColorsList } from './PrivateColorsList';

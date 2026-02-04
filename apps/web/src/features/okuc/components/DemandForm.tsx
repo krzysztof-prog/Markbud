@@ -1,25 +1,20 @@
 /**
  * Formularz dodawania/edycji zapotrzebowania OKUC
  *
- * Features:
- * - Dodawanie nowego zapotrzebowania
- * - Edycja istniejącego zapotrzebowania (z polem editReason)
- * - Wybór artykułu z listy
- * - Wybór tygodnia (HTML native week input)
- * - Walidacja ilości (minimum 1)
- * - Auto-close po submit
- *
- * Props:
- * - demand: OkucDemand | null - zapotrzebowanie do edycji (null = dodawanie)
- * - open: boolean - czy dialog jest otwarty
- * - onOpenChange: (open: boolean) => void - callback zmiany stanu
- * - onSubmit: (data: any) => void - callback wysyłania formularza
- * - isPending: boolean - czy trwa zapisywanie
+ * Walidacja: React Hook Form + Zod
+ * - Artykuł: wymagany (tylko przy dodawaniu)
+ * - Tydzień: wymagany, format RRRR-WTT
+ * - Ilość: wymagana, minimum 1
+ * - Powód edycji: wymagany (tylko przy edycji)
+ * - Błędy pokazywane inline pod polami (onBlur)
  */
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import {
   Dialog,
   DialogContent,
@@ -29,8 +24,8 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { FormField } from '@/components/ui/form-field';
 import {
   Select,
   SelectContent,
@@ -40,6 +35,29 @@ import {
 } from '@/components/ui/select';
 import { useOkucArticles } from '@/features/okuc/hooks';
 import type { OkucDemand, DemandStatus, DemandSource, CreateDemandInput, UpdateDemandInput } from '@/types/okuc';
+
+// Zod schema dla dodawania
+const createDemandSchema = z.object({
+  articleId: z.string().min(1, 'Wybierz artykuł'),
+  expectedWeek: z
+    .string()
+    .min(1, 'Tydzień jest wymagany')
+    .regex(/^\d{4}-W\d{2}$/, 'Nieprawidłowy format tygodnia (RRRR-WTT)'),
+  quantity: z
+    .string()
+    .min(1, 'Ilość jest wymagana')
+    .refine((val) => parseInt(val, 10) >= 1, 'Ilość musi być większa od 0'),
+  status: z.enum(['pending', 'confirmed', 'in_production', 'completed', 'cancelled']),
+  source: z.enum(['order', 'csv_import', 'manual']),
+  editReason: z.string().optional(),
+});
+
+// Zod schema dla edycji (wymaga editReason)
+const updateDemandSchema = createDemandSchema.extend({
+  editReason: z.string().min(1, 'Powód edycji jest wymagany'),
+});
+
+type DemandFormData = z.infer<typeof createDemandSchema>;
 
 interface DemandFormProps {
   demand: OkucDemand | null;
@@ -52,78 +70,80 @@ interface DemandFormProps {
 export function DemandForm({ demand, open, onOpenChange, onSubmit, isPending }: DemandFormProps) {
   const isEdit = !!demand;
 
-  // === DATA FETCHING ===
+  // Pobierz artykuły dla selecta
   const { data: articles = [], isLoading: isLoadingArticles } = useOkucArticles();
 
-  // === FORM STATE ===
-  const [articleId, setArticleId] = useState<string>('');
-  const [expectedWeek, setExpectedWeek] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [status, setStatus] = useState<DemandStatus>('pending');
-  const [source, setSource] = useState<DemandSource>('manual');
-  const [editReason, setEditReason] = useState('');
+  // React Hook Form z dynamiczną schemą
+  const {
+    register,
+    handleSubmit,
+    control,
+    reset,
+    formState: { errors, isValid },
+  } = useForm<DemandFormData>({
+    resolver: zodResolver(isEdit ? updateDemandSchema : createDemandSchema),
+    mode: 'onBlur', // Walidacja po wyjściu z pola
+    defaultValues: {
+      articleId: '',
+      expectedWeek: '',
+      quantity: '',
+      status: 'pending',
+      source: 'manual',
+      editReason: '',
+    },
+  });
 
-  // === RESET FORM ON OPEN/CLOSE ===
+  // Reset formularza przy otwarciu/zamknięciu
   useEffect(() => {
     if (open) {
       if (demand) {
-        // Edycja - załaduj dane z demand
-        setArticleId(demand.articleId.toString());
-        setExpectedWeek(demand.expectedWeek);
-        setQuantity(demand.quantity.toString());
-        setStatus(demand.status);
-        setSource(demand.source);
-        setEditReason(''); // Wyczyść edit reason
+        // Edycja - załaduj dane
+        reset({
+          articleId: demand.articleId.toString(),
+          expectedWeek: demand.expectedWeek,
+          quantity: demand.quantity.toString(),
+          status: demand.status,
+          source: demand.source,
+          editReason: '',
+        });
       } else {
-        // Dodawanie - wyczyść formularz
-        setArticleId('');
-        setExpectedWeek('');
-        setQuantity('');
-        setStatus('pending');
-        setSource('manual');
-        setEditReason('');
+        // Dodawanie - wyczyść
+        reset({
+          articleId: '',
+          expectedWeek: '',
+          quantity: '',
+          status: 'pending',
+          source: 'manual',
+          editReason: '',
+        });
       }
     }
-  }, [open, demand]);
+  }, [open, demand, reset]);
 
-  // === VALIDATION ===
-  const isValid = () => {
-    if (!articleId || !expectedWeek || !quantity) return false;
-    if (parseInt(quantity, 10) < 1) return false;
-    if (isEdit && !editReason.trim()) return false; // Edycja wymaga powodu
-    return true;
-  };
-
-  // === SUBMIT ===
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isValid()) return;
-
-    const quantityNum = parseInt(quantity, 10);
+  // Submit handler
+  const onFormSubmit = (data: DemandFormData) => {
+    const quantityNum = parseInt(data.quantity, 10);
 
     if (isEdit) {
-      // Edycja - tylko pola które mogą się zmienić
-      const data: UpdateDemandInput = {
+      const updateData: UpdateDemandInput = {
         quantity: quantityNum,
-        status,
-        expectedWeek,
-        editReason: editReason.trim(),
+        status: data.status as DemandStatus,
+        expectedWeek: data.expectedWeek,
+        editReason: data.editReason?.trim() || '',
       };
-      onSubmit(data);
+      onSubmit(updateData);
     } else {
-      // Dodawanie
-      const data: CreateDemandInput = {
-        articleId: parseInt(articleId, 10),
-        expectedWeek,
+      const createData: CreateDemandInput = {
+        articleId: parseInt(data.articleId, 10),
+        expectedWeek: data.expectedWeek,
         quantity: quantityNum,
-        status,
-        source,
+        status: data.status as DemandStatus,
+        source: data.source as DemandSource,
       };
-      onSubmit(data);
+      onSubmit(createData);
     }
   };
 
-  // === RENDER ===
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
@@ -138,117 +158,151 @@ export function DemandForm({ demand, open, onOpenChange, onSubmit, isPending }: 
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+        <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-4 mt-4">
           {/* Artykuł - tylko przy dodawaniu */}
           {!isEdit && (
-            <div className="space-y-2">
-              <Label htmlFor="articleId" className="required">
-                Artykuł
-              </Label>
-              <Select value={articleId} onValueChange={setArticleId} required>
-                <SelectTrigger id="articleId" disabled={isLoadingArticles}>
-                  <SelectValue placeholder={isLoadingArticles ? 'Ładowanie...' : 'Wybierz artykuł'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {articles.map((article) => (
-                    <SelectItem key={article.id} value={article.id.toString()}>
-                      {article.articleId} - {article.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <FormField
+              id="articleId"
+              label="Artykuł"
+              required
+              error={errors.articleId?.message}
+            >
+              <Controller
+                name="articleId"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={isLoadingArticles || isPending}
+                  >
+                    <SelectTrigger id="articleId">
+                      <SelectValue placeholder={isLoadingArticles ? 'Ładowanie...' : 'Wybierz artykuł'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {articles.map((article) => (
+                        <SelectItem key={article.id} value={article.id.toString()}>
+                          {article.articleId} - {article.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </FormField>
           )}
 
           {/* Tydzień */}
-          <div className="space-y-2">
-            <Label htmlFor="expectedWeek" className="required">
-              Tydzień
-            </Label>
+          <FormField
+            id="expectedWeek"
+            label="Tydzień"
+            required
+            error={errors.expectedWeek?.message}
+            hint="Format: RRRR-WTT (np. 2026-W05)"
+          >
             <Input
               id="expectedWeek"
               type="week"
-              value={expectedWeek}
-              onChange={(e) => setExpectedWeek(e.target.value)}
               placeholder="2026-W01"
-              required
+              {...register('expectedWeek')}
               disabled={isPending}
             />
-            <p className="text-xs text-muted-foreground">
-              Wybierz tydzień w formacie RRRR-WTT (np. 2026-W05)
-            </p>
-          </div>
+          </FormField>
 
           {/* Ilość */}
-          <div className="space-y-2">
-            <Label htmlFor="quantity" className="required">
-              Ilość
-            </Label>
+          <FormField
+            id="quantity"
+            label="Ilość"
+            required
+            error={errors.quantity?.message}
+          >
             <Input
               id="quantity"
               type="number"
               min="1"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
               placeholder="Wprowadź ilość"
-              required
+              {...register('quantity')}
               disabled={isPending}
             />
-          </div>
+          </FormField>
 
           {/* Status */}
-          <div className="space-y-2">
-            <Label htmlFor="status">Status</Label>
-            <Select value={status} onValueChange={(v) => setStatus(v as DemandStatus)}>
-              <SelectTrigger id="status" disabled={isPending}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pending">Oczekujące</SelectItem>
-                <SelectItem value="confirmed">Potwierdzone</SelectItem>
-                <SelectItem value="in_production">W produkcji</SelectItem>
-                <SelectItem value="completed">Zakończone</SelectItem>
-                <SelectItem value="cancelled">Anulowane</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <FormField
+            id="status"
+            label="Status"
+            error={errors.status?.message}
+          >
+            <Controller
+              name="status"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  disabled={isPending}
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Oczekujące</SelectItem>
+                    <SelectItem value="confirmed">Potwierdzone</SelectItem>
+                    <SelectItem value="in_production">W produkcji</SelectItem>
+                    <SelectItem value="completed">Zakończone</SelectItem>
+                    <SelectItem value="cancelled">Anulowane</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </FormField>
 
           {/* Źródło - tylko przy dodawaniu */}
           {!isEdit && (
-            <div className="space-y-2">
-              <Label htmlFor="source">Źródło</Label>
-              <Select value={source} onValueChange={(v) => setSource(v as DemandSource)}>
-                <SelectTrigger id="source" disabled={isPending}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="order">Zlecenie</SelectItem>
-                  <SelectItem value="csv_import">Import CSV</SelectItem>
-                  <SelectItem value="manual">Ręczne</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <FormField
+              id="source"
+              label="Źródło"
+              error={errors.source?.message}
+            >
+              <Controller
+                name="source"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={isPending}
+                  >
+                    <SelectTrigger id="source">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="order">Zlecenie</SelectItem>
+                      <SelectItem value="csv_import">Import CSV</SelectItem>
+                      <SelectItem value="manual">Ręczne</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </FormField>
           )}
 
           {/* Powód edycji - TYLKO przy edycji */}
           {isEdit && (
-            <div className="space-y-2">
-              <Label htmlFor="editReason" className="required">
-                Powód edycji
-              </Label>
+            <FormField
+              id="editReason"
+              label="Powód edycji"
+              required
+              error={errors.editReason?.message}
+              hint="Wymagane przy edycji ręcznej zapotrzebowania"
+            >
               <Textarea
                 id="editReason"
-                value={editReason}
-                onChange={(e) => setEditReason(e.target.value)}
                 placeholder="Opisz powód zmiany..."
                 rows={3}
-                required
+                {...register('editReason')}
                 disabled={isPending}
               />
-              <p className="text-xs text-muted-foreground">
-                Wymagane przy edycji ręcznej zapotrzebowania
-              </p>
-            </div>
+            </FormField>
           )}
 
           {/* Akcje */}
@@ -261,7 +315,7 @@ export function DemandForm({ demand, open, onOpenChange, onSubmit, isPending }: 
             >
               Anuluj
             </Button>
-            <Button type="submit" disabled={!isValid() || isPending}>
+            <Button type="submit" disabled={!isValid || isPending}>
               {isPending ? 'Zapisywanie...' : isEdit ? 'Zapisz zmiany' : 'Dodaj'}
             </Button>
           </div>

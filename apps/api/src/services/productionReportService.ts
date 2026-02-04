@@ -14,6 +14,7 @@
 import { productionReportRepository, ProductionReportRepository } from '../repositories/ProductionReportRepository.js';
 import { groszeToPln, centyToEur, type Grosze, type Centy } from '../utils/money.js';
 import { ValidationError, NotFoundError, ConflictError } from '../utils/errors.js';
+import { formatDateWarsaw, isSameDayWarsaw } from '../utils/date-helpers.js';
 
 // ============================================================================
 // TYPY
@@ -460,15 +461,15 @@ export class ProductionReportService {
     }
 
     const deliveryDate = sourceItem.deliveryDate;
-    const deliveryDateStr = new Date(deliveryDate).toISOString().split('T')[0];
+    const deliveryDateStr = formatDateWarsaw(deliveryDate);
 
     // Znajdź wszystkie zlecenia z tą samą datą dostawy (oprócz źródłowego)
     const ordersToUpdate = fullReport.items
       .filter(item => {
         if (item.orderId === sourceOrderId) return false;
         if (!item.deliveryDate) return false;
-        const itemDateStr = new Date(item.deliveryDate).toISOString().split('T')[0];
-        return itemDateStr === deliveryDateStr;
+        // Porównujemy daty w strefie Warsaw
+        return isSameDayWarsaw(item.deliveryDate, deliveryDate);
       })
       .map(item => ({
         orderId: item.orderId,

@@ -19,7 +19,8 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, Package } from 'lucide-react';
+import { ChevronDown, ChevronUp, Package, CheckCircle2, XCircle, AlertTriangle, Clock } from 'lucide-react';
+import type { ReadinessResult, AggregatedReadinessStatus } from '@/lib/api/orders';
 import DeliveryStats from './DeliveryStats';
 import DeliveryValue from './DeliveryValue';
 import DeliveryActions from './DeliveryActions';
@@ -61,6 +62,15 @@ interface DeliveryItem {
   quantity: number;
 }
 
+interface LabelCheckData {
+  id: number;
+  status: string;
+  results: Array<{
+    orderId: number;
+    status: string;
+  }>;
+}
+
 interface DeliveryRow {
   id: number;
   deliveryDate: string;
@@ -69,6 +79,7 @@ interface DeliveryRow {
   notes?: string | null;
   deliveryOrders?: DeliveryOrder[];
   deliveryItems?: DeliveryItem[];
+  labelChecks?: LabelCheckData[];
 }
 
 interface DeliveriesTableProps {
@@ -79,8 +90,57 @@ interface DeliveriesTableProps {
   onOptimize: (deliveryId: number) => void;
   onProtocol: (deliveryId: number) => void;
   onVerify: (deliveryId: number, deliveryDate: string) => void;
+  onCheckLabels: (labelCheckId: number | null) => void;
   onViewOrder: (orderId: number) => void;
   protocolLoadingId?: number | null;
+  /** QW-1: Mapa statusów readiness z batch query */
+  readinessMap?: Record<number, ReadinessResult>;
+}
+
+/**
+ * Komponent do wyświetlania ikony statusu readiness w tabeli
+ * QW-1: Zoptymalizowany - otrzymuje status z batch query
+ */
+function ReadinessIcon({ readiness }: { readiness?: ReadinessResult }) {
+  const iconClass = 'h-4 w-4 flex-shrink-0';
+
+  if (!readiness) {
+    return (
+      <span title="Ładowanie statusu..." className="inline-flex">
+        <Clock className={`${iconClass} text-slate-400`} />
+      </span>
+    );
+  }
+
+  const status: AggregatedReadinessStatus = readiness.status;
+
+  switch (status) {
+    case 'ready':
+      return (
+        <span title="Gotowe do wysyłki" className="inline-flex">
+          <CheckCircle2 className={`${iconClass} text-green-600`} />
+        </span>
+      );
+    case 'conditional':
+      return (
+        <span title="Warunkowe - sprawdź ostrzeżenia" className="inline-flex">
+          <AlertTriangle className={`${iconClass} text-yellow-600`} />
+        </span>
+      );
+    case 'blocked':
+      return (
+        <span title="Zablokowane - sprawdź blokady" className="inline-flex">
+          <XCircle className={`${iconClass} text-red-600`} />
+        </span>
+      );
+    case 'pending':
+    default:
+      return (
+        <span title="Oczekuje na sprawdzenie" className="inline-flex">
+          <Clock className={`${iconClass} text-slate-400`} />
+        </span>
+      );
+  }
 }
 
 const columnHelper = createColumnHelper<DeliveryRow>();
@@ -93,8 +153,10 @@ export default function DeliveriesTable({
   onOptimize,
   onProtocol,
   onVerify,
+  onCheckLabels,
   onViewOrder,
   protocolLoadingId,
+  readinessMap,
 }: DeliveriesTableProps) {
   // Sorting state: default by date ascending (oldest first)
   const [sorting, setSorting] = useState<SortingState>([
@@ -104,6 +166,15 @@ export default function DeliveriesTable({
   // Static columns - no dependencies on expandedRows
   const staticColumns = useMemo(
     () => [
+      // QW-1: Kolumna statusu readiness
+      columnHelper.display({
+        id: 'readiness',
+        header: 'Status',
+        cell: (info) => {
+          const delivery = info.row.original;
+          return <ReadinessIcon readiness={readinessMap?.[delivery.id]} />;
+        },
+      }),
       columnHelper.accessor('deliveryDate', {
         header: 'Data',
         cell: (info) => {
@@ -178,13 +249,14 @@ export default function DeliveriesTable({
               onOptimize={() => onOptimize(delivery.id)}
               onProtocol={() => onProtocol(delivery.id)}
               onVerify={() => onVerify(delivery.id, delivery.deliveryDate)}
+              onCheckLabels={() => onCheckLabels(delivery.labelChecks?.[0]?.id ?? null)}
               isProtocolLoading={isLoading}
             />
           );
         },
       }),
     ],
-    [onComplete, onOptimize, onProtocol, onVerify, protocolLoadingId]
+    [onComplete, onOptimize, onProtocol, onVerify, onCheckLabels, protocolLoadingId, readinessMap]
   );
 
   // Expand column - depends on expandedRows

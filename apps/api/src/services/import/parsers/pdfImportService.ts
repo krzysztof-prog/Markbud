@@ -16,6 +16,7 @@ import fs from 'fs';
 import pdf from 'pdf-parse';
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../../../utils/logger.js';
+import { plnToGrosze, eurToCenty } from '@markbud/shared';
 import type {
   IPdfImportService,
   ParsedPdfCeny,
@@ -61,12 +62,13 @@ export class PdfImportService implements IPdfImportService {
     }
 
     // Update order with PDF data
+    // WAŻNE: Konwertujemy do groszy/centów przed zapisem do bazy
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
         ...(parsed.currency === 'EUR'
-          ? { valueEur: parsed.valueNetto }
-          : { valuePln: parsed.valueNetto }),
+          ? { valueEur: eurToCenty(parsed.valueNetto) }
+          : { valuePln: plnToGrosze(parsed.valueNetto) }),
       },
     });
 

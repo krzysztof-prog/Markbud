@@ -82,7 +82,9 @@ export const useProductionSelection = (): UseProductionSelectionReturn => {
     setSelectedDeliveryIds(new Set());
   }, []);
 
-  const totalSelected = selectedOrderIds.size + selectedDeliveryIds.size;
+  // Licznik pokazuje tylko unikalne zlecenia (nie liczymy dostaw osobno,
+  // bo zaznaczenie dostawy automatycznie dodaje jej zlecenia do selectedOrderIds)
+  const totalSelected = selectedOrderIds.size;
   const hasSelection = totalSelected > 0;
 
   return {

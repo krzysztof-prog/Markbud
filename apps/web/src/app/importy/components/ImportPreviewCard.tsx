@@ -9,8 +9,8 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Check, AlertTriangle, X, AlertCircle, Download } from 'lucide-react';
-import { OrderVariantConflictModal } from '@/features/orders/components/OrderVariantConflictModal';
+import { Check, AlertTriangle, X, AlertCircle, Download, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { getTodayWarsaw } from '@/lib/date-utils';
 import type { ImportPreview } from '@/types';
 
 // Typy pomocnicze dla danych importu
@@ -60,18 +60,10 @@ export function ImportPreviewCard({
   open,
   onOpenChange,
 }: ImportPreviewCardProps) {
-  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [conflictExpanded, setConflictExpanded] = useState(false);
 
   const hasConflict = preview?.variantConflict?.type && preview.variantConflict.existingOrders.length > 0;
   const hasErrors = preview?.errors && preview.errors.length > 0;
-
-  const handleApprove = () => {
-    if (hasConflict) {
-      setConflictModalOpen(true);
-    } else {
-      onApprove();
-    }
-  };
 
   const handleResolveConflict = (
     resolutionType: 'keep_existing' | 'use_latest',
@@ -79,7 +71,6 @@ export function ImportPreviewCard({
   ) => {
     const resolution = { type: resolutionType, deleteOlder };
     onApprove(resolution);
-    setConflictModalOpen(false);
   };
 
   const handleDownloadErrors = () => {
@@ -104,7 +95,7 @@ export function ImportPreviewCard({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `bledy_importu_${metadata?.orderNumber || 'unknown'}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `bledy_importu_${metadata?.orderNumber || 'unknown'}_${getTodayWarsaw()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -143,24 +134,92 @@ export function ImportPreviewCard({
             {/* Naglowek z numerem zlecenia */}
             <PreviewHeader metadata={metadata} requirementCount={requirementItems.length} windowCount={windowItems.length} />
 
-            {/* Konflikt wariantow - warning */}
-            {hasConflict && (
+            {/* Konflikt wariantow - inline resolution */}
+            {hasConflict && preview.variantConflict && (
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5" />
+                  <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
-                    <h4 className="font-medium text-orange-900 mb-1">Wykryto konflikt wariantow</h4>
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="font-medium text-orange-900">
+                        {preview.variantConflict.type === 'base_exists' && 'Zlecenie bazowe już istnieje'}
+                        {preview.variantConflict.type === 'variant_exists' && 'Wariant zlecenia już istnieje'}
+                        {preview.variantConflict.type === 'multiple_variants' && 'Wiele wariantów zlecenia'}
+                      </h4>
+                      <button
+                        onClick={() => setConflictExpanded(!conflictExpanded)}
+                        className="text-orange-700 hover:text-orange-900 p-1"
+                      >
+                        {conflictExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </button>
+                    </div>
                     <p className="text-sm text-orange-800 mb-3">
-                      W systemie istnieja juz zlecenia z tym numerem bazowym.
-                      Kliknij "Rozwiaz konflikt" aby zdecydowac jak obsluzyc import.
+                      W systemie istnieje {preview.variantConflict.existingOrders.length} {preview.variantConflict.existingOrders.length === 1 ? 'zlecenie' : 'zleceń'} z tym numerem bazowym.
                     </p>
-                    <div className="flex gap-2">
-                      <Badge variant="outline" className="text-orange-700 border-orange-300">
-                        Typ: {preview.variantConflict?.type}
-                      </Badge>
-                      <Badge variant="outline" className="text-orange-700 border-orange-300">
-                        Istniejace: {preview.variantConflict?.existingOrders.length}
-                      </Badge>
+
+                    {/* Rozwinięte szczegóły */}
+                    {conflictExpanded && (
+                      <div className="space-y-3 mb-4">
+                        {/* Lista istniejących */}
+                        <div className="bg-white rounded border border-orange-200 p-3">
+                          <p className="text-xs text-orange-700 font-medium mb-2">Istniejące zlecenia:</p>
+                          <div className="space-y-1">
+                            {preview.variantConflict.existingOrders.map((order, idx) => (
+                              <div key={idx} className="flex items-center gap-3 text-sm">
+                                <span className="font-mono">{order.orderNumber}</span>
+                                {order.windowCount !== undefined && (
+                                  <Badge variant="outline" className="text-xs">{order.windowCount} okien</Badge>
+                                )}
+                                {order.delivery && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Dostawa: {new Date(order.delivery.deliveryDate).toLocaleDateString('pl-PL')}
+                                  </Badge>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Rekomendacja */}
+                        {preview.variantConflict.recommendation && (
+                          <p className="text-xs text-green-700 bg-green-50 rounded p-2 border border-green-200">
+                            <strong>Rekomendacja:</strong> {preview.variantConflict.recommendation}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Inline action buttons */}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleResolveConflict('keep_existing')}
+                        disabled={isPending}
+                        className="border-slate-400 text-slate-700 hover:bg-slate-100"
+                      >
+                        Zachowaj istniejące
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleResolveConflict('use_latest', false)}
+                        disabled={isPending}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        {isPending ? 'Przetwarzanie...' : 'Użyj nowego'}
+                      </Button>
+                      {preview.variantConflict.type === 'multiple_variants' && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleResolveConflict('use_latest', true)}
+                          disabled={isPending}
+                          className="gap-1"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          Użyj nowego i usuń stare
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -203,23 +262,14 @@ export function ImportPreviewCard({
             <div className="flex gap-2 pt-4 border-t">
               {preview.import.status === 'pending' && (
                 <>
-                  {hasConflict ? (
+                  {/* Przycisk Zatwierdź tylko gdy NIE ma konfliktu (konflikty rozwiązywane inline powyżej) */}
+                  {!hasConflict && (
                     <Button
-                      onClick={() => setConflictModalOpen(true)}
-                      variant="outline"
-                      className="border-orange-400 text-orange-700 hover:bg-orange-50"
-                      disabled={isPending}
-                    >
-                      <AlertTriangle className="h-4 w-4 mr-1" />
-                      Rozwiaz konflikt
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={handleApprove}
+                      onClick={() => onApprove()}
                       disabled={isPending}
                     >
                       <Check className="h-4 w-4 mr-1" />
-                      Zatwierdz import
+                      {isPending ? 'Przetwarzanie...' : 'Zatwierdz import'}
                     </Button>
                   )}
                   {onReject && (
@@ -242,15 +292,6 @@ export function ImportPreviewCard({
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Modal konfliktu wariantow */}
-      <OrderVariantConflictModal
-        open={conflictModalOpen}
-        onOpenChange={setConflictModalOpen}
-        conflict={preview?.variantConflict || null}
-        onResolve={handleResolveConflict}
-        isResolving={isPending}
-      />
     </>
   );
 }

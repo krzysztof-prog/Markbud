@@ -25,8 +25,12 @@ import {
   type ManualStatusInput,
 } from '../validators/order.js';
 import { prisma } from '../index.js';
-import { parseIntParam } from '../utils/errors.js';
+import { parseIntParam, ForbiddenError } from '../utils/errors.js';
 import { emitOrderUpdated } from '../services/event-emitter.js';
+import type { AuthenticatedRequest } from '../middleware/auth.js';
+
+// Role z uprawnieniami do usuwania zleceń
+const DELETE_ALLOWED_ROLES = ['owner', 'admin', 'kierownik'];
 import { ReadinessOrchestrator } from '../services/readinessOrchestrator.js';
 
 export class OrderHandler {
@@ -95,12 +99,28 @@ export class OrderHandler {
     return reply.send(order);
   }
 
+  /**
+   * Soft delete zlecenia - tylko dla admin/kierownik, tylko status "new"
+   */
   async delete(
-    request: FastifyRequest<{ Params: { id: string } }>,
+    request: AuthenticatedRequest & FastifyRequest<{ Params: { id: string } }>,
     reply: FastifyReply
   ) {
+    // Sprawdzenie uprawnień - tylko admin/kierownik
+    const userRole = request.user?.role;
+    if (!userRole || !DELETE_ALLOWED_ROLES.includes(userRole)) {
+      throw new ForbiddenError(
+        'Tylko administrator lub kierownik może usuwać zlecenia'
+      );
+    }
+
+    const userId = request.user?.userId;
+    if (!userId) {
+      throw new ForbiddenError('Brak identyfikatora użytkownika');
+    }
+
     const { id } = orderParamsSchema.parse(request.params);
-    await this.service.deleteOrder(parseInt(id));
+    await this.service.deleteOrder(parseInt(id), Number(userId));
     return reply.status(204).send();
   }
 
@@ -461,5 +481,148 @@ export class OrderHandler {
         variantType: order.variantType,
       },
     });
+  }
+
+  /**
+   * Check if glass order TXT exists for order
+   * GET /api/orders/:id/has-glass-order-txt
+   *
+   * Szuka zamówienia szyb (GlassOrder) które zawiera pozycje dla tego zlecenia,
+   * następnie sprawdza czy istnieje plik TXT w archiwum.
+   */
+  async hasGlassOrderTxt(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = orderParamsSchema.parse(request.params);
+    const orderId = parseInt(id);
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { orderNumber: true },
+    });
+
+    if (!order) {
+      return reply.status(404).send({ error: 'Zlecenie nie znalezione' });
+    }
+
+    // Znajdź GlassOrder który zawiera pozycje dla tego zlecenia
+    const glassOrderItem = await prisma.glassOrderItem.findFirst({
+      where: { orderNumber: order.orderNumber },
+      select: {
+        glassOrder: {
+          select: {
+            id: true,
+            glassOrderNumber: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!glassOrderItem?.glassOrder) {
+      return reply.send({
+        hasGlassOrderTxt: false,
+        glassOrderNumber: null,
+        message: 'Brak zamówienia szyb',
+      });
+    }
+
+    const { glassOrderNumber } = glassOrderItem.glassOrder;
+
+    // Znajdź FileImport z tym glassOrderNumber w metadata
+    const fileImport = await prisma.fileImport.findFirst({
+      where: {
+        fileType: { in: ['glass_order', 'glass_order_correction'] },
+        status: 'completed',
+        metadata: {
+          contains: `"glassOrderNumber":"${glassOrderNumber}"`,
+        },
+      },
+      orderBy: { processedAt: 'desc' },
+    });
+
+    if (!fileImport) {
+      return reply.send({
+        hasGlassOrderTxt: false,
+        glassOrderNumber,
+        message: 'Nie znaleziono pliku importu',
+      });
+    }
+
+    // Sprawdź czy plik istnieje (może być w archiwum)
+    const fileExists = existsSync(fileImport.filepath);
+
+    return reply.send({
+      hasGlassOrderTxt: fileExists,
+      glassOrderNumber,
+      filename: fileImport.filename,
+    });
+  }
+
+  /**
+   * Download glass order TXT file for order
+   * GET /api/orders/:id/glass-order-txt
+   */
+  async downloadGlassOrderTxt(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = orderParamsSchema.parse(request.params);
+    const orderId = parseInt(id);
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { orderNumber: true },
+    });
+
+    if (!order) {
+      return reply.status(404).send({ error: 'Zlecenie nie znalezione' });
+    }
+
+    // Znajdź GlassOrder który zawiera pozycje dla tego zlecenia
+    const glassOrderItem = await prisma.glassOrderItem.findFirst({
+      where: { orderNumber: order.orderNumber },
+      select: {
+        glassOrder: {
+          select: {
+            glassOrderNumber: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!glassOrderItem?.glassOrder) {
+      return reply.status(404).send({ error: 'Brak zamówienia szyb dla tego zlecenia' });
+    }
+
+    const { glassOrderNumber } = glassOrderItem.glassOrder;
+
+    // Znajdź FileImport z tym glassOrderNumber w metadata
+    const fileImport = await prisma.fileImport.findFirst({
+      where: {
+        fileType: { in: ['glass_order', 'glass_order_correction'] },
+        status: 'completed',
+        metadata: {
+          contains: `"glassOrderNumber":"${glassOrderNumber}"`,
+        },
+      },
+      orderBy: { processedAt: 'desc' },
+    });
+
+    if (!fileImport) {
+      return reply.status(404).send({ error: 'Nie znaleziono pliku zamówienia szyb' });
+    }
+
+    if (!existsSync(fileImport.filepath)) {
+      return reply.status(404).send({ error: 'Plik zamówienia szyb nie został znaleziony na dysku' });
+    }
+
+    reply.header('Content-Type', 'text/plain; charset=utf-8');
+    reply.header('Content-Disposition', `inline; filename="${fileImport.filename}"`);
+
+    const stream = createReadStream(fileImport.filepath);
+    return reply.send(stream);
   }
 }

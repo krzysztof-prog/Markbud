@@ -208,4 +208,58 @@ export const logisticsApi = {
       method: 'POST',
       body: JSON.stringify({ field, previousValue }),
     }),
+
+  // ============================================================================
+  // USTAWIANIE DATY DOSTAWY ZLECENIA
+  // ============================================================================
+
+  /**
+   * POST /api/logistics/set-order-delivery-date
+   * Ustawia datę dostawy dla zlecenia i dodaje je do odpowiedniej dostawy
+   * Używane gdy zlecenie zostało znalezione ale nie ma ustawionej daty dostawy
+   *
+   * @param orderId ID zlecenia
+   * @param deliveryCode Kod dostawy np. "08.01.2026_II" - identyfikuje właściwą dostawę
+   */
+  setOrderDeliveryDate: (orderId: number, deliveryCode: string) =>
+    fetchApi<{ success: boolean; orderId: number; deliveryDate: string }>(
+      '/api/logistics/set-order-delivery-date',
+      {
+        method: 'POST',
+        body: JSON.stringify({ orderId, deliveryCode }),
+      }
+    ),
+
+  // ============================================================================
+  // ORPHAN ORDERS - Zlecenia na dostawie ale nie na liście mailowej
+  // ============================================================================
+
+  /**
+   * GET /api/logistics/deliveries/:code/orphan-orders
+   * Pobiera zlecenia przypisane do dostawy ale nieobecne na liście mailowej
+   */
+  getOrphanOrders: (deliveryCode: string) =>
+    fetchApi<{
+      orders: {
+        id: number;
+        orderNumber: string;
+        client: string | null;
+        project: string | null;
+        status: string | null;
+        deliveryDate: string;
+      }[];
+      totalCount: number;
+    }>(`/api/logistics/deliveries/${encodeURIComponent(deliveryCode)}/orphan-orders`),
+
+  /**
+   * DELETE /api/logistics/orders/:id/remove-from-delivery
+   * Usuwa zlecenie z dostawy (czyści datę dostawy)
+   */
+  removeOrderFromDelivery: (orderId: number) =>
+    fetchApi<{ orderId: number; orderNumber: string }>(
+      `/api/logistics/orders/${orderId}/remove-from-delivery`,
+      {
+        method: 'DELETE',
+      }
+    ),
 };

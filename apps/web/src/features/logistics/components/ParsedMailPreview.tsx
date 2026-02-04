@@ -14,7 +14,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { AlertTriangle, CheckCircle2, Clock, XCircle, Ban, RefreshCw, Pencil, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, XCircle, Ban, RefreshCw, Pencil, Trash2, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,6 +38,7 @@ import {
   type ItemFlag,
 } from '../types';
 import { ParsedItemEditor } from './ParsedItemEditor';
+import { useSetOrderDeliveryDate } from '../hooks';
 
 // ========== Typy Props ==========
 
@@ -47,6 +48,8 @@ interface ParsedMailPreviewProps {
   onSaveAll: (data: SaveMailListInput[]) => void;
   onCancel: () => void;
   isSaving: boolean;
+  /** Tryb kompaktowy dla panelu bocznego */
+  compact?: boolean;
 }
 
 interface DeliveryStatusBadgeProps {
@@ -58,6 +61,8 @@ interface DeliveryCardProps {
   deliveryDate: string;
   onEditItem: (deliveryIndex: number, itemPosition: number) => void;
   onDeleteItem: (deliveryIndex: number, itemPosition: number) => void;
+  onSetDeliveryDate: (orderId: number, deliveryCode: string) => void;
+  isSettingDeliveryDate: boolean;
 }
 
 // ========== Komponenty pomocnicze ==========
@@ -160,7 +165,18 @@ function calculateItemStatus(flags: ItemFlag[]): ItemStatus {
 /**
  * Karta z pojedynczą dostawą (Klient nr X)
  */
-function DeliveryCard({ delivery, deliveryDate: _deliveryDate, onEditItem, onDeleteItem }: DeliveryCardProps) {
+function DeliveryCard({ delivery, deliveryDate, onEditItem, onDeleteItem, onSetDeliveryDate, isSettingDeliveryDate }: DeliveryCardProps) {
+  // Formatuj datę do krótkiej formy DD.MM
+  const shortDate = (() => {
+    try {
+      const date = new Date(deliveryDate);
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      return `${day}.${month}`;
+    } catch {
+      return 'DD.MM';
+    }
+  })();
   // Zliczamy pozycje z różnymi statusami
   const statusCounts = delivery.items.reduce(
     (acc, item) => {
@@ -279,6 +295,19 @@ function DeliveryCard({ delivery, deliveryDate: _deliveryDate, onEditItem, onDel
                           {item.matchedOrder.client}
                         </div>
                       )}
+                      {/* Przycisk "Ustaw datę" gdy zlecenie istnieje ale nie ma daty dostawy */}
+                      {!item.matchedOrder.deliveryDate && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-xs mt-1 text-orange-600 border-orange-300 hover:bg-orange-50"
+                          disabled={isSettingDeliveryDate}
+                          onClick={() => onSetDeliveryDate(item.matchedOrder!.id, delivery.deliveryCode)}
+                        >
+                          <Calendar className="h-3 w-3 mr-1" />
+                          {isSettingDeliveryDate ? 'Ustawianie...' : `Ustaw datę ${shortDate}`}
+                        </Button>
+                      )}
                     </div>
                   ) : (
                     <span className="text-yellow-600 text-sm flex items-center gap-1">
@@ -337,6 +366,7 @@ export function ParsedMailPreview({
   onSaveAll,
   onCancel,
   isSaving,
+  compact = false,
 }: ParsedMailPreviewProps) {
   const { deliveryDate, isUpdate, warnings } = parseResult;
 
@@ -351,6 +381,30 @@ export function ParsedMailPreview({
     itemPosition: number;
     item: ParseResultItem;
   } | null>(null);
+
+  // Mutacja do ustawiania daty dostawy zlecenia
+  const setDeliveryDateMutation = useSetOrderDeliveryDate({
+    onSuccess: (data) => {
+      // Po ustawieniu daty, zaktualizuj lokalny stan - dodaj deliveryDate do matchedOrder
+      setEditedDeliveries((prev) =>
+        prev.map((delivery) => ({
+          ...delivery,
+          items: delivery.items.map((item) => {
+            if (item.matchedOrder?.id === data.orderId) {
+              return {
+                ...item,
+                matchedOrder: {
+                  ...item.matchedOrder,
+                  deliveryDate: data.deliveryDate,
+                },
+              };
+            }
+            return item;
+          }),
+        }))
+      );
+    },
+  });
 
   // Obsługa otwarcia edycji pozycji
   const handleEditItem = useCallback((deliveryIndex: number, itemPosition: number) => {
@@ -537,6 +591,8 @@ export function ParsedMailPreview({
             deliveryDate={deliveryDate.suggested}
             onEditItem={handleEditItem}
             onDeleteItem={handleDeleteItem}
+            onSetDeliveryDate={(orderId, deliveryCode) => setDeliveryDateMutation.mutate({ orderId, deliveryCode })}
+            isSettingDeliveryDate={setDeliveryDateMutation.isPending}
           />
         ))}
       </div>

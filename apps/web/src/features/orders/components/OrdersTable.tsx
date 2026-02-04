@@ -45,6 +45,10 @@ interface OrdersTableProps {
   // Manual status callback
   onManualStatusChange?: (orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => void;
 
+  // Delete order (tylko dla admin/kierownik)
+  canDeleteOrders?: boolean;
+  onDeleteOrder?: (orderId: number, orderNumber: string) => void;
+
   // Grouping
   getGroupLabel: (key: string) => string;
 
@@ -81,6 +85,8 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   onSchucoStatusClick,
   onGlassDiscrepancyClick,
   onManualStatusChange,
+  canDeleteOrders,
+  onDeleteOrder,
   getGroupLabel,
   missingOrderNumbers = [],
   showOnlyMissing = false,
@@ -252,6 +258,8 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                     onSchucoStatusClick={onSchucoStatusClick}
                     onGlassDiscrepancyClick={onGlassDiscrepancyClick}
                     onManualStatusChange={onManualStatusChange}
+                    canDeleteOrders={canDeleteOrders}
+                    onDeleteOrder={onDeleteOrder}
                   />
                 );
               })}

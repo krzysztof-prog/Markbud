@@ -10,7 +10,13 @@ export { dashboardApi } from './dashboard';
 
 // Orders
 export { ordersApi } from './orders';
-export type { ReadinessResult, ReadinessSignal, ChecklistItem } from './orders';
+export type {
+  ReadinessResult,
+  ReadinessSignal,
+  ReadinessCheckResult,
+  ChecklistItem,
+  AggregatedReadinessStatus,
+} from './orders';
 
 // Deliveries
 export { deliveriesApi } from './deliveries';
@@ -55,6 +61,10 @@ export { monthlyReportsApi } from './monthly-reports';
 
 // Imports
 export { importsApi } from './imports';
+
+// Gmail IMAP
+export { gmailApi } from './gmail';
+export type { GmailStatus, GmailFetchLog, GmailFetchResult, GmailTestResult } from './gmail';
 
 // Users
 export { usersApi } from './users';

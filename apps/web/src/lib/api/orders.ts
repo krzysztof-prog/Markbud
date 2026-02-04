@@ -28,28 +28,39 @@ interface OrderSearchResult {
   windows: Array<{ reference: string | null }>;
 }
 
-// ReadinessResult type for System Brain
+// ReadinessResult type for System Brain (DeliveryReadinessAggregator)
+export type AggregatedReadinessStatus = 'ready' | 'conditional' | 'blocked' | 'pending';
+
 export interface ReadinessResult {
-  ready: boolean;
-  blocking: ReadinessSignal[];
-  warnings: ReadinessSignal[];
+  status: AggregatedReadinessStatus;
+  blocking: ReadinessCheckResult[];
+  warnings: ReadinessCheckResult[];
+  passed: ReadinessCheckResult[];
   checklist: ChecklistItem[];
+  lastCalculatedAt: string;
+  // Computed property for backwards compatibility
+  ready?: boolean;
 }
 
-export interface ReadinessSignal {
-  module: 'warehouse' | 'glass' | 'okuc' | 'pallet' | 'approval' | 'variant';
-  requirement: string;
+export interface ReadinessCheckResult {
+  module: string;
   status: 'ok' | 'warning' | 'blocking';
   message: string;
-  actionRequired?: string;
-  metadata?: Record<string, unknown>;
+  details?: Array<{
+    itemId?: string;
+    orderId?: number;
+    reason?: string;
+  }>;
 }
 
+// Alias dla starszego kodu
+export type ReadinessSignal = ReadinessCheckResult;
+
 export interface ChecklistItem {
-  id: string;
+  module: string;
   label: string;
-  checked: boolean;
-  blocking: boolean;
+  status: 'ok' | 'warning' | 'blocking';
+  message: string;
 }
 
 // Zlecenia
@@ -85,6 +96,23 @@ export const ordersApi = {
       return await response.json();
     } catch {
       return { hasPdf: false, filename: null };
+    }
+  },
+  // Sprawdź czy istnieje plik TXT zamówienia szyb dla zlecenia
+  checkGlassOrderTxt: async (id: number): Promise<{ hasGlassOrderTxt: boolean; glassOrderNumber: string | null; filename?: string; message?: string }> => {
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${API_URL}/api/orders/${id}/has-glass-order-txt`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        return { hasGlassOrderTxt: false, glassOrderNumber: null };
+      }
+      return await response.json();
+    } catch {
+      return { hasGlassOrderTxt: false, glassOrderNumber: null };
     }
   },
   create: (data: CreateOrderData) =>

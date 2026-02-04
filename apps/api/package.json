@@ -1,5 +1,5 @@
 {
-  "name": "@akrobud/api",
+  "name": "@markbud/api",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -39,10 +39,12 @@
     "csv-parse": "^6.1.0",
     "csv-parser": "^3.0.0",
     "date-fns": "^3.6.0",
+    "dayjs": "^1.11.19",
     "dotenv": "^16.3.1",
     "exceljs": "^4.4.0",
     "fastify": "^4.25.2",
     "iconv-lite": "^0.7.0",
+    "imapflow": "^1.2.8",
     "jimp": "0.22.12",
     "jsonwebtoken": "^9.0.2",
     "node-cache": "^5.1.2",
@@ -63,7 +65,7 @@
   "devDependencies": {
     "@types/node": "^20.19.25",
     "@types/node-cron": "^3.0.11",
-    "@types/pdf-parse": "^1.1.4",
+    "@types/pdf-parse": "^1.1.5",
     "@types/pdfkit": "^0.17.4",
     "@vitest/coverage-v8": "^4.0.16",
     "@vitest/ui": "^4.0.14",

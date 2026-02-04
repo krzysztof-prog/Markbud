@@ -2,6 +2,8 @@
  * Date formatting utilities for manager feature
  */
 
+import { getTodayWarsaw } from '@/lib/date-utils';
+
 /**
  * Format date to Polish locale (DD.MM.YYYY)
  * @param date - Date string, Date object, null or undefined
@@ -32,5 +34,5 @@ export const isOverdue = (date: string | Date | null | undefined): boolean => {
  * @returns Today's date string
  */
 export const getTodayISOString = (): string => {
-  return new Date().toISOString().split('T')[0];
+  return getTodayWarsaw();
 };

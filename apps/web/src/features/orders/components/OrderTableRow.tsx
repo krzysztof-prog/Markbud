@@ -13,7 +13,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Check, X, Pencil, MoreVertical, Ban, Clock, XCircle, CircleOff } from 'lucide-react';
+import { Check, X, Pencil, MoreVertical, Ban, Clock, XCircle, CircleOff, Trash2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,6 +61,10 @@ interface OrderTableRowProps {
 
   // Manual status callback
   onManualStatusChange?: (orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => void;
+
+  // Delete order (tylko dla admin/kierownik)
+  canDeleteOrders?: boolean;
+  onDeleteOrder?: (orderId: number, orderNumber: string) => void;
 }
 
 // ================================
@@ -102,6 +106,8 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
   onSchucoStatusClick,
   onGlassDiscrepancyClick,
   onManualStatusChange,
+  canDeleteOrders,
+  onDeleteOrder,
 }) => {
   const isEditing = editingCell?.orderId === order.id;
 
@@ -231,6 +237,19 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
                         </DropdownMenuItem>
                       </>
                     )}
+                    {/* Opcja usuwania zlecenia - tylko dla admin/kierownik i status "new" */}
+                    {canDeleteOrders && order.status === 'new' && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => onDeleteOrder?.(order.id, order.orderNumber)}
+                          className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          <span>Usuń zlecenie</span>
+                        </DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
 
@@ -278,6 +297,10 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
         }
 
         case 'glassDeliveryDate': {
+          // totalGlasses = ile szyb potrzeba (z OrderGlass)
+          // orderedGlassCount = ile zamówiono u dostawcy
+          // deliveredGlassCount = ile dostarczono
+          const needed = order.totalGlasses ?? 0;
           const ordered = order.orderedGlassCount ?? 0;
           const delivered = order.deliveredGlassCount ?? 0;
           const deadline = order.deadline ? new Date(order.deadline) : null;
@@ -290,55 +313,60 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           let isClickable = false;
 
           // Priorytet statusów:
-          // 1. Brak zamówienia (ordered = 0) + sprawdź czy zbliża się deadline
-          // 2. Dostarczone (delivered >= ordered)
-          // 3. Rozbieżność (częściowo/nadwyżka) - klikalny
-          // 4. Zamówione ale nie dostarczone
-          // 5. Brak danych
+          // 1. Brak szyb w zleceniu (needed = 0) → "-"
+          // 2. Potrzebne ale nie zamówione (needed > 0, ordered = 0) → "ZAMÓW"
+          // 3. Dostarczone wszystkie (delivered >= needed) → "Dostarczone"
+          // 4. Częściowo dostarczone (0 < delivered < needed) → "Częściowo"
+          // 5. Zamówione ale nie dostarczone (ordered > 0, delivered = 0) → data/status
 
-          if (ordered === 0) {
-            // Sprawdź czy deadline jest w ciągu 2 tygodni
+          if (needed === 0) {
+            // Brak szyb w zleceniu
+            content = '-';
+            colorClass = 'text-slate-400';
+          } else if (ordered === 0) {
+            // Potrzebne szyby ale nie zamówione - sprawdź deadline
             if (deadline && deadline <= twoWeeksFromNow && deadline > now) {
               content = 'ZAMÓW';
               colorClass = 'bg-red-100 text-red-700 font-semibold';
-              tooltipContent = `Termin realizacji: ${formatDate(order.deadline)}\nZbliża się termin - zamów szyby!`;
+              tooltipContent = `Potrzebne: ${needed} szt.\nTermin realizacji: ${formatDate(order.deadline)}\nZbliża się termin - zamów szyby!`;
             } else if (deadline && deadline <= now) {
               content = 'ZAMÓW';
               colorClass = 'bg-red-200 text-red-800 font-semibold animate-pulse';
-              tooltipContent = `Termin realizacji: ${formatDate(order.deadline)}\nTermin minął - pilnie zamów szyby!`;
+              tooltipContent = `Potrzebne: ${needed} szt.\nTermin realizacji: ${formatDate(order.deadline)}\nTermin minął - pilnie zamów szyby!`;
             } else {
               content = '-';
               colorClass = 'text-slate-400';
+              tooltipContent = `Potrzebne: ${needed} szt.\nNie zamówiono jeszcze szyb`;
             }
-          } else if (delivered >= ordered && delivered > 0) {
-            // Dostarczone (lub nadwyżka)
+          } else if (delivered >= needed && delivered > 0) {
+            // Dostarczone wszystkie potrzebne
             content = 'Dostarczone';
             colorClass = 'bg-green-100 text-green-700';
             const deliveryDate = order.glassDeliveryDate ? formatDate(order.glassDeliveryDate) : null;
-            tooltipContent = `Data dostawy: ${deliveryDate || 'brak'}\nZamówiono: ${ordered} szt.\nDostarczone: ${delivered} szt.`;
+            tooltipContent = `Data dostawy: ${deliveryDate || 'brak'}\nPotrzebne: ${needed} szt.\nDostarczone: ${delivered} szt.`;
 
             // Nadwyżka - pokaż jako klikalny
-            if (delivered > ordered) {
+            if (delivered > needed) {
               content = 'Nadwyżka';
               colorClass = 'bg-orange-100 text-orange-700 cursor-pointer hover:bg-orange-200';
               isClickable = true;
-              tooltipContent = `Nadwyżka szyb!\nZamówiono: ${ordered} szt.\nDostarczone: ${delivered} szt.\nKliknij aby zobaczyć szczegóły`;
+              tooltipContent = `Nadwyżka szyb!\nPotrzebne: ${needed} szt.\nDostarczone: ${delivered} szt.\nKliknij aby zobaczyć szczegóły`;
             }
-          } else if (delivered > 0 && delivered < ordered) {
+          } else if (delivered > 0 && delivered < needed) {
             // Częściowo dostarczone - klikalny
             content = `Częściowo`;
             colorClass = 'bg-yellow-100 text-yellow-700 cursor-pointer hover:bg-yellow-200';
             isClickable = true;
-            tooltipContent = `Częściowa dostawa\nZamówiono: ${ordered} szt.\nDostarczone: ${delivered} szt.\nBrakuje: ${ordered - delivered} szt.\nKliknij aby zobaczyć szczegóły`;
+            tooltipContent = `Częściowa dostawa\nPotrzebne: ${needed} szt.\nDostarczone: ${delivered} szt.\nBrakuje: ${needed - delivered} szt.\nKliknij aby zobaczyć szczegóły`;
           } else if (ordered > 0 && delivered === 0) {
-            // Zamówione ale nie dostarczone - pokaż datę oczekiwanej dostawy w formacie DD.MM
+            // Zamówione ale nie dostarczone - pokaż datę oczekiwanej dostawy
             const expectedDeliveryShort = order.glassDeliveryDate ? formatDateShort(order.glassDeliveryDate) : null;
             const expectedDeliveryFull = order.glassDeliveryDate ? formatDate(order.glassDeliveryDate) : null;
             content = expectedDeliveryShort || 'Zamówione';
             colorClass = 'bg-blue-100 text-blue-700';
             tooltipContent = expectedDeliveryFull
-              ? `Szyby zamówione\nIlość: ${ordered} szt.\nOczekiwana dostawa: ${expectedDeliveryFull}`
-              : `Szyby zamówione\nIlość: ${ordered} szt.\nOczekiwanie na dostawę`;
+              ? `Szyby zamówione\nPotrzebne: ${needed} szt.\nOczekiwana dostawa: ${expectedDeliveryFull}`
+              : `Szyby zamówione\nPotrzebne: ${needed} szt.\nOczekiwanie na dostawę`;
           } else {
             content = '-';
             colorClass = 'text-slate-400';
@@ -574,10 +602,10 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           );
 
         case 'glasses':
-          // Używamy orderedGlassCount (szyby zamówione u dostawcy) zamiast totalGlasses (stara wartość z importu)
+          // Używamy totalGlasses (ile szyb potrzeba na zlecenie z OrderGlass)
           return (
             <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
-              {order.orderedGlassCount || '-'}
+              {order.totalGlasses || '-'}
             </td>
           );
 

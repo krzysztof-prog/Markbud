@@ -22,6 +22,7 @@ export type ImportJobType =
   | 'okucia'
   | 'glass_order'
   | 'glass_order_correction'
+  | 'glass_order_pdf'
   | 'glass_delivery';
 
 export interface ImportJob {

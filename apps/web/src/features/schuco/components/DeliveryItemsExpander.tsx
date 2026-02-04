@@ -64,7 +64,8 @@ export const DeliveryItemsExpander: React.FC<DeliveryItemsExpanderProps> = ({
   }, [deliveryId, orderNumber, fetchItemsMutation, refetch]);
 
   // Status czy pozycje były kiedykolwiek pobrane
-  const hasBeenFetched = !!itemsFetchedAt;
+  // Użyj items.length jako fallback jeśli itemsFetchedAt nie jest ustawione
+  const hasBeenFetched = !!itemsFetchedAt || (items && items.length > 0);
   const isFetching = fetchItemsMutation.isPending;
 
   return (

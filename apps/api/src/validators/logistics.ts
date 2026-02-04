@@ -113,6 +113,20 @@ export const updateMailItemSchema = z.object({
  */
 export const mailItemParamsSchema = idParamsSchema('mail item');
 
+/**
+ * Schema do ustawiania daty dostawy dla zlecenia
+ * Używane gdy zlecenie jest dopasowane do listy mailowej, ale nie ma ustawionej daty dostawy
+ *
+ * Używa deliveryCode (np. "08.01.2026_II") aby jednoznacznie zidentyfikować dostawę
+ * - _I, _II, _III itd. oznaczają różne dostawy na ten sam dzień
+ */
+export const setOrderDeliveryDateSchema = z.object({
+  orderId: z.number().int().positive('ID zlecenia jest wymagane'),
+  deliveryCode: z.string()
+    .min(1, 'Kod dostawy jest wymagany')
+    .regex(/^\d{2}\.\d{2}\.\d{4}_[IVX]+$/, 'Nieprawidłowy format kodu dostawy (np. "08.01.2026_II")'),
+});
+
 // Type exports
 export type ItemFlag = z.infer<typeof itemFlagSchema>;
 export type ItemStatus = z.infer<typeof itemStatusSchema>;
@@ -127,3 +141,4 @@ export type VersionDiffQuery = z.infer<typeof versionDiffQuerySchema>;
 export type CalendarQuery = z.infer<typeof calendarQuerySchema>;
 export type UpdateMailItemInput = z.infer<typeof updateMailItemSchema>;
 export type MailItemParams = z.infer<typeof mailItemParamsSchema>;
+export type SetOrderDeliveryDateInput = z.infer<typeof setOrderDeliveryDateSchema>;

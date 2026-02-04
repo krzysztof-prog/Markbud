@@ -19,6 +19,9 @@
  * - DELETE /items/:id/reject - odrzuć dodaną pozycję (soft delete)
  * - POST /items/:id/accept-change - zaakceptuj zmianę
  * - POST /items/:id/restore - przywróć poprzednią wartość
+ *
+ * Ustawianie daty dostawy:
+ * - POST /set-order-delivery-date - ustaw datę dostawy dla zlecenia
  */
 
 import type { FastifyPluginAsync } from 'fastify';
@@ -156,5 +159,37 @@ export const logisticsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Params: { id: string }; Body: { field: string; previousValue: string } }>(
     '/items/:id/restore',
     logisticsHandler.restoreItemValue.bind(logisticsHandler)
+  );
+
+  // ========== USTAWIANIE DATY DOSTAWY ==========
+
+  /**
+   * POST /logistics/set-order-delivery-date
+   * Ustawia datę dostawy dla zlecenia i dodaje je do odpowiedniej dostawy
+   * Body: { orderId: number, deliveryCode: string (np. "08.01.2026_II") }
+   */
+  fastify.post<{ Body: { orderId: number; deliveryCode: string } }>(
+    '/set-order-delivery-date',
+    logisticsHandler.setOrderDeliveryDate.bind(logisticsHandler)
+  );
+
+  // ========== ORPHAN ORDERS ==========
+
+  /**
+   * GET /logistics/deliveries/:code/orphan-orders
+   * Pobiera zlecenia przypisane do dostawy ale nieobecne na liście mailowej
+   */
+  fastify.get<{ Params: { code: string } }>(
+    '/deliveries/:code/orphan-orders',
+    logisticsHandler.getOrphanOrders.bind(logisticsHandler)
+  );
+
+  /**
+   * DELETE /logistics/orders/:id/remove-from-delivery
+   * Usuwa zlecenie z dostawy (czyści datę dostawy)
+   */
+  fastify.delete<{ Params: { id: string } }>(
+    '/orders/:id/remove-from-delivery',
+    logisticsHandler.removeOrderFromDelivery.bind(logisticsHandler)
   );
 };

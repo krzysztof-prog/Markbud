@@ -1,23 +1,28 @@
 /**
  * Formularz tworzenia/edycji zamówienia OKUC
  *
- * Tryby: create | edit
- * Pola: basketType, notes, items (lista pozycji)
- * Pozycje: articleId, quantity, estimatedPrice (grosze!), deliveryWeek
+ * Walidacja: React Hook Form + Zod
+ * - Typ koszyka: wymagany
+ * - Pozycje: minimum 1, każda z articleId i quantity > 0
+ * - Cena: opcjonalna, jeśli podana to w PLN (konwersja do groszy przy submit)
+ * - Błędy pokazywane inline pod polami (onBlur)
  *
  * KRYTYCZNE:
  * - plnToGrosze() przy wysyłaniu
  * - groszeToPln() przy wyświetlaniu
- * - NIGDY parseFloat!
+ * - NIGDY parseFloat na danych z bazy!
  */
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useForm, Controller, useFieldArray } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { FormField } from '@/components/ui/form-field';
 import {
   Select,
   SelectContent,
@@ -39,19 +44,46 @@ import { plnToGrosze, groszeToPln } from '@/lib/money';
 import type { PLN } from '@/lib/money';
 import { useOkucArticles } from '@/features/okuc/hooks';
 
+// Zod schema dla pozycji zamówienia
+const orderItemSchema = z.object({
+  articleId: z.number().min(1, 'Wybierz artykuł'),
+  orderedQty: z.number().min(1, 'Ilość musi być większa od 0'),
+  unitPrice: z.number().min(0).optional(), // PLN, opcjonalne
+  deliveryWeek: z.string().optional(),
+});
+
+// Zod schema dla formularza zamówienia
+const orderFormSchema = z.object({
+  basketType: z.enum(['typical_standard', 'typical_gabarat', 'atypical'], {
+    required_error: 'Wybierz typ koszyka',
+  }),
+  notes: z.string().optional(),
+  items: z.array(orderItemSchema).min(1, 'Dodaj co najmniej jedną pozycję'),
+});
+
+// Zod schema dla formularza nowej pozycji
+const newItemSchema = z.object({
+  articleId: z.string().min(1, 'Wybierz artykuł'),
+  quantity: z.string().min(1, 'Ilość jest wymagana').refine(
+    (val) => parseInt(val, 10) >= 1,
+    'Ilość musi być większa od 0'
+  ),
+  price: z.string().optional().refine(
+    (val) => !val || !isNaN(parseFloat(val)),
+    'Cena musi być liczbą'
+  ),
+  week: z.string().optional(),
+});
+
+type OrderFormData = z.infer<typeof orderFormSchema>;
+type NewItemFormData = z.infer<typeof newItemSchema>;
+
 interface OrderFormProps {
   mode: 'create' | 'edit';
   order?: OkucOrder;
   onSubmit: (data: CreateOkucOrderInput) => void;
   onCancel: () => void;
   isPending?: boolean;
-}
-
-interface OrderItemFormData {
-  articleId: number;
-  orderedQty: number;
-  unitPrice: number; // w PLN dla wyświetlania (konwersja do groszy przy submit)
-  deliveryWeek?: string; // Format: "2026-W01"
 }
 
 export function OrderForm({
@@ -61,28 +93,59 @@ export function OrderForm({
   onCancel,
   isPending = false,
 }: OrderFormProps) {
-  // State formularza
-  const [basketType, setBasketType] = useState<BasketType>('typical_standard');
-  const [notes, setNotes] = useState('');
-  const [items, setItems] = useState<OrderItemFormData[]>([]);
-
-  // State dla nowej pozycji
-  const [newItemArticleId, setNewItemArticleId] = useState<number | ''>('');
-  const [newItemQuantity, setNewItemQuantity] = useState<number | ''>('');
-  const [newItemPrice, setNewItemPrice] = useState<string>(''); // String dla input (PLN)
-  const [newItemWeek, setNewItemWeek] = useState('');
-
-  // Błędy walidacji
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
   // Pobierz artykuły dla selecta
   const { data: articles = [], isLoading: articlesLoading } = useOkucArticles();
+
+  // Główny formularz z React Hook Form
+  const {
+    control,
+    handleSubmit,
+    register,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<OrderFormData>({
+    resolver: zodResolver(orderFormSchema),
+    mode: 'onBlur',
+    defaultValues: {
+      basketType: 'typical_standard',
+      notes: '',
+      items: [],
+    },
+  });
+
+  // useFieldArray dla dynamicznej listy pozycji
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: 'items',
+  });
+
+  // Formularz dla nowej pozycji (osobny)
+  const {
+    register: registerNewItem,
+    handleSubmit: handleNewItemSubmit,
+    reset: resetNewItem,
+    control: newItemControl,
+    formState: { errors: newItemErrors },
+  } = useForm<NewItemFormData>({
+    resolver: zodResolver(newItemSchema),
+    mode: 'onBlur',
+    defaultValues: {
+      articleId: '',
+      quantity: '',
+      price: '',
+      week: '',
+    },
+  });
+
+  // Stan dla błędu listy pozycji (pokazywany przy submit)
+  const [itemsError, setItemsError] = useState<string | null>(null);
 
   // Inicjalizacja formularza w trybie edit
   useEffect(() => {
     if (mode === 'edit' && order) {
-      setBasketType(order.basketType);
-      setNotes(order.notes || '');
+      setValue('basketType', order.basketType);
+      setValue('notes', order.notes || '');
 
       // Konwertuj pozycje z groszy na PLN dla wyświetlania
       if (order.items && order.items.length > 0) {
@@ -90,144 +153,116 @@ export function OrderForm({
           articleId: item.articleId,
           orderedQty: item.orderedQty,
           unitPrice: item.unitPrice ? groszeToPln(item.unitPrice) : 0,
-          deliveryWeek: '', // Backend nie ma tego pola w OkucOrderItem, może być undefined
+          deliveryWeek: '',
         }));
-        setItems(formattedItems);
+        setValue('items', formattedItems);
       }
     }
-  }, [mode, order]);
+  }, [mode, order, setValue]);
 
   // Dodaj pozycję do listy
-  const handleAddItem = () => {
-    const newErrors: Record<string, string> = {};
-
-    // Walidacja nowej pozycji
-    if (!newItemArticleId) {
-      newErrors.articleId = 'Wybierz artykuł';
-    }
-    if (!newItemQuantity || newItemQuantity <= 0) {
-      newErrors.quantity = 'Ilość musi być większa niż 0';
-    }
-    if (newItemPrice && isNaN(parseFloat(newItemPrice))) {
-      newErrors.price = 'Cena musi być liczbą';
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    // Dodaj pozycję
-    const newItem: OrderItemFormData = {
-      articleId: newItemArticleId as number,
-      orderedQty: newItemQuantity as number,
-      unitPrice: newItemPrice ? parseFloat(newItemPrice) : 0,
-      deliveryWeek: newItemWeek || undefined,
+  const handleAddItem = (data: NewItemFormData) => {
+    const newItem = {
+      articleId: parseInt(data.articleId, 10),
+      orderedQty: parseInt(data.quantity, 10),
+      unitPrice: data.price ? parseFloat(data.price) : 0,
+      deliveryWeek: data.week || undefined,
     };
 
-    setItems([...items, newItem]);
-
-    // Wyczyść formularz nowej pozycji
-    setNewItemArticleId('');
-    setNewItemQuantity('');
-    setNewItemPrice('');
-    setNewItemWeek('');
-    setErrors({});
+    append(newItem);
+    resetNewItem();
+    setItemsError(null);
   };
 
-  // Usuń pozycję z listy
-  const handleRemoveItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
-  };
-
-  // Walidacja i submit formularza
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const newErrors: Record<string, string> = {};
-
-    // Walidacja
-    if (!basketType) {
-      newErrors.basketType = 'Wybierz typ koszyka';
-    }
-    if (items.length === 0) {
-      newErrors.items = 'Dodaj co najmniej jedną pozycję';
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+  // Submit głównego formularza
+  const onFormSubmit = (data: OrderFormData) => {
+    if (data.items.length === 0) {
+      setItemsError('Dodaj co najmniej jedną pozycję');
       return;
     }
 
     // Konwertuj pozycje (PLN → grosze)
-    const formattedItems = items.map(item => ({
+    const formattedItems = data.items.map(item => ({
       articleId: item.articleId,
       orderedQty: item.orderedQty,
-      unitPrice: item.unitPrice > 0 ? plnToGrosze(item.unitPrice as PLN) : 0,
+      unitPrice: item.unitPrice && item.unitPrice > 0
+        ? plnToGrosze(item.unitPrice as PLN)
+        : 0,
     }));
 
-    // Przygotuj dane do wysłania
-    const data: CreateOkucOrderInput = {
-      basketType,
+    const submitData: CreateOkucOrderInput = {
+      basketType: data.basketType,
       items: formattedItems,
-      notes: notes || undefined,
+      notes: data.notes || undefined,
     };
 
-    onSubmit(data);
+    onSubmit(submitData);
   };
 
   // Czy można edytować pozycje (tylko dla draft/pending w trybie edit)
   const canEditItems = mode === 'create' || (order && (order.status === 'draft' || order.status === 'pending_approval'));
 
+  // Obserwuj items dla walidacji
+  const watchedItems = watch('items');
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
       {/* Typ koszyka */}
-      <div className="space-y-2">
-        <Label htmlFor="basketType">
-          Typ koszyka <span className="text-destructive">*</span>
-        </Label>
-        <Select
-          value={basketType}
-          onValueChange={(value) => setBasketType(value as BasketType)}
-          disabled={isPending || !canEditItems}
-        >
-          <SelectTrigger id="basketType">
-            <SelectValue placeholder="Wybierz typ koszyka" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="typical_standard">Typowy Standard</SelectItem>
-            <SelectItem value="typical_gabarat">Typowy Gabaryty</SelectItem>
-            <SelectItem value="atypical">Atypowy</SelectItem>
-          </SelectContent>
-        </Select>
-        {errors.basketType && (
-          <p className="text-sm text-destructive">{errors.basketType}</p>
-        )}
-      </div>
+      <FormField
+        id="basketType"
+        label="Typ koszyka"
+        required
+        error={errors.basketType?.message}
+      >
+        <Controller
+          name="basketType"
+          control={control}
+          render={({ field }) => (
+            <Select
+              value={field.value}
+              onValueChange={field.onChange}
+              disabled={isPending || !canEditItems}
+            >
+              <SelectTrigger id="basketType">
+                <SelectValue placeholder="Wybierz typ koszyka" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="typical_standard">Typowy Standard</SelectItem>
+                <SelectItem value="typical_gabarat">Typowy Gabaryty</SelectItem>
+                <SelectItem value="atypical">Atypowy</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        />
+      </FormField>
 
       {/* Notatki */}
-      <div className="space-y-2">
-        <Label htmlFor="notes">Notatki</Label>
+      <FormField
+        id="notes"
+        label="Notatki"
+        error={errors.notes?.message}
+      >
         <Textarea
           id="notes"
           placeholder="Dodatkowe informacje do zamówienia..."
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          {...register('notes')}
           disabled={isPending}
           rows={3}
         />
-      </div>
+      </FormField>
 
       {/* Lista pozycji */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Label>Pozycje zamówienia <span className="text-destructive">*</span></Label>
-          {errors.items && (
-            <p className="text-sm text-destructive">{errors.items}</p>
+          <span className="text-sm font-medium">
+            Pozycje zamówienia <span className="text-red-500">*</span>
+          </span>
+          {(errors.items?.message || itemsError) && (
+            <p className="text-sm text-red-600">{errors.items?.message || itemsError}</p>
           )}
         </div>
 
-        {items.length > 0 && (
+        {fields.length > 0 && (
           <div className="rounded-md border">
             <Table>
               <TableHeader>
@@ -240,34 +275,36 @@ export function OrderForm({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((item, index) => {
-                  const article = articles.find(a => a.id === item.articleId);
+                {fields.map((field, index) => {
+                  const item = watchedItems[index];
+                  const article = articles.find(a => a.id === item?.articleId);
                   return (
-                    <TableRow key={index}>
+                    <TableRow key={field.id}>
                       <TableCell>
-                        {article?.articleId || `ID: ${item.articleId}`}
+                        {article?.articleId || `ID: ${item?.articleId}`}
                         {article?.name && (
                           <span className="text-muted-foreground text-sm ml-2">
                             ({article.name})
                           </span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">{item.orderedQty}</TableCell>
+                      <TableCell className="text-right">{item?.orderedQty}</TableCell>
                       <TableCell className="text-right">
-                        {item.unitPrice > 0 ? item.unitPrice.toFixed(2) : '-'}
+                        {item?.unitPrice && item.unitPrice > 0 ? item.unitPrice.toFixed(2) : '-'}
                       </TableCell>
-                      <TableCell>{item.deliveryWeek || '-'}</TableCell>
+                      <TableCell>{item?.deliveryWeek || '-'}</TableCell>
                       {canEditItems && (
                         <TableCell className="text-right">
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleRemoveItem(index)}
+                            onClick={() => remove(index)}
                             disabled={isPending}
                             title="Usuń pozycję"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                            <span className="sr-only">Usuń pozycję</span>
                           </Button>
                         </TableCell>
                       )}
@@ -286,88 +323,94 @@ export function OrderForm({
 
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               {/* Artykuł */}
-              <div className="space-y-2">
-                <Label htmlFor="newItemArticleId">Artykuł</Label>
-                <Select
-                  value={newItemArticleId ? String(newItemArticleId) : ''}
-                  onValueChange={(value) => setNewItemArticleId(Number(value))}
-                  disabled={isPending || articlesLoading}
-                >
-                  <SelectTrigger id="newItemArticleId">
-                    <SelectValue placeholder="Wybierz..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {articles.map((article) => (
-                      <SelectItem key={article.id} value={String(article.id)}>
-                        {article.articleId} - {article.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.articleId && (
-                  <p className="text-sm text-destructive">{errors.articleId}</p>
-                )}
-              </div>
+              <FormField
+                id="newItemArticleId"
+                label="Artykuł"
+                error={newItemErrors.articleId?.message}
+              >
+                <Controller
+                  name="articleId"
+                  control={newItemControl}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      disabled={isPending || articlesLoading}
+                    >
+                      <SelectTrigger id="newItemArticleId">
+                        <SelectValue placeholder="Wybierz..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {articles.map((article) => (
+                          <SelectItem key={article.id} value={String(article.id)}>
+                            {article.articleId} - {article.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </FormField>
 
               {/* Ilość */}
-              <div className="space-y-2">
-                <Label htmlFor="newItemQuantity">Ilość</Label>
+              <FormField
+                id="newItemQuantity"
+                label="Ilość"
+                error={newItemErrors.quantity?.message}
+              >
                 <Input
                   id="newItemQuantity"
                   type="number"
                   min="1"
                   step="1"
                   placeholder="0"
-                  value={newItemQuantity}
-                  onChange={(e) => setNewItemQuantity(e.target.value ? Number(e.target.value) : '')}
+                  {...registerNewItem('quantity')}
                   disabled={isPending}
                 />
-                {errors.quantity && (
-                  <p className="text-sm text-destructive">{errors.quantity}</p>
-                )}
-              </div>
+              </FormField>
 
               {/* Cena (PLN) */}
-              <div className="space-y-2">
-                <Label htmlFor="newItemPrice">Cena (PLN)</Label>
+              <FormField
+                id="newItemPrice"
+                label="Cena (PLN)"
+                error={newItemErrors.price?.message}
+              >
                 <Input
                   id="newItemPrice"
                   type="number"
                   min="0"
                   step="0.01"
                   placeholder="0.00"
-                  value={newItemPrice}
-                  onChange={(e) => setNewItemPrice(e.target.value)}
+                  {...registerNewItem('price')}
                   disabled={isPending}
                 />
-                {errors.price && (
-                  <p className="text-sm text-destructive">{errors.price}</p>
-                )}
-              </div>
+              </FormField>
 
               {/* Tydzień dostawy */}
-              <div className="space-y-2">
-                <Label htmlFor="newItemWeek">Tydzień</Label>
+              <FormField
+                id="newItemWeek"
+                label="Tydzień"
+                error={newItemErrors.week?.message}
+              >
                 <Input
                   id="newItemWeek"
                   type="week"
                   placeholder="2026-W01"
-                  value={newItemWeek}
-                  onChange={(e) => setNewItemWeek(e.target.value)}
+                  {...registerNewItem('week')}
                   disabled={isPending}
                 />
-              </div>
+              </FormField>
 
               {/* Przycisk dodaj */}
               <div className="flex items-end">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={handleAddItem}
+                  onClick={handleNewItemSubmit(handleAddItem)}
                   disabled={isPending}
                   className="w-full"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
                   Dodaj
                 </Button>
               </div>
@@ -386,7 +429,7 @@ export function OrderForm({
         >
           Anuluj
         </Button>
-        <Button type="submit" disabled={isPending}>
+        <Button type="submit" disabled={isPending || fields.length === 0}>
           {isPending ? 'Zapisywanie...' : mode === 'create' ? 'Utwórz zamówienie' : 'Zapisz zmiany'}
         </Button>
       </div>

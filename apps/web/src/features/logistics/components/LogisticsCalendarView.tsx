@@ -14,7 +14,7 @@
 
 import { useMemo, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Calendar, Package, RefreshCw, AlertCircle, GitCompare } from 'lucide-react';
+import { Calendar, Package, RefreshCw, AlertCircle, GitCompare, Sparkles } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -64,6 +64,17 @@ const STATUS_BADGE_CLASSES: Record<DeliveryStatus, string> = {
   conditional: 'bg-yellow-100 text-yellow-800 border-yellow-200',
 };
 
+/**
+ * Sprawdza czy wpis jest świeży (utworzony w ciągu ostatnich 24h)
+ */
+function isRecentEntry(createdAt: string): boolean {
+  const created = new Date(createdAt);
+  const now = new Date();
+  const diffMs = now.getTime() - created.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
+  return diffHours <= 24;
+}
+
 // ========== Komponenty pomocnicze ==========
 
 /**
@@ -106,6 +117,9 @@ function DeliveryCard({ entry, onShowDiff, onNavigateToDetail }: DeliveryCardPro
   // Pokaż przycisk "Pokaż zmiany" dla wersji > 1
   const canShowDiff = entry.version > 1;
 
+  // Sprawdź czy to świeża aktualizacja (nowa wersja w ostatnich 24h)
+  const isNewVersion = entry.version > 1 && entry.isUpdate && isRecentEntry(entry.createdAt);
+
   const handleShowDiff = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -123,11 +137,22 @@ function DeliveryCard({ entry, onShowDiff, onNavigateToDetail }: DeliveryCardPro
       className={cn(
         'transition-all hover:shadow-md cursor-pointer',
         entry.deliveryStatus === 'blocked' && 'border-red-200',
-        entry.deliveryStatus === 'conditional' && 'border-yellow-200'
+        entry.deliveryStatus === 'conditional' && 'border-yellow-200',
+        isNewVersion && 'ring-2 ring-purple-300 ring-offset-1'
       )}
       onClick={handleCardClick}
     >
       <CardContent className="p-4">
+        {/* Badge "Nowa wersja" dla świeżych aktualizacji */}
+        {isNewVersion && (
+          <div className="flex items-center gap-1 mb-2">
+            <Badge className="bg-purple-100 text-purple-800 border-purple-200 text-xs">
+              <Sparkles className="h-3 w-3 mr-1" />
+              Nowa wersja
+            </Badge>
+          </div>
+        )}
+
         {/* Nagłówek - kod dostawy i status */}
         <div className="flex items-center justify-between mb-3">
           <div className="font-medium text-sm">{entry.deliveryCode}</div>

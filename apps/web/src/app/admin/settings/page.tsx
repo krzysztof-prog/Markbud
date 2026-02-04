@@ -15,6 +15,7 @@ import {
   ProfilesTab,
   SteelTab,
   OkucLocationsTab,
+  GmailSettingsTab,
   DocumentAuthorMappingsTab,
   PalletDialog,
   ColorDialog,
@@ -633,6 +634,7 @@ export default function UstawieniaPage() {
             <TabsTrigger value="steel">Stal</TabsTrigger>
             <TabsTrigger value="author-mappings">Autorzy dokumentów</TabsTrigger>
             <TabsTrigger value="okuc-locations">Magazyny OKUC</TabsTrigger>
+            <TabsTrigger value="gmail">Gmail IMAP</TabsTrigger>
           </TabsList>
 
           <TabsContent value="general">
@@ -762,6 +764,16 @@ export default function UstawieniaPage() {
 
           <TabsContent value="okuc-locations">
             <OkucLocationsTab />
+          </TabsContent>
+
+          <TabsContent value="gmail">
+            <GmailSettingsTab
+              settings={settings}
+              hasChanges={hasChanges}
+              onSettingChange={handleSettingChange}
+              onSave={handleSave}
+              isUpdatePending={updateSettingsMutation.isPending}
+            />
           </TabsContent>
         </Tabs>
       </div>

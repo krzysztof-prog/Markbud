@@ -157,6 +157,38 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
     preHandler: verifyAuth,
   }, handler.downloadPdf.bind(handler));
 
+  // GET /api/orders/:id/has-glass-order-txt - check if glass order TXT exists
+  fastify.get<{ Params: { id: string } }>('/:id/has-glass-order-txt', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Check if glass order TXT file exists for this order',
+      tags: ['orders'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string', description: 'Order ID' },
+        },
+      },
+    },
+  }, handler.hasGlassOrderTxt.bind(handler));
+
+  // GET /api/orders/:id/glass-order-txt - download glass order TXT file
+  fastify.get<{ Params: { id: string } }>('/:id/glass-order-txt', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Download glass order TXT file for this order',
+      tags: ['orders'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string', description: 'Order ID' },
+        },
+      },
+    },
+  }, handler.downloadGlassOrderTxt.bind(handler));
+
   // GET /api/orders/table/:colorId - orders table for given color
   fastify.get<{ Params: { colorId: string } }>('/table/:colorId', {
     preHandler: verifyAuth,

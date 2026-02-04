@@ -12,6 +12,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { LabelCheckRepository } from '../../repositories/LabelCheckRepository.js';
 import { OcrService } from './OcrService.js';
+import { DeliveryReadinessAggregator } from '../readiness/index.js';
 import { readdir, access } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -76,12 +77,14 @@ export class LabelCheckService {
   private ocrService: OcrService;
   private prisma: PrismaClient;
   private basePath: string;
+  private readinessAggregator: DeliveryReadinessAggregator;
 
   constructor(prisma: PrismaClient, config?: LabelCheckServiceConfig) {
     this.prisma = prisma;
     this.repository = new LabelCheckRepository(prisma);
     this.ocrService = new OcrService();
     this.basePath = config?.basePath ?? LabelCheckService.BASE_PATH;
+    this.readinessAggregator = new DeliveryReadinessAggregator(prisma);
   }
 
   /**
@@ -163,6 +166,9 @@ export class LabelCheckService {
       errorCount,
       completedAt,
     });
+
+    // 6. Auto-recalculate readiness status po zakończeniu sprawdzania
+    await this.readinessAggregator.recalculateIfNeeded(deliveryId);
 
     return {
       ...labelCheck,

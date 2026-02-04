@@ -103,7 +103,7 @@ export const PvcDemandTable: React.FC<PvcDemandTableProps> = ({
               const activeSystems = getActiveSystems(item.profile);
 
               return (
-                <TableRow key={`${item.profile.id}-${item.color.id}-${idx}`}>
+                <TableRow key={`${item.profile.id}-${item.color?.id ?? 'no-color'}-${idx}`}>
                   {/* Numer profilu */}
                   <TableCell className="font-mono text-sm">
                     {item.profile.number}
@@ -132,9 +132,9 @@ export const PvcDemandTable: React.FC<PvcDemandTableProps> = ({
                     <div className="flex items-center gap-2">
                       <div
                         className="w-4 h-4 rounded border flex-shrink-0"
-                        style={{ backgroundColor: item.color.hexColor || '#ccc' }}
+                        style={{ backgroundColor: item.color?.hexColor || '#ccc' }}
                       />
-                      <span className="font-mono text-xs">{item.color.code}</span>
+                      <span className="font-mono text-xs">{item.color?.code || 'Brak'}</span>
                     </div>
                   </TableCell>
 

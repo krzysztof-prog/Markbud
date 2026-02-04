@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { createDynamicComponent } from '@/lib/dynamic-import';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,15 +14,17 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { List } from 'lucide-react';
+import { List, Plus, Zap } from 'lucide-react';
 import { deliveriesApi } from '@/lib/api';
 import { showSuccessToast, showErrorToast, getErrorMessage } from '@/lib/toast-helpers';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
-import { useDownloadDeliveryProtocol } from '@/features/deliveries/hooks/useDeliveries';
+import { useDownloadDeliveryProtocol, useBatchReadiness } from '@/features/deliveries/hooks';
+import { getTodayWarsaw, formatDateWarsaw } from '@/lib/date-utils';
 
-// OrderDetailModal - ciężki komponent (551 linii) - eager w PROD, lazy w DEV
-const OrderDetailModal = createDynamicComponent(
-  () => import('@/features/orders/components/OrderDetailModal').then((mod) => ({ default: mod.OrderDetailModal }))
+// OrderDetailModal - lazy loaded
+const OrderDetailModal = dynamic(
+  () => import('@/features/orders/components/OrderDetailModal').then((mod) => mod.OrderDetailModal),
+  { ssr: false }
 );
 import { DeliveryFilters } from './DeliveryFilters';
 import DeliveriesTable from './DeliveriesTable';
@@ -32,6 +34,8 @@ type DateFilterValue = '7' | '14' | '30' | 'archive';
 
 interface DeliveriesListViewProps {
   initialDateRange?: DateFilterValue;
+  onShowNewDeliveryDialog?: () => void;
+  onShowQuickDeliveryDialog?: () => void;
 }
 
 // Helper to calculate date ranges
@@ -41,11 +45,10 @@ const getDateRange = (
   filter: DateFilterValue,
   customStartDate?: string
 ): { from: string; to: string } => {
-  const today = new Date();
-  const formatDate = (d: Date) => d.toISOString().split('T')[0];
+  const formatDate = (d: Date) => formatDateWarsaw(d);
 
   // Use custom start date if provided, otherwise use today
-  const startDate = customStartDate || formatDate(today);
+  const startDate = customStartDate || getTodayWarsaw();
 
   switch (filter) {
     case '7': {
@@ -67,6 +70,7 @@ const getDateRange = (
       return { from: formatDate(from), to: formatDate(to) };
     }
     case 'archive': {
+      const today = new Date();
       const to = new Date(today);
       to.setDate(today.getDate() - 1); // Yesterday
       return { from: '2020-01-01', to: formatDate(to) };
@@ -76,7 +80,11 @@ const getDateRange = (
   }
 };
 
-export function DeliveriesListView({ initialDateRange = '14' }: DeliveriesListViewProps) {
+export function DeliveriesListView({
+  initialDateRange = '14',
+  onShowNewDeliveryDialog,
+  onShowQuickDeliveryDialog,
+}: DeliveriesListViewProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -102,6 +110,15 @@ export function DeliveriesListView({ initialDateRange = '14' }: DeliveriesListVi
       from: dateRange.from,
       to: dateRange.to,
     }),
+  });
+
+  // QW-1: Batch readiness dla listy dostaw
+  const deliveryIds = useMemo(
+    () => (Array.isArray(deliveries) ? deliveries.map((d) => d.id) : []),
+    [deliveries]
+  );
+  const { data: readinessMap } = useBatchReadiness(deliveryIds, {
+    enabled: deliveryIds.length > 0,
   });
 
   // Protocol download mutation
@@ -167,6 +184,14 @@ export function DeliveriesListView({ initialDateRange = '14' }: DeliveriesListVi
     setSelectedOrderId(orderId);
   }, []);
 
+  const handleCheckLabels = useCallback((labelCheckId: number | null) => {
+    if (labelCheckId) {
+      router.push(`/kontrola-etykiet/${labelCheckId}`);
+    } else {
+      showErrorToast('Brak weryfikacji', 'Ta dostawa nie ma jeszcze sprawdzenia etykiet');
+    }
+  }, [router]);
+
   const handleConfirmComplete = useCallback(() => {
     if (showCompleteDialog && productionDate) {
       completeOrdersMutation.mutate({
@@ -211,12 +236,27 @@ export function DeliveriesListView({ initialDateRange = '14' }: DeliveriesListVi
               <List className="h-5 w-5 text-slate-500" />
               <CardTitle className="text-lg">Lista dostaw</CardTitle>
             </div>
-            <DeliveryFilters
-              value={dateFilter}
-              onChange={setDateFilter}
-              customStartDate={customStartDate}
-              onCustomStartDateChange={setCustomStartDate}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Przyciski dodawania dostaw */}
+              {onShowNewDeliveryDialog && (
+                <Button size="sm" onClick={onShowNewDeliveryDialog}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nowa dostawa
+                </Button>
+              )}
+              {onShowQuickDeliveryDialog && (
+                <Button size="sm" variant="secondary" onClick={onShowQuickDeliveryDialog}>
+                  <Zap className="h-4 w-4 mr-2" />
+                  Szybka dostawa
+                </Button>
+              )}
+              <DeliveryFilters
+                value={dateFilter}
+                onChange={setDateFilter}
+                customStartDate={customStartDate}
+                onCustomStartDateChange={setCustomStartDate}
+              />
+            </div>
           </div>
 
           {/* Summary stats */}
@@ -267,8 +307,10 @@ export function DeliveriesListView({ initialDateRange = '14' }: DeliveriesListVi
               onOptimize={handleOptimize}
               onProtocol={handleProtocol}
               onVerify={handleVerify}
+              onCheckLabels={handleCheckLabels}
               onViewOrder={handleViewOrder}
               protocolLoadingId={protocolLoadingId}
+              readinessMap={readinessMap}
             />
           ) : (
             <div className="py-12 text-center">

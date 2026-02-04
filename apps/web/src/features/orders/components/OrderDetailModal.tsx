@@ -10,10 +10,11 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ordersApi } from '@/lib/api';
 import { toast } from '@/hooks/useToast';
 import { formatGrosze, formatCenty, type Grosze, type Centy } from '@/lib/money';
-import { Package, Layers, Grid3X3, Calendar, FileText, FileDown, ChevronDown, ChevronUp, Truck, Calculator } from 'lucide-react';
+import { Package, Layers, Grid3X3, Calendar, FileText, FileDown, Truck, Calculator, LayoutGrid, List, Boxes } from 'lucide-react';
 import type { Order, SchucoDeliveryLink } from '@/types';
 import type { Requirement } from '@/types';
 import { ReadinessChecklist } from '@/components/ReadinessChecklist';
@@ -76,10 +77,8 @@ export function OrderDetailModal({
   });
 
   const [hasPdf, setHasPdf] = React.useState(false);
-  const [windowsExpanded, setWindowsExpanded] = React.useState(false);
-  const [glassesExpanded, setGlassesExpanded] = React.useState(false);
-  const [requirementsExpanded, setRequirementsExpanded] = React.useState(false);
-  const [schucoExpanded, setSchucoExpanded] = React.useState(true); // Domyślnie rozwinięte
+  const [hasGlassTxt, setHasGlassTxt] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState('podstawowe');
 
   // Sprawdź czy istnieje PDF dla tego zlecenia w bazie danych
   // UWAGA: Używamy isMounted pattern aby uniknąć race condition przy unmount
@@ -96,6 +95,29 @@ export function OrderDetailModal({
         .catch(() => {
           if (isMounted) {
             setHasPdf(false);
+          }
+        });
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [orderId, open]);
+
+  // Sprawdź czy istnieje plik TXT zamówienia szyb
+  React.useEffect(() => {
+    let isMounted = true;
+
+    if (orderId && open) {
+      ordersApi.checkGlassOrderTxt(orderId)
+        .then((result) => {
+          if (isMounted) {
+            setHasGlassTxt(result.hasGlassOrderTxt);
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setHasGlassTxt(false);
           }
         });
     }
@@ -130,6 +152,30 @@ export function OrderDetailModal({
     }
   };
 
+  const handleOpenGlassOrderTxt = async () => {
+    if (!orderId) return;
+
+    try {
+      // Pobierz TXT przez fetchBlob (z tokenem autoryzacyjnym)
+      const { fetchBlob } = await import('@/lib/api-client');
+      const blob = await fetchBlob(`/api/orders/${orderId}/glass-order-txt`);
+
+      // Utwórz URL dla blob i otwórz w nowej karcie
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+
+      // Zwolnij URL natychmiast po otwarciu okna
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Błąd podczas otwierania pliku zamówienia szyb:', error);
+      toast({
+        title: 'Błąd',
+        description: error instanceof Error ? error.message : 'Nie udało się otworzyć pliku zamówienia szyb',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
@@ -140,46 +186,60 @@ export function OrderDetailModal({
                 <Package className="h-5 w-5" />
                 Zlecenie {orderNumber || order?.orderNumber || '...'}
               </div>
-              {order?.clientName && (
+              {order?.client && (
                 <div className="text-sm font-normal text-slate-600">
-                  Klient: {order.clientName}
+                  Klient: {order.client}
                 </div>
               )}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleOpenPdf}
-              disabled={!hasPdf}
-              className={hasPdf
-                  ? 'border-green-500 text-green-700 hover:bg-green-50'
-                  : 'border-slate-300 text-slate-500 hover:bg-slate-50 opacity-60'
-              }
-            >
-              <FileDown className="h-4 w-4 mr-2" />
-              {hasPdf ? 'Otwórz PDF' : 'Brak PDF'}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenPdf}
+                disabled={!hasPdf}
+                className={hasPdf
+                    ? 'border-green-500 text-green-700 hover:bg-green-50'
+                    : 'border-slate-300 text-slate-500 hover:bg-slate-50 opacity-60'
+                }
+              >
+                <FileDown className="h-4 w-4 mr-2" />
+                {hasPdf ? 'PDF' : 'Brak PDF'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenGlassOrderTxt}
+                disabled={!hasGlassTxt}
+                className={hasGlassTxt
+                    ? 'border-cyan-500 text-cyan-700 hover:bg-cyan-50'
+                    : 'border-slate-300 text-slate-500 hover:bg-slate-50 opacity-60'
+                }
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                {hasGlassTxt ? 'Szyby TXT' : 'Brak szyb'}
+              </Button>
+            </div>
           </DialogTitle>
         </DialogHeader>
 
         {isLoading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-slate-100 rounded-lg p-2 h-16 animate-pulse" />
+              ))}
+            </div>
+            <div className="h-8 bg-slate-100 rounded animate-pulse" />
+            <div className="space-y-2">
+              <div className="h-32 bg-slate-100 rounded animate-pulse" />
+              <div className="h-32 bg-slate-100 rounded animate-pulse" />
+            </div>
           </div>
         ) : order ? (
-          <div className="space-y-6">
-            {/* P1-R4: System Brain - Production Readiness Checklist */}
-            {order.status === 'new' && (
-              <ReadinessChecklist
-                type="production"
-                entityId={order.id}
-                className="mb-4"
-              />
-            )}
-
-            {/* Podsumowanie */}
+          <div className="space-y-4">
+            {/* Podsumowanie - zawsze widoczne */}
             {(() => {
-              // Oblicz totals z danych okien jako fallback
               const calculatedWindows = order.windows?.reduce(
                 (sum: number, w) => sum + (w.quantity || 1),
                 0
@@ -209,181 +269,358 @@ export function OrderDetailModal({
               );
             })()}
 
-            {/* Informacje o zleceniu i Projekty */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Informacje o zleceniu */}
-              <div className="bg-slate-50 rounded-lg p-4">
-                <h4 className="font-medium mb-3 flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Informacje o zleceniu
-                </h4>
-                <div className="grid grid-cols-1 gap-3 text-sm">
-                  <div>
-                    <span className="text-slate-500">Status:</span>{' '}
-                    <Badge
-                      variant={
-                        order.status === 'new'
-                          ? 'secondary'
-                          : order.status === 'completed'
-                          ? 'default'
-                          : 'outline'
-                      }
-                    >
-                      {order.status === 'new'
-                        ? 'Nowe'
-                        : order.status === 'in_progress'
-                        ? 'W produkcji'
-                        : order.status === 'completed'
-                        ? 'Zakończone'
-                        : order.status === 'archived'
-                        ? 'Zarchiwizowane'
-                        : order.status}
+            {/* Taby */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="w-full grid grid-cols-3">
+                <TabsTrigger value="podstawowe" className="flex items-center gap-1.5 text-xs sm:text-sm">
+                  <LayoutGrid className="h-4 w-4" />
+                  <span className="hidden sm:inline">Podstawowe</span>
+                  <span className="sm:hidden">Info</span>
+                </TabsTrigger>
+                <TabsTrigger value="szczegoly" className="flex items-center gap-1.5 text-xs sm:text-sm">
+                  <List className="h-4 w-4" />
+                  <span className="hidden sm:inline">Szczegóły</span>
+                  <span className="sm:hidden">Listy</span>
+                  {(order.windows?.length || order.glasses?.length || order.requirements?.length) && (
+                    <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
+                      {(order.windows?.length || 0) + (order.glasses?.length || 0) + (order.requirements?.length || 0)}
                     </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="dostawy" className="flex items-center gap-1.5 text-xs sm:text-sm">
+                  <Truck className="h-4 w-4" />
+                  <span className="hidden sm:inline">Dostawy</span>
+                  <span className="sm:hidden">Schuco</span>
+                  {order.schucoLinks && order.schucoLinks.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
+                      {order.schucoLinks.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Tab: Podstawowe */}
+              <TabsContent value="podstawowe" className="mt-4 space-y-4">
+                {/* Informacje o zleceniu i Projekty */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Informacje o zleceniu */}
+                  <div className="bg-slate-50 rounded-lg p-4">
+                    <h4 className="font-medium mb-3 flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Informacje o zleceniu
+                    </h4>
+                    <div className="grid grid-cols-1 gap-3 text-sm">
+                      <div>
+                        <span className="text-slate-500">Status:</span>{' '}
+                        <Badge
+                          variant={
+                            order.status === 'new'
+                              ? 'secondary'
+                              : order.status === 'completed'
+                              ? 'default'
+                              : 'outline'
+                          }
+                        >
+                          {order.status === 'new'
+                            ? 'Nowe'
+                            : order.status === 'in_progress'
+                            ? 'W produkcji'
+                            : order.status === 'completed'
+                            ? 'Zakończone'
+                            : order.status === 'archived'
+                            ? 'Zarchiwizowane'
+                            : order.status}
+                        </Badge>
+                      </div>
+                      {order.deliveryDate && (
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-4 w-4 text-slate-400" />
+                          <span className="text-slate-500">Data dostawy:</span>{' '}
+                          <span className="font-medium">
+                            {new Date(order.deliveryDate).toLocaleDateString('pl-PL')}
+                          </span>
+                        </div>
+                      )}
+                      {order.valuePln && (
+                        <div>
+                          <span className="text-slate-500">Wartość PLN:</span>{' '}
+                          <span className="font-medium">{formatGrosze(order.valuePln as Grosze)}</span>
+                        </div>
+                      )}
+                      {order.valueEur && (
+                        <div>
+                          <span className="text-slate-500">Wartość EUR:</span>{' '}
+                          <span className="font-medium">{formatCenty(order.valueEur as Centy)}</span>
+                        </div>
+                      )}
+                      {order.invoiceNumber && (
+                        <div>
+                          <span className="text-slate-500">Nr faktury:</span>{' '}
+                          <span className="font-mono">{order.invoiceNumber}</span>
+                        </div>
+                      )}
+                    </div>
+                    {order.notes && (
+                      <div className="mt-3 pt-3 border-t">
+                        <span className="text-slate-500 text-sm">Notatki:</span>
+                        <p className="text-sm mt-1">{order.notes}</p>
+                      </div>
+                    )}
                   </div>
-                  {order.deliveryDate && (
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4 text-slate-400" />
-                      <span className="text-slate-500">Data dostawy:</span>{' '}
-                      <span className="font-medium">
-                        {new Date(order.deliveryDate).toLocaleDateString('pl-PL')}
-                      </span>
-                    </div>
-                  )}
-                  {order.valuePln && (
-                    <div>
-                      <span className="text-slate-500">Wartość PLN:</span>{' '}
-                      <span className="font-medium">{formatGrosze(order.valuePln as Grosze)}</span>
-                    </div>
-                  )}
-                  {order.valueEur && (
-                    <div>
-                      <span className="text-slate-500">Wartość EUR:</span>{' '}
-                      <span className="font-medium">{formatCenty(order.valueEur as Centy)}</span>
-                    </div>
-                  )}
-                  {order.invoiceNumber && (
-                    <div>
-                      <span className="text-slate-500">Nr faktury:</span>{' '}
-                      <span className="font-mono">{order.invoiceNumber}</span>
-                    </div>
-                  )}
+
+                  {/* Projekty - widoczne tylko dla klientów AKROBUD */}
+                  {isAkrobudOrder(order.client) && (() => {
+                    const references = Array.from(
+                      new Set(
+                        order.windows
+                          ?.map((w) => w.reference)
+                          .filter((ref): ref is string => ref !== null && ref !== undefined && ref.trim() !== '') || []
+                      )
+                    );
+
+                    if (references.length > 0) {
+                      return (
+                        <div className="bg-blue-50 rounded-lg p-4">
+                          <h4 className="font-medium mb-3 flex items-center gap-2 text-blue-900">
+                            <FileText className="h-4 w-4" />
+                            Projekty
+                          </h4>
+                          <div className="flex flex-wrap gap-2">
+                            {references.map((ref, i) => (
+                              <span
+                                key={i}
+                                className="inline-block px-3 py-1.5 bg-white border border-blue-200 rounded-md text-sm font-mono text-blue-900 shadow-sm"
+                              >
+                                {ref}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
-                {order.notes && (
-                  <div className="mt-3 pt-3 border-t">
-                    <span className="text-slate-500 text-sm">Notatki:</span>
-                    <p className="text-sm mt-1">{order.notes}</p>
+
+                {/* Materiałówka - sumy wartości */}
+                {(order.windowsNetValue || order.windowsMaterial || order.assemblyValue || order.extrasValue || order.otherValue) && (
+                  <div className="border rounded-lg border-emerald-200 bg-emerald-50/30">
+                    <div className="px-4 py-3">
+                      <h4 className="font-medium flex items-center gap-2 text-emerald-900 mb-3">
+                        <Calculator className="h-4 w-4" />
+                        Materiałówka - sumy
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {order.windowsNetValue != null && order.windowsNetValue > 0 && (
+                          <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                            <div className="text-xs text-slate-500 mb-1">Wartość netto okien</div>
+                            <div className="font-semibold text-emerald-700">
+                              {formatGrosze(order.windowsNetValue as Grosze)}
+                            </div>
+                          </div>
+                        )}
+                        {order.windowsMaterial != null && order.windowsMaterial > 0 && (
+                          <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                            <div className="text-xs text-slate-500 mb-1">Materiał okien</div>
+                            <div className="font-semibold text-emerald-700">
+                              {formatGrosze(order.windowsMaterial as Grosze)}
+                            </div>
+                          </div>
+                        )}
+                        {order.assemblyValue != null && order.assemblyValue > 0 && (
+                          <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                            <div className="text-xs text-slate-500 mb-1">Wartość montażu</div>
+                            <div className="font-semibold text-emerald-700">
+                              {formatGrosze(order.assemblyValue as Grosze)}
+                            </div>
+                          </div>
+                        )}
+                        {order.extrasValue != null && order.extrasValue > 0 && (
+                          <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                            <div className="text-xs text-slate-500 mb-1">Wartość dodatków</div>
+                            <div className="font-semibold text-emerald-700">
+                              {formatGrosze(order.extrasValue as Grosze)}
+                            </div>
+                          </div>
+                        )}
+                        {order.otherValue != null && order.otherValue > 0 && (
+                          <div className="bg-white rounded-lg p-3 border border-emerald-100">
+                            <div className="text-xs text-slate-500 mb-1">Inne</div>
+                            <div className="font-semibold text-emerald-700">
+                              {formatGrosze(order.otherValue as Grosze)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
-              </div>
+              </TabsContent>
 
-              {/* Projekty - widoczne tylko dla klientów AKROBUD */}
-              {isAkrobudOrder(order.clientName) && (() => {
-                const references = Array.from(
-                  new Set(
-                    order.windows
-                      ?.map((w) => w.reference)
-                      .filter((ref): ref is string => ref !== null && ref !== undefined && ref.trim() !== '') || []
-                  )
-                );
-
-                if (references.length > 0) {
-                  return (
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <h4 className="font-medium mb-3 flex items-center gap-2 text-blue-900">
-                        <FileText className="h-4 w-4" />
-                        Projekty
+              {/* Tab: Szczegóły (Okna, Szyby, Profile) */}
+              <TabsContent value="szczegoly" className="mt-4 space-y-4">
+                {/* Lista okien */}
+                {order.windows && order.windows.length > 0 && (
+                  <div className="border rounded-lg">
+                    <div className="px-4 py-3 bg-slate-50 border-b">
+                      <h4 className="font-medium flex items-center gap-2">
+                        <Boxes className="h-4 w-4" />
+                        Lista okien i drzwi ({order.windows.length})
                       </h4>
-                      <div className="flex flex-wrap gap-2">
-                        {references.map((ref, i) => (
-                          <span
-                            key={i}
-                            className="inline-block px-3 py-1.5 bg-white border border-blue-200 rounded-md text-sm font-mono text-blue-900 shadow-sm"
-                          >
-                            {ref}
-                          </span>
-                        ))}
-                      </div>
                     </div>
-                  );
-                }
-                return null;
-              })()}
-            </div>
-
-            {/* Materiałówka - sumy wartości */}
-            {(order.windowsNetValue || order.windowsMaterial || order.assemblyValue || order.extrasValue || order.otherValue) && (
-              <div className="border rounded-lg border-emerald-200 bg-emerald-50/30">
-                <div className="px-4 py-3">
-                  <h4 className="font-medium flex items-center gap-2 text-emerald-900 mb-3">
-                    <Calculator className="h-4 w-4" />
-                    Materiałówka - sumy
-                  </h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {order.windowsNetValue != null && order.windowsNetValue > 0 && (
-                      <div className="bg-white rounded-lg p-3 border border-emerald-100">
-                        <div className="text-xs text-slate-500 mb-1">Wartość netto okien</div>
-                        <div className="font-semibold text-emerald-700">
-                          {formatGrosze(order.windowsNetValue as Grosze)}
-                        </div>
-                      </div>
-                    )}
-                    {order.windowsMaterial != null && order.windowsMaterial > 0 && (
-                      <div className="bg-white rounded-lg p-3 border border-emerald-100">
-                        <div className="text-xs text-slate-500 mb-1">Materiał okien</div>
-                        <div className="font-semibold text-emerald-700">
-                          {formatGrosze(order.windowsMaterial as Grosze)}
-                        </div>
-                      </div>
-                    )}
-                    {order.assemblyValue != null && order.assemblyValue > 0 && (
-                      <div className="bg-white rounded-lg p-3 border border-emerald-100">
-                        <div className="text-xs text-slate-500 mb-1">Wartość montażu</div>
-                        <div className="font-semibold text-emerald-700">
-                          {formatGrosze(order.assemblyValue as Grosze)}
-                        </div>
-                      </div>
-                    )}
-                    {order.extrasValue != null && order.extrasValue > 0 && (
-                      <div className="bg-white rounded-lg p-3 border border-emerald-100">
-                        <div className="text-xs text-slate-500 mb-1">Wartość dodatków</div>
-                        <div className="font-semibold text-emerald-700">
-                          {formatGrosze(order.extrasValue as Grosze)}
-                        </div>
-                      </div>
-                    )}
-                    {order.otherValue != null && order.otherValue > 0 && (
-                      <div className="bg-white rounded-lg p-3 border border-emerald-100">
-                        <div className="text-xs text-slate-500 mb-1">Inne</div>
-                        <div className="font-semibold text-emerald-700">
-                          {formatGrosze(order.otherValue as Grosze)}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Zamówienia Schuco - Collapsible */}
-            {order.schucoLinks && order.schucoLinks.length > 0 && (
-              <div className="border rounded-lg border-orange-200 bg-orange-50/30">
-                <button
-                  onClick={() => setSchucoExpanded(!schucoExpanded)}
-                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-orange-50 transition-colors rounded-t-lg"
-                >
-                  <h4 className="font-medium flex items-center gap-2 text-orange-900">
-                    <Truck className="h-4 w-4" />
-                    Zamówienia Schuco ({order.schucoLinks.length})
-                  </h4>
-                  {schucoExpanded ? (
-                    <ChevronUp className="h-5 w-5 text-orange-500" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 text-orange-500" />
-                  )}
-                </button>
-                {schucoExpanded && (
-                  <div className="border-t border-orange-200">
                     <div className="max-h-[300px] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-3 py-2 text-center w-12">Lp.</th>
+                            <th className="px-3 py-2 text-center">Szerokość</th>
+                            <th className="px-3 py-2 text-center">Wysokość</th>
+                            <th className="px-3 py-2 text-left">Typ profilu</th>
+                            <th className="px-3 py-2 text-center">Ilość</th>
+                            <th className="px-3 py-2 text-left">Referencja</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {order.windows.map((win, i: number) => (
+                            <tr key={win.id || i} className={`border-t hover:bg-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
+                              <td className="px-3 py-2 text-center text-slate-500">{i + 1}</td>
+                              <td className="px-3 py-2 text-center font-mono">{win.widthMm} mm</td>
+                              <td className="px-3 py-2 text-center font-mono">{win.heightMm} mm</td>
+                              <td className="px-3 py-2">{win.profileType}</td>
+                              <td className="px-3 py-2 text-center font-medium">{win.quantity}</td>
+                              <td className="px-3 py-2 font-mono text-slate-600">{win.reference || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Lista szyb */}
+                {order.glasses && order.glasses.length > 0 && (
+                  <div className="border rounded-lg border-cyan-200">
+                    <div className="px-4 py-3 bg-cyan-50 border-b border-cyan-200">
+                      <h4 className="font-medium flex items-center gap-2 text-cyan-900">
+                        <Package className="h-4 w-4" />
+                        Lista szyb ({order.glasses.length})
+                      </h4>
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-cyan-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-3 py-2 text-center w-12">Lp.</th>
+                            <th className="px-3 py-2 text-center">Pozycja</th>
+                            <th className="px-3 py-2 text-center">Szerokość</th>
+                            <th className="px-3 py-2 text-center">Wysokość</th>
+                            <th className="px-3 py-2 text-center">Ilość</th>
+                            <th className="px-3 py-2 text-left">Typ pakietu</th>
+                            <th className="px-3 py-2 text-right">Pow. (m²)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {order.glasses.map((glass, i: number) => (
+                            <tr key={glass.id} className={`border-t hover:bg-cyan-50 ${i % 2 === 0 ? 'bg-white' : 'bg-cyan-50/30'}`}>
+                              <td className="px-3 py-2 text-center text-slate-500">{glass.lp}</td>
+                              <td className="px-3 py-2 text-center font-medium">{glass.position}</td>
+                              <td className="px-3 py-2 text-center font-mono">{glass.widthMm} mm</td>
+                              <td className="px-3 py-2 text-center font-mono">{glass.heightMm} mm</td>
+                              <td className="px-3 py-2 text-center font-medium">{glass.quantity}</td>
+                              <td className="px-3 py-2 text-slate-600 max-w-[200px] truncate" title={glass.packageType}>
+                                {glass.packageType}
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono">{glass.areaSqm.toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-cyan-100 font-medium">
+                          <tr>
+                            <td colSpan={4} className="px-3 py-2 text-right">Suma:</td>
+                            <td className="px-3 py-2 text-center">
+                              {order.glasses.reduce((sum, g) => sum + g.quantity, 0)}
+                            </td>
+                            <td className="px-3 py-2"></td>
+                            <td className="px-3 py-2 text-right font-mono">
+                              {order.glasses.reduce((sum, g) => sum + g.areaSqm * g.quantity, 0).toFixed(2)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Lista zapotrzebowania na profile */}
+                {order.requirements && order.requirements.length > 0 && (
+                  <div className="border rounded-lg">
+                    <div className="px-4 py-3 bg-slate-50 border-b">
+                      <h4 className="font-medium">Zapotrzebowanie na profile ({order.requirements.length})</h4>
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Profil</th>
+                            <th className="px-3 py-2 text-left">Kolor</th>
+                            <th className="px-3 py-2 text-center">Bele</th>
+                            <th className="px-3 py-2 text-center">Metry</th>
+                            <th className="px-3 py-2 text-center">Reszta (mm)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {order.requirements.map((req: Requirement & { beamsCount?: number; meters?: number; restMm?: number }, index: number) => (
+                            <tr key={req.id} className={`border-t hover:bg-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
+                              <td className="px-3 py-2 font-mono font-medium">{req.profile?.number}</td>
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="w-4 h-4 rounded border"
+                                    style={{ backgroundColor: req.color?.hexColor || '#ccc' }}
+                                  />
+                                  <span className="font-mono text-xs">{req.color?.code}</span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-center font-medium">{req.beamsCount}</td>
+                              <td className="px-3 py-2 text-center">{req.meters?.toFixed(1)}</td>
+                              <td className="px-3 py-2 text-center text-slate-500">{req.restMm}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Komunikat gdy brak danych */}
+                {!order.windows?.length && !order.glasses?.length && !order.requirements?.length && (
+                  <div className="text-center py-8 text-slate-500">
+                    Brak szczegółowych danych dla tego zlecenia
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Tab: Dostawy Schuco */}
+              <TabsContent value="dostawy" className="mt-4 space-y-4">
+                {/* P1-R4: System Brain - Production Readiness Checklist */}
+                {order.status === 'new' && (
+                  <ReadinessChecklist
+                    type="production"
+                    entityId={order.id}
+                    className="mb-4"
+                  />
+                )}
+
+                {/* Zamówienia Schuco */}
+                {order.schucoLinks && order.schucoLinks.length > 0 ? (
+                  <div className="border rounded-lg border-orange-200 bg-orange-50/30">
+                    <div className="px-4 py-3 border-b border-orange-200">
+                      <h4 className="font-medium flex items-center gap-2 text-orange-900">
+                        <Truck className="h-4 w-4" />
+                        Zamówienia Schuco ({order.schucoLinks.length})
+                      </h4>
+                    </div>
+                    <div className="max-h-[400px] overflow-y-auto">
                       <table className="w-full text-sm">
                         <thead className="bg-orange-50 sticky top-0 z-10">
                           <tr>
@@ -429,175 +666,13 @@ export function OrderDetailModal({
                       </table>
                     </div>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* Lista okien - Collapsible */}
-            {order.windows && order.windows.length > 0 && (
-              <div className="border rounded-lg">
-                <button
-                  onClick={() => setWindowsExpanded(!windowsExpanded)}
-                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
-                >
-                  <h4 className="font-medium">Lista okien i drzwi ({order.windows.length})</h4>
-                  {windowsExpanded ? (
-                    <ChevronUp className="h-5 w-5 text-slate-500" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 text-slate-500" />
-                  )}
-                </button>
-                {windowsExpanded && (
-                  <div className="border-t">
-                    <div className="max-h-[400px] overflow-y-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 sticky top-0 z-10">
-                          <tr>
-                            <th className="px-3 py-2 text-center w-12">Lp.</th>
-                            <th className="px-3 py-2 text-center">Szerokość</th>
-                            <th className="px-3 py-2 text-center">Wysokość</th>
-                            <th className="px-3 py-2 text-left">Typ profilu</th>
-                            <th className="px-3 py-2 text-center">Ilość</th>
-                            <th className="px-3 py-2 text-left">Referencja</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {order.windows.map((win, i: number) => (
-                            <tr key={win.id || i} className={`border-t hover:bg-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
-                              <td className="px-3 py-2 text-center text-slate-500">{i + 1}</td>
-                              <td className="px-3 py-2 text-center font-mono">{win.widthMm} mm</td>
-                              <td className="px-3 py-2 text-center font-mono">{win.heightMm} mm</td>
-                              <td className="px-3 py-2">{win.profileType}</td>
-                              <td className="px-3 py-2 text-center font-medium">{win.quantity}</td>
-                              <td className="px-3 py-2 font-mono text-slate-600">{win.reference || '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-500 border rounded-lg">
+                    Brak powiązanych zamówień Schuco
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* Lista szyb - Collapsible */}
-            {order.glasses && order.glasses.length > 0 && (
-              <div className="border rounded-lg border-cyan-200">
-                <button
-                  onClick={() => setGlassesExpanded(!glassesExpanded)}
-                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-cyan-50 transition-colors"
-                >
-                  <h4 className="font-medium flex items-center gap-2 text-cyan-900">
-                    <Package className="h-4 w-4" />
-                    Lista szyb ({order.glasses.length})
-                  </h4>
-                  {glassesExpanded ? (
-                    <ChevronUp className="h-5 w-5 text-cyan-500" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 text-cyan-500" />
-                  )}
-                </button>
-                {glassesExpanded && (
-                  <div className="border-t border-cyan-200">
-                    <div className="max-h-[400px] overflow-y-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-cyan-50 sticky top-0 z-10">
-                          <tr>
-                            <th className="px-3 py-2 text-center w-12">Lp.</th>
-                            <th className="px-3 py-2 text-center">Pozycja</th>
-                            <th className="px-3 py-2 text-center">Szerokość</th>
-                            <th className="px-3 py-2 text-center">Wysokość</th>
-                            <th className="px-3 py-2 text-center">Ilość</th>
-                            <th className="px-3 py-2 text-left">Typ pakietu</th>
-                            <th className="px-3 py-2 text-right">Pow. (m²)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {order.glasses.map((glass, i: number) => (
-                            <tr key={glass.id} className={`border-t hover:bg-cyan-50 ${i % 2 === 0 ? 'bg-white' : 'bg-cyan-50/30'}`}>
-                              <td className="px-3 py-2 text-center text-slate-500">{glass.lp}</td>
-                              <td className="px-3 py-2 text-center font-medium">{glass.position}</td>
-                              <td className="px-3 py-2 text-center font-mono">{glass.widthMm} mm</td>
-                              <td className="px-3 py-2 text-center font-mono">{glass.heightMm} mm</td>
-                              <td className="px-3 py-2 text-center font-medium">{glass.quantity}</td>
-                              <td className="px-3 py-2 text-slate-600 max-w-[200px] truncate" title={glass.packageType}>
-                                {glass.packageType}
-                              </td>
-                              <td className="px-3 py-2 text-right font-mono">{glass.areaSqm.toFixed(2)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot className="bg-cyan-100 font-medium">
-                          <tr>
-                            <td colSpan={4} className="px-3 py-2 text-right">Suma:</td>
-                            <td className="px-3 py-2 text-center">
-                              {order.glasses.reduce((sum, g) => sum + g.quantity, 0)}
-                            </td>
-                            <td className="px-3 py-2"></td>
-                            <td className="px-3 py-2 text-right font-mono">
-                              {order.glasses.reduce((sum, g) => sum + g.areaSqm * g.quantity, 0).toFixed(2)}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Lista zapotrzebowania na profile - Collapsible */}
-            {order.requirements && order.requirements.length > 0 && (
-              <div className="border rounded-lg">
-                <button
-                  onClick={() => setRequirementsExpanded(!requirementsExpanded)}
-                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
-                >
-                  <h4 className="font-medium">Zapotrzebowanie na profile ({order.requirements.length})</h4>
-                  {requirementsExpanded ? (
-                    <ChevronUp className="h-5 w-5 text-slate-500" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 text-slate-500" />
-                  )}
-                </button>
-                {requirementsExpanded && (
-                  <div className="border-t">
-                    <div className="max-h-[400px] overflow-y-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 sticky top-0 z-10">
-                          <tr>
-                            <th className="px-3 py-2 text-left">Profil</th>
-                            <th className="px-3 py-2 text-left">Kolor</th>
-                            <th className="px-3 py-2 text-center">Bele</th>
-                            <th className="px-3 py-2 text-center">Metry</th>
-                            <th className="px-3 py-2 text-center">Reszta (mm)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {order.requirements.map((req: Requirement & { beamsCount?: number; meters?: number; restMm?: number }, index: number) => (
-                            <tr key={req.id} className={`border-t hover:bg-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
-                              <td className="px-3 py-2 font-mono font-medium">{req.profile?.number}</td>
-                              <td className="px-3 py-2">
-                                <div className="flex items-center gap-2">
-                                  <div
-                                    className="w-4 h-4 rounded border"
-                                    style={{ backgroundColor: req.color?.hexColor || '#ccc' }}
-                                  />
-                                  <span className="font-mono text-xs">{req.color?.code}</span>
-                                </div>
-                              </td>
-                              <td className="px-3 py-2 text-center font-medium">{req.beamsCount}</td>
-                              <td className="px-3 py-2 text-center">{req.meters?.toFixed(1)}</td>
-                              <td className="px-3 py-2 text-center text-slate-500">{req.restMm}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+              </TabsContent>
+            </Tabs>
           </div>
         ) : (
           <div className="text-center py-8 text-slate-500">

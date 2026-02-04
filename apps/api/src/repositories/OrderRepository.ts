@@ -16,7 +16,10 @@ export class OrderRepository {
   constructor(private prisma: PrismaClient) {}
 
   async findAll(filters: OrderFilters = {}, pagination?: PaginationParams): Promise<PaginatedResponse<unknown>> {
-    const where: Prisma.OrderWhereInput = {};
+    const where: Prisma.OrderWhereInput = {
+      // Zawsze filtruj usunięte zlecenia (soft delete)
+      deletedAt: null,
+    };
 
     if (filters.status) {
       where.status = filters.status;
@@ -324,9 +327,29 @@ export class OrderRepository {
     return deliveryOrders.map(d => d.delivery);
   }
 
-  async delete(id: number): Promise<void> {
-    await this.prisma.order.delete({
+  /**
+   * Soft delete zlecenia - ustawia deletedAt i deletedByUserId
+   */
+  async softDelete(id: number, deletedByUserId: number): Promise<void> {
+    await this.prisma.order.update({
       where: { id },
+      data: {
+        deletedAt: new Date(),
+        deletedByUserId,
+      },
+    });
+  }
+
+  /**
+   * Przywrócenie usuniętego zlecenia
+   */
+  async restore(id: number): Promise<void> {
+    await this.prisma.order.update({
+      where: { id },
+      data: {
+        deletedAt: null,
+        deletedByUserId: null,
+      },
     });
   }
 
@@ -567,6 +590,7 @@ export class OrderRepository {
           lte: endDate,
         },
         archivedAt: null, // Exclude archived orders
+        deletedAt: null,  // Exclude deleted orders (soft delete)
       },
       select: {
         id: true,
@@ -606,6 +630,8 @@ export class OrderRepository {
         // Wyszukiwanie po referencjach okien
         { windows: { some: { reference: { contains: query } } } },
       ],
+      // Zawsze filtruj usunięte zlecenia (soft delete)
+      deletedAt: null,
       // Opcjonalnie wyklucz zarchiwizowane
       ...(includeArchived ? {} : { archivedAt: null }),
     };
@@ -653,6 +679,7 @@ export class OrderRepository {
       where: {
         ...(userId !== null ? { documentAuthorUserId: userId } : {}),
         archivedAt: null,
+        deletedAt: null, // Exclude deleted orders (soft delete)
       },
       select: {
         id: true,

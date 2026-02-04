@@ -22,6 +22,7 @@ import {
   emitMatchingRetry,
 } from '../event-emitter.js';
 import { logger } from '../../utils/logger.js';
+import { moveToSkipped } from '../file-watcher/utils.js';
 
 /**
  * Inicjalizuje bridge między kolejkami a WebSocket.
@@ -49,13 +50,33 @@ export function initializeImportWebSocketBridge(): void {
     });
   });
 
-  importQueue.on('job:failed', ({ job, error }) => {
+  importQueue.on('job:failed', async ({ job, error }) => {
     emitImportFailed({
       jobId: job.id,
       jobType: job.type,
       filePath: job.filePath,
       error,
     });
+
+    // Przenieś plik do folderu _pominiete po ostatecznej porażce
+    // Dotyczy typów importu które mają pliki źródłowe w obserwowanych folderach
+    const fileBasedJobTypes = [
+      'glass_order',
+      'glass_order_correction',
+      'glass_order_pdf',
+      'glass_delivery',
+    ];
+
+    if (fileBasedJobTypes.includes(job.type)) {
+      try {
+        await moveToSkipped(job.filePath);
+        logger.info(`[ImportWebSocketBridge] Plik przeniesiony do _pominiete: ${job.filePath}`);
+      } catch (moveError) {
+        logger.warn(`[ImportWebSocketBridge] Nie udało się przenieść pliku do _pominiete: ${job.filePath}`, {
+          error: moveError instanceof Error ? moveError.message : 'Unknown error',
+        });
+      }
+    }
   });
 
   importQueue.on('job:retry', ({ job, error, retryCount, retryInMs }) => {

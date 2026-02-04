@@ -45,6 +45,7 @@ import { attendanceRoutes } from './routes/attendance.js';
 import { logisticsRoutes } from './routes/logistics.js';
 import { pvcWarehouseRoutes } from './routes/pvc-warehouse.js';
 import { helpRoutes } from './routes/help.js';
+import { gmailRoutes } from './routes/gmail.js';
 
 // Services
 import { FileWatcherService } from './services/file-watcher/index.js';
@@ -56,6 +57,7 @@ import { startOrderArchiveScheduler, stopOrderArchiveScheduler } from './service
 import { startSoftDeleteCleanupScheduler, stopSoftDeleteCleanupScheduler } from './services/softDeleteCleanupScheduler.js';
 import { DeliveryAlertScheduler } from './services/alerts/DeliveryAlertScheduler.js';
 import { LabelCheckScheduler } from './services/alerts/LabelCheckScheduler.js';
+import { startGmailScheduler, stopGmailScheduler } from './services/gmail/GmailScheduler.js';
 import { setupWebSocket } from './plugins/websocket.js';
 import { seedDefaultWorkers } from './services/seedDefaultWorkers.js';
 import { initializeImportWebSocketBridge } from './services/import/ImportWebSocketBridge.js';
@@ -237,6 +239,9 @@ await fastify.register(pvcWarehouseRoutes, { prefix: '/api/pvc-warehouse' });
 // Help Routes (Instrukcje obsługi - generowanie PDF)
 await fastify.register(helpRoutes, { prefix: '/api/help' });
 
+// Gmail IMAP Routes (automatyczne pobieranie CSV z Gmail)
+await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
+
 // Health checks (basic - must be before extended health routes)
 fastify.get('/api/health', {
   schema: {
@@ -319,6 +324,7 @@ const closeGracefully = async (signal: string) => {
   stopSoftDeleteCleanupScheduler();
   DeliveryAlertScheduler.stop();
   LabelCheckScheduler.stop();
+  stopGmailScheduler();
   // Zatrzymaj Schuco Item Scheduler
   if (schucoItemService) {
     schucoItemService.stopAutoFetchScheduler();
@@ -374,6 +380,9 @@ const start = async () => {
 
     // Uruchom Label Check Scheduler (automatyczne sprawdzanie etykiet codziennie o 7:00 dla dostaw na najbliższe 14 dni)
     LabelCheckScheduler.start();
+
+    // Uruchom Gmail IMAP Scheduler (pobieranie CSV z Gmail co godzinę)
+    startGmailScheduler(prisma);
 
     // Uruchom Schuco Item Scheduler (automatyczne pobieranie pozycji co 45 minut)
     // WYŁĄCZONE - scheduler powodował problemy ze współbieżnością

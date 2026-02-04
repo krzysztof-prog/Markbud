@@ -4,6 +4,7 @@
 
 import { useMemo, useCallback } from 'react';
 import { formatDate } from '@/lib/utils';
+import { formatDateWarsaw } from '@/lib/date-utils';
 import type { ExtendedOrder, GroupBy } from '../types';
 
 // ================================
@@ -30,7 +31,7 @@ const getMonthKey = (date: Date): string => {
  * Zwraca klucz dnia (YYYY-MM-DD)
  */
 const getDayKey = (date: Date): string => {
-  return date.toISOString().split('T')[0];
+  return formatDateWarsaw(date);
 };
 
 /**

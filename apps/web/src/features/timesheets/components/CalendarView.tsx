@@ -48,6 +48,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const { data: calendarData, isLoading } = useCalendarSummary(year, month);
 
   // Mapa statusów dni
+  // day.date to string z API w formacie ISO - split('T')[0] jest poprawny dla stringów
   const dayStatusMap = useMemo(() => {
     const map = new Map<string, DayStatus>();
     if (calendarData?.days) {

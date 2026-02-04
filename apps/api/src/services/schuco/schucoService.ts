@@ -762,6 +762,11 @@ export class SchucoService {
         where: {
           archivedAt: null, // Tylko niezarchiwizowane
         },
+        include: {
+          _count: {
+            select: { items: true }, // Liczba pobranych pozycji zamówienia
+          },
+        },
         orderBy: [
           { orderDateParsed: 'desc' },
           { id: 'desc' },

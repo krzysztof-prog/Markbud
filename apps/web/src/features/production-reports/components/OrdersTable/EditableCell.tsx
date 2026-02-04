@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Pencil, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDateWarsaw } from '@/lib/date-utils';
 
 interface EditableCellProps {
   value: number | string | null;
@@ -64,8 +65,8 @@ export const EditableCell: React.FC<EditableCellProps> = ({
       setLocalValue((value / 100).toString());
     } else if (type === 'date' && value) {
       // Format YYYY-MM-DD dla input type=date
-      const date = new Date(value);
-      setLocalValue(date.toISOString().split('T')[0]);
+      // value tutaj to string (bo type === 'date')
+      setLocalValue(formatDateWarsaw(value as string));
     } else {
       setLocalValue(value?.toString() || '');
     }

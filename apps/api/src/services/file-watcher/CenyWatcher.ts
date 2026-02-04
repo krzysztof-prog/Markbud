@@ -230,33 +230,40 @@ export class CenyWatcher implements IFileWatcher {
         `   ❌ Błąd importu PDF ${filename}: ${error instanceof Error ? error.message : 'Unknown'}`
       );
 
-      // Znajdź istniejący import lub utwórz nowy ze statusem failed
-      const existingImport = await this.prisma.fileImport.findFirst({
-        where: { filepath: filePath },
-      });
+      // Zapisz do FileImport jako failed (ale nie blokuj propagacji błędu)
+      try {
+        const existingImport = await this.prisma.fileImport.findFirst({
+          where: { filepath: filePath },
+        });
 
-      if (existingImport) {
-        await this.prisma.fileImport.update({
-          where: { id: existingImport.id },
-          data: {
-            status: 'failed',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          },
-        });
-      } else {
-        await this.prisma.fileImport.create({
-          data: {
-            filename,
-            filepath: filePath,
-            fileType: 'ceny_pdf',
-            status: 'failed',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          },
-        });
+        if (existingImport) {
+          await this.prisma.fileImport.update({
+            where: { id: existingImport.id },
+            data: {
+              status: 'failed',
+              errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            },
+          });
+        } else {
+          await this.prisma.fileImport.create({
+            data: {
+              filename,
+              filepath: filePath,
+              fileType: 'ceny_pdf',
+              status: 'failed',
+              errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            },
+          });
+        }
+      } catch (fileImportError) {
+        logger.warn(`Nie udalo sie zapisac FileImport dla ${filename}`);
       }
 
       // NIE archiwizuj pliku jeśli był błąd
       logger.warn(`   ⚠️ Plik NIE został zarchiwizowany - błąd importu`);
+
+      // WAŻNE: Propaguj błąd do kolejki aby mogła retry
+      throw error;
     }
   }
 }

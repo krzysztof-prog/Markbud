@@ -23,9 +23,15 @@ export interface SchucoDelivery {
   changedAt: string | null;
   changedFields: string | null; // JSON array of changed field names
   previousValues: string | null; // JSON object of previous values
+  // Item fetch tracking
+  itemsFetchedAt: string | null; // Data ostatniego pobrania pozycji zamówienia
   fetchedAt: string;
   createdAt: string;
   updatedAt: string;
+  // Liczba pobranych pozycji zamówienia
+  _count?: {
+    items: number;
+  };
 }
 
 export interface SchucoFetchLog {

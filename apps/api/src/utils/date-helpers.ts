@@ -1,6 +1,22 @@
 /**
- * Date helper utilities using date-fns
+ * Date helper utilities using date-fns and dayjs
+ *
+ * WAŻNE: Wszystkie daty w projekcie AKROBUD używają strefy czasowej Europe/Warsaw.
+ * Używaj funkcji z prefiksem 'warsaw' dla operacji wymagających poprawnej strefy czasowej.
  */
+
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+import isoWeek from 'dayjs/plugin/isoWeek';
+
+// Konfiguracja dayjs z pluginami timezone
+dayjs.extend(utc);
+dayjs.extend(timezone);
+dayjs.extend(isoWeek);
+
+// Domyślna strefa czasowa dla projektu
+export const TIMEZONE = 'Europe/Warsaw';
 
 import {
   format,
@@ -307,3 +323,112 @@ export function getMonthEnd(month?: number, year?: number): Date {
   const nextMonth = new Date(targetYear, targetMonth + 1, 1, 0, 0, 0, 0);
   return new Date(nextMonth.getTime() - 1);
 }
+
+// ============================================================================
+// FUNKCJE Z OBSŁUGĄ STREFY CZASOWEJ EUROPE/WARSAW
+// Używaj tych funkcji zamiast toISOString().split('T')[0]!
+// ============================================================================
+
+/**
+ * Formatuje datę do formatu YYYY-MM-DD w strefie czasowej Warsaw.
+ * UŻYWAJ ZAMIAST: date.toISOString().split('T')[0]
+ *
+ * @example
+ * // O północy 2025-12-24 00:30 w Warszawie:
+ * // toISOString() zwróci "2025-12-23T23:30:00Z" (UTC) -> split daje "2025-12-23" (BŁĄD!)
+ * // formatDateWarsaw() zwróci "2025-12-24" (POPRAWNIE!)
+ */
+export function formatDateWarsaw(date: Date | string | null | undefined): string {
+  if (!date) return '';
+  return dayjs(date).tz(TIMEZONE).format('YYYY-MM-DD');
+}
+
+/**
+ * Formatuje datę do formatu DD.MM.YYYY w strefie czasowej Warsaw.
+ */
+export function formatDateWarsawPolish(date: Date | string | null | undefined): string {
+  if (!date) return '';
+  return dayjs(date).tz(TIMEZONE).format('DD.MM.YYYY');
+}
+
+/**
+ * Formatuje datę i czas do formatu YYYY-MM-DD HH:mm w strefie czasowej Warsaw.
+ */
+export function formatDateTimeWarsaw(date: Date | string | null | undefined): string {
+  if (!date) return '';
+  return dayjs(date).tz(TIMEZONE).format('YYYY-MM-DD HH:mm');
+}
+
+/**
+ * Formatuje datę i czas do formatu DD.MM.YYYY HH:mm w strefie czasowej Warsaw.
+ */
+export function formatDateTimeWarsawPolish(date: Date | string | null | undefined): string {
+  if (!date) return '';
+  return dayjs(date).tz(TIMEZONE).format('DD.MM.YYYY HH:mm');
+}
+
+/**
+ * Pobiera dzisiejszą datę w formacie YYYY-MM-DD w strefie Warsaw.
+ * UŻYWAJ ZAMIAST: new Date().toISOString().split('T')[0]
+ */
+export function getTodayWarsaw(): string {
+  return dayjs().tz(TIMEZONE).format('YYYY-MM-DD');
+}
+
+/**
+ * Pobiera początek dnia (00:00:00) w strefie Warsaw jako Date.
+ */
+export function getStartOfDayWarsaw(date?: Date | string): Date {
+  const d = date ? dayjs(date) : dayjs();
+  return d.tz(TIMEZONE).startOf('day').toDate();
+}
+
+/**
+ * Pobiera koniec dnia (23:59:59.999) w strefie Warsaw jako Date.
+ */
+export function getEndOfDayWarsaw(date?: Date | string): Date {
+  const d = date ? dayjs(date) : dayjs();
+  return d.tz(TIMEZONE).endOf('day').toDate();
+}
+
+/**
+ * Normalizuje datę do początku dnia w strefie Warsaw.
+ * Używaj zamiast date.setHours(0,0,0,0) lub setUTCHours(0,0,0,0).
+ */
+export function normalizeDateWarsaw(date: Date | string): Date {
+  return dayjs(date).tz(TIMEZONE).startOf('day').toDate();
+}
+
+/**
+ * Porównuje dwie daty (tylko dzień, bez czasu) w strefie Warsaw.
+ * @returns true jeśli obie daty są tego samego dnia
+ */
+export function isSameDayWarsaw(date1: Date | string, date2: Date | string): boolean {
+  return formatDateWarsaw(date1) === formatDateWarsaw(date2);
+}
+
+/**
+ * Parsuje string daty YYYY-MM-DD do Date w strefie Warsaw.
+ * UŻYWAJ ZAMIAST: new Date(year, month - 1, day)
+ */
+export function parseDateWarsaw(dateString: string): Date {
+  return dayjs.tz(dateString, TIMEZONE).toDate();
+}
+
+/**
+ * Pobiera numer tygodnia ISO w strefie Warsaw.
+ */
+export function getWeekNumberWarsaw(date?: Date | string): number {
+  const d = date ? dayjs(date) : dayjs();
+  return d.tz(TIMEZONE).isoWeek();
+}
+
+/**
+ * Eksportuj dayjs skonfigurowany dla Warsaw do użycia w bardziej złożonych operacjach.
+ */
+export function dayjsWarsaw(date?: Date | string) {
+  return date ? dayjs(date).tz(TIMEZONE) : dayjs().tz(TIMEZONE);
+}
+
+// Re-eksportuj dayjs dla zaawansowanych przypadków
+export { dayjs };

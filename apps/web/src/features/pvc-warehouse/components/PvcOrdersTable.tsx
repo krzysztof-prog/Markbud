@@ -111,7 +111,7 @@ export const PvcOrdersTable: React.FC<PvcOrdersTableProps> = ({
                   </div>
                   <div className="flex items-center gap-4 text-sm">
                     <span className="text-muted-foreground">
-                      Wysłano: <span className="font-medium text-green-600">{week.totalShipped}</span>
+                      Dostarczone: <span className="font-medium text-green-600">{week.totalShipped}</span>
                     </span>
                   </div>
                 </div>
@@ -162,7 +162,7 @@ export const PvcOrdersTable: React.FC<PvcOrdersTableProps> = ({
       <div className="mt-4 p-3 bg-slate-50 border rounded-lg text-sm text-slate-600 flex justify-between">
         <span>Razem: {totalItems} pozycji</span>
         <span>
-          Łącznie wysłano: <strong className="text-green-600">{totalShipped} szt.</strong>
+          Łącznie dostarczone: <strong className="text-green-600">{totalShipped} szt.</strong>
         </span>
       </div>
     </div>

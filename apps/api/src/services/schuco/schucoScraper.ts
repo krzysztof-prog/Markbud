@@ -332,8 +332,10 @@ export class SchucoScraper {
 
   /**
    * Navigate to orders page with date filter and retry logic
+   * @param applyDateFilter Czy ustawić filtr daty (domyślnie true dla głównego scrapera)
+   *                        Dla SchucoItemService powinno być FALSE żeby nie filtrować zamówień
    */
-  private async navigateToOrders(): Promise<void> {
+  private async navigateToOrders(applyDateFilter: boolean = true): Promise<void> {
     if (!this.page) throw new Error('Browser not initialized');
 
     const ordersUrl = `https://connect.schueco.com/schueco/pl/purchaseOrders/orders?filters=default&sort=code,false&view=default`;
@@ -376,8 +378,14 @@ export class SchucoScraper {
             path: path.join(this.config.downloadPath, 'orders-page.png'),
           });
 
-          // Ustaw filtr daty (domyślnie 90 dni wstecz)
-          await this.setDateFilter();
+          // Ustaw filtr daty tylko jeśli applyDateFilter = true
+          // Dla SchucoItemService (pobieranie szczegółów pojedynczego zamówienia)
+          // NIE stosujemy filtra bo zamówienie może być starsze i nie pojawi się po filtrowaniu
+          if (applyDateFilter) {
+            await this.setDateFilter();
+          } else {
+            logger.info('[SchucoScraper] Skipping date filter (applyDateFilter=false)');
+          }
 
           return; // Success
         }
@@ -426,7 +434,7 @@ export class SchucoScraper {
 
       logger.info(`[SchucoScraper] ${logMessage}`);
 
-      // Format daty - Schuco używa D.M.YYYY (np. 9.1.2026) - bez zer wiodących!
+      // Format daty - Schuco używa D.M.YYYY (np. 9.1.2026) - BEZ zer wiodących!
       const year = filterDate.getFullYear();
       const month = filterDate.getMonth() + 1;
       const day = filterDate.getDate();
@@ -436,6 +444,12 @@ export class SchucoScraper {
 
       // Czekaj na załadowanie strony z tabelą
       await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Screenshot PRZED rozpoczęciem filtrowania
+      await this.page.screenshot({
+        path: path.join(this.config.downloadPath, 'debug-01-before-filter.png'),
+      });
+      logger.info('[SchucoScraper] Screenshot saved: debug-01-before-filter.png');
 
       // Pobierz aktualną liczbę pozycji przed filtrowaniem
       const initialCount = await this.getRecordCount();
@@ -506,10 +520,11 @@ export class SchucoScraper {
       // Czekaj na otwarcie dropdown
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Screenshot po kliknięciu
+      // Screenshot po kliknięciu w dropdown
       await this.page.screenshot({
-        path: path.join(this.config.downloadPath, 'after-dropdown-click-1.png'),
+        path: path.join(this.config.downloadPath, 'debug-02-after-dropdown-click.png'),
       });
+      logger.info('[SchucoScraper] Screenshot saved: debug-02-after-dropdown-click.png');
 
       // ========================================
       // KROK 2: Wybierz opcję "po" z rozwiniętej listy
@@ -599,10 +614,11 @@ export class SchucoScraper {
 
       await new Promise(resolve => setTimeout(resolve, 1500));
 
-      // Screenshot po wyborze opcji
+      // Screenshot po wyborze opcji "po"
       await this.page.screenshot({
-        path: path.join(this.config.downloadPath, 'after-option-select.png'),
+        path: path.join(this.config.downloadPath, 'debug-03-after-option-select.png'),
       });
+      logger.info('[SchucoScraper] Screenshot saved: debug-03-after-option-select.png');
 
       // Sprawdź czy filtr się zmienił (szukaj tekstu "po" w filtrze zamiast "w dniu")
       const filterChanged = await this.page.evaluate(() => {
@@ -616,90 +632,177 @@ export class SchucoScraper {
       logger.info(`[SchucoScraper] Filter changed to "po": ${filterChanged ? 'YES' : 'NO'}`);
 
       // ========================================
-      // KROK 3: Wypełnij pole daty i zatwierdź przez calendar picker
+      // KROK 3: Wypełnij pole daty przez Puppeteer (nie przez value!)
       // ========================================
       logger.info('[SchucoScraper] Step 3: Filling date input...');
 
-      // Schuco używa calendar pickera - musimy:
-      // 1. Kliknąć na input daty (otworzy kalendarz)
-      // 2. Wpisać datę lub wybrać z kalendarza
-      // 3. Zamknąć kalendarz (Escape lub kliknięcie poza)
+      // Schuco używa Angular calendar picker - musimy użyć Puppeteer.type()
+      // a nie inp.value = ... które nie triggeruje Angular change detection
 
-      // Znajdź input daty obok filtra "po"
-      const dateInputFound = await this.page.evaluate((dateValue: string) => {
+      // Znajdź input daty obok filtra "po" - szukamy po placeholder
+      const dateInputSelector = await this.page.evaluate(() => {
         const inputs = Array.from(document.querySelectorAll('input'));
 
-        for (const inp of inputs) {
+        for (let i = 0; i < inputs.length; i++) {
+          const inp = inputs[i];
           const placeholder = (inp.placeholder || '').toLowerCase();
 
           // Input daty - szukaj po placeholder "Wybierz datę"
           if (placeholder.includes('wybierz') || placeholder.includes('dat')) {
-            // Wyczyść i wpisz datę
-            inp.focus();
-            inp.value = '';
-            inp.value = dateValue;
-
-            // Odpal eventy żeby React zaktualizował state
-            inp.dispatchEvent(new Event('input', { bubbles: true }));
-            inp.dispatchEvent(new Event('change', { bubbles: true }));
-
-            return { found: true, placeholder: inp.placeholder };
+            // Dodaj unikalny atrybut żeby go później znaleźć
+            inp.setAttribute('data-schuco-date-input', 'true');
+            return {
+              found: true,
+              placeholder: inp.placeholder,
+              index: i,
+            };
           }
         }
-        return { found: false };
-      }, dateStr);
-
-      if (dateInputFound.found) {
-        logger.info(`[SchucoScraper] Entered date "${dateStr}" in input with placeholder="${dateInputFound.placeholder}"`);
-      } else {
-        logger.warn('[SchucoScraper] Could not find date input');
-      }
-
-      // Poczekaj chwilę
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Zamknij calendar picker i zatwierdź filtr
-      // UWAGA: NIE klikamy "Zmień filtr" - to otwiera modal!
-      // Zamiast tego używamy Tab + Enter żeby zatwierdzić inline filtr
-
-      // Krok 1: Zamknij kalendarz przez Escape
-      await this.page.keyboard.press('Escape');
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Krok 2: Jeszcze raz Escape (kalendarz może być uparte)
-      await this.page.keyboard.press('Escape');
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      // Krok 3: Kliknij poza kalendarzem żeby się zamknął
-      // Klikamy na nagłówek tabeli (bezpieczne miejsce)
-      const safeClick = await this.page.evaluate(() => {
-        // Znajdź jakiś nagłówek tabeli
-        const headers = Array.from(document.querySelectorAll('th, thead td, .header, [class*="header"]'));
-        for (const h of headers) {
-          const rect = h.getBoundingClientRect();
-          if (rect.height > 0 && rect.width > 0) {
-            (h as HTMLElement).click();
-            return true;
-          }
-        }
-        // Fallback - kliknij gdziekolwiek
-        document.body.click();
-        return false;
+        return { found: false, placeholder: '', index: -1 };
       });
 
-      logger.info(`[SchucoScraper] Clicked safe area to close calendar: ${safeClick}`);
+      if (dateInputSelector.found) {
+        logger.info(
+          `[SchucoScraper] Found date input with placeholder="${dateInputSelector.placeholder}", index=${dateInputSelector.index}`
+        );
+
+        // Użyj Puppeteer do kliknięcia i wpisania - to jest KLUCZOWE!
+        const dateInput = await this.page.$('input[data-schuco-date-input="true"]');
+
+        if (dateInput) {
+          // 1. Kliknij na input żeby go aktywować (otworzy kalendarz)
+          await dateInput.click();
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // 2. Wyczyść pole (Ctrl+A + Backspace)
+          await this.page.keyboard.down('Control');
+          await this.page.keyboard.press('a');
+          await this.page.keyboard.up('Control');
+          await this.page.keyboard.press('Backspace');
+          await new Promise(resolve => setTimeout(resolve, 200));
+
+          // 3. Wpisz datę przez Puppeteer.type() - to triggeruje Angular events!
+          await dateInput.type(dateStr, { delay: 50 });
+          logger.info(`[SchucoScraper] Typed date "${dateStr}" using Puppeteer.type()`);
+
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } else {
+          logger.warn('[SchucoScraper] Could not get date input element handle');
+        }
+      } else {
+        logger.warn('[SchucoScraper] Could not find date input by placeholder');
+
+        // Fallback - szukaj inputa typu date lub text w obszarze filtra
+        const fallbackInput = await this.page.$('input[type="text"]:not([readonly])');
+        if (fallbackInput) {
+          await fallbackInput.click();
+          await new Promise(resolve => setTimeout(resolve, 300));
+          await this.page.keyboard.down('Control');
+          await this.page.keyboard.press('a');
+          await this.page.keyboard.up('Control');
+          await this.page.keyboard.press('Backspace');
+          await fallbackInput.type(dateStr, { delay: 50 });
+          logger.info(`[SchucoScraper] Used fallback input, typed date "${dateStr}"`);
+        }
+      }
+
+      // Screenshot po wpisaniu daty
+      await this.page.screenshot({
+        path: path.join(this.config.downloadPath, 'debug-04-after-date-input.png'),
+      });
+      logger.info('[SchucoScraper] Screenshot saved: debug-04-after-date-input.png');
+
+      // Poczekaj chwilę na kalendarz
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Krok 4: Wciśnij Tab żeby wyjść z inputa (to powinno zatwierdzić wartość)
-      // UWAGA: NIE wciskamy Enter - to może otworzyć modal "Filtr"!
-      await this.page.keyboard.press('Tab');
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // ========================================
+      // ZATWIERDZENIE FILTRU - KLIKNIĘCIE OBOK
+      // Angular potrzebuje blur event żeby zatwierdzić wartość
+      // Najprostsze rozwiązanie: kliknąć w pusty obszar obok filtra
+      // ========================================
 
-      // Krok 5: Jeszcze raz Tab żeby całkowicie wyjść z obszaru filtra
-      await this.page.keyboard.press('Tab');
-      await new Promise(resolve => setTimeout(resolve, 300));
+      logger.info('[SchucoScraper] Clicking outside date input to trigger blur and apply filter...');
 
-      logger.info('[SchucoScraper] Filter submitted via Tab (no Enter - avoids modal!)');
+      // Metoda 1: Kliknij w nagłówek strony używając Puppeteer.click() na współrzędnych
+      // To triggeruje prawdziwy blur event, nie tylko JavaScript click()
+      const pageViewport = this.page.viewport();
+      if (pageViewport) {
+        // Kliknij w lewy górny róg strony (poza filtrem)
+        await this.page.mouse.click(100, 150);
+        logger.info('[SchucoScraper] Clicked at coordinates (100, 150) to blur date input');
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Screenshot po pierwszym kliknięciu
+      await this.page.screenshot({
+        path: path.join(this.config.downloadPath, 'debug-05-after-click-outside.png'),
+      });
+      logger.info('[SchucoScraper] Screenshot saved: debug-05-after-click-outside.png');
+
+      // Metoda 2: Kliknij w tytuł strony lub logo (jeśli istnieje)
+      const clickedTitle = await this.page.evaluate(() => {
+        // Szukaj elementu z tekstem "Moje zamówienia" lub podobnym
+        const allElements = Array.from(document.querySelectorAll('h1, h2, h3, .title, [class*="title"], [class*="header"], span'));
+        for (const el of allElements) {
+          const text = el.textContent?.trim() || '';
+          if (text.includes('Moje zamówienia') || text.includes('zamówienia') || text.includes('Zamówienia')) {
+            const rect = el.getBoundingClientRect();
+            if (rect.height > 0 && rect.width > 0) {
+              (el as HTMLElement).click();
+              return { clicked: true, text: text.substring(0, 50) };
+            }
+          }
+        }
+        return { clicked: false, text: '' };
+      });
+
+      if (clickedTitle.clicked) {
+        logger.info(`[SchucoScraper] Clicked on title element: "${clickedTitle.text}"`);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // ========================================
+      // KROK 3.5: KLIKNIJ "Zmień filtr" - KRYTYCZNE!
+      // Na stronie Schüco trzeba kliknąć przycisk "Zmień filtr" żeby zastosować filtr
+      // ========================================
+      logger.info('[SchucoScraper] Looking for "Zmień filtr" button...');
+
+      const filterApplied = await this.page.evaluate(() => {
+        // Szukaj linku/przycisku "Zmień filtr"
+        const allElements = Array.from(document.querySelectorAll('a, button, span, div'));
+        for (const el of allElements) {
+          const text = el.textContent?.trim() || '';
+          if (text === 'Zmień filtr' || text.includes('Zmień filtr')) {
+            const rect = el.getBoundingClientRect();
+            if (rect.height > 0 && rect.width > 0) {
+              console.log('Found "Zmień filtr" button, clicking...');
+              (el as HTMLElement).click();
+              return { clicked: true, text };
+            }
+          }
+        }
+        return { clicked: false, text: '' };
+      });
+
+      if (filterApplied.clicked) {
+        logger.info(`[SchucoScraper] ✅ Clicked "Zmień filtr" button`);
+      } else {
+        logger.warn('[SchucoScraper] ⚠️ "Zmień filtr" button not found, trying alternative methods...');
+
+        // Alternatywa: Naciśnij Enter w polu daty
+        await this.page.keyboard.press('Enter');
+        logger.info('[SchucoScraper] Pressed Enter as fallback');
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Screenshot po kliknięciu "Zmień filtr"
+      await this.page.screenshot({
+        path: path.join(this.config.downloadPath, 'debug-06-after-filter-submit.png'),
+      });
+      logger.info('[SchucoScraper] Screenshot saved: debug-06-after-filter-submit.png');
 
       // ========================================
       // KROK 4: Czekaj na przefiltrowane dane - WAŻNE!
@@ -766,10 +869,11 @@ export class SchucoScraper {
         logger.warn('[SchucoScraper] ⚠️ No records found after filtering');
       }
 
-      // Screenshot końcowy
+      // Screenshot końcowy - po filtrze
       await this.page.screenshot({
-        path: path.join(this.config.downloadPath, 'after-date-filter.png'),
+        path: path.join(this.config.downloadPath, 'debug-06-final-after-filter.png'),
       });
+      logger.info('[SchucoScraper] Screenshot saved: debug-06-final-after-filter.png');
 
     } catch (error) {
       logger.warn(`[SchucoScraper] Failed to set date filter: ${(error as Error).message}`);
@@ -991,11 +1095,13 @@ export class SchucoScraper {
       logger.info('[SchucoScraper] Step 2/3: Logging in...');
       await this.login();
 
-      logger.info('[SchucoScraper] Step 3/3: Navigating to orders...');
-      await this.navigateToOrders();
+      logger.info('[SchucoScraper] Step 3/3: Navigating to orders (without date filter for item scraper)...');
+      // WAŻNE: NIE stosujemy filtra daty dla SchucoItemService
+      // bo zamówienie może być starsze i nie pojawi się po filtrowaniu
+      await this.navigateToOrders(false);
 
       const duration = Date.now() - startTime;
-      logger.info(`[SchucoScraper] ✅ Login and navigate completed in ${duration}ms (browser stays open)`);
+      logger.info(`[SchucoScraper] ✅ Login and navigate completed in ${duration}ms (browser stays open, no date filter)`);
     } catch (error) {
       const duration = Date.now() - startTime;
       logger.error(`[SchucoScraper] ❌ Login and navigate failed after ${duration}ms:`, error);

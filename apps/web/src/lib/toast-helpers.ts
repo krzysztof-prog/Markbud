@@ -3,6 +3,23 @@ import { ToastAction } from '@/components/ui/toast';
 import * as React from 'react';
 import { getErrorMessage as getCentralErrorMessage, getErrorAction } from './error-messages';
 
+// Re-eksporty rozszerzonych funkcji toastów
+export {
+  showPersistentToast,
+  showProgressToast,
+  showGroupedToast,
+  type PersistentToastOptions,
+  type ProgressToastController,
+  type ProgressToastOptions,
+  type GroupedToastOptions,
+} from './toast-extended';
+
+export {
+  showUndoToast,
+  showUndoToastWithCountdown,
+  type UndoToastOptions,
+} from './toast-undo';
+
 export const showSuccessToast = (title: string, description?: string) => {
   toast({
     title,

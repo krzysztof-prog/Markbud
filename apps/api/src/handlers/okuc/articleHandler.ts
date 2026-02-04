@@ -13,6 +13,7 @@ import {
   type CreateArticleInput,
   type UpdateArticleInput,
 } from '../../validators/okuc.js';
+import { getTodayWarsaw } from '../../utils/date-helpers.js';
 
 const repository = new OkucArticleRepository(prisma);
 const service = new OkucArticleService(repository);
@@ -241,7 +242,7 @@ export const okucArticleHandler = {
 
     const csv = await service.exportArticlesToCsv(warehouseType);
 
-    const timestamp = new Date().toISOString().split('T')[0];
+    const timestamp = getTodayWarsaw();
     const filename = `okuc_articles_${warehouseType || 'all'}_${timestamp}.csv`;
 
     return reply

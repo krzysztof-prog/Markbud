@@ -110,9 +110,11 @@ export class GlassDeliveryService {
 
   /**
    * Get all loose glasses (szyby luzem)
+   * Deduplikacja na wypadek gdyby w bazie były duplikaty (safety net)
+   * Zwraca tylko unikalne szyby (najnowsze po id)
    */
   async getLooseGlasses() {
-    return this.prisma.looseGlass.findMany({
+    const allGlasses = await this.prisma.looseGlass.findMany({
       include: {
         glassDelivery: {
           select: {
@@ -121,8 +123,29 @@ export class GlassDeliveryService {
           }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { id: 'desc' } // Najnowsze pierwsze
     });
+
+    // Deduplikacja - zostawiamy najnowsze (pierwsze w posortowanej liście)
+    const seen = new Set<string>();
+    const unique: typeof allGlasses = [];
+
+    for (const glass of allGlasses) {
+      const key = `${glass.orderNumber}|${glass.widthMm}|${glass.heightMm}|${glass.quantity}|${glass.glassComposition || ''}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(glass);
+      }
+    }
+
+    // Posortuj po dacie dostawy (najnowsze pierwsze)
+    unique.sort((a, b) => {
+      const dateA = a.glassDelivery?.deliveryDate?.getTime() || 0;
+      const dateB = b.glassDelivery?.deliveryDate?.getTime() || 0;
+      return dateB - dateA;
+    });
+
+    return unique;
   }
 
   /**

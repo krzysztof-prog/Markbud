@@ -2,8 +2,10 @@
  * Pallet Optimization hooks - data fetching i mutations
  */
 
-import { useSuspenseQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useToastMutation } from '@/hooks/useToastMutation';
 import { palletsApi } from '../api/palletsApi';
+import { getTodayWarsaw } from '@/lib/date-utils';
 import type { OptimizationResult } from '@/types/pallet';
 
 // ==================== QUERY KEYS ====================
@@ -67,9 +69,12 @@ interface OptimizeMutationParams {
 export function useOptimizePallet() {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useToastMutation({
     mutationFn: ({ deliveryId, options }: OptimizeMutationParams) =>
       palletsApi.optimize(deliveryId, options),
+    successMessage: (data: OptimizationResult) =>
+      `Optymalizacja zakończona: ${data.pallets?.length || 0} palet`,
+    errorMessage: 'Nie udało się zoptymalizować palet',
     onSuccess: (data: OptimizationResult, { deliveryId }: OptimizeMutationParams) => {
       // Zaktualizuj cache
       queryClient.setQueryData(PALLET_OPTIMIZATION_QUERY_KEY(deliveryId), data);
@@ -96,8 +101,10 @@ export function useOptimizePallet() {
 export function useDeleteOptimization() {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useToastMutation({
     mutationFn: (deliveryId: number) => palletsApi.deleteOptimization(deliveryId),
+    successMessage: 'Optymalizacja usunięta',
+    errorMessage: 'Nie udało się usunąć optymalizacji',
     onSuccess: (_data, deliveryId: number) => {
       // Usuń z cache
       queryClient.removeQueries({ queryKey: PALLET_OPTIMIZATION_QUERY_KEY(deliveryId) });
@@ -122,7 +129,7 @@ export function useDeleteOptimization() {
  * ```
  */
 export function useDownloadPdf() {
-  return useMutation({
+  return useToastMutation({
     mutationFn: async (deliveryId: number) => {
       const blob = await palletsApi.exportToPdf(deliveryId);
 
@@ -132,7 +139,7 @@ export function useDownloadPdf() {
       // Utwórz link do pobrania
       const a = document.createElement('a');
       a.href = url;
-      a.download = `palety_dostawa_${deliveryId}_${new Date().toISOString().split('T')[0]}.pdf`;
+      a.download = `palety_dostawa_${deliveryId}_${getTodayWarsaw()}.pdf`;
 
       // Kliknij automatycznie
       document.body.appendChild(a);
@@ -142,6 +149,8 @@ export function useDownloadPdf() {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     },
+    successMessage: 'PDF został pobrany',
+    errorMessage: 'Nie udało się pobrać PDF',
   });
 }
 
@@ -172,8 +181,10 @@ export function usePalletTypes() {
 export function useCreatePalletType() {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useToastMutation({
     mutationFn: palletsApi.createPalletType,
+    successMessage: 'Typ palety utworzony',
+    errorMessage: 'Nie udało się utworzyć typu palety',
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: PALLET_TYPES_QUERY_KEY() });
     },
@@ -186,9 +197,11 @@ export function useCreatePalletType() {
 export function useUpdatePalletType() {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useToastMutation({
     mutationFn: ({ id, data }: { id: number; data: import('@/types/pallet').UpdatePalletTypeRequest }) =>
       palletsApi.updatePalletType(id, data),
+    successMessage: 'Typ palety zaktualizowany',
+    errorMessage: 'Nie udało się zaktualizować typu palety',
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: PALLET_TYPES_QUERY_KEY() });
     },
@@ -201,8 +214,10 @@ export function useUpdatePalletType() {
 export function useDeletePalletType() {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useToastMutation({
     mutationFn: (id: number) => palletsApi.deletePalletType(id),
+    successMessage: 'Typ palety usunięty',
+    errorMessage: 'Nie udało się usunąć typu palety',
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: PALLET_TYPES_QUERY_KEY() });
     },

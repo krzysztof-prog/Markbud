@@ -94,6 +94,7 @@ export function ParsedItemEditor({
       client: order.client,
       project: order.project,
       status: null,
+      deliveryDate: null, // Nowo wybrane zlecenie - data będzie ustawiona po parsowaniu
     });
     setShowOrderSearch(false);
     setSearchQuery('');

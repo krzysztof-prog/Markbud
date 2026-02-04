@@ -12,5 +12,8 @@ export {
   useSchucoItemsFetchRunning,
   useSchucoItemsFetch,
   useSchucoItemsClearOldChanges,
+  useSchucoItemsSchedulerStatus,
+  useSchucoItemsSchedulerControl,
+  useSchucoItemsAutoFetch,
   SCHUCO_ITEMS_QUERY_KEYS,
 } from './useSchucoItems';

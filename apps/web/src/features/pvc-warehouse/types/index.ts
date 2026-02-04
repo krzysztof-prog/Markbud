@@ -19,12 +19,17 @@ export interface ProfileSystems {
 }
 
 export interface PvcStock {
-  id: number;
-  colorId: number;
-  color: PvcColor;
+  colorId: number | null;
+  color: PvcColor | null;
+  privateColorId: number | null;
+  privateColorName: string | null;
   initialStockBeams: number;
+  deliveriesBeams: number;
+  rwBeams: number;
   currentStockBeams: number;
-  difference: number;
+  orderedBeams: number;
+  demandBeams: number;
+  afterDemandBeams: number;
 }
 
 export interface PvcProfileWithStock {

@@ -1,6 +1,14 @@
 /**
  * Helpers dla dat w module godzinówek
+ *
+ * UWAGA: Te funkcje używają lokalnej strefy czasowej przeglądarki.
+ * Dla operacji wymagających Europe/Warsaw użyj funkcji z @/lib/date-utils.
  */
+
+import { formatDateWarsaw, parseDateWarsaw } from '@/lib/date-utils';
+
+// Re-eksport dla kompatybilności - używaj gdy potrzebujesz strefy Warsaw
+export { formatDateWarsaw, parseDateWarsaw };
 
 // Nazwy miesięcy po polsku
 export const MONTH_NAMES = [
@@ -43,7 +51,10 @@ export function formatDateISO(date: Date): string {
 }
 
 /**
- * Parsuje datę z YYYY-MM-DD
+ * Parsuje datę z YYYY-MM-DD do Date w lokalnej strefie czasowej.
+ *
+ * UWAGA: Używaj tej funkcji tylko do operacji wyświetlania (kalendarz, formatowanie).
+ * Dla porównywania dat z bazą danych użyj parseDateWarsaw() z @/lib/date-utils.
  */
 export function parseDateISO(dateString: string): Date {
   const [year, month, day] = dateString.split('-').map(Number);

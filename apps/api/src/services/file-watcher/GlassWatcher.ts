@@ -57,7 +57,7 @@ export class GlassWatcher implements IFileWatcher {
    * Używa importQueue singleton dla sekwencyjnego przetwarzania wszystkich importów w systemie
    */
   private enqueueToGlobalQueue(
-    type: 'glass_order' | 'glass_order_correction' | 'glass_delivery',
+    type: 'glass_order' | 'glass_order_correction' | 'glass_order_pdf' | 'glass_delivery',
     filePath: string
   ): void {
     // Sprawdź czy plik nie jest już w kolejce
@@ -78,6 +78,9 @@ export class GlassWatcher implements IFileWatcher {
               break;
             case 'glass_order_correction':
               await this.processCorrectionGlassOrder(filePath);
+              break;
+            case 'glass_order_pdf':
+              await this.processGlassPdfOrder(filePath);
               break;
             case 'glass_delivery':
               await this.processGlassDelivery(filePath);
@@ -125,20 +128,23 @@ export class GlassWatcher implements IFileWatcher {
 
     watcher
       .on('add', (filePath) => {
-        // Filtruj tylko pliki TXT
+        // Filtruj pliki TXT i PDF
         const filename = path.basename(filePath).toLowerCase();
-        if (!filename.endsWith('.txt')) {
-          return;
-        }
 
-        const isCorrection = /korekta|correction/i.test(filename);
+        if (filename.endsWith('.txt')) {
+          // Pliki TXT - zamówienia szyb (stary format)
+          const isCorrection = /korekta|correction/i.test(filename);
 
-        // Dodaj do GLOBALNEJ kolejki importów
-        if (isCorrection) {
-          this.enqueueToGlobalQueue('glass_order_correction', filePath);
-        } else {
-          this.enqueueToGlobalQueue('glass_order', filePath);
+          if (isCorrection) {
+            this.enqueueToGlobalQueue('glass_order_correction', filePath);
+          } else {
+            this.enqueueToGlobalQueue('glass_order', filePath);
+          }
+        } else if (filename.endsWith('.pdf')) {
+          // Pliki PDF - zamówienia szyb (format WH-Okna)
+          this.enqueueToGlobalQueue('glass_order_pdf', filePath);
         }
+        // Inne rozszerzenia są ignorowane
       })
       .on('error', (error) => {
         logger.error(`Blad File Watcher dla zamowien szyb ${basePath}: ${error}`);
@@ -253,15 +259,23 @@ export class GlassWatcher implements IFileWatcher {
         `   Blad korekty ${filename}: ${error instanceof Error ? error.message : 'Unknown'}`
       );
 
-      await this.prisma.fileImport.create({
-        data: {
-          filename,
-          filepath: filePath,
-          fileType: 'glass_order_correction',
-          status: 'failed',
-          errorMessage: error instanceof Error ? error.message : 'Unknown error',
-        },
-      });
+      // Zapisz do FileImport jako failed (ale nie blokuj propagacji błędu)
+      try {
+        await this.prisma.fileImport.create({
+          data: {
+            filename,
+            filepath: filePath,
+            fileType: 'glass_order_correction',
+            status: 'failed',
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          },
+        });
+      } catch (fileImportError) {
+        logger.warn(`Nie udalo sie zapisac FileImport dla ${filename}`);
+      }
+
+      // WAŻNE: Propaguj błąd do kolejki aby mogła retry
+      throw error;
     }
   }
 
@@ -309,15 +323,156 @@ export class GlassWatcher implements IFileWatcher {
         `   Blad importu ${filename}: ${error instanceof Error ? error.message : 'Unknown'}`
       );
 
+      // Zapisz do FileImport jako failed (ale nie blokuj propagacji błędu)
+      try {
+        await this.prisma.fileImport.create({
+          data: {
+            filename,
+            filepath: filePath,
+            fileType: 'glass_order',
+            status: 'failed',
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          },
+        });
+      } catch (fileImportError) {
+        // Jeśli zapis do FileImport też się nie udał - loguj ale propaguj oryginalny błąd
+        logger.warn(`Nie udalo sie zapisac FileImport dla ${filename}`);
+      }
+
+      // WAŻNE: Propaguj błąd do kolejki aby mogła retry
+      throw error;
+    }
+  }
+
+  /**
+   * Przetwarza zamówienie szyb z pliku PDF (format WH-Okna)
+   * orderNumber jest wyciągany z nazwy pliku
+   */
+  private async processGlassPdfOrder(filePath: string): Promise<void> {
+    const filename = path.basename(filePath);
+
+    try {
+      // Sprawdź czy plik powinien być pominięty
+      const shouldSkip = await shouldSkipImport(this.prisma, filename, filePath);
+
+      if (shouldSkip) {
+        await moveToSkipped(filePath);
+        return;
+      }
+
+      logger.info(`   Nowe zamowienie szyb (PDF): ${filename}`);
+
+      // Dynamiczny import parsera PDF
+      const { parseGlassOrderPdf } = await import('../parsers/glass-order-pdf-parser.js');
+      const { GlassOrderService } = await import('../glassOrderService.js');
+
+      const buffer = await readFile(filePath);
+      const parsed = await parseGlassOrderPdf(buffer, filename);
+
+      logger.info(`   Sparsowano PDF: ${parsed.metadata.glassOrderNumber}, ${parsed.items.length} pozycji`);
+
+      // Sprawdź czy zamówienie już istnieje
+      const existing = await this.prisma.glassOrder.findUnique({
+        where: { glassOrderNumber: parsed.metadata.glassOrderNumber },
+      });
+
+      if (existing) {
+        logger.warn(`   Zamowienie ${parsed.metadata.glassOrderNumber} juz istnieje (ID: ${existing.id}), pomijam`);
+        await moveToSkipped(filePath);
+        return;
+      }
+
+      // Zapisz do bazy używając GlassOrderService (bez parsowania - dane już sparsowane)
+      const glassOrderService = new GlassOrderService(this.prisma);
+
+      // Użyj transakcji do zapisu
+      const glassOrder = await this.prisma.$transaction(async (tx) => {
+        // Utwórz GlassOrder z items
+        const order = await tx.glassOrder.create({
+          data: {
+            glassOrderNumber: parsed.metadata.glassOrderNumber,
+            orderDate: parsed.metadata.orderDate,
+            supplier: parsed.metadata.supplier,
+            orderedBy: parsed.metadata.orderedBy || null,
+            expectedDeliveryDate: parsed.metadata.expectedDeliveryDate,
+            status: 'ordered',
+            items: {
+              create: parsed.items.map((item) => ({
+                orderNumber: item.orderNumber,
+                orderSuffix: item.orderSuffix || null,
+                position: item.position,
+                glassType: item.glassType,
+                widthMm: item.widthMm,
+                heightMm: item.heightMm,
+                quantity: item.quantity,
+              })),
+            },
+          },
+          include: {
+            items: true,
+          },
+        });
+
+        return order;
+      }, {
+        timeout: 60000,
+        maxWait: 10000,
+      });
+
+      // Dopasuj do zleceń produkcyjnych
+      await glassOrderService.matchWithProductionOrders(glassOrder.id);
+
+      // Jeśli jest notatka (np. "Zam. - szprosy"), zaktualizuj powiązane zlecenia
+      if (parsed.metadata.orderedBy) {
+        const orderNumbers = [...new Set(parsed.items.map(item => item.orderNumber))];
+        await this.prisma.order.updateMany({
+          where: { orderNumber: { in: orderNumbers } },
+          data: { glassOrderNote: parsed.metadata.orderedBy },
+        });
+        logger.info(`   Ustawiono notatkę "${parsed.metadata.orderedBy}" dla ${orderNumbers.length} zleceń`);
+      }
+
+      logger.info(`   Zaimportowano zamowienie PDF (ID: ${glassOrder.id})`);
+
       await this.prisma.fileImport.create({
         data: {
           filename,
           filepath: filePath,
-          fileType: 'glass_order',
-          status: 'failed',
-          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          fileType: 'glass_order_pdf',
+          status: 'completed',
+          processedAt: new Date(),
+          metadata: JSON.stringify({
+            glassOrderNumber: parsed.metadata.glassOrderNumber,
+            itemsCount: parsed.items.length,
+            totalQuantity: parsed.summary.totalQuantity,
+          }),
         },
       });
+
+      // Archiwizuj plik po pomyślnym imporcie
+      await archiveFile(filePath);
+    } catch (error) {
+      logger.error(
+        `   Blad importu PDF ${filename}: ${error instanceof Error ? error.message : 'Unknown'}`
+      );
+
+      // Zapisz do FileImport jako failed (ale nie blokuj propagacji błędu)
+      try {
+        await this.prisma.fileImport.create({
+          data: {
+            filename,
+            filepath: filePath,
+            fileType: 'glass_order_pdf',
+            status: 'failed',
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          },
+        });
+      } catch (fileImportError) {
+        logger.warn(`Nie udalo sie zapisac FileImport dla ${filename}`);
+      }
+
+      // WAŻNE: Propaguj błąd do kolejki aby mogła retry
+      throw error;
     }
   }
 
@@ -366,15 +521,23 @@ export class GlassWatcher implements IFileWatcher {
         `   Blad importu ${filename}: ${error instanceof Error ? error.message : 'Unknown'}`
       );
 
-      await this.prisma.fileImport.create({
-        data: {
-          filename,
-          filepath: filePath,
-          fileType: 'glass_delivery',
-          status: 'failed',
-          errorMessage: error instanceof Error ? error.message : 'Unknown error',
-        },
-      });
+      // Zapisz do FileImport jako failed (ale nie blokuj propagacji błędu)
+      try {
+        await this.prisma.fileImport.create({
+          data: {
+            filename,
+            filepath: filePath,
+            fileType: 'glass_delivery',
+            status: 'failed',
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          },
+        });
+      } catch (fileImportError) {
+        logger.warn(`Nie udalo sie zapisac FileImport dla ${filename}`);
+      }
+
+      // WAŻNE: Propaguj błąd do kolejki aby mogła retry
+      throw error;
     }
   }
 }

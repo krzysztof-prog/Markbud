@@ -16,8 +16,19 @@ import {
   calendarQuerySchema,
   updateMailItemSchema,
   mailItemParamsSchema,
+  setOrderDeliveryDateSchema,
 } from '../validators/logistics.js';
-import { NotFoundError } from '../utils/errors.js';
+import { NotFoundError, ForbiddenError } from '../utils/errors.js';
+import type { AuthenticatedRequest } from '../middleware/auth.js';
+
+// Pomocnik do pobierania userId jako number
+function getUserId(request: AuthenticatedRequest): number {
+  const userId = request.user?.userId;
+  if (!userId) {
+    throw new ForbiddenError('Brak autoryzacji');
+  }
+  return typeof userId === 'string' ? parseInt(userId, 10) : userId;
+}
 
 export class LogisticsHandler {
   /**
@@ -201,11 +212,12 @@ export class LogisticsHandler {
    * Używane dla pozycji usuniętych z maila - użytkownik potwierdza usunięcie
    */
   async removeItemFromDelivery(
-    request: FastifyRequest<{ Params: { id: string } }>,
+    request: AuthenticatedRequest & FastifyRequest<{ Params: { id: string } }>,
     reply: FastifyReply
   ) {
     const { id } = mailItemParamsSchema.parse(request.params);
-    await logisticsMailService.removeItemFromDelivery(parseInt(id, 10));
+    const userId = getUserId(request);
+    await logisticsMailService.removeItemFromDelivery(parseInt(id, 10), userId);
     return reply.status(204).send();
   }
 
@@ -215,11 +227,12 @@ export class LogisticsHandler {
    * Używane dla nowych pozycji w mailu - użytkownik akceptuje
    */
   async confirmAddedItem(
-    request: FastifyRequest<{ Params: { id: string } }>,
+    request: AuthenticatedRequest & FastifyRequest<{ Params: { id: string } }>,
     reply: FastifyReply
   ) {
     const { id } = mailItemParamsSchema.parse(request.params);
-    const item = await logisticsMailService.confirmAddedItem(parseInt(id, 10));
+    const userId = getUserId(request);
+    const item = await logisticsMailService.confirmAddedItem(parseInt(id, 10), userId);
     return reply.send(item);
   }
 
@@ -229,11 +242,12 @@ export class LogisticsHandler {
    * Używane dla nowych pozycji w mailu - użytkownik odrzuca
    */
   async rejectAddedItem(
-    request: FastifyRequest<{ Params: { id: string } }>,
+    request: AuthenticatedRequest & FastifyRequest<{ Params: { id: string } }>,
     reply: FastifyReply
   ) {
     const { id } = mailItemParamsSchema.parse(request.params);
-    await logisticsMailService.rejectAddedItem(parseInt(id, 10));
+    const userId = getUserId(request);
+    await logisticsMailService.rejectAddedItem(parseInt(id, 10), userId);
     return reply.status(204).send();
   }
 
@@ -243,11 +257,12 @@ export class LogisticsHandler {
    * Używane dla zmienionych pozycji - użytkownik akceptuje nową wartość
    */
   async acceptItemChange(
-    request: FastifyRequest<{ Params: { id: string } }>,
+    request: AuthenticatedRequest & FastifyRequest<{ Params: { id: string } }>,
     reply: FastifyReply
   ) {
     const { id } = mailItemParamsSchema.parse(request.params);
-    const item = await logisticsMailService.acceptItemChange(parseInt(id, 10));
+    const userId = getUserId(request);
+    const item = await logisticsMailService.acceptItemChange(parseInt(id, 10), userId);
     return reply.send(item);
   }
 
@@ -257,19 +272,71 @@ export class LogisticsHandler {
    * Używane dla zmienionych pozycji - użytkownik chce przywrócić starą wartość
    */
   async restoreItemValue(
-    request: FastifyRequest<{ Params: { id: string }; Body: { field: string; previousValue: string } }>,
+    request: AuthenticatedRequest & FastifyRequest<{ Params: { id: string }; Body: { field: string; previousValue: string } }>,
     reply: FastifyReply
   ) {
     const { id } = mailItemParamsSchema.parse(request.params);
+    const userId = getUserId(request);
     const { field, previousValue } = request.body;
 
     const item = await logisticsMailService.restoreItemValue(
       parseInt(id, 10),
       field,
-      previousValue
+      previousValue,
+      userId
     );
 
     return reply.send(item);
+  }
+
+  // ========== USTAWIANIE DATY DOSTAWY ==========
+
+  /**
+   * POST /logistics/set-order-delivery-date
+   * Ustawia datę dostawy dla zlecenia i dodaje je do odpowiedniej dostawy
+   *
+   * Używane gdy zlecenie jest dopasowane do pozycji na liście mailowej,
+   * ale nie ma ustawionej daty dostawy.
+   *
+   * Body: { orderId: number, deliveryCode: string (np. "08.01.2026_II") }
+   */
+  async setOrderDeliveryDate(
+    request: FastifyRequest<{ Body: unknown }>,
+    reply: FastifyReply
+  ) {
+    const { orderId, deliveryCode } = setOrderDeliveryDateSchema.parse(request.body);
+
+    const result = await logisticsMailService.setOrderDeliveryDate(orderId, deliveryCode);
+
+    return reply.send(result);
+  }
+
+  // ========== ORPHAN ORDERS ==========
+
+  /**
+   * GET /logistics/deliveries/:code/orphan-orders
+   * Pobiera zlecenia przypisane do dostawy ale nieobecne na liście mailowej
+   */
+  async getOrphanOrders(
+    request: FastifyRequest<{ Params: { code: string } }>,
+    reply: FastifyReply
+  ) {
+    const { code } = deliveryCodeParamsSchema.parse(request.params);
+    const result = await logisticsMailService.getOrphanOrders(code);
+    return reply.send(result);
+  }
+
+  /**
+   * DELETE /logistics/orders/:id/remove-from-delivery
+   * Usuwa zlecenie z dostawy (czyści datę dostawy)
+   */
+  async removeOrderFromDelivery(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = mailItemParamsSchema.parse(request.params);
+    const result = await logisticsMailService.removeOrderFromDelivery(parseInt(id, 10));
+    return reply.send(result);
   }
 }
 

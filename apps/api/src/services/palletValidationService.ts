@@ -7,6 +7,7 @@
 
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger.js';
+import { DeliveryReadinessAggregator } from './readiness/index.js';
 
 export interface ValidationResult {
   isValid: boolean;
@@ -33,7 +34,11 @@ export interface ValidationWarning {
 }
 
 export class PalletValidationService {
-  constructor(private prisma: PrismaClient) {}
+  private readinessAggregator: DeliveryReadinessAggregator;
+
+  constructor(private prisma: PrismaClient) {
+    this.readinessAggregator = new DeliveryReadinessAggregator(prisma);
+  }
 
   /**
    * Waliduj optymalizację palet dla dostawy
@@ -134,6 +139,9 @@ export class PalletValidationService {
       warningCount: warnings.length,
     });
 
+    // Auto-recalculate readiness status po walidacji
+    await this.readinessAggregator.recalculateIfNeeded(deliveryId);
+
     return { isValid, errors, warnings };
   }
 
@@ -159,6 +167,9 @@ export class PalletValidationService {
       status,
       errorCount: errors?.length || 0,
     });
+
+    // Auto-recalculate readiness status po oznaczeniu jako zwalidowane
+    await this.readinessAggregator.recalculateIfNeeded(deliveryId);
   }
 
   /**

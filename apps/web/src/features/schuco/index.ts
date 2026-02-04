@@ -30,6 +30,9 @@ export {
   useSchucoItemsFetchRunning,
   useSchucoItemsFetch,
   useSchucoItemsClearOldChanges,
+  useSchucoItemsSchedulerStatus,
+  useSchucoItemsSchedulerControl,
+  useSchucoItemsAutoFetch,
 } from './hooks';
 
 // Helpery

@@ -46,6 +46,9 @@ export const logisticsKeys = {
   // Calendar
   calendar: () => [...logisticsKeys.all, 'calendar'] as const,
   calendarRange: (from: string, to: string) => [...logisticsKeys.calendar(), { from, to }] as const,
+
+  // Orphan orders - zlecenia na dostawie ale nie na liście mailowej
+  orphanOrders: (deliveryCode: string) => [...logisticsKeys.all, 'orphan-orders', deliveryCode] as const,
 };
 
 // ============================================================================
@@ -564,6 +567,56 @@ export function useRestoreItemValue(callbacks?: {
 }
 
 // ============================================================================
+// USTAWIANIE DATY DOSTAWY ZLECENIA
+// ============================================================================
+
+/**
+ * Hook do ustawiania daty dostawy zlecenia
+ * Używane gdy zlecenie zostało znalezione ale nie ma ustawionej daty dostawy
+ *
+ * @param callbacks - Opcjonalne callbacki (onSuccess, onError)
+ * @returns Mutation z funkcją mutate i stanem isPending
+ *
+ * @example
+ * const { mutate, isPending } = useSetOrderDeliveryDate();
+ * mutate({ orderId: 123, deliveryCode: '08.01.2026_II' });
+ */
+export function useSetOrderDeliveryDate(callbacks?: {
+  onSuccess?: (data: { orderId: number; deliveryDate: string }) => void;
+  onError?: (error: Error) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ orderId, deliveryCode }: { orderId: number; deliveryCode: string }) =>
+      logisticsApi.setOrderDeliveryDate(orderId, deliveryCode),
+    onSuccess: (data) => {
+      // Invaliduj wszystkie powiązane dane
+      queryClient.invalidateQueries({ queryKey: logisticsKeys.all });
+      // Invaliduj też zlecenia (order)
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+
+      toast({
+        title: 'Data dostawy ustawiona',
+        description: `Zlecenie zostało przypisane do dostawy.`,
+        variant: 'success',
+      });
+
+      callbacks?.onSuccess?.(data);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd ustawiania daty',
+        description: error.message || 'Nie udało się ustawić daty dostawy.',
+        variant: 'destructive',
+      });
+
+      callbacks?.onError?.(error);
+    },
+  });
+}
+
+// ============================================================================
 // COMBINED HOOKS - Hooki agregujace (convenience)
 // ============================================================================
 
@@ -619,4 +672,61 @@ export function useDiffActions() {
       acceptChangeMutation.isPending ||
       restoreMutation.isPending,
   };
+}
+
+// ============================================================================
+// ORPHAN ORDERS - Zlecenia na dostawie ale nie na liście mailowej
+// ============================================================================
+
+/**
+ * Hook do pobierania zleceń przypisanych do dostawy ale nieobecnych na liście mailowej
+ *
+ * @param deliveryCode - Kod dostawy (np. "08.01.2026_II")
+ * @returns Query result z listą "osieroconych" zleceń
+ */
+export function useOrphanOrders(deliveryCode: string) {
+  return useQuery({
+    queryKey: logisticsKeys.orphanOrders(deliveryCode),
+    queryFn: () => logisticsApi.getOrphanOrders(deliveryCode),
+    enabled: !!deliveryCode,
+    staleTime: 2 * 60 * 1000, // 2 minuty - może się często zmieniać
+  });
+}
+
+/**
+ * Hook do usuwania zlecenia z dostawy (czyści datę dostawy)
+ * Używane dla zleceń które są na dostawie ale nie na liście mailowej
+ */
+export function useRemoveOrderFromDelivery(callbacks?: {
+  onSuccess?: (data: { orderId: number; orderNumber: string }) => void;
+  onError?: (error: Error) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (orderId: number) => logisticsApi.removeOrderFromDelivery(orderId),
+    onSuccess: (data) => {
+      // Invaliduj wszystkie powiązane dane
+      queryClient.invalidateQueries({ queryKey: logisticsKeys.all });
+      // Invaliduj też zlecenia
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+
+      toast({
+        title: 'Zlecenie usunięte z dostawy',
+        description: `Zlecenie ${data.orderNumber} zostało usunięte z dostawy.`,
+        variant: 'success',
+      });
+
+      callbacks?.onSuccess?.(data);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Błąd usuwania z dostawy',
+        description: error.message || 'Nie udało się usunąć zlecenia z dostawy.',
+        variant: 'destructive',
+      });
+
+      callbacks?.onError?.(error);
+    },
+  });
 }

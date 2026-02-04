@@ -43,10 +43,11 @@ export async function login(input: LoginInput): Promise<LoginResponse | null> {
       return null;
     }
 
-    // Generuj JWT token (30 dni)
+    // Generuj JWT token (30 dni) - zawiera role do autoryzacji
     const token = encodeToken({
       userId: user.id,
       email: user.email,
+      role: user.role,
     });
 
     logger.info('User logged in successfully', {

@@ -3,7 +3,7 @@
  *
  * Layout:
  * - Header z tytułem
- * - Checkboxy systemów (Living, BLOK, VLAK, CT70, FOCUSING)
+ * - Dropdown systemów (Living, BLOK, VLAK, CT70, FOCUSING)
  * - Główna zawartość + sidebar kolorów po prawej stronie
  * - Tabs: Stan | Zapotrzebowanie | RW | Zamówienia
  */
@@ -13,18 +13,13 @@
 import React, { useState, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/header';
-import { Button } from '@/components/ui/button';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { ArrowLeft, Box, Package, FileText, History, ShoppingCart, ChevronLeft, ChevronRight } from 'lucide-react';
-import Link from 'next/link';
+import { PeriodSelector } from '@/components/ui/period-selector';
+import { BackButton } from '@/components/ui/back-button';
+import { Box, Package, FileText, History, ShoppingCart } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 import {
   SystemFilters,
@@ -40,11 +35,6 @@ import {
   usePvcOrders,
   type SystemType,
 } from '@/features/pvc-warehouse';
-
-const MONTHS = [
-  'Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec',
-  'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień',
-];
 
 type TabType = 'stan' | 'zapotrzebowanie' | 'rw' | 'zamowienia';
 
@@ -78,6 +68,7 @@ export default function PvcWarehousePageContent() {
   const [selectedYear, setSelectedYear] = useState<number>(
     yearParam ? parseInt(yearParam, 10) : defaultYear
   );
+  const [hideZeroStock, setHideZeroStock] = useState(true);
 
   // Pobierz dane
   const { data: stockData, isLoading: stockLoading } = usePvcStock({
@@ -123,12 +114,6 @@ export default function PvcWarehousePageContent() {
     [router]
   );
 
-  // Dostępne lata (od 2024 do +1 rok)
-  const availableYears = Array.from(
-    { length: defaultYear - 2024 + 2 },
-    (_, i) => 2024 + i
-  );
-
   // Handlery zmian
   const handleTabChange = (tab: string) => {
     const newTab = tab as TabType;
@@ -146,41 +131,11 @@ export default function PvcWarehousePageContent() {
     updateUrl(activeTab, selectedSystems, colorId, selectedMonth, selectedYear);
   };
 
-  const handleMonthChange = (month: string) => {
-    const newMonth = parseInt(month, 10);
-    setSelectedMonth(newMonth);
-    updateUrl(activeTab, selectedSystems, selectedColorId, newMonth, selectedYear);
-  };
-
-  const handleYearChange = (year: string) => {
-    const newYear = parseInt(year, 10);
-    setSelectedYear(newYear);
-    updateUrl(activeTab, selectedSystems, selectedColorId, selectedMonth, newYear);
-  };
-
-  const handlePrevMonth = () => {
-    let newMonth = selectedMonth - 1;
-    let newYear = selectedYear;
-    if (newMonth < 1) {
-      newMonth = 12;
-      newYear -= 1;
-    }
-    setSelectedMonth(newMonth);
-    setSelectedYear(newYear);
-    updateUrl(activeTab, selectedSystems, selectedColorId, newMonth, newYear);
-  };
-
-  const handleNextMonth = () => {
-    let newMonth = selectedMonth + 1;
-    let newYear = selectedYear;
-    if (newMonth > 12) {
-      newMonth = 1;
-      newYear += 1;
-    }
-    setSelectedMonth(newMonth);
-    setSelectedYear(newYear);
-    updateUrl(activeTab, selectedSystems, selectedColorId, newMonth, newYear);
-  };
+  const handlePeriodChange = useCallback((month: number, year: number) => {
+    setSelectedMonth(month);
+    setSelectedYear(year);
+    updateUrl(activeTab, selectedSystems, selectedColorId, month, year);
+  }, [activeTab, selectedSystems, selectedColorId, updateUrl]);
 
   // Pobierz statystyki systemów
   const systemCounts = systemsData?.systems
@@ -200,12 +155,7 @@ export default function PvcWarehousePageContent() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <Header title="Magazyn PVC">
-        <Link href="/">
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Powrót do dashboardu
-          </Button>
-        </Link>
+        <BackButton href="/" label="Powrót do dashboardu" />
       </Header>
 
       {/* Breadcrumb */}
@@ -250,10 +200,21 @@ export default function PvcWarehousePageContent() {
 
             {/* Stan magazynowy */}
             <TabsContent value="stan" className="mt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Checkbox
+                  id="hide-zero-stock"
+                  checked={hideZeroStock}
+                  onCheckedChange={(checked) => setHideZeroStock(checked === true)}
+                />
+                <Label htmlFor="hide-zero-stock" className="text-sm cursor-pointer">
+                  Ukryj stany zerowe
+                </Label>
+              </div>
               <PvcStockTable
                 profiles={stockData?.profiles || []}
                 isLoading={stockLoading}
                 showColorColumn={!selectedColorId}
+                hideZeroStock={hideZeroStock}
               />
             </TabsContent>
 
@@ -267,119 +228,35 @@ export default function PvcWarehousePageContent() {
 
             {/* RW */}
             <TabsContent value="rw" className="mt-4">
-              {/* Selektor miesiąca/roku */}
-              <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg border mb-4">
-                <span className="text-sm font-medium text-slate-600">Okres:</span>
-
-                <Button variant="ghost" size="sm" onClick={handlePrevMonth}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-
-                <Select value={selectedMonth.toString()} onValueChange={handleMonthChange}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MONTHS.map((name, idx) => (
-                      <SelectItem key={idx + 1} value={(idx + 1).toString()}>
-                        {name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={selectedYear.toString()} onValueChange={handleYearChange}>
-                  <SelectTrigger className="w-24">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableYears.map((year) => (
-                      <SelectItem key={year} value={year.toString()}>
-                        {year}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Button variant="ghost" size="sm" onClick={handleNextMonth}>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-
-                {/* Statystyki */}
-                {rwData && (
-                  <div className="ml-auto flex items-center gap-4 text-sm">
-                    <span className="text-slate-500">
-                      Pozycji: <strong className="text-slate-700">{rwData.totals?.totalPositions ?? 0}</strong>
-                    </span>
-                    <span className="text-slate-500">
-                      Beli: <strong className="text-slate-700">{rwData.totals?.totalBeams ?? 0}</strong>
-                    </span>
-                    <span className="text-slate-500">
-                      Zleceń: <strong className="text-slate-700">{rwData.totals?.totalOrders ?? 0}</strong>
-                    </span>
-                  </div>
-                )}
-              </div>
-
+              <PeriodSelector
+                month={selectedMonth}
+                year={selectedYear}
+                onMonthChange={(m) => handlePeriodChange(m, selectedYear)}
+                onYearChange={(y) => handlePeriodChange(selectedMonth, y)}
+                stats={rwData ? [
+                  { label: 'Pozycji', value: rwData.totals?.totalPositions ?? 0 },
+                  { label: 'Beli', value: rwData.totals?.totalBeams ?? 0 },
+                  { label: 'Zleceń', value: rwData.totals?.totalOrders ?? 0 },
+                ] : undefined}
+                className="mb-4"
+              />
               <PvcRwTable rw={rwData?.rw || []} isLoading={rwLoading} />
             </TabsContent>
 
             {/* Zamówienia Schuco - wysłane pozycje */}
             <TabsContent value="zamowienia" className="mt-4">
-              {/* Selektor miesiąca/roku */}
-              <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg border mb-4">
-                <span className="text-sm font-medium text-slate-600">Okres:</span>
-
-                <Button variant="ghost" size="sm" onClick={handlePrevMonth}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-
-                <Select value={selectedMonth.toString()} onValueChange={handleMonthChange}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MONTHS.map((name, idx) => (
-                      <SelectItem key={idx + 1} value={(idx + 1).toString()}>
-                        {name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={selectedYear.toString()} onValueChange={handleYearChange}>
-                  <SelectTrigger className="w-24">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableYears.map((year) => (
-                      <SelectItem key={year} value={year.toString()}>
-                        {year}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Button variant="ghost" size="sm" onClick={handleNextMonth}>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-
-                {/* Statystyki */}
-                {ordersData && (
-                  <div className="ml-auto flex items-center gap-4 text-sm">
-                    <span className="text-slate-500">
-                      Pozycji: <strong className="text-slate-700">{ordersData.totals?.totalItems ?? 0}</strong>
-                    </span>
-                    <span className="text-slate-500">
-                      Wysłano: <strong className="text-green-600">{ordersData.totals?.totalShipped ?? 0}</strong>
-                    </span>
-                    <span className="text-slate-500">
-                      Zamówień: <strong className="text-slate-700">{ordersData.totals?.totalOrders ?? 0}</strong>
-                    </span>
-                  </div>
-                )}
-              </div>
-
+              <PeriodSelector
+                month={selectedMonth}
+                year={selectedYear}
+                onMonthChange={(m) => handlePeriodChange(m, selectedYear)}
+                onYearChange={(y) => handlePeriodChange(selectedMonth, y)}
+                stats={ordersData ? [
+                  { label: 'Pozycji', value: ordersData.totals?.totalItems ?? 0 },
+                  { label: 'Dostarczone', value: ordersData.totals?.totalShipped ?? 0, valueClassName: 'text-green-600' },
+                  { label: 'Zamówień', value: ordersData.totals?.totalOrders ?? 0 },
+                ] : undefined}
+                className="mb-4"
+              />
               <PvcOrdersTable weeks={ordersData?.weeks || []} isLoading={ordersLoading} />
             </TabsContent>
           </Tabs>

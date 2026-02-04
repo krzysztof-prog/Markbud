@@ -8,6 +8,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../utils/prisma.js';
+import { formatDateWarsaw } from '../utils/date-helpers.js';
+import { articleNumberParser } from '../services/parsers/ArticleNumberParser.js';
 
 // Query params schema dla głównego endpointu
 const getStockQuerySchema = z.object({
@@ -90,109 +92,287 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
       const query = getStockQuerySchema.parse(request.query);
       const systemsFilter = parseSystemsFilter(query.systems);
 
-      // Pobierz wszystkie kolory (dla sidebara)
-      const colors = await prisma.color.findMany({
-        orderBy: { code: 'asc' },
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          hexColor: true,
-          type: true,
-        },
-      });
-
-      // Buduj where dla profili
+      // Buduj where dla profili (system + search)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const profileWhere: any = {};
-
-      // Filtr systemów
       if (systemsFilter && systemsFilter.length > 0) {
         profileWhere.OR = systemsFilter;
       }
-
-      // Filtr wyszukiwania
       if (query.search) {
-        const searchTerm = query.search;
         const searchConditions = [
-          { number: { contains: searchTerm } },
-          { name: { contains: searchTerm } },
+          { number: { contains: query.search } },
+          { name: { contains: query.search } },
         ];
-
         if (profileWhere.OR) {
-          // Mamy już systemsFilter - dodaj AND
           profileWhere.AND = [{ OR: searchConditions }];
         } else {
           profileWhere.OR = searchConditions;
         }
       }
+      const hasProfileWhere = Object.keys(profileWhere).length > 0;
 
-      // Pobierz profile z WarehouseStock
-      const profiles = await prisma.profile.findMany({
-        where: Object.keys(profileWhere).length > 0 ? profileWhere : undefined,
-        orderBy: { number: 'asc' },
-        include: {
-          warehouseStock: query.colorId
-            ? {
-                where: { colorId: query.colorId },
-                include: {
-                  color: {
-                    select: { id: true, code: true, name: true, hexColor: true },
-                  },
-                },
-              }
-            : {
-                include: {
-                  color: {
-                    select: { id: true, code: true, name: true, hexColor: true },
-                  },
-                },
-              },
-        },
-      });
+      // 7 równoczesnych zapytań do bazy
+      const [
+        sidebarColors,
+        allProfiles,
+        warehouseStocks,
+        schucoItems,
+        rwRequirements,
+        demandRequirements,
+        privateColors,
+      ] = await Promise.all([
+        // 1. Kolory do sidebara
+        prisma.color.findMany({
+          orderBy: { code: 'asc' },
+          select: { id: true, code: true, name: true, hexColor: true, type: true },
+        }),
 
-      // Mapuj dane do formatu odpowiedzi
-      const profilesWithStock = profiles.map((profile) => ({
-        id: profile.id,
-        number: profile.number,
-        name: profile.name,
-        articleNumber: profile.articleNumber,
-        systems: {
-          isLiving: profile.isLiving,
-          isBlok: profile.isBlok,
-          isVlak: profile.isVlak,
-          isCt70: profile.isCt70,
-          isFocusing: profile.isFocusing,
-        },
-        stocks: profile.warehouseStock.map((stock) => ({
-          id: stock.id,
-          colorId: stock.colorId,
-          color: stock.color,
-          initialStockBeams: stock.initialStockBeams,
-          currentStockBeams: stock.currentStockBeams,
-          difference: stock.currentStockBeams - stock.initialStockBeams,
-        })),
-      }));
+        // 2. Wszystkie profile PVC (z filtrem systemów)
+        prisma.profile.findMany({
+          where: hasProfileWhere ? profileWhere : undefined,
+          select: {
+            id: true, number: true, name: true, articleNumber: true,
+            isLiving: true, isBlok: true, isVlak: true, isCt70: true, isFocusing: true,
+          },
+        }),
+
+        // 3. Stany magazynowe (remanent + data remanentu)
+        prisma.warehouseStock.findMany({
+          where: {
+            deletedAt: null,
+            ...(query.colorId ? { colorId: query.colorId } : {}),
+          },
+          select: {
+            profileId: true, colorId: true, currentStockBeams: true, updatedAt: true,
+            color: { select: { id: true, code: true, name: true, hexColor: true } },
+          },
+        }),
+
+        // 4. Pozycje zamówień Schuco (dostawy + zamówione)
+        prisma.schucoOrderItem.findMany({
+          select: {
+            articleNumber: true, shippedQty: true, orderedQty: true, createdAt: true,
+          },
+        }),
+
+        // 5. RW - OrderRequirement ze zleceń ukończonych
+        prisma.orderRequirement.findMany({
+          where: { order: { status: 'completed' } },
+          select: {
+            profileId: true, colorId: true, privateColorId: true, beamsCount: true,
+            order: { select: { completedAt: true, updatedAt: true } },
+          },
+        }),
+
+        // 6. Zapotrzebowanie - OrderRequirement z aktywnych zleceń (BEZ filtra daty)
+        prisma.orderRequirement.findMany({
+          where: { order: { status: { in: ['new', 'in_progress'] } } },
+          select: {
+            profileId: true, colorId: true, privateColorId: true, beamsCount: true,
+          },
+        }),
+
+        // 7. Prywatne kolory (lookup)
+        prisma.privateColor.findMany({
+          select: { id: true, code: true, name: true },
+        }),
+      ]);
+
+      // --- Buduj mapy lookup ---
+      const profileByNumber = new Map(allProfiles.map((p) => [p.number, p]));
+      const validProfileIds = new Set(allProfiles.map((p) => p.id));
+
+      // Mapa kolorów po code (z sidebara - pełna lista kolorów)
+      const colorByCode = new Map(sidebarColors.map((c) => [c.code, c]));
+      const colorById = new Map(sidebarColors.map((c) => [c.id, c]));
+
+      const privateColorById = new Map(privateColors.map((pc) => [pc.id, pc]));
+
+      // Mapa daty remanentu: "profileId-colorId" -> Date
+      const remanentDateMap = new Map<string, Date>();
+      for (const ws of warehouseStocks) {
+        remanentDateMap.set(`${ws.profileId}-${ws.colorId}`, ws.updatedAt);
+      }
+
+      // --- Typ wiersza agregacji ---
+      interface AggRow {
+        profileId: number;
+        colorId: number | null;
+        privateColorId: number | null;
+        initialStockBeams: number;
+        deliveriesBeams: number;
+        rwBeams: number;
+        orderedBeams: number;
+        demandBeams: number;
+      }
+
+      // Mapa agregacji: klucz -> AggRow
+      const aggMap = new Map<string, AggRow>();
+
+      function getAggKey(profileId: number, colorId: number | null, privateColorId: number | null): string {
+        if (privateColorId != null) return `${profileId}-p${privateColorId}`;
+        return `${profileId}-c${colorId}`;
+      }
+
+      function getOrCreate(profileId: number, colorId: number | null, privateColorId: number | null): AggRow {
+        const key = getAggKey(profileId, colorId, privateColorId);
+        let row = aggMap.get(key);
+        if (!row) {
+          row = {
+            profileId, colorId, privateColorId,
+            initialStockBeams: 0, deliveriesBeams: 0, rwBeams: 0,
+            orderedBeams: 0, demandBeams: 0,
+          };
+          aggMap.set(key, row);
+        }
+        return row;
+      }
+
+      // --- 1. WarehouseStock -> initial stock ---
+      for (const ws of warehouseStocks) {
+        if (!validProfileIds.has(ws.profileId)) continue;
+        const row = getOrCreate(ws.profileId, ws.colorId, null);
+        row.initialStockBeams = ws.currentStockBeams;
+      }
+
+      // --- 2. Schuco items -> dostawy + zamówione ---
+      for (const item of schucoItems) {
+        if (!item.articleNumber) continue;
+        // Pomijaj stal
+        if (articleNumberParser.isSteel(item.articleNumber)) continue;
+        // Sprawdź format (8 cyfr, opcjonalnie "p")
+        const cleaned = item.articleNumber.replace(/p$/i, '').trim();
+        if (!/^\d{8}$/.test(cleaned)) continue;
+
+        const parsed = articleNumberParser.parse(item.articleNumber);
+        const profile = profileByNumber.get(parsed.profileNumber);
+        if (!profile) continue;
+        if (!validProfileIds.has(profile.id)) continue;
+
+        const color = colorByCode.get(parsed.colorCode);
+        if (!color) continue;
+
+        // Filtr koloru z query
+        if (query.colorId && color.id !== query.colorId) continue;
+
+        // Sprawdź datę remanentu
+        const remanentDate = remanentDateMap.get(`${profile.id}-${color.id}`);
+        if (remanentDate && item.createdAt < remanentDate) continue;
+
+        const row = getOrCreate(profile.id, color.id, null);
+        if (item.shippedQty > 0) {
+          row.deliveriesBeams += item.shippedQty;
+        }
+        row.orderedBeams += item.orderedQty;
+      }
+
+      // --- 3. RW (ukończone zlecenia) ---
+      for (const req of rwRequirements) {
+        if (!validProfileIds.has(req.profileId)) continue;
+
+        // Filtr koloru z query (dla standardowych kolorów)
+        if (query.colorId && req.colorId !== query.colorId && req.privateColorId != null) continue;
+        if (query.colorId && req.colorId !== null && req.colorId !== query.colorId) continue;
+
+        const completedAt = req.order.completedAt ?? req.order.updatedAt;
+
+        // Sprawdź datę remanentu (tylko dla standardowych kolorów)
+        if (req.colorId != null) {
+          const remanentDate = remanentDateMap.get(`${req.profileId}-${req.colorId}`);
+          if (remanentDate && completedAt < remanentDate) continue;
+        }
+        // Prywatne kolory: brak remanent -> brak filtra daty
+
+        const row = getOrCreate(req.profileId, req.colorId, req.privateColorId);
+        row.rwBeams += req.beamsCount;
+      }
+
+      // --- 4. Zapotrzebowanie (aktywne zlecenia, BEZ filtra daty) ---
+      for (const req of demandRequirements) {
+        if (!validProfileIds.has(req.profileId)) continue;
+
+        // Filtr koloru z query
+        if (query.colorId && req.colorId !== query.colorId && req.privateColorId != null) continue;
+        if (query.colorId && req.colorId !== null && req.colorId !== query.colorId) continue;
+
+        const row = getOrCreate(req.profileId, req.colorId, req.privateColorId);
+        row.demandBeams += req.beamsCount;
+      }
+
+      // --- Buduj odpowiedź: pogrupowane wg profilu ---
+      // Grupuj wiersze wg profileId
+      const profileRowsMap = new Map<number, AggRow[]>();
+      for (const row of aggMap.values()) {
+        const existing = profileRowsMap.get(row.profileId);
+        if (existing) {
+          existing.push(row);
+        } else {
+          profileRowsMap.set(row.profileId, [row]);
+        }
+      }
+
+      // Buduj profiles array
+      const profilesWithStock = allProfiles
+        .filter((p) => profileRowsMap.has(p.id))
+        .map((profile) => {
+          const rows = profileRowsMap.get(profile.id) || [];
+          return {
+            id: profile.id,
+            number: profile.number,
+            name: profile.name,
+            articleNumber: profile.articleNumber,
+            systems: {
+              isLiving: profile.isLiving,
+              isBlok: profile.isBlok,
+              isVlak: profile.isVlak,
+              isCt70: profile.isCt70,
+              isFocusing: profile.isFocusing,
+            },
+            stocks: rows.map((row) => {
+              const currentStockBeams = row.initialStockBeams + row.deliveriesBeams - row.rwBeams;
+              const afterDemandBeams = row.initialStockBeams + row.orderedBeams - row.demandBeams;
+              const color = row.colorId != null ? colorById.get(row.colorId) : null;
+              const pc = row.privateColorId != null ? privateColorById.get(row.privateColorId) : null;
+
+              return {
+                colorId: row.colorId,
+                color: color ? { id: color.id, code: color.code, name: color.name, hexColor: color.hexColor } : null,
+                privateColorId: row.privateColorId,
+                privateColorName: pc?.name ?? null,
+                initialStockBeams: row.initialStockBeams,
+                deliveriesBeams: row.deliveriesBeams,
+                rwBeams: row.rwBeams,
+                currentStockBeams,
+                orderedBeams: row.orderedBeams,
+                demandBeams: row.demandBeams,
+                afterDemandBeams,
+              };
+            }),
+          };
+        })
+        .sort((a, b) => a.number.localeCompare(b.number));
 
       // Oblicz totale
-      let totalBeams = 0;
+      let totalCurrentBeams = 0;
       let totalProfiles = 0;
+      let totalPositions = 0;
       for (const profile of profilesWithStock) {
         if (profile.stocks.length > 0) {
           totalProfiles++;
+          totalPositions += profile.stocks.length;
           for (const stock of profile.stocks) {
-            totalBeams += stock.currentStockBeams;
+            totalCurrentBeams += stock.currentStockBeams;
           }
         }
       }
 
       return reply.send({
         profiles: profilesWithStock,
-        colors,
+        colors: sidebarColors,
         totals: {
-          totalBeams,
+          totalBeams: totalCurrentBeams,
           totalProfiles,
-          totalPositions: profilesWithStock.reduce((acc, p) => acc + p.stocks.length, 0),
+          totalPositions,
         },
       });
     }
@@ -555,15 +735,14 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
-      // Pobierz pozycje zamówień Schuco które FAKTYCZNIE zostały wysłane (shippedQty > 0)
-      // w danym miesiącu (wg deliveryDate)
+      // Pobierz pozycje zamówień Schuco z deliveryDate w danym miesiącu
+      // Tylko artykuły które zostały faktycznie dostarczone (shippedQty > 0)
       const items = await prisma.schucoOrderItem.findMany({
         where: {
           deliveryDate: {
             gte: startDate,
             lte: endDate,
           },
-          // Tylko pozycje które zostały wysłane
           shippedQty: { gt: 0 },
           ...(query.search
             ? {
@@ -612,7 +791,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         monday.setDate(date.getDate() + diff);
         monday.setHours(0, 0, 0, 0);
 
-        const weekKey = monday.toISOString().split('T')[0];
+        const weekKey = formatDateWarsaw(monday);
         const weekNum = getWeekNumber(monday);
         const weekLabel = `Tydzień ${weekNum} (${formatDate(monday)})`;
 

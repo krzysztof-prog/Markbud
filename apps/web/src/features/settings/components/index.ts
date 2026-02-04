@@ -9,6 +9,7 @@ export { ProfileDepthsTab } from './ProfileDepthsTab';
 export { OkucLocationsTab } from './OkucLocationsTab';
 export { DocumentAuthorMappingsTab } from './DocumentAuthorMappingsTab';
 export { SteelTab } from './SteelTab';
+export { GmailSettingsTab } from './GmailSettingsTab';
 
 // Settings Dialog Components
 export {

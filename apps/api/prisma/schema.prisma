@@ -47,6 +47,8 @@ model User {
   palletInitialStockUpdates PalletInitialStock[]    @relation("PalletInitialStockUpdatedBy")
   // Logistics decision logs
   logisticsDecisionLogs     LogisticsDecisionLog[]
+  // Orders deleted by this user
+  deletedOrders             Order[]                 @relation("OrderDeletedBy")
 
   @@map("users")
 }
@@ -166,6 +168,8 @@ model Order {
   orderedGlassCount     Int?                      @default(0) @map("ordered_glass_count")
   deliveredGlassCount   Int?                      @default(0) @map("delivered_glass_count")
   glassOrderStatus      String?                   @default("not_ordered") @map("glass_order_status")
+  // Notatka z zamówienia szyb (np. "Zam. - szprosy")
+  glassOrderNote        String?                   @map("glass_order_note")
   // Status okuć dla zlecenia: 'none' | 'no_okuc' | 'imported' | 'has_atypical' | 'pending'
   // none - brak zapotrzebowania, no_okuc - zlecenie bez okuć (pusty plik), imported - zaimportowano, has_atypical - są nietypowe, pending - czeka na zlecenie
   okucDemandStatus      String?                   @default("none") @map("okuc_demand_status")
@@ -192,6 +196,10 @@ model Order {
   // null - brak ręcznego statusu
   manualStatus          String?                   @map("manual_status")
   manualStatusSetAt     DateTime?                 @map("manual_status_set_at")
+  // Soft delete - data usunięcia zlecenia
+  deletedAt             DateTime?                 @map("deleted_at")
+  deletedByUserId       Int?                      @map("deleted_by_user_id")
+  deletedByUser         User?                     @relation("OrderDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
   deliveryOrders        DeliveryOrder[]
   // Removed glassOrderItems relation - no FK constraint (glass orders can exist without production order)
   monthlyReportItems    MonthlyReportItem[]
@@ -224,6 +232,7 @@ model Order {
   @@index([completedAt])
   @@index([documentAuthorUserId, archivedAt])
   @@index([manualStatus])
+  @@index([deletedAt])
   @@map("orders")
 }
 
@@ -675,6 +684,26 @@ model SchucoFetchLog {
   @@index([startedAt])
   @@index([triggerType])
   @@map("schuco_fetch_logs")
+}
+
+// Gmail IMAP - log pobierania załączników CSV z maili
+model GmailFetchLog {
+  id             Int       @id @default(autoincrement())
+  messageUid     String    @map("message_uid")
+  subject        String?
+  sender         String?
+  receivedAt     DateTime? @map("received_at")
+  attachmentName String?   @map("attachment_name")
+  savedFilePath  String?   @map("saved_file_path")
+  status         String    @default("pending") // pending | downloaded | failed
+  errorMessage   String?   @map("error_message")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@unique([messageUid])
+  @@index([status])
+  @@index([createdAt])
+  @@map("gmail_fetch_logs")
 }
 
 // Pozycje zamówienia Schüco - artykuły w zamówieniu

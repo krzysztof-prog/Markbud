@@ -44,14 +44,26 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
                   complaint: { type: 'string', nullable: true },
                   orderType: { type: 'string', nullable: true },
                   totalAmount: { type: 'string', nullable: true },
+                  isWarehouseItem: { type: 'boolean' },
+                  extractedOrderNums: { type: 'string', nullable: true },
                   // Change tracking fields
                   changeType: { type: 'string', nullable: true },
                   changedAt: { type: 'string', format: 'date-time', nullable: true },
                   changedFields: { type: 'string', nullable: true },
                   previousValues: { type: 'string', nullable: true },
+                  // Item fetch tracking
+                  itemsFetchedAt: { type: 'string', format: 'date-time', nullable: true },
                   fetchedAt: { type: 'string', format: 'date-time' },
                   createdAt: { type: 'string', format: 'date-time' },
                   updatedAt: { type: 'string', format: 'date-time' },
+                  // Prisma count of related items
+                  _count: {
+                    type: 'object',
+                    nullable: true,
+                    properties: {
+                      items: { type: 'integer' },
+                    },
+                  },
                 },
               },
             },
@@ -721,9 +733,387 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
 
   // ============================================
   // ENDPOINTY DLA POZYCJI ZAMÓWIEŃ (ITEMS)
+  // UWAGA: Statyczne endpointy MUSZĄ być PRZED dynamicznym :deliveryId!
   // ============================================
 
+  // GET /api/schuco/items/stats - Get items statistics
+  fastify.get('/items/stats', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get statistics about order items',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            totalDeliveries: { type: 'integer' },
+            withItems: { type: 'integer' },
+            withoutItems: { type: 'integer' },
+            totalItems: { type: 'integer' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const stats = await schucoItemService.getItemsStats();
+      return reply.send(stats);
+    },
+  });
+
+  // GET /api/schuco/items/is-running - Check if item fetch is running
+  fastify.get('/items/is-running', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Check if order items fetch is currently running',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            isRunning: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      return reply.send({
+        isRunning: schucoItemService.isItemFetchRunning(),
+      });
+    },
+  });
+
+  // POST /api/schuco/items/fetch - Trigger manual fetch of order items
+  // Rozszerzone o mode: 'missing' (domyślne), 'all', 'from-date'
+  fastify.post('/items/fetch', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Trigger manual fetch of order items from Schuco. Mode: missing (default), all, from-date',
+      tags: ['schuco'],
+      body: {
+        type: 'object',
+        properties: {
+          mode: {
+            type: 'string',
+            enum: ['missing', 'all', 'from-date'],
+            default: 'missing',
+            description: 'Tryb pobierania: missing (brakujące), all (wszystkie), from-date (od daty)',
+          },
+          fromDate: {
+            type: 'string',
+            pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+            description: 'Data od której pobierać (YYYY-MM-DD) - wymagane dla mode=from-date',
+          },
+          limit: { type: 'integer', default: 100, minimum: 1, maximum: 500 },
+          deliveryIds: {
+            type: 'array',
+            items: { type: 'integer' },
+            description: 'Konkretne ID zamówień do pobrania (ignoruje mode)',
+          },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            totalDeliveries: { type: 'integer' },
+            processedDeliveries: { type: 'integer' },
+            newItems: { type: 'integer' },
+            updatedItems: { type: 'integer' },
+            unchangedItems: { type: 'integer' },
+            errors: { type: 'integer' },
+          },
+        },
+        400: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+          },
+        },
+        409: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { mode = 'missing', fromDate, limit, deliveryIds } = request.body as {
+        mode?: 'missing' | 'all' | 'from-date';
+        fromDate?: string;
+        limit?: number;
+        deliveryIds?: number[];
+      };
+
+      // Sprawdź czy nie ma aktywnego pobierania
+      if (schucoItemService.isItemFetchRunning()) {
+        return reply.status(409).send({ error: 'Pobieranie pozycji jest już w trakcie' });
+      }
+
+      try {
+        let result;
+
+        // Jeśli podano konkretne ID - pobierz dla nich
+        if (deliveryIds && deliveryIds.length > 0) {
+          result = await schucoItemService.fetchItemsByDeliveryIds(deliveryIds);
+        }
+        // W przeciwnym razie - użyj mode
+        else if (mode === 'all') {
+          result = await schucoItemService.fetchAllItems(limit || 500);
+        } else if (mode === 'from-date') {
+          if (!fromDate) {
+            return reply.status(400).send({ error: 'Wymagana data (fromDate) dla mode=from-date' });
+          }
+          const parsedDate = new Date(fromDate);
+          if (isNaN(parsedDate.getTime())) {
+            return reply.status(400).send({ error: 'Nieprawidłowy format daty. Użyj YYYY-MM-DD' });
+          }
+          result = await schucoItemService.fetchItemsFromDate(parsedDate, limit || 500);
+        } else {
+          // mode === 'missing' (domyślne)
+          result = await schucoItemService.fetchMissingItems(limit || 100);
+        }
+
+        return reply.send(result);
+      } catch (error) {
+        return reply.status(500).send({ error: (error as Error).message });
+      }
+    },
+  });
+
+  // POST /api/schuco/items/clear-old-changes - Clear old change markers
+  fastify.post('/items/clear-old-changes', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Clear change markers older than 72 hours',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            cleared: { type: 'integer' },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const cleared = await schucoItemService.clearOldChangeMarkers();
+      return reply.send({
+        cleared,
+        message: cleared > 0
+          ? `Wyczyszczono markery zmian z ${cleared} pozycji`
+          : 'Brak starych markerów do wyczyszczenia',
+      });
+    },
+  });
+
+  // POST /api/schuco/items/refresh - Odśwież pozycje zamówień ze starymi danymi
+  fastify.post('/items/refresh', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Refresh stale order items (items fetched more than X days ago)',
+      tags: ['schuco'],
+      body: {
+        type: 'object',
+        properties: {
+          staleDays: { type: 'integer', default: 1, minimum: 1, maximum: 30 },
+          limit: { type: 'integer', default: 50, minimum: 1, maximum: 200 },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            totalDeliveries: { type: 'integer' },
+            processedDeliveries: { type: 'integer' },
+            newItems: { type: 'integer' },
+            updatedItems: { type: 'integer' },
+            unchangedItems: { type: 'integer' },
+            errors: { type: 'integer' },
+          },
+        },
+        409: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { staleDays = 1, limit = 50 } = request.body as { staleDays?: number; limit?: number };
+
+      // Sprawdź czy nie ma aktywnego pobierania
+      if (schucoItemService.isItemFetchRunning()) {
+        return reply.status(409).send({ error: 'Pobieranie pozycji jest już w trakcie' });
+      }
+
+      try {
+        const result = await schucoItemService.refreshStaleItems(staleDays, limit);
+        return reply.send(result);
+      } catch (error) {
+        return reply.status(500).send({ error: (error as Error).message });
+      }
+    },
+  });
+
+  // GET /api/schuco/items/scheduler-status - Status schedulera automatycznego pobierania
+  fastify.get('/items/scheduler-status', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get status of automatic item fetch scheduler',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            isSchedulerRunning: { type: 'boolean' },
+            lastAutoFetchTime: { type: 'string', format: 'date-time', nullable: true },
+            intervalMinutes: { type: 'integer' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const status = schucoItemService.getSchedulerStatus();
+      return reply.send({
+        ...status,
+        intervalMinutes: 45,
+      });
+    },
+  });
+
+  // POST /api/schuco/items/scheduler/start - Uruchom scheduler
+  fastify.post('/items/scheduler/start', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Start automatic item fetch scheduler (every 45 minutes)',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            isSchedulerRunning: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      schucoItemService.startAutoFetchScheduler();
+      const status = schucoItemService.getSchedulerStatus();
+      return reply.send({
+        message: 'Scheduler uruchomiony - automatyczne pobieranie co 45 minut',
+        isSchedulerRunning: status.isSchedulerRunning,
+      });
+    },
+  });
+
+  // POST /api/schuco/items/scheduler/stop - Zatrzymaj scheduler
+  fastify.post('/items/scheduler/stop', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Stop automatic item fetch scheduler',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            isSchedulerRunning: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      schucoItemService.stopAutoFetchScheduler();
+      const status = schucoItemService.getSchedulerStatus();
+      return reply.send({
+        message: 'Scheduler zatrzymany',
+        isSchedulerRunning: status.isSchedulerRunning,
+      });
+    },
+  });
+
+  // POST /api/schuco/items/auto-fetch - Ręczne uruchomienie auto-fetch (jednorazowo)
+  fastify.post('/items/auto-fetch', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Manually trigger auto-fetch for changed items (one-time)',
+      tags: ['schuco'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            totalDeliveries: { type: 'integer' },
+            processedDeliveries: { type: 'integer' },
+            newItems: { type: 'integer' },
+            updatedItems: { type: 'integer' },
+            unchangedItems: { type: 'integer' },
+            errors: { type: 'integer' },
+          },
+        },
+        409: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      if (schucoItemService.isItemFetchRunning()) {
+        return reply.status(409).send({ error: 'Pobieranie pozycji jest już w trakcie' });
+      }
+
+      try {
+        const result = await schucoItemService.autoFetchChangedItems();
+        return reply.send(result || {
+          totalDeliveries: 0,
+          processedDeliveries: 0,
+          newItems: 0,
+          updatedItems: 0,
+          unchangedItems: 0,
+          errors: 0,
+        });
+      } catch (error) {
+        return reply.status(500).send({ error: (error as Error).message });
+      }
+    },
+  });
+
+  // GET /api/schuco/items/stale-count - Ile zamówień ma stare pozycje do odświeżenia
+  fastify.get('/items/stale-count', {
+    preHandler: verifyAuth,
+    schema: {
+      description: 'Get count of deliveries with stale items',
+      tags: ['schuco'],
+      querystring: {
+        type: 'object',
+        properties: {
+          staleDays: { type: 'integer', default: 1, minimum: 1, maximum: 30 },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            count: { type: 'integer' },
+            staleDays: { type: 'integer' },
+          },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { staleDays = 1 } = request.query as { staleDays?: number };
+      const count = await schucoItemService.getStaleItemsCount(staleDays);
+      return reply.send({ count, staleDays });
+    },
+  });
+
   // GET /api/schuco/items/:deliveryId - Get items for a specific delivery
+  // WAŻNE: Ten endpoint MUSI być NA KOŃCU (po wszystkich statycznych /items/*)
   fastify.get('/items/:deliveryId', {
     preHandler: verifyAuth,
     schema: {
@@ -767,139 +1157,6 @@ export default async function schucoRoutes(fastify: FastifyInstance) {
       const { deliveryId } = request.params as { deliveryId: number };
       const items = await schucoItemService.getItemsForDelivery(deliveryId);
       return reply.send(items);
-    },
-  });
-
-  // GET /api/schuco/items/stats - Get items statistics
-  fastify.get('/items/stats', {
-    preHandler: verifyAuth,
-    schema: {
-      description: 'Get statistics about order items',
-      tags: ['schuco'],
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            totalDeliveries: { type: 'integer' },
-            withItems: { type: 'integer' },
-            withoutItems: { type: 'integer' },
-            totalItems: { type: 'integer' },
-          },
-        },
-      },
-    },
-    handler: async (request, reply) => {
-      const stats = await schucoItemService.getItemsStats();
-      return reply.send(stats);
-    },
-  });
-
-  // POST /api/schuco/items/fetch - Trigger manual fetch of order items
-  fastify.post('/items/fetch', {
-    preHandler: verifyAuth,
-    schema: {
-      description: 'Trigger manual fetch of order items from Schuco',
-      tags: ['schuco'],
-      body: {
-        type: 'object',
-        properties: {
-          limit: { type: 'integer', default: 100, minimum: 1, maximum: 500 },
-          deliveryIds: {
-            type: 'array',
-            items: { type: 'integer' },
-          },
-        },
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            totalDeliveries: { type: 'integer' },
-            processedDeliveries: { type: 'integer' },
-            newItems: { type: 'integer' },
-            updatedItems: { type: 'integer' },
-            unchangedItems: { type: 'integer' },
-            errors: { type: 'integer' },
-          },
-        },
-        409: {
-          type: 'object',
-          properties: {
-            error: { type: 'string' },
-          },
-        },
-      },
-    },
-    handler: async (request, reply) => {
-      const { limit, deliveryIds } = request.body as { limit?: number; deliveryIds?: number[] };
-
-      // Sprawdź czy nie ma aktywnego pobierania
-      if (schucoItemService.isItemFetchRunning()) {
-        return reply.status(409).send({ error: 'Pobieranie pozycji jest już w trakcie' });
-      }
-
-      try {
-        let result;
-        if (deliveryIds && deliveryIds.length > 0) {
-          // Pobierz dla konkretnych zamówień
-          result = await schucoItemService.fetchItemsByDeliveryIds(deliveryIds);
-        } else {
-          // Pobierz brakujące
-          result = await schucoItemService.fetchMissingItems(limit || 100);
-        }
-        return reply.send(result);
-      } catch (error) {
-        return reply.status(500).send({ error: (error as Error).message });
-      }
-    },
-  });
-
-  // GET /api/schuco/items/is-running - Check if item fetch is running
-  fastify.get('/items/is-running', {
-    preHandler: verifyAuth,
-    schema: {
-      description: 'Check if order items fetch is currently running',
-      tags: ['schuco'],
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            isRunning: { type: 'boolean' },
-          },
-        },
-      },
-    },
-    handler: async (request, reply) => {
-      return reply.send({
-        isRunning: schucoItemService.isItemFetchRunning(),
-      });
-    },
-  });
-
-  // POST /api/schuco/items/clear-old-changes - Clear old change markers
-  fastify.post('/items/clear-old-changes', {
-    preHandler: verifyAuth,
-    schema: {
-      description: 'Clear change markers older than 72 hours',
-      tags: ['schuco'],
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            cleared: { type: 'integer' },
-            message: { type: 'string' },
-          },
-        },
-      },
-    },
-    handler: async (request, reply) => {
-      const cleared = await schucoItemService.clearOldChangeMarkers();
-      return reply.send({
-        cleared,
-        message: cleared > 0
-          ? `Wyczyszczono markery zmian z ${cleared} pozycji`
-          : 'Brak starych markerów do wyczyszczenia',
-      });
     },
   });
 }

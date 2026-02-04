@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/alert';
 import { useToast } from '@/components/ui/use-toast';
 import { usePalletInitialStocks, useSetInitialStocksMutation } from '../hooks/usePalletStock';
+import { getTodayWarsaw } from '@/lib/date-utils';
 import type { ProductionPalletType } from '../types/index';
 import { PALLET_TYPE_LABELS, PALLET_TYPES } from '../types/index';
 
@@ -74,6 +75,7 @@ export const InitialStockDialog: React.FC<InitialStockDialogProps> = ({
       });
       setLocalStocks(map);
       // Użyj daty z pierwszego wpisu (wszystkie mają tę samą)
+      // startDate to string z API w formacie ISO - split('T')[0] jest poprawny
       if (initialStocks[0]?.startDate) {
         setStartDate(initialStocks[0].startDate.split('T')[0]);
       }
@@ -86,7 +88,7 @@ export const InitialStockDialog: React.FC<InitialStockDialogProps> = ({
       });
       setLocalStocks(map);
       // Domyślna data - dziś
-      setStartDate(new Date().toISOString().split('T')[0]);
+      setStartDate(getTodayWarsaw());
       setHasExistingConfig(false);
     }
   }, [open, initialStocks, isLoading]);

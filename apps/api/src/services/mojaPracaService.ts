@@ -3,6 +3,7 @@ import { MojaPracaRepository } from '../repositories/MojaPracaRepository.js';
 import { CsvParser } from './parsers/csv-parser.js';
 import { logger } from '../utils/logger.js';
 import type { ConflictResolutionInput } from '../validators/moja-praca.js';
+import { formatDateWarsaw } from '../utils/date-helpers.js';
 
 // Role które mogą rozwiązywać konflikty wszystkich użytkowników
 const ADMIN_ROLES = ['owner', 'admin', 'kierownik'];
@@ -505,7 +506,7 @@ export class MojaPracaService {
     ]);
 
     return {
-      date: date.toISOString().split('T')[0],
+      date: formatDateWarsaw(date),
       conflicts,
       ordersCount: orders.length,
       deliveriesCount: deliveries.length,

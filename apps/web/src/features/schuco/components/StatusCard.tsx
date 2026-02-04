@@ -39,7 +39,28 @@ import {
   Download,
   Package,
   X,
+  ChevronDown,
+  Calendar,
+  ListChecks,
+  Zap,
+  Play,
+  Square,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/useToast';
 import { schucoApi } from '@/lib/api/schuco';
@@ -47,7 +68,12 @@ import type { SchucoFetchLog } from '@/types/schuco';
 import type { SchucoStatistics } from '../types';
 import { formatDatePL } from '../helpers/deliveryHelpers';
 import { useSchucoRealtimeProgress } from '../hooks/useSchucoRealtimeProgress';
-import { useSchucoItemsFetch, useSchucoItemsStats } from '../hooks/useSchucoItems';
+import {
+  useSchucoItemsFetch,
+  useSchucoItemsStats,
+  useSchucoItemsSchedulerStatus,
+  useSchucoItemsSchedulerControl,
+} from '../hooks/useSchucoItems';
 
 interface StatusCardProps {
   /** Status ostatniego pobrania */
@@ -217,11 +243,17 @@ export const StatusCard: React.FC<StatusCardProps> = ({
   // Pobieranie pozycji zamówień
   const itemsStats = useSchucoItemsStats();
   const fetchItemsMutation = useSchucoItemsFetch();
+  const schedulerStatus = useSchucoItemsSchedulerStatus();
+  const { startScheduler, stopScheduler, isStarting, isStopping } = useSchucoItemsSchedulerControl();
 
-  // Handler pobierania pozycji dla wszystkich
-  const handleFetchItems = () => {
+  // Stan dla dialogu wyboru daty
+  const [isFromDateDialogOpen, setIsFromDateDialogOpen] = useState(false);
+  const [fromDateValue, setFromDateValue] = useState<string>('');
+
+  // Handler pobierania pozycji - brakujące (domyślne)
+  const handleFetchMissing = () => {
     fetchItemsMutation.mutate(
-      { limit: 50 }, // Pobierz dla max 50 zamówień na raz
+      { mode: 'missing', limit: 100 },
       {
         onSuccess: (result) => {
           toast({
@@ -240,6 +272,83 @@ export const StatusCard: React.FC<StatusCardProps> = ({
         },
       }
     );
+  };
+
+  // Handler pobierania wszystkich pozycji
+  const handleFetchAll = () => {
+    fetchItemsMutation.mutate(
+      { mode: 'all', limit: 500 },
+      {
+        onSuccess: (result) => {
+          toast({
+            variant: 'success',
+            title: 'Wszystkie pozycje pobrane',
+            description: `Pobrano ${result.newItems + result.updatedItems} pozycji dla ${result.processedDeliveries} zamówień`,
+          });
+          queryClient.invalidateQueries({ queryKey: ['schuco', 'items'] });
+        },
+        onError: (error) => {
+          toast({
+            variant: 'destructive',
+            title: 'Błąd pobierania pozycji',
+            description: error.message || 'Nie udało się pobrać pozycji',
+          });
+        },
+      }
+    );
+  };
+
+  // Handler pobierania od daty
+  const handleFetchFromDate = () => {
+    if (!fromDateValue) {
+      toast({ variant: 'destructive', title: 'Wybierz datę' });
+      return;
+    }
+    setIsFromDateDialogOpen(false);
+    fetchItemsMutation.mutate(
+      { mode: 'from-date', fromDate: fromDateValue, limit: 500 },
+      {
+        onSuccess: (result) => {
+          toast({
+            variant: 'success',
+            title: 'Pozycje pobrane od daty',
+            description: `Pobrano ${result.newItems + result.updatedItems} pozycji dla ${result.processedDeliveries} zamówień`,
+          });
+          queryClient.invalidateQueries({ queryKey: ['schuco', 'items'] });
+          setFromDateValue('');
+        },
+        onError: (error) => {
+          toast({
+            variant: 'destructive',
+            title: 'Błąd pobierania pozycji',
+            description: error.message || 'Nie udało się pobrać pozycji',
+          });
+        },
+      }
+    );
+  };
+
+  // Handler przełączania schedulera
+  const handleToggleScheduler = () => {
+    if (schedulerStatus.data?.isSchedulerRunning) {
+      stopScheduler(undefined, {
+        onSuccess: () => {
+          toast({ variant: 'success', title: 'Scheduler zatrzymany' });
+        },
+        onError: () => {
+          toast({ variant: 'destructive', title: 'Błąd zatrzymywania schedulera' });
+        },
+      });
+    } else {
+      startScheduler(undefined, {
+        onSuccess: () => {
+          toast({ variant: 'success', title: 'Scheduler uruchomiony (co 45 min)' });
+        },
+        onError: () => {
+          toast({ variant: 'destructive', title: 'Błąd uruchamiania schedulera' });
+        },
+      });
+    }
   };
 
   return (
@@ -499,7 +608,26 @@ export const StatusCard: React.FC<StatusCardProps> = ({
             <div className="flex items-center gap-3">
               <Package className="h-5 w-5 text-slate-600" />
               <div>
-                <p className="text-sm font-medium text-slate-800">Pozycje zamówień (artykuły)</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-slate-800">Pozycje zamówień (artykuły)</p>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-5 w-5 p-0"
+                        onClick={() => {
+                          queryClient.invalidateQueries({ queryKey: ['schuco', 'items', 'stats'] });
+                          toast({ variant: 'default', title: 'Odświeżam statystyki...' });
+                        }}
+                        disabled={itemsStats.isFetching}
+                      >
+                        <RefreshCw className={`h-3 w-3 ${itemsStats.isFetching ? 'animate-spin' : ''}`} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Odśwież statystyki</TooltipContent>
+                  </Tooltip>
+                </div>
                 <p className="text-xs text-slate-500">
                   {itemsStats.data ? (
                     <>
@@ -515,24 +643,146 @@ export const StatusCard: React.FC<StatusCardProps> = ({
                     'Ładowanie statystyk...'
                   )}
                 </p>
+                {/* Status schedulera */}
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Auto-pobieranie:{' '}
+                  {schedulerStatus.data?.isSchedulerRunning ? (
+                    <span className="text-green-600 font-medium">aktywne (co 45 min)</span>
+                  ) : (
+                    <span className="text-slate-500">wyłączone</span>
+                  )}
+                  {schedulerStatus.data?.lastAutoFetchTime && (
+                    <span className="ml-2">
+                      | ostatnie: {formatDatePL(schedulerStatus.data.lastAutoFetchTime)}
+                    </span>
+                  )}
+                </p>
               </div>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleFetchItems}
-              disabled={fetchItemsMutation.isPending || showProgress}
-              className="gap-2"
-            >
-              {fetchItemsMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-              {fetchItemsMutation.isPending ? 'Pobieranie...' : 'Pobierz pozycje'}
-            </Button>
+
+            {/* Dropdown menu z opcjami pobierania */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={fetchItemsMutation.isPending || showProgress}
+                  className="gap-2"
+                >
+                  {fetchItemsMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  {fetchItemsMutation.isPending ? 'Pobieranie...' : 'Pobierz pozycje'}
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {/* Pobierz brakujące */}
+                <DropdownMenuItem onClick={handleFetchMissing} disabled={fetchItemsMutation.isPending}>
+                  <ListChecks className="h-4 w-4 mr-2 text-blue-600" />
+                  <div>
+                    <p className="font-medium">Pobierz brakujące</p>
+                    <p className="text-xs text-slate-500">Tylko zamówienia bez pozycji</p>
+                  </div>
+                </DropdownMenuItem>
+
+                {/* Pobierz wszystkie */}
+                <DropdownMenuItem onClick={handleFetchAll} disabled={fetchItemsMutation.isPending}>
+                  <Download className="h-4 w-4 mr-2 text-green-600" />
+                  <div>
+                    <p className="font-medium">Pobierz wszystkie</p>
+                    <p className="text-xs text-slate-500">Nadpisz wszystkie pozycje</p>
+                  </div>
+                </DropdownMenuItem>
+
+                {/* Pobierz od daty */}
+                <DropdownMenuItem
+                  onClick={() => setIsFromDateDialogOpen(true)}
+                  disabled={fetchItemsMutation.isPending}
+                >
+                  <Calendar className="h-4 w-4 mr-2 text-purple-600" />
+                  <div>
+                    <p className="font-medium">Pobierz od daty</p>
+                    <p className="text-xs text-slate-500">Od wybranej daty zamówienia</p>
+                  </div>
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                {/* Włącz/wyłącz scheduler */}
+                <DropdownMenuItem
+                  onClick={handleToggleScheduler}
+                  disabled={isStarting || isStopping}
+                >
+                  {schedulerStatus.data?.isSchedulerRunning ? (
+                    <>
+                      <Square className="h-4 w-4 mr-2 text-red-600" />
+                      <div>
+                        <p className="font-medium">Zatrzymaj auto-pobieranie</p>
+                        <p className="text-xs text-slate-500">Wyłącz scheduler (45 min)</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 mr-2 text-green-600" />
+                      <div>
+                        <p className="font-medium">Włącz auto-pobieranie</p>
+                        <p className="text-xs text-slate-500">Scheduler co 45 min</p>
+                      </div>
+                    </>
+                  )}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
+
+        {/* Dialog wyboru daty */}
+        <Dialog open={isFromDateDialogOpen} onOpenChange={setIsFromDateDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Pobierz pozycje od daty</DialogTitle>
+              <DialogDescription>
+                Wybierz datę zamówienia. Zostaną pobrane pozycje dla wszystkich zamówień
+                od tej daty do dziś.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Label htmlFor="from-date-picker">Data zamówienia:</Label>
+              <Input
+                id="from-date-picker"
+                type="date"
+                value={fromDateValue}
+                onChange={(e) => setFromDateValue(e.target.value)}
+                className="mt-2"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsFromDateDialogOpen(false);
+                  setFromDateValue('');
+                }}
+              >
+                Anuluj
+              </Button>
+              <Button
+                onClick={handleFetchFromDate}
+                disabled={!fromDateValue || fetchItemsMutation.isPending}
+              >
+                {fetchItemsMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                Pobierz
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Info o harmonogramie */}
         <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">

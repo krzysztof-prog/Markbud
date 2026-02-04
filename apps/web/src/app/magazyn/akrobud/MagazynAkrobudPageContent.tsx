@@ -7,11 +7,12 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { BackButton } from '@/components/ui/back-button';
 import { colorsApi, ordersApi, warehouseApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Warehouse, ClipboardCheck, History } from 'lucide-react';
+import { Warehouse, ClipboardCheck, History } from 'lucide-react';
 
 // OrderDetailModal - ciężki komponent (551 linii) - eager w PROD, lazy w DEV
 const OrderDetailModal = createDynamicComponent(
@@ -81,12 +82,7 @@ export default function MagazynAkrobudPageContent() {
               Wykonaj remanent
             </Button>
           </Link>
-          <Link href="/">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Powrót
-            </Button>
-          </Link>
+          <BackButton href="/" />
         </div>
       </Header>
 
@@ -177,12 +173,6 @@ export default function MagazynAkrobudPageContent() {
                     {selectedColor.type === 'typical' ? 'Typowy' : 'Nietypowy'}
                   </Badge>
                 </div>
-                <Link href="/magazyn/akrobud/remanent">
-                  <Button variant="default" size="sm">
-                    <ClipboardCheck className="h-4 w-4 mr-2" />
-                    Wykonaj remanent
-                  </Button>
-                </Link>
               </div>
 
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'zlecenia' | 'magazyn' | 'historia')}>

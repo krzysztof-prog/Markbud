@@ -5,6 +5,7 @@
 import { useSuspenseQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { deliveriesApi } from '../api/deliveriesApi';
 import { deliveriesApi as mainDeliveriesApi } from '@/lib/api';
+import { getTodayWarsaw } from '@/lib/date-utils';
 import type { DeliveryCalendarData } from '@/types';
 
 export const DELIVERIES_CALENDAR_QUERY_KEY = (monthsParams: { month: number; year: number }[]) =>
@@ -83,7 +84,7 @@ export function useDownloadDeliveryProtocol() {
       // Utwórz link do pobrania
       const a = document.createElement('a');
       a.href = url;
-      a.download = `protokol_dostawy_${deliveryId}_${new Date().toISOString().split('T')[0]}.pdf`;
+      a.download = `protokol_dostawy_${deliveryId}_${getTodayWarsaw()}.pdf`;
 
       // Kliknij automatycznie
       document.body.appendChild(a);

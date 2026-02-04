@@ -265,3 +265,25 @@ export const emitMatchingRetry = (data: MatchingProgressData) => eventEmitter.em
   data,
   timestamp: new Date(),
 });
+
+// ============================================================================
+// Gmail IMAP Events - postęp pobierania maili z Gmail
+// ============================================================================
+
+export const emitGmailFetchStarted = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'gmail:fetch_started',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitGmailFetchCompleted = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'gmail:fetch_completed',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitGmailFetchFailed = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'gmail:fetch_failed',
+  data,
+  timestamp: new Date(),
+});

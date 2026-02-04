@@ -3,36 +3,28 @@
 /**
  * LogistykaPageContent - Główny komponent strony logistyki
  *
- * Orkiestruje cały flow parsowania emaili z awizacjami:
- * 1. Widok kalendarza (domyślny) - pokazuje dostawy na najbliższe 2 miesiące
- * 2. Widok parsowania - formularz do wklejenia emaila
- * 3. Widok podglądu - podgląd sparsowanych danych przed zapisem
+ * Layout 3-strefowy:
+ * - Lewa kolumna (col-3): Kompaktowy kalendarz z listą dostaw
+ * - Środkowa kolumna (col-5): Lista pozycji wybranej dostawy
+ * - Prawa kolumna (col-4): Szczegóły lub Parser (przełączane tabami)
  *
  * Flow użytkownika:
- * 1. Użytkownik klika "Nowy mail" -> przejście do stanu 'parsing'
- * 2. Wkleja email, klika "Parsuj" -> przy sukcesie przejście do 'preview'
- * 3. Klika "Zapisz" -> zapis przez useSaveMailList -> powrót do 'calendar'
- * 4. Klika "Anuluj" w dowolnym momencie -> powrót do 'calendar'
+ * 1. Użytkownik wybiera dostawę z kalendarza (lewa kolumna)
+ * 2. Pozycje wyświetlają się w środkowej kolumnie
+ * 3. Szczegóły/parser w prawej kolumnie
+ * 4. Parser pozwala wkleić nowy mail i zapisać
  */
 
 import { useState, useMemo, useCallback } from 'react';
-import { Plus, Calendar, ArrowLeft } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Calendar } from 'lucide-react';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 
-import { MailParserForm } from './MailParserForm';
-import { ParsedMailPreview } from './ParsedMailPreview';
-import { LogisticsCalendarView } from './LogisticsCalendarView';
+import { LogisticsLeftPanel } from './LogisticsLeftPanel';
+import { LogisticsItemsList } from './LogisticsItemsList';
+import { LogisticsRightPanel } from './LogisticsRightPanel';
 
-import { useLogisticsCalendar, useSaveMailList } from '../hooks';
-import type { ParseResult, SaveMailListInput } from '../types';
-
-// ========== Typy ==========
-
-/**
- * Możliwe stany widoku strony
- */
-type ViewState = 'calendar' | 'parsing' | 'preview';
+import { useLogisticsCalendar } from '../hooks';
+import { getTodayWarsaw, formatDateWarsaw, addDaysWarsaw } from '@/lib/date-utils';
 
 // ========== Stałe ==========
 
@@ -40,13 +32,11 @@ type ViewState = 'calendar' | 'parsing' | 'preview';
  * Oblicza zakres dat dla kalendarza (2 miesiące do przodu)
  */
 function getDefaultDateRange(): { from: string; to: string } {
-  const now = new Date();
-  const from = now.toISOString().split('T')[0];
+  const from = getTodayWarsaw();
 
-  // 2 miesiące do przodu
-  const toDate = new Date(now);
-  toDate.setMonth(toDate.getMonth() + 2);
-  const to = toDate.toISOString().split('T')[0];
+  // 2 miesiące do przodu (~60 dni)
+  const toDate = addDaysWarsaw(new Date(), 60);
+  const to = formatDateWarsaw(toDate);
 
   return { from, to };
 }
@@ -54,22 +44,16 @@ function getDefaultDateRange(): { from: string; to: string } {
 // ========== Główny komponent ==========
 
 /**
- * Główna strona modułu logistyki
+ * Główna strona modułu logistyki - Layout 3-strefowy
  *
- * Zarządza stanem widoku i przepływem danych między komponentami:
- * - MailParserForm (parsowanie emaila)
- * - ParsedMailPreview (podgląd sparsowanych danych)
- * - LogisticsCalendarView (widok kalendarza dostaw)
+ * Zarządza stanem wyboru i przepływem danych między komponentami:
+ * - LogisticsLeftPanel (kalendarz z listą dostaw)
+ * - LogisticsItemsList (lista pozycji wybranej dostawy)
+ * - LogisticsRightPanel (szczegóły / parser z tabami)
  */
 export function LogistykaPageContent() {
-  // Stan widoku
-  const [viewState, setViewState] = useState<ViewState>('calendar');
-
-  // Przechowywanie wyniku parsowania do wyświetlenia w preview
-  const [parseResult, setParseResult] = useState<ParseResult | null>(null);
-
-  // Przechowywanie oryginalnego tekstu maila (do zapisu razem z danymi)
-  const [rawMailText, setRawMailText] = useState<string>('');
+  // Stan - aktualnie wybrana dostawa
+  const [selectedDeliveryCode, setSelectedDeliveryCode] = useState<string | null>(null);
 
   // Zakres dat dla kalendarza (2 miesiące od dziś)
   const dateRange = useMemo(() => getDefaultDateRange(), []);
@@ -78,78 +62,16 @@ export function LogistykaPageContent() {
   const {
     data: calendarData,
     isLoading: isLoadingCalendar,
-    error: calendarError,
     refetch: refetchCalendar,
   } = useLogisticsCalendar(dateRange.from, dateRange.to);
-
-  // Hook do zapisywania listy mailowej
-  const { mutate: saveMailList, isPending: isSaving } = useSaveMailList({
-    onSuccess: () => {
-      // Po sukcesie wracamy do kalendarza
-      setViewState('calendar');
-      setParseResult(null);
-      setRawMailText('');
-    },
-  });
 
   // ========== Handlery ==========
 
   /**
-   * Przejście do widoku parsowania
+   * Wybór dostawy z kalendarza
    */
-  const handleNewMail = useCallback(() => {
-    setViewState('parsing');
-    setParseResult(null);
-    setRawMailText('');
-  }, []);
-
-  /**
-   * Obsługa sparsowanego emaila - przejście do preview
-   */
-  const handleParsed = useCallback((result: ParseResult, mailText: string) => {
-    setParseResult(result);
-    setRawMailText(mailText);
-    setViewState('preview');
-  }, []);
-
-  /**
-   * Zapisanie wszystkich list mailowych (obsługa wielu dostaw: Klient nr 1, 2...)
-   *
-   * Zapisuje każdą dostawę sekwencyjnie. Po zapisaniu wszystkich:
-   * - Wraca do widoku kalendarza
-   * - Czyści stan
-   */
-  const handleSaveAll = useCallback(
-    async (allData: SaveMailListInput[]) => {
-      if (allData.length === 0) return;
-
-      // Zapisujemy każdą dostawę sekwencyjnie
-      // Używamy Promise.all ale saveMailList jest mutation więc
-      // musimy użyć mutateAsync
-      try {
-        for (const data of allData) {
-          await new Promise<void>((resolve, reject) => {
-            saveMailList(data, {
-              onSuccess: () => resolve(),
-              onError: (error) => reject(error),
-            });
-          });
-        }
-        // Sukces wszystkich - callback onSuccess z useSaveMailList zajmie się resztą
-      } catch {
-        // Błąd - toast już pokazany przez useSaveMailList
-      }
-    },
-    [saveMailList]
-  );
-
-  /**
-   * Anulowanie - powrót do kalendarza
-   */
-  const handleCancel = useCallback(() => {
-    setViewState('calendar');
-    setParseResult(null);
-    setRawMailText('');
+  const handleDeliverySelect = useCallback((deliveryCode: string) => {
+    setSelectedDeliveryCode(deliveryCode);
   }, []);
 
   /**
@@ -159,82 +81,55 @@ export function LogistykaPageContent() {
     refetchCalendar();
   }, [refetchCalendar]);
 
+  /**
+   * Po zapisaniu nowej dostawy - odśwież kalendarz i wybierz nową dostawę
+   */
+  const handleDeliverySaved = useCallback((newDeliveryCode: string) => {
+    setSelectedDeliveryCode(newDeliveryCode);
+  }, []);
+
   // ========== Renderowanie ==========
 
-  // Tytuł strony zależny od stanu
-  const pageTitle = useMemo(() => {
-    switch (viewState) {
-      case 'parsing':
-        return 'Nowa lista z emaila';
-      case 'preview':
-        return 'Podgląd listy';
-      default:
-        return 'Logistyka';
-    }
-  }, [viewState]);
-
   return (
-    <div className="space-y-6">
-      {/* Nagłówek strony */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            {/* Tytuł z ikoną */}
-            <div className="flex items-center gap-3">
-              {viewState !== 'calendar' && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleCancel}
-                  className="mr-2"
-                >
-                  <ArrowLeft className="h-4 w-4 mr-1" />
-                  Wróć
-                </Button>
-              )}
-              <Calendar className="h-6 w-6 text-blue-600" />
-              <CardTitle className="text-xl">{pageTitle}</CardTitle>
-            </div>
-
-            {/* Przycisk "Nowy mail" - tylko w widoku kalendarza */}
-            {viewState === 'calendar' && (
-              <Button onClick={handleNewMail}>
-                <Plus className="h-4 w-4 mr-2" />
-                Nowy mail
-              </Button>
-            )}
+    <div className="h-[calc(100vh-120px)] flex flex-col gap-4">
+      {/* Nagłówek strony - kompaktowy */}
+      <Card className="flex-shrink-0">
+        <CardHeader className="py-3">
+          <div className="flex items-center gap-3">
+            <Calendar className="h-5 w-5 text-blue-600" />
+            <CardTitle className="text-lg">Logistyka</CardTitle>
           </div>
         </CardHeader>
       </Card>
 
-      {/* Zawartość główna - zależna od stanu widoku */}
-      <div>
-        {viewState === 'calendar' && (
-          <LogisticsCalendarView
+      {/* Layout 3-kolumnowy: Szczegóły | Pozycje | Dostawy (sidebar) */}
+      <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
+        {/* Lewa kolumna - Szczegóły lub Parser - 45% */}
+        <div className="min-h-0 overflow-hidden w-[45%]">
+          <LogisticsRightPanel
+            deliveryCode={selectedDeliveryCode}
+            onDeliverySaved={handleDeliverySaved}
+            onRefreshCalendar={handleRefreshCalendar}
+          />
+        </div>
+
+        {/* Środkowa kolumna - Lista pozycji */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <LogisticsItemsList
+            deliveryCode={selectedDeliveryCode}
+          />
+        </div>
+
+        {/* Prawa kolumna - Dostawy (sidebar) - 560px */}
+        <div className="flex-shrink-0 min-h-0 overflow-hidden w-[560px]">
+          <LogisticsLeftPanel
             entries={calendarData?.entries ?? []}
             isLoading={isLoadingCalendar}
-            error={calendarError?.message ?? null}
+            selectedDeliveryCode={selectedDeliveryCode}
+            onDeliverySelect={handleDeliverySelect}
             onRefresh={handleRefreshCalendar}
           />
-        )}
-
-        {viewState === 'parsing' && (
-          <Card>
-            <CardContent className="pt-6">
-              <MailParserForm onParsed={handleParsed} />
-            </CardContent>
-          </Card>
-        )}
-
-        {viewState === 'preview' && parseResult && (
-          <ParsedMailPreview
-            parseResult={parseResult}
-            rawMailText={rawMailText}
-            onSaveAll={handleSaveAll}
-            onCancel={handleCancel}
-            isSaving={isSaving}
-          />
-        )}
+        </div>
       </div>
     </div>
   );

@@ -169,4 +169,11 @@ export const deliveriesApi = {
     }>(`/api/deliveries/stats/windows/by-weekday${months ? `?months=${months}` : ''}`),
   // P1-R4: Get shipping readiness checklist (System Brain)
   getReadiness: (id: number) => fetchApi<ReadinessResult>(`/api/deliveries/${id}/readiness`),
+
+  // QW-1: Batch readiness - jeden request zamiast N (optymalizacja kalendarza)
+  getBatchReadiness: (ids: number[]): Promise<Record<number, ReadinessResult>> => {
+    if (ids.length === 0) return Promise.resolve({});
+    const idsParam = ids.join(',');
+    return fetchApi<Record<number, ReadinessResult>>(`/api/deliveries/readiness/batch?ids=${idsParam}`);
+  },
 };

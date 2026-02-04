@@ -17,7 +17,7 @@ module.exports = {
     // 🔧 BACKEND API (Fastify)
     // ═══════════════════════════════════════════════════════════
     {
-      name: 'akrobud-api',
+      name: 'markbud-api',
 
       // Ścieżka do aplikacji
       cwd: './apps/api',
@@ -56,7 +56,7 @@ module.exports = {
     // 🌐 FRONTEND WEB (Next.js)
     // ═══════════════════════════════════════════════════════════
     {
-      name: 'akrobud-web',
+      name: 'markbud-web',
 
       // Ścieżka do aplikacji
       cwd: './apps/web',

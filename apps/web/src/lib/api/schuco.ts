@@ -104,11 +104,46 @@ export const schucoApi = {
     fetchApi<import('@/types').SchucoItemsStats>('/api/schuco/items/stats'),
 
   /** Ręczne pobieranie pozycji */
-  fetchItems: (options?: { limit?: number; deliveryIds?: number[] }) =>
+  fetchItems: (options?: {
+    mode?: 'missing' | 'all' | 'from-date';
+    fromDate?: string;
+    limit?: number;
+    deliveryIds?: number[]
+  }) =>
     fetchApi<import('@/types').SchucoItemsFetchResult>('/api/schuco/items/fetch', {
       method: 'POST',
       body: JSON.stringify(options || {}),
     }),
+
+  /** Pobiera status schedulera */
+  getSchedulerStatus: () =>
+    fetchApi<{ isSchedulerRunning: boolean; lastAutoFetchTime: string | null }>(
+      '/api/schuco/items/scheduler-status'
+    ),
+
+  /** Uruchamia scheduler automatycznego pobierania */
+  startScheduler: () =>
+    fetchApi<{ success: boolean; message: string }>('/api/schuco/items/scheduler/start', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  /** Zatrzymuje scheduler */
+  stopScheduler: () =>
+    fetchApi<{ success: boolean; message: string }>('/api/schuco/items/scheduler/stop', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  /** Ręczne wywołanie auto-fetch (sprawdza zmiany i pobiera) */
+  triggerAutoFetch: () =>
+    fetchApi<import('@/types').SchucoItemsFetchResult | { message: string }>(
+      '/api/schuco/items/auto-fetch',
+      {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }
+    ),
 
   /** Sprawdza czy pobieranie pozycji jest w trakcie */
   isItemsFetchRunning: () =>

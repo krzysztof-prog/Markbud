@@ -892,7 +892,10 @@ export class UzyteBeleParser {
         } else if (lineLower.includes('skrzyd')) {
           totals.sashes = value;
         } else if (lineLower.includes('szyb')) {
-          totals.glasses = value;
+          // Bierz tylko pierwszą wartość (z górnej sekcji podsumowania, nie z dolnej po liście szyb)
+          if (totals.glasses === 0) {
+            totals.glasses = value;
+          }
         }
         continue;
       }
@@ -1087,6 +1090,22 @@ export class UzyteBeleParser {
       if (profileTypes.length > 0) {
         finalSystem = profileTypes.join(', ');
       }
+    }
+
+    // Policz szyby wykluczając panele (panel to nie szyba)
+    // Używamy wartości z tablicy glasses zamiast wartości z nagłówka CSV,
+    // ponieważ nagłówek może zawierać niepoprawną sumę (z panelami)
+    if (glasses.length > 0) {
+      let realGlassCount = 0;
+      for (const glass of glasses) {
+        const packageTypeLower = (glass.packageType || '').toLowerCase();
+        // Jeśli packageType NIE zawiera "panel", to jest to prawdziwa szyba
+        if (!packageTypeLower.includes('panel')) {
+          realGlassCount += glass.quantity;
+        }
+      }
+      // Nadpisz totals.glasses poprawną wartością (tylko prawdziwe szyby, bez paneli)
+      totals.glasses = realGlassCount;
     }
 
     return {

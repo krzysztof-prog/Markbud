@@ -6,6 +6,7 @@ import PDFDocument from 'pdfkit';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger.js';
+import { getTodayWarsaw } from '../utils/date-helpers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -335,7 +336,7 @@ export class DeliveryProtocolService {
    * Generuj nazwę pliku PDF
    */
   generateFilename(deliveryId: number): string {
-    const date = new Date().toISOString().split('T')[0];
+    const date = getTodayWarsaw();
     return `protokol_dostawy_${deliveryId}_${date}.pdf`;
   }
 }

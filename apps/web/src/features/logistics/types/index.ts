@@ -130,6 +130,8 @@ export interface ParseResultItem extends ParsedItem {
     client: string | null;
     project: string | null;
     status: string | null;
+    /** Data dostawy zlecenia - null jeśli nie ustawiona */
+    deliveryDate: string | null;
   };
   orderNotFound?: boolean;
 }
@@ -232,11 +234,39 @@ export interface MailList {
 }
 
 /**
+ * Informacja o niezgodności daty dostawy
+ */
+export interface DateMismatchItem {
+  itemId: number;
+  projectNumber: string;
+  orderId: number;
+  orderNumber: string;
+  orderDeliveryDate: string;
+  mailListDeliveryDate: string;
+  reason: string;
+}
+
+/**
+ * Informacja o zleceniu bez ustawionej daty dostawy
+ */
+export interface MissingDeliveryDateItem {
+  itemId: number;
+  projectNumber: string;
+  orderId: number;
+  orderNumber: string;
+  reason: string;
+}
+
+/**
  * Lista mailowa z wyliczonym statusem dostawy
  */
 export interface MailListWithStatus extends MailList {
   deliveryStatus: DeliveryStatus;
   blockedItems: { projectNumber: string; reason: string }[];
+  dateMismatchItems?: DateMismatchItem[];
+  hasDateMismatch?: boolean;
+  missingDeliveryDateItems?: MissingDeliveryDateItem[];
+  hasMissingDeliveryDate?: boolean;
 }
 
 // ========== Diff między wersjami ==========
@@ -251,6 +281,14 @@ export interface DiffOrderInfo {
 }
 
 /**
+ * Ostrzeżenie o różnicy dat zlecenia vs listy mailowej
+ */
+export interface DateWarning {
+  orderDeliveryDate: string;
+  mailListDeliveryDate: string;
+}
+
+/**
  * Pozycja dodana w diff
  */
 export interface DiffAddedItem {
@@ -258,6 +296,7 @@ export interface DiffAddedItem {
   notes?: string;
   itemId: number; // ID pozycji w nowej wersji (do akcji)
   order?: DiffOrderInfo;
+  dateWarning?: DateWarning;
 }
 
 /**
@@ -280,6 +319,7 @@ export interface DiffChangedItem {
   newValue: string;
   itemId: number; // ID pozycji w nowej wersji (do akcji)
   order?: DiffOrderInfo;
+  dateWarning?: DateWarning;
 }
 
 /**

@@ -6,7 +6,7 @@ import { Providers } from './providers';
 const inter = Inter({ subsets: ['latin', 'latin-ext'] });
 
 export const metadata: Metadata = {
-  title: 'AKROBUD - System zarządzania produkcją',
+  title: 'MARKBUD - System zarządzania produkcją',
   description: 'System do zarządzania zamówieniami, magazynem i dostawami okien',
 };
 

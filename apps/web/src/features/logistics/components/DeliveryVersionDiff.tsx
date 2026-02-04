@@ -13,14 +13,14 @@
  */
 
 import { useMemo, useState, useCallback } from 'react';
-import { Plus, Minus, RefreshCw, AlertCircle, Loader2, Check, X, Undo2, ExternalLink } from 'lucide-react';
+import { Plus, Minus, RefreshCw, AlertCircle, Loader2, Check, X, Undo2, ExternalLink, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 
 import { useVersionDiff, useDiffActions } from '../hooks';
-import type { VersionDiff, DiffAddedItem, DiffRemovedItem, DiffChangedItem, DiffOrderInfo } from '../types';
+import type { VersionDiff, DiffAddedItem, DiffRemovedItem, DiffChangedItem, DiffOrderInfo, DateWarning } from '../types';
 
 // ========== Typy Props ==========
 
@@ -38,6 +38,34 @@ interface DeliveryVersionDiffProps {
 }
 
 // ========== Komponenty pomocnicze ==========
+
+/**
+ * Formatuje datę ISO do formatu dd.mm.yyyy
+ */
+function formatDate(isoDate: string): string {
+  const date = new Date(isoDate);
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}.${month}.${year}`;
+}
+
+/**
+ * Wyświetla ostrzeżenie o różnicy dat zlecenia vs listy mailowej
+ */
+function DateWarningBadge({ dateWarning }: { dateWarning?: DateWarning }) {
+  if (!dateWarning) return null;
+
+  return (
+    <div className="text-yellow-600 text-xs flex items-center gap-1 mt-1">
+      <AlertTriangle className="h-3 w-3" />
+      <span>
+        Zlecenie ma deliveryDate = {formatDate(dateWarning.orderDeliveryDate)},
+        lista mailowa: {formatDate(dateWarning.mailListDeliveryDate)}
+      </span>
+    </div>
+  );
+}
 
 /**
  * Wyświetla informacje o powiązanym zleceniu
@@ -83,6 +111,7 @@ function AddedItemRow({
           {item.notes && <span className="text-sm text-green-600 truncate">({item.notes})</span>}
         </div>
         <OrderInfo order={item.order} />
+        <DateWarningBadge dateWarning={item.dateWarning} />
       </div>
       {!isProcessed && (
         <div className="flex gap-2 flex-shrink-0">
@@ -224,6 +253,7 @@ function ChangedItemRow({
           <span className="text-yellow-800 font-medium">{item.newValue || '(brak)'}</span>
         </div>
         <OrderInfo order={item.order} />
+        <DateWarningBadge dateWarning={item.dateWarning} />
       </div>
       {!isProcessed && (
         <div className="flex gap-2 flex-shrink-0">
@@ -310,6 +340,9 @@ export function DeliveryVersionDiff({
   // Stan dla obsłużonych pozycji (śledzenie lokalnie)
   const [processedItems, setProcessedItems] = useState<Set<string>>(new Set());
 
+  // Stan dla bulk actions
+  const [isBulkPending, setIsBulkPending] = useState(false);
+
   // Pobierz diff z API
   const { data, isLoading, error, refetch } = useVersionDiff(deliveryCode, versionFrom, versionTo);
 
@@ -385,6 +418,92 @@ export function DeliveryVersionDiff({
       { onSuccess: () => markAsProcessed(getItemKey('changed', item.itemId)) }
     );
   }, [restoreMutation, getItemKey, markAsProcessed]);
+
+  // Handlery bulk actions dla dodanych pozycji
+  const handleBulkConfirmAdded = useCallback(async () => {
+    if (!diff) return;
+    const unprocessedAdded = diff.added.filter(
+      (item) => !processedItems.has(getItemKey('added', item.itemId))
+    );
+    if (unprocessedAdded.length === 0) return;
+
+    setIsBulkPending(true);
+    try {
+      await Promise.all(
+        unprocessedAdded.map(
+          (item) =>
+            new Promise<void>((resolve, reject) => {
+              confirmMutation.mutate(item.itemId, {
+                onSuccess: () => {
+                  markAsProcessed(getItemKey('added', item.itemId));
+                  resolve();
+                },
+                onError: reject,
+              });
+            })
+        )
+      );
+    } finally {
+      setIsBulkPending(false);
+    }
+  }, [diff, processedItems, getItemKey, confirmMutation, markAsProcessed]);
+
+  const handleBulkRejectAdded = useCallback(async () => {
+    if (!diff) return;
+    const unprocessedAdded = diff.added.filter(
+      (item) => !processedItems.has(getItemKey('added', item.itemId))
+    );
+    if (unprocessedAdded.length === 0) return;
+
+    setIsBulkPending(true);
+    try {
+      await Promise.all(
+        unprocessedAdded.map(
+          (item) =>
+            new Promise<void>((resolve, reject) => {
+              rejectMutation.mutate(item.itemId, {
+                onSuccess: () => {
+                  markAsProcessed(getItemKey('added', item.itemId));
+                  resolve();
+                },
+                onError: reject,
+              });
+            })
+        )
+      );
+    } finally {
+      setIsBulkPending(false);
+    }
+  }, [diff, processedItems, getItemKey, rejectMutation, markAsProcessed]);
+
+  // Handler bulk action dla zmienionych pozycji
+  const handleBulkAcceptChanged = useCallback(async () => {
+    if (!diff) return;
+    const unprocessedChanged = diff.changed.filter(
+      (item) => !processedItems.has(getItemKey('changed', item.itemId))
+    );
+    if (unprocessedChanged.length === 0) return;
+
+    setIsBulkPending(true);
+    try {
+      await Promise.all(
+        unprocessedChanged.map(
+          (item) =>
+            new Promise<void>((resolve, reject) => {
+              acceptChangeMutation.mutate(item.itemId, {
+                onSuccess: () => {
+                  markAsProcessed(getItemKey('changed', item.itemId));
+                  resolve();
+                },
+                onError: reject,
+              });
+            })
+        )
+      );
+    } finally {
+      setIsBulkPending(false);
+    }
+  }, [diff, processedItems, getItemKey, acceptChangeMutation, markAsProcessed]);
 
   // Stan ładowania
   if (isLoading) {
@@ -477,13 +596,38 @@ export function DeliveryVersionDiff({
       <CardContent className="space-y-6">
         {/* Dodane pozycje */}
         <DiffSection title="Dodane" count={diff.added.length} icon={Plus} color="green">
+          {/* Bulk actions dla dodanych pozycji */}
+          {diff.added.filter((i) => !processedItems.has(getItemKey('added', i.itemId))).length > 1 && (
+            <div className="flex gap-2 mb-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-green-700 border-green-300 hover:bg-green-100"
+                onClick={handleBulkConfirmAdded}
+                disabled={isBulkPending || isAnyPending}
+              >
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Potwierdź wszystkie ({diff.added.filter((i) => !processedItems.has(getItemKey('added', i.itemId))).length})
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-red-700 border-red-300 hover:bg-red-100"
+                onClick={handleBulkRejectAdded}
+                disabled={isBulkPending || isAnyPending}
+              >
+                <XCircle className="h-3 w-3 mr-1" />
+                Odrzuć wszystkie
+              </Button>
+            </div>
+          )}
           {diff.added.map((item) => (
             <AddedItemRow
               key={`added-${item.itemId}`}
               item={item}
               onConfirm={() => handleConfirmAdded(item)}
               onReject={() => handleRejectAdded(item)}
-              isPending={isAnyPending}
+              isPending={isAnyPending || isBulkPending}
               isProcessed={processedItems.has(getItemKey('added', item.itemId))}
             />
           ))}
@@ -497,7 +641,7 @@ export function DeliveryVersionDiff({
               item={item}
               onRemove={() => handleRemoveFromDelivery(item)}
               onIgnore={() => handleIgnoreRemoved(item)}
-              isPending={isAnyPending}
+              isPending={isAnyPending || isBulkPending}
               isProcessed={processedItems.has(getItemKey('removed', item.itemId))}
             />
           ))}
@@ -505,13 +649,28 @@ export function DeliveryVersionDiff({
 
         {/* Zmienione pozycje */}
         <DiffSection title="Zmienione" count={diff.changed.length} icon={RefreshCw} color="yellow">
+          {/* Bulk action dla zmienionych pozycji */}
+          {diff.changed.filter((i) => !processedItems.has(getItemKey('changed', i.itemId))).length > 1 && (
+            <div className="flex gap-2 mb-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-green-700 border-green-300 hover:bg-green-100"
+                onClick={handleBulkAcceptChanged}
+                disabled={isBulkPending || isAnyPending}
+              >
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Akceptuj wszystkie ({diff.changed.filter((i) => !processedItems.has(getItemKey('changed', i.itemId))).length})
+              </Button>
+            </div>
+          )}
           {diff.changed.map((item) => (
             <ChangedItemRow
               key={`changed-${item.itemId}`}
               item={item}
               onAccept={() => handleAcceptChange(item)}
               onRestore={() => handleRestoreValue(item)}
-              isPending={isAnyPending}
+              isPending={isAnyPending || isBulkPending}
               isProcessed={processedItems.has(getItemKey('changed', item.itemId))}
             />
           ))}

@@ -43,83 +43,165 @@ export interface SchucoOrderItemRow {
 export class SchucoItemParser {
   /**
    * Parsuje CSV z pozycjami zamówienia
-   * Format: średnik (;) jako separator, UTF-8
+   * Format Schüco - specjalny format z metadanymi na początku:
+   * - Wiersz 1: "Data zamówienia";"YYYY-MM-DDTHH:mm"
+   * - Wiersz 2: "Nr zamówienia";"XX/YYYY/NNNNN"
+   * - Wiersz 3: "Zlecenie";"NNNNNNNNN"
+   * - Wiersz 4: "Obiekt";"";""
+   * - Wiersz 5: Nagłówki: "Pozycja";"Artykuł";"";"Wysłany";...
+   * - Wiersze 6+: Dane pozycji
    */
   async parseCSV(filePath: string): Promise<SchucoOrderItemRow[]> {
     logger.info(`[SchucoItemParser] Parsing CSV file: ${filePath}`);
 
-    return new Promise((resolve, reject) => {
-      const results: SchucoOrderItemRow[] = [];
-      const stream = fs.createReadStream(filePath);
+    const results: SchucoOrderItemRow[] = [];
 
-      stream
-        .pipe(stripBomStream()) // Usuń UTF-8 BOM jeśli jest
-        .pipe(
-          csvParser({
-            separator: ';',
-            quote: '"',
-            escape: '"',
-          })
-        )
-        .on('data', (row: Record<string, string>) => {
-          try {
-            // Pomiń puste wiersze
-            const values = Object.values(row);
-            if (values.every((v) => !v || v.trim() === '')) {
-              return;
-            }
+    // Wczytaj cały plik jako string
+    let fileContent = fs.readFileSync(filePath, 'utf-8');
 
-            // Mapuj kolumny według pozycji
-            const columns = Object.keys(row);
+    // Usuń BOM jeśli jest
+    if (fileContent.charCodeAt(0) === 0xfeff) {
+      fileContent = fileContent.substring(1);
+    }
 
-            // Parsuj ilość z formatu "0/6" -> shippedQty=0, orderedQty=6
-            const { shipped, ordered } = this.parseQuantity(row[columns[7]] || '');
+    // Podziel na wiersze
+    const lines = fileContent.split(/\r?\n/).filter(line => line.trim() !== '');
 
-            const position = parseInt(row[columns[4]] || '0', 10);
-            if (position === 0 || isNaN(position)) {
-              // Pomiń nagłówek lub nieprawidłowy wiersz
-              return;
-            }
+    if (lines.length < 6) {
+      logger.warn(`[SchucoItemParser] File has too few lines: ${lines.length}`);
+      return results;
+    }
 
-            const itemRow: SchucoOrderItemRow = {
-              orderDate: this.cleanField(row[columns[0]] || ''),
-              orderNumber: this.cleanField(row[columns[1]] || ''),
-              orderName: this.cleanField(row[columns[2]] || ''),
-              object: this.cleanField(row[columns[3]] || ''),
-              position: position,
-              articleNumber: this.cleanField(row[columns[5]] || ''),
-              articleDescription: this.cleanField(row[columns[6]] || ''),
-              shippedQty: shipped,
-              orderedQty: ordered,
-              unit: this.cleanField(row[columns[8]] || 'szt.'),
-              dimensions: this.cleanField(row[columns[9]] || ''),
-              configuration: this.cleanField(row[columns[10]] || ''),
-              deliveryWeek: this.cleanField(row[columns[11]] || ''),
-              tracking: this.cleanField(row[columns[12]] || ''),
-              comment: this.cleanField(row[columns[13]] || ''),
-              rawData: row,
-            };
+    // Parsuj metadane z pierwszych wierszy
+    const parseMetaLine = (line: string): string => {
+      // Format: "Label";"Value" lub "Label";"Value";""
+      const match = line.match(/^"[^"]*";"([^"]*)"/);
+      return match ? match[1] : '';
+    };
 
-            // Waliduj wymagane pola
-            if (this.isValidRow(itemRow)) {
-              results.push(itemRow);
-            } else {
-              logger.warn('[SchucoItemParser] Skipping invalid row:', { position, articleNumber: itemRow.articleNumber });
-            }
-          } catch (error) {
-            logger.error('[SchucoItemParser] Error parsing row:', error, row);
-          }
-        })
-        .on('end', () => {
-          logger.info(`[SchucoItemParser] Parsed ${results.length} item rows`);
-          resolve(results);
-        })
-        .on('error', (error) => {
-          logger.error('[SchucoItemParser] CSV parsing error:', error);
-          stream.destroy();
-          reject(error);
-        });
-    });
+    const orderDate = parseMetaLine(lines[0]);
+    const orderNumber = parseMetaLine(lines[1]);
+    const orderName = parseMetaLine(lines[2]); // Zlecenie
+    const object = parseMetaLine(lines[3]);
+
+    logger.info(`[SchucoItemParser] Metadata - Date: ${orderDate}, Order: ${orderNumber}, Zlecenie: ${orderName}`);
+
+    // Wiersz 5 (index 4) to nagłówki - pomijamy
+    // Wiersze od 6 (index 5) to dane pozycji
+
+    for (let i = 5; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line || line.trim() === '') continue;
+
+      try {
+        // Parsuj wiersz CSV (separator: ;, quote: ")
+        const values = this.parseCSVLine(line);
+
+        if (values.length < 6) {
+          logger.warn(`[SchucoItemParser] Line ${i + 1} has too few columns: ${values.length}`);
+          continue;
+        }
+
+        // Kolumny według screenshota i analizy:
+        // 0: Pozycja (np. "1")
+        // 1: Artykuł (nr, np. "18866201")
+        // 2: Opis artykułu (np. "8866 Skrzydło 70/83 KMAT")
+        // 3: Wysłany (np. "0/2")
+        // 4: Jednostka (np. "szt.")
+        // 5: Wymiary (np. "6000 mm")
+        // 6: Konfiguracja
+        // 7: Tydzień dostawy
+        // 8: Śledzenie
+        // 9: Komentarz
+        // 10-11: Puste kolumny
+
+        const position = parseInt(values[0] || '0', 10);
+        if (position === 0 || isNaN(position)) {
+          logger.warn(`[SchucoItemParser] Line ${i + 1} invalid position: ${values[0]}`);
+          continue;
+        }
+
+        const { shipped, ordered } = this.parseQuantity(values[3] || '');
+
+        const itemRow: SchucoOrderItemRow = {
+          orderDate: this.cleanField(orderDate),
+          orderNumber: this.cleanField(orderNumber),
+          orderName: this.cleanField(orderName),
+          object: this.cleanField(object),
+          position: position,
+          articleNumber: this.cleanField(values[1] || ''),
+          articleDescription: this.cleanField(values[2] || ''),
+          shippedQty: shipped,
+          orderedQty: ordered,
+          unit: this.cleanField(values[4] || 'szt.'),
+          dimensions: this.cleanField(values[5] || ''),
+          configuration: this.cleanField(values[6] || ''),
+          deliveryWeek: this.cleanField(values[7] || ''),
+          tracking: this.cleanField(values[8] || ''),
+          comment: this.cleanField(values[9] || ''),
+          rawData: { line: line },
+        };
+
+        // Waliduj wymagane pola
+        if (this.isValidRow(itemRow)) {
+          results.push(itemRow);
+          logger.info(`[SchucoItemParser] Parsed item: Pos ${position}, Article ${itemRow.articleNumber}`);
+        } else {
+          logger.warn(`[SchucoItemParser] Skipping invalid row at line ${i + 1}:`, {
+            position,
+            articleNumber: itemRow.articleNumber,
+          });
+        }
+      } catch (error) {
+        logger.error(`[SchucoItemParser] Error parsing line ${i + 1}:`, error);
+      }
+    }
+
+    logger.info(`[SchucoItemParser] Parsed ${results.length} item rows`);
+    return results;
+  }
+
+  /**
+   * Parsuje pojedynczą linię CSV (separator: ;, quote: ")
+   */
+  private parseCSVLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+
+      if (inQuotes) {
+        if (char === '"' && nextChar === '"') {
+          // Escaped quote
+          current += '"';
+          i++; // Skip next quote
+        } else if (char === '"') {
+          // End of quoted field
+          inQuotes = false;
+        } else {
+          current += char;
+        }
+      } else {
+        if (char === '"') {
+          // Start of quoted field
+          inQuotes = true;
+        } else if (char === ';') {
+          // Field separator
+          result.push(current);
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+    }
+
+    // Don't forget the last field
+    result.push(current);
+
+    return result;
   }
 
   /**

@@ -57,7 +57,7 @@ for (const cmd of dangerousCommands) {
     console.error('ℹ️  Dlaczego pnpm?');
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.error('  - Projekt używa pnpm workspaces');
-    console.error('  - npm/yarn złamią linki między pakietami (@akrobud/api, @akrobud/web)');
+    console.error('  - npm/yarn złamią linki między pakietami (@markbud/api, @markbud/web)');
     console.error('  - Może spowodować "module not found" errors');
     console.error('\n📚 Dokumentacja:');
     console.error('   - COMMON_MISTAKES.md → Package Manager');

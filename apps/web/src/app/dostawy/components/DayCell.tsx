@@ -1,11 +1,61 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
-import { Ban, Truck } from 'lucide-react';
+import { Ban, Truck, CheckCircle2, XCircle, AlertTriangle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DroppableDelivery } from '../DragDropComponents';
 import type { Delivery } from '@/types/delivery';
 import type { DayStats, HolidayInfo } from '../hooks';
+import type { ReadinessResult, AggregatedReadinessStatus } from '@/lib/api/orders';
+
+/**
+ * Komponent do wyświetlania ikony statusu readiness
+ *
+ * QW-1: Zoptymalizowany - otrzymuje status z batch query zamiast własnego useQuery
+ * Eliminuje problem N+1 queries w kalendarzu
+ */
+function ReadinessIcon({ readiness }: { readiness?: ReadinessResult }) {
+  // Ikona 16px (h-4 w-4) dla lepszej widoczności
+  const iconClass = 'h-4 w-4 flex-shrink-0';
+
+  if (!readiness) {
+    return (
+      <span title="Ładowanie statusu..." className="inline-flex">
+        <Clock className={`${iconClass} text-slate-400`} />
+      </span>
+    );
+  }
+
+  const status: AggregatedReadinessStatus = readiness.status;
+
+  switch (status) {
+    case 'ready':
+      return (
+        <span title="Gotowe do wysyłki" className="inline-flex">
+          <CheckCircle2 className={`${iconClass} text-green-600`} />
+        </span>
+      );
+    case 'conditional':
+      return (
+        <span title="Warunkowe - sprawdź ostrzeżenia" className="inline-flex">
+          <AlertTriangle className={`${iconClass} text-yellow-600`} />
+        </span>
+      );
+    case 'blocked':
+      return (
+        <span title="Zablokowane - sprawdź blokady" className="inline-flex">
+          <XCircle className={`${iconClass} text-red-600`} />
+        </span>
+      );
+    case 'pending':
+    default:
+      return (
+        <span title="Oczekuje na sprawdzenie" className="inline-flex">
+          <Clock className={`${iconClass} text-slate-400`} />
+        </span>
+      );
+  }
+}
 
 interface DayCellProps {
   date: Date;
@@ -19,6 +69,8 @@ interface DayCellProps {
   onDayClick: (date: Date) => void;
   onDayRightClick: (e: React.MouseEvent, date: Date) => void;
   onDeliveryClick: (delivery: Delivery) => void;
+  /** QW-1: Mapa statusów readiness z batch query (opcjonalna dla backwards compatibility) */
+  readinessMap?: Record<number, ReadinessResult>;
 }
 
 export function DayCell({
@@ -33,6 +85,7 @@ export function DayCell({
   onDayClick,
   onDayRightClick,
   onDeliveryClick,
+  readinessMap,
 }: DayCellProps) {
   const hasPolishHoliday = holidayInfo.polishHolidays.length > 0;
   const hasGermanHoliday = holidayInfo.germanHolidays.length > 0;
@@ -133,6 +186,8 @@ export function DayCell({
                 onDeliveryClick(delivery);
               }}
             >
+              {/* QW-1: Używamy readiness z batch query zamiast N osobnych zapytań */}
+              <ReadinessIcon readiness={readinessMap?.[delivery.id]} />
               <Truck className="h-3 w-3 flex-shrink-0" />
               <span className="truncate">
                 {delivery.deliveryNumber || `#${delivery.id}`}

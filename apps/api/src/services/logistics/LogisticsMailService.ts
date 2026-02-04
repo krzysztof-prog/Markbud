@@ -873,17 +873,18 @@ class LogisticsMailService {
    * - Ale nie ma ustawionej daty dostawy (Order.deliveryDate = null)
    *
    * Co robi:
-   * 1. Aktualizuje Order.deliveryDate
-   * 2. Znajduje lub tworzy Delivery dla tej daty
-   * 3. Dodaje zlecenie do tej dostawy
+   * 1. Parsuje deliveryCode aby wyciągnąć datę i index dostawy
+   * 2. Aktualizuje Order.deliveryDate
+   * 3. Znajduje właściwą Delivery (po indeksie _I, _II) lub tworzy nową
+   * 4. Dodaje zlecenie do tej dostawy
    *
    * @param orderId ID zlecenia
-   * @param deliveryDateISO Data dostawy w formacie ISO (z listy mailowej)
+   * @param deliveryCode Kod dostawy np. "08.01.2026_II" - zawiera datę i index
    * @returns Informacje o zaktualizowanym zleceniu i dostawie
    */
   async setOrderDeliveryDate(
     orderId: number,
-    deliveryDateISO: string
+    deliveryCode: string
   ): Promise<{
     orderId: number;
     orderNumber: string;
@@ -908,77 +909,119 @@ class LogisticsMailService {
       throw new NotFoundError(`Zlecenie o ID ${orderId}`);
     }
 
-    // 2. Parsuj datę
-    const deliveryDate = new Date(deliveryDateISO);
-    if (isNaN(deliveryDate.getTime())) {
-      throw new ValidationError(`Nieprawidłowy format daty: ${deliveryDateISO}`);
-    }
-
-    // Ustaw godzinę na 12:00 żeby uniknąć problemów ze strefą czasową
-    deliveryDate.setHours(12, 0, 0, 0);
+    // 2. Parsuj deliveryCode na datę i index
+    const { date: deliveryDate, index: deliveryIndex } = this.parseDeliveryCode(deliveryCode);
 
     logger.info(`[LogisticsMailService] Setting delivery date for order ${order.orderNumber}`, {
       orderId,
+      deliveryCode,
       deliveryDate: deliveryDate.toISOString(),
+      deliveryIndex,
     });
 
-    // 3. Znajdź lub utwórz dostawę dla tej daty
+    // 3. Znajdź LogisticsMailList po deliveryCode (aby znaleźć powiązaną Delivery)
+    const mailList = await prisma.logisticsMailList.findFirst({
+      where: {
+        deliveryCode,
+        deletedAt: null,
+      },
+      orderBy: {
+        version: 'desc', // Najnowsza wersja
+      },
+      select: {
+        id: true,
+        deliveryId: true,
+        delivery: {
+          select: {
+            id: true,
+            deliveryNumber: true,
+            deletedAt: true,
+          },
+        },
+      },
+    });
+
+    // 4. Znajdź lub utwórz dostawę
     const deliveryRepo = new DeliveryRepository(prisma);
     const deliveryOrderService = new DeliveryOrderService(deliveryRepo, prisma);
     const numberGenerator = new DeliveryNumberGenerator(prisma);
 
-    // Szukaj dostawy na ten dzień (ignorując godzinę)
-    const startOfDay = new Date(deliveryDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(deliveryDate);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const existingDeliveries = await prisma.delivery.findMany({
-      where: {
-        deliveryDate: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
-        deletedAt: null,
-      },
-      orderBy: {
-        createdAt: 'desc', // Najnowsza najpierw
-      },
-      take: 1,
-    });
-
     let delivery: { id: number; deliveryNumber: string | null };
     let isNewDelivery = false;
 
-    if (existingDeliveries.length > 0) {
-      // Użyj istniejącej dostawy
-      delivery = existingDeliveries[0];
-      logger.info(`[LogisticsMailService] Found existing delivery for date`, {
+    if (mailList?.delivery && !mailList.delivery.deletedAt) {
+      // Użyj dostawy powiązanej z listą mailową
+      delivery = mailList.delivery;
+      logger.info(`[LogisticsMailService] Found delivery linked to mail list`, {
         deliveryId: delivery.id,
         deliveryNumber: delivery.deliveryNumber,
+        mailListId: mailList.id,
       });
     } else {
-      // Utwórz nową dostawę
-      const deliveryNumber = await numberGenerator.generateDeliveryNumber(deliveryDate);
-      const newDelivery = await deliveryRepo.create({
-        deliveryDate,
-        deliveryNumber,
+      // Szukaj dostawy na ten dzień z odpowiednim indeksem
+      const startOfDay = new Date(deliveryDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(deliveryDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      // Pobierz wszystkie dostawy na ten dzień i wybierz odpowiednią po indeksie
+      const existingDeliveries = await prisma.delivery.findMany({
+        where: {
+          deliveryDate: {
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+          deletedAt: null,
+        },
+        orderBy: {
+          createdAt: 'asc', // Najstarsza najpierw = index 1
+        },
       });
-      delivery = newDelivery;
-      isNewDelivery = true;
-      logger.info(`[LogisticsMailService] Created new delivery for date`, {
-        deliveryId: delivery.id,
-        deliveryNumber: delivery.deliveryNumber,
-      });
+
+      // Index 1 = pierwsza dostawa (_I), index 2 = druga (_II), itd.
+      if (existingDeliveries.length >= deliveryIndex) {
+        delivery = existingDeliveries[deliveryIndex - 1];
+        logger.info(`[LogisticsMailService] Found existing delivery by index`, {
+          deliveryId: delivery.id,
+          deliveryNumber: delivery.deliveryNumber,
+          deliveryIndex,
+        });
+      } else {
+        // Utwórz nową dostawę
+        const deliveryNumber = await numberGenerator.generateDeliveryNumber(deliveryDate);
+        const newDelivery = await deliveryRepo.create({
+          deliveryDate,
+          deliveryNumber,
+        });
+        delivery = newDelivery;
+        isNewDelivery = true;
+        logger.info(`[LogisticsMailService] Created new delivery for index`, {
+          deliveryId: delivery.id,
+          deliveryNumber: delivery.deliveryNumber,
+          deliveryIndex,
+        });
+      }
+
+      // Połącz mailList z delivery jeśli istnieje i nie jest powiązana
+      if (mailList && !mailList.deliveryId) {
+        await prisma.logisticsMailList.update({
+          where: { id: mailList.id },
+          data: { deliveryId: delivery.id },
+        });
+        logger.info(`[LogisticsMailService] Linked mail list to delivery`, {
+          mailListId: mailList.id,
+          deliveryId: delivery.id,
+        });
+      }
     }
 
-    // 4. Aktualizuj datę dostawy w zleceniu
+    // 5. Aktualizuj datę dostawy w zleceniu
     await prisma.order.update({
       where: { id: orderId },
       data: { deliveryDate },
     });
 
-    // 5. Dodaj zlecenie do dostawy (jeśli jeszcze nie jest przypisane)
+    // 6. Dodaj zlecenie do dostawy (jeśli jeszcze nie jest przypisane)
     const existingAssignment = await prisma.deliveryOrder.findFirst({
       where: {
         orderId,
@@ -998,13 +1041,14 @@ class LogisticsMailService {
       });
     }
 
-    // 6. Przelicz readiness dla dostawy
+    // 7. Przelicz readiness dla dostawy
     const readinessAggregator = new DeliveryReadinessAggregator(prisma);
     await readinessAggregator.calculateAndPersist(delivery.id);
 
     logger.info(`[LogisticsMailService] Successfully set delivery date for order`, {
       orderId,
       orderNumber: order.orderNumber,
+      deliveryCode,
       deliveryDate: deliveryDate.toISOString(),
       deliveryId: delivery.id,
       isNewDelivery,
@@ -1020,6 +1064,175 @@ class LogisticsMailService {
         isNew: isNewDelivery,
       },
     };
+  }
+
+  // ========== ORPHAN ORDERS ==========
+
+  /**
+   * Pobiera zlecenia przypisane do dostawy ale nieobecne na liście mailowej
+   *
+   * "Orphan orders" to zlecenia które:
+   * 1. Mają ustawioną datę dostawy (Order.deliveryDate) pasującą do daty z deliveryCode
+   * 2. NIE są powiązane z żadną pozycją na liście mailowej dla tego deliveryCode
+   *
+   * Używane do wykrywania zleceń które zostały ręcznie dodane do dostawy
+   * lub których pozycje zostały usunięte z maila.
+   *
+   * @param deliveryCode Kod dostawy np. "08.01.2026_II"
+   * @returns Lista "orphan orders" z podstawowymi danymi
+   */
+  async getOrphanOrders(deliveryCode: string): Promise<{
+    orders: {
+      id: number;
+      orderNumber: string;
+      client: string | null;
+      project: string | null;
+      status: string | null;
+      deliveryDate: string;
+    }[];
+    totalCount: number;
+  }> {
+    // 1. Parsuj deliveryCode aby wyciągnąć datę
+    const { date: deliveryDate } = this.parseDeliveryCode(deliveryCode);
+
+    // Normalizuj datę do początku dnia
+    const startOfDay = new Date(deliveryDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(deliveryDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // 2. Pobierz najnowszą wersję listy mailowej dla tego deliveryCode
+    const mailList = await logisticsRepository.getLatestVersionByDeliveryCode(deliveryCode);
+
+    // 3. Pobierz wszystkie orderId które SĄ na liście mailowej
+    const linkedOrderIds: number[] = [];
+    if (mailList?.items) {
+      for (const item of mailList.items) {
+        if (item.orderId !== null) {
+          linkedOrderIds.push(item.orderId);
+        }
+      }
+    }
+
+    // 4. Pobierz zlecenia z pasującą datą dostawy ale NIE na liście
+    const orphanOrders = await prisma.order.findMany({
+      where: {
+        deliveryDate: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+        id: {
+          notIn: linkedOrderIds.length > 0 ? linkedOrderIds : [-1], // SQLite nie lubi pustych IN
+        },
+        archivedAt: null, // Nie pokazuj zarchiwizowanych
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        client: true,
+        project: true,
+        status: true,
+        deliveryDate: true,
+      },
+      orderBy: {
+        orderNumber: 'asc',
+      },
+    });
+
+    logger.debug(`[LogisticsMailService] Found orphan orders for ${deliveryCode}`, {
+      deliveryCode,
+      deliveryDate: deliveryDate.toISOString(),
+      linkedOrderIds: linkedOrderIds.length,
+      orphanCount: orphanOrders.length,
+    });
+
+    return {
+      orders: orphanOrders.map(order => ({
+        ...order,
+        deliveryDate: formatDateWarsaw(order.deliveryDate!),
+      })),
+      totalCount: orphanOrders.length,
+    };
+  }
+
+  /**
+   * Usuwa zlecenie z dostawy (czyści datę dostawy)
+   *
+   * Używane gdy zlecenie jest na dostawie ale użytkownik chce je usunąć
+   * (np. zostało błędnie przypisane lub usunięte z maila).
+   *
+   * @param orderId ID zlecenia do usunięcia z dostawy
+   * @returns Zaktualizowane zlecenie
+   */
+  async removeOrderFromDelivery(orderId: number): Promise<{
+    orderId: number;
+    orderNumber: string;
+  }> {
+    // 1. Pobierz zlecenie
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, orderNumber: true, deliveryDate: true },
+    });
+
+    if (!order) {
+      throw new NotFoundError(`Zlecenie o ID ${orderId}`);
+    }
+
+    if (!order.deliveryDate) {
+      throw new ValidationError(`Zlecenie ${order.orderNumber} nie ma ustawionej daty dostawy`);
+    }
+
+    // 2. Wyczyść datę dostawy
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { deliveryDate: null },
+    });
+
+    // 3. Usuń z DeliveryOrder (jeśli jest przypisane)
+    await prisma.deliveryOrder.deleteMany({
+      where: { orderId },
+    });
+
+    logger.info(`[LogisticsMailService] Removed order from delivery`, {
+      orderId,
+      orderNumber: order.orderNumber,
+      previousDeliveryDate: order.deliveryDate,
+    });
+
+    return {
+      orderId,
+      orderNumber: order.orderNumber,
+    };
+  }
+
+  /**
+   * Parsuje deliveryCode na datę i index
+   * np. "08.01.2026_II" → { date: Date(2026-01-08), index: 2 }
+   */
+  private parseDeliveryCode(deliveryCode: string): { date: Date; index: number } {
+    // Format: "DD.MM.YYYY_I" lub "DD.MM.YYYY_II" itd.
+    const match = deliveryCode.match(/^(\d{2})\.(\d{2})\.(\d{4})_([IVX]+)$/);
+    if (!match) {
+      throw new ValidationError(`Nieprawidłowy format kodu dostawy: ${deliveryCode}`);
+    }
+
+    const [, day, month, year, romanIndex] = match;
+    const date = new Date(`${year}-${month}-${day}T12:00:00`);
+    if (isNaN(date.getTime())) {
+      throw new ValidationError(`Nieprawidłowa data w kodzie dostawy: ${deliveryCode}`);
+    }
+
+    // Konwersja cyfr rzymskich na arabskie (obsługujemy I-X)
+    const romanToArabic: Record<string, number> = {
+      'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
+      'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
+    };
+    const index = romanToArabic[romanIndex];
+    if (!index) {
+      throw new ValidationError(`Nieprawidłowy index dostawy: ${romanIndex}`);
+    }
+
+    return { date, index };
   }
 }
 

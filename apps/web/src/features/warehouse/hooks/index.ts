@@ -1,0 +1,1 @@
+export { useWarehouseData } from './useWarehouseData';

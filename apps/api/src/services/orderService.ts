@@ -18,9 +18,14 @@ import { OkucRwService } from './okuc/OkucRwService.js';
 import { WarehouseRwService } from './warehouse/WarehouseRwService.js';
 import { SteelRwService } from './SteelRwService.js';
 import { logger } from '../utils/logger.js';
+import { DeliveryReadinessAggregator } from './readiness/index.js';
 
 export class OrderService {
-  constructor(private repository: OrderRepository) {}
+  private readinessAggregator: DeliveryReadinessAggregator;
+
+  constructor(private repository: OrderRepository) {
+    this.readinessAggregator = new DeliveryReadinessAggregator(prisma);
+  }
 
   async getAllOrders(filters: { status?: string; archived?: string; colorId?: string; documentAuthorUserId?: string }) {
     return this.repository.findAll(filters);
@@ -98,12 +103,46 @@ export class OrderService {
 
     emitOrderUpdated(order);
 
+    // Auto-recalculate readiness dla powiązanych dostaw
+    await this.recalculateDeliveryReadinessForOrder(id);
+
     return order;
   }
 
-  async deleteOrder(id: number) {
+  /**
+   * Helper: Przelicza readiness dla wszystkich dostaw powiązanych ze zleceniem
+   */
+  private async recalculateDeliveryReadinessForOrder(orderId: number): Promise<void> {
+    try {
+      const deliveryOrders = await prisma.deliveryOrder.findMany({
+        where: { orderId },
+        select: { deliveryId: true },
+      });
+
+      for (const { deliveryId } of deliveryOrders) {
+        await this.readinessAggregator.recalculateIfNeeded(deliveryId);
+      }
+    } catch (error) {
+      logger.error('Error recalculating delivery readiness for order', { orderId, error });
+    }
+  }
+
+  /**
+   * Soft delete zlecenia - tylko dla adminów/kierowników, tylko status "new"
+   * @param id - ID zlecenia
+   * @param deletedByUserId - ID użytkownika usuwającego
+   */
+  async deleteOrder(id: number, deletedByUserId: number) {
     // Verify order exists
     const order = await this.getOrderById(id);
+
+    // Safety check: Tylko zlecenia w statusie "new" można usunąć
+    if (order.status !== 'new') {
+      throw new ValidationError(
+        `Nie można usunąć zlecenia o statusie "${order.status}". ` +
+        'Można usuwać tylko zlecenia w statusie "Nowe".'
+      );
+    }
 
     // Safety check: Sprawdź czy zlecenie nie jest powiązane z wysłaną/dostarczoną dostawą
     const deliveries = await this.repository.getOrderDeliveries(id);
@@ -113,22 +152,30 @@ export class OrderService {
 
     if (hasShippedOrDelivered) {
       throw new ValidationError(
-        'Nie można usunąć zlecenia przypisanego do wysłanej lub dostarczonej dostawy. ' +
-        'Archiwizuj zlecenie zamiast je usuwać.'
+        'Nie można usunąć zlecenia przypisanego do wysłanej lub dostarczonej dostawy.'
       );
     }
 
-    // Safety check: Ostrzeżenie jeśli zlecenie jest w trakcie produkcji
-    if (order.status === 'in_progress' || order.status === 'completed') {
-      throw new ValidationError(
-        `Nie można usunąć zlecenia o statusie "${order.status}". ` +
-        'Archiwizuj zlecenie zamiast je usuwać.'
-      );
-    }
-
-    await this.repository.delete(id);
+    // Soft delete - zachowuje dane w bazie z datą usunięcia
+    await this.repository.softDelete(id, deletedByUserId);
 
     emitOrderDeleted(id);
+
+    logger.info('Order soft deleted', { orderId: id, deletedByUserId });
+  }
+
+  /**
+   * Przywrócenie usuniętego zlecenia (soft delete restore)
+   */
+  async restoreOrder(id: number) {
+    await this.repository.restore(id);
+
+    const order = await this.getOrderById(id);
+    emitOrderUpdated(order);
+
+    logger.info('Order restored', { orderId: id });
+
+    return order;
   }
 
   async archiveOrder(id: number) {
@@ -250,7 +297,29 @@ export class OrderService {
       this.processSteelRwAsync(orderIds);
     }
 
+    // Auto-recalculate readiness dla powiązanych dostaw
+    await this.recalculateDeliveryReadinessForOrders(orderIds);
+
     return updatedOrders;
+  }
+
+  /**
+   * Helper: Przelicza readiness dla wszystkich dostaw powiązanych z wieloma zleceniami
+   */
+  private async recalculateDeliveryReadinessForOrders(orderIds: number[]): Promise<void> {
+    try {
+      const deliveryOrders = await prisma.deliveryOrder.findMany({
+        where: { orderId: { in: orderIds } },
+        select: { deliveryId: true },
+        distinct: ['deliveryId'],
+      });
+
+      for (const { deliveryId } of deliveryOrders) {
+        await this.readinessAggregator.recalculateIfNeeded(deliveryId);
+      }
+    } catch (error) {
+      logger.error('Error recalculating delivery readiness for orders', { orderIds, error });
+    }
   }
 
   /**

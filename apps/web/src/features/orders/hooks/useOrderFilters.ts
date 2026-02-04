@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDebounce } from '@/hooks/useDebounce';
+import { getTodayWarsaw } from '@/lib/date-utils';
 import type {
   FilterState,
   Column,
@@ -34,7 +35,17 @@ import {
 export const getDefaultDateFrom = (): string => {
   const now = new Date();
   now.setMonth(now.getMonth() - 6);
-  return now.toISOString().split('T')[0]; // format YYYY-MM-DD
+  // Używamy getTodayWarsaw() jako bazę i odejmujemy 6 miesięcy
+  // Ale dla prostoty używamy formatDateWarsaw z date-utils
+  // Jednak tutaj potrzebujemy obliczyć 6 miesięcy wstecz od teraz,
+  // więc używamy getTodayWarsaw() jako punkt wyjścia
+  const todayStr = getTodayWarsaw();
+  const [year, month, day] = todayStr.split('-').map(Number);
+  const date = new Date(year, month - 1 - 6, day);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
 const DEFAULT_FILTERS: FilterState = {

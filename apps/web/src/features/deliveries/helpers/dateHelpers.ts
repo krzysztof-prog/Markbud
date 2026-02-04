@@ -2,6 +2,8 @@
  * Date helpers for deliveries calendar
  */
 
+import { formatDateWarsaw } from '@/lib/date-utils';
+
 /**
  * Pobierz początek tygodnia (poniedziałek) dla danej daty
  */
@@ -65,5 +67,5 @@ export function getWeekNumber(date: Date): number {
  * Formatuj datę do YYYY-MM-DD
  */
 export function formatDateToISO(date: Date): string {
-  return date.toISOString().split('T')[0];
+  return formatDateWarsaw(date);
 }

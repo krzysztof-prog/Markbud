@@ -37,6 +37,8 @@ import {
   ChevronsRight,
   ChevronDown,
   ChevronUp,
+  ListChecks,
+  ListX,
 } from 'lucide-react';
 import { DeliveryItemsExpander } from './DeliveryItemsExpander';
 import { cn } from '@/lib/utils';
@@ -208,7 +210,7 @@ export const DeliveryListTab: React.FC<DeliveryListTabProps> = ({
         ) : (
           <>
             {/* Legenda */}
-            <div className="mb-4 flex items-center gap-4 text-xs">
+            <div className="mb-4 flex items-center gap-4 text-xs flex-wrap">
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 bg-green-50 border-l-4 border-l-green-500 rounded-sm" />
                 <span>Nowe zamówienie</span>
@@ -216,6 +218,14 @@ export const DeliveryListTab: React.FC<DeliveryListTabProps> = ({
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 bg-amber-50 border-l-4 border-l-amber-500 rounded-sm" />
                 <span>Zmienione (kliknij by zobaczyć szczegóły)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <ListChecks className="h-4 w-4 text-green-600" />
+                <span>Pozycje pobrane</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <ListX className="h-4 w-4 text-slate-400" />
+                <span>Brak pozycji</span>
               </div>
             </div>
 
@@ -335,19 +345,38 @@ const DeliveryRow: React.FC<DeliveryRowProps> = ({ delivery, index }) => {
           isExpanded && 'bg-blue-50/50'
         )}
       >
-        {/* Przycisk rozwijania */}
+        {/* Przycisk rozwijania + status pozycji */}
         <td className="px-2 py-3 text-center">
-          <button
-            onClick={handleToggle}
-            className="p-1 hover:bg-slate-200 rounded transition-colors"
-            title={isExpanded ? 'Zwiń pozycje' : 'Rozwiń pozycje'}
-          >
-            {isExpanded ? (
-              <ChevronUp className="h-4 w-4 text-slate-600" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-slate-600" />
-            )}
-          </button>
+          <div className="flex items-center justify-center gap-1">
+            <button
+              onClick={handleToggle}
+              className="p-1 hover:bg-slate-200 rounded transition-colors"
+              title={isExpanded ? 'Zwiń pozycje' : 'Rozwiń pozycje'}
+            >
+              {isExpanded ? (
+                <ChevronUp className="h-4 w-4 text-slate-600" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-slate-600" />
+              )}
+            </button>
+            {/* Ikona statusu pozycji */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex">
+                  {(delivery._count?.items || delivery.itemsFetchedAt) ? (
+                    <ListChecks className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <ListX className="h-4 w-4 text-slate-400" />
+                  )}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {(delivery._count?.items || delivery.itemsFetchedAt)
+                  ? `Pobrano ${delivery._count?.items || ''} pozycji`
+                  : 'Brak pobranych pozycji'}
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </td>
         <td className="px-4 py-3">
           <span className="flex items-center gap-1">
@@ -399,6 +428,7 @@ const DeliveryRow: React.FC<DeliveryRowProps> = ({ delivery, index }) => {
             <DeliveryItemsExpander
               deliveryId={delivery.id}
               orderNumber={delivery.orderNumber}
+              itemsFetchedAt={delivery.itemsFetchedAt}
             />
           </td>
         </tr>

@@ -1,0 +1,1 @@
+export { usePrivateColors } from './usePrivateColors';

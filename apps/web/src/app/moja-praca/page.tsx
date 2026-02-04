@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { AlertTriangle, FileText, Truck, Layers, Calendar } from 'lucide-react';
+import { formatDateWarsaw } from '@/lib/date-utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +27,7 @@ export default function MojaPracaPage() {
 
   // Formatuj datę do YYYY-MM-DD
   const dateString = useMemo(() => {
-    return selectedDate.toISOString().split('T')[0];
+    return formatDateWarsaw(selectedDate);
   }, [selectedDate]);
 
   // Pobierz licznik konfliktów

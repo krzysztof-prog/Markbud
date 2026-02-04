@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { cn, formatDate } from '@/lib/utils';
 import { History, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { formatDateWarsaw } from '@/lib/date-utils';
 import type { RemanentHistoryEntry } from '@/types/warehouse';
 
 // Helper functions outside component to avoid recreation on each render
@@ -42,7 +43,7 @@ export function WarehouseHistory({ colorId, colorName }: WarehouseHistoryProps) 
     }
 
     const grouped = history.reduce((groups, entry) => {
-      const dateKey = new Date(entry.recordedAt).toISOString().split('T')[0];
+      const dateKey = formatDateWarsaw(entry.recordedAt);
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }

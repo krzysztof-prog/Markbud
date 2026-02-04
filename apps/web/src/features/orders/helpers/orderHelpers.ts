@@ -176,7 +176,8 @@ export const formatClientName = (client: string | null | undefined, maxLength = 
     result = 'AKROBUD';
   } else {
     // Sprawdź czy to firma (zawiera sufiks firmowy w dowolnym miejscu)
-    const hasCompanySuffix = /(SP\.?|SPÓŁKA|S\.A\.|LTD|LLC|GMBH|FIRMA|COMPANY|CO\.|INC|CORP|O\.O\.|Z\s+O\.O\.)/i.test(
+    // e.K. = eingetragener Kaufmann (niemiecki skrót dla jednoosobowej działalności)
+    const hasCompanySuffix = /(SP\.?|SPÓŁKA|S\.A\.|LTD|LLC|GMBH|FIRMA|COMPANY|CO\.|INC|CORP|O\.O\.|Z\s+O\.O\.|e\.?\s?K\.)/i.test(
       client
     );
 

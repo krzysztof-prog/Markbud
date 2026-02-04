@@ -21,7 +21,7 @@ interface RateLimitInfo {
 }
 
 const MAX_CONNECTIONS = 100;
-const MAX_CONNECTIONS_PER_USER = 5; // Limit połączeń per użytkownik
+const MAX_CONNECTIONS_PER_USER = 10; // Limit połączeń per użytkownik (zwiększony z 5 bo 2 hooki WS)
 const MAX_MESSAGES_PER_MINUTE = 100;
 const RATE_LIMIT_WINDOW = 60000; // 1 minute in milliseconds
 const MAX_STRING_LENGTH = 10000;

@@ -12,6 +12,7 @@ import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { ClientSidebar } from './client-sidebar';
 import { ErrorReportButton } from '@/components/ErrorReportButton';
+import { HelpButton } from '@/components/help';
 
 export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -46,8 +47,9 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {/* Przycisk zgłaszania błędów - prawy dolny róg */}
-      <div className="fixed bottom-4 right-4 z-50">
+      {/* Przyciski w prawym dolnym rogu: Pomoc + Zgłoś problem */}
+      <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2">
+        <HelpButton />
         <ErrorReportButton />
       </div>
     </div>

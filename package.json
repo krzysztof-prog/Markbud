@@ -1,5 +1,5 @@
 {
-  "name": "akrobud",
+  "name": "markbud",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -8,22 +8,22 @@
     "dev": "turbo dev",
     "dev:clean": "node scripts/kill-dev-servers.js --clean && turbo dev",
     "predev:web": "node scripts/kill-dev-servers.js",
-    "dev:web": "pnpm --filter @akrobud/web dev",
+    "dev:web": "pnpm --filter @markbud/web dev",
     "predev:api": "node scripts/kill-dev-servers.js",
-    "dev:api": "pnpm --filter @akrobud/api dev",
+    "dev:api": "pnpm --filter @markbud/api dev",
     "build": "turbo build",
-    "build:web": "pnpm --filter @akrobud/web build",
-    "build:api": "pnpm --filter @akrobud/api build",
-    "db:generate": "pnpm --filter @akrobud/api db:generate",
-    "db:migrate": "pnpm --filter @akrobud/api db:migrate",
-    "db:migrate:deploy": "pnpm --filter @akrobud/api db:migrate:deploy",
-    "db:migrate:status": "pnpm --filter @akrobud/api db:migrate:status",
-    "db:push": "pnpm --filter @akrobud/api db:push",
-    "db:seed": "pnpm --filter @akrobud/api db:seed",
-    "db:studio": "pnpm --filter @akrobud/api db:studio",
-    "db:reset": "pnpm --filter @akrobud/api db:reset",
+    "build:web": "pnpm --filter @markbud/web build",
+    "build:api": "pnpm --filter @markbud/api build",
+    "db:generate": "pnpm --filter @markbud/api db:generate",
+    "db:migrate": "pnpm --filter @markbud/api db:migrate",
+    "db:migrate:deploy": "pnpm --filter @markbud/api db:migrate:deploy",
+    "db:migrate:status": "pnpm --filter @markbud/api db:migrate:status",
+    "db:push": "pnpm --filter @markbud/api db:push",
+    "db:seed": "pnpm --filter @markbud/api db:seed",
+    "db:studio": "pnpm --filter @markbud/api db:studio",
+    "db:reset": "pnpm --filter @markbud/api db:reset",
     "lint": "turbo lint",
-    "test:e2e": "pnpm --filter @akrobud/web test:e2e",
+    "test:e2e": "pnpm --filter @markbud/web test:e2e",
     "prepare": "husky || true",
     "clean": "turbo clean",
     "kill": "node scripts/kill-dev-servers.js",
@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "@fastify/helmet": "^13.0.2",
-    "@fastify/rate-limit": "^10.3.0"
+    "@fastify/rate-limit": "^10.3.0",
+    "dayjs": "^1.11.19"
   }
 }

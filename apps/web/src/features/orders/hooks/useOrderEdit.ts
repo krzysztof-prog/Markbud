@@ -6,6 +6,7 @@ import { useState, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ordersApi } from '@/lib/api';
 import { toast } from '@/hooks/useToast';
+import { formatDateWarsaw } from '@/lib/date-utils';
 
 // ================================
 // Typy
@@ -69,7 +70,7 @@ export function useOrderEdit(): UseOrderEditReturn {
       try {
         const date = new Date(currentValue);
         if (!isNaN(date.getTime())) {
-          const formattedDate = date.toISOString().split('T')[0];
+          const formattedDate = formatDateWarsaw(date);
           setEditValue(formattedDate);
           return;
         }

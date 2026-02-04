@@ -10,6 +10,7 @@ import { setupGlobalErrorHandler } from '@/lib/error-logger';
 import { AuthProvider } from '@/features/auth';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { ConditionalLayout } from '@/components/layout/conditional-layout';
+import { DeliveryAlerts } from '@/features/deliveries/components/DeliveryAlerts';
 
 function RealtimeSyncWrapper({ children, enabled }: { children: React.ReactNode; enabled: boolean }) {
   // WebSocket with graceful degradation - nie blokuje gdy nie działa
@@ -97,6 +98,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           </ErrorBoundary>
         </AuthProvider>
         <Toaster />
+        <DeliveryAlerts />
       </PersistQueryClientProvider>
     );
   }
@@ -113,6 +115,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         </ErrorBoundary>
       </AuthProvider>
       <Toaster />
+      <DeliveryAlerts />
     </QueryClientProvider>
   );
 }

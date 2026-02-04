@@ -10,7 +10,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Header } from '@/components/layout/header';
 import { ordersApi, settingsApi } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
+import { getTodayWarsaw } from '@/lib/date-utils';
+import { useRoleCheck } from '@/features/auth/hooks/useRoleCheck';
 import type { SchucoDeliveryLink } from '@/types';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
 
 // Feature imports
 import {
@@ -51,6 +64,13 @@ export default function ZestawienieZlecenPage() {
     schucoLinks: SchucoDeliveryLink[];
   } | null>(null);
   const [glassDiscrepancyOrderNumber, setGlassDiscrepancyOrderNumber] = useState<string | null>(null);
+
+  // Stan dla confirmation dialog usuwania
+  const [orderToDelete, setOrderToDelete] = useState<{ id: number; orderNumber: string } | null>(null);
+
+  // Sprawdzanie uprawnień - tylko admin i kierownik mogą usuwać
+  const { isAdmin, isKierownik } = useRoleCheck();
+  const canDeleteOrders = isAdmin || isKierownik;
 
   // ================================
   // Data fetching
@@ -200,6 +220,60 @@ export default function ZestawienieZlecenPage() {
     },
   });
 
+  // Mutacja do usuwania zlecenia (soft delete)
+  const deleteOrderMutation = useMutation({
+    mutationFn: (orderId: number) => ordersApi.delete(orderId),
+    onMutate: async (orderId) => {
+      // Anuluj wszystkie pending queries
+      await queryClient.cancelQueries({ queryKey: ['orders'] });
+
+      // Zachowaj poprzedni stan
+      const previousActive = queryClient.getQueryData(['orders', 'all-active']);
+      const previousArchived = queryClient.getQueryData(['orders', 'all-archived']);
+
+      // Optymistycznie usuń zlecenie z listy
+      const removeOrder = (oldData: unknown) => {
+        if (!oldData || typeof oldData !== 'object' || !('data' in oldData)) return oldData;
+        const typedData = oldData as { data: ExtendedOrder[] };
+        return {
+          ...typedData,
+          data: typedData.data.filter((order: ExtendedOrder) => order.id !== orderId),
+        };
+      };
+
+      queryClient.setQueryData(['orders', 'all-active'], removeOrder);
+      queryClient.setQueryData(['orders', 'all-archived'], removeOrder);
+
+      return { previousActive, previousArchived };
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Zlecenie usunięte',
+        description: `Zlecenie ${orderToDelete?.orderNumber} zostało usunięte`,
+      });
+      setOrderToDelete(null);
+    },
+    onError: (error: Error, _orderId, context) => {
+      // Rollback przy błędzie
+      if (context?.previousActive) {
+        queryClient.setQueryData(['orders', 'all-active'], context.previousActive);
+      }
+      if (context?.previousArchived) {
+        queryClient.setQueryData(['orders', 'all-archived'], context.previousArchived);
+      }
+
+      toast({
+        title: 'Błąd',
+        description: error.message || 'Nie udało się usunąć zlecenia',
+        variant: 'destructive',
+      });
+      setOrderToDelete(null);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+
   // ================================
   // Callbacks
   // ================================
@@ -220,6 +294,18 @@ export default function ZestawienieZlecenPage() {
     manualStatusMutation.mutate({ orderId, manualStatus });
   }, [manualStatusMutation]);
 
+  // Handler do usuwania zlecenia - otwiera confirmation dialog
+  const handleDeleteOrder = useCallback((orderId: number, orderNumber: string) => {
+    setOrderToDelete({ id: orderId, orderNumber });
+  }, []);
+
+  // Potwierdź usunięcie zlecenia
+  const confirmDeleteOrder = useCallback(() => {
+    if (orderToDelete) {
+      deleteOrderMutation.mutate(orderToDelete.id);
+    }
+  }, [orderToDelete, deleteOrderMutation]);
+
   const handleExportCSV = useCallback(() => {
     const headers = visibleColumns.map(col => col.label);
     const rows = filteredOrders.map((order: ExtendedOrder) =>
@@ -231,7 +317,7 @@ export default function ZestawienieZlecenPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `zestawienie_zlecen_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `zestawienie_zlecen_${getTodayWarsaw()}.csv`;
     link.click();
   }, [visibleColumns, filteredOrders]);
 
@@ -306,6 +392,8 @@ export default function ZestawienieZlecenPage() {
             onSchucoStatusClick={handleSchucoStatusClick}
             onGlassDiscrepancyClick={handleGlassDiscrepancyClick}
             onManualStatusChange={handleManualStatusChange}
+            canDeleteOrders={canDeleteOrders}
+            onDeleteOrder={handleDeleteOrder}
             getGroupLabel={getGroupLabel}
             missingOrderNumbers={missingOrderNumbers}
             showOnlyMissing={true}
@@ -334,6 +422,8 @@ export default function ZestawienieZlecenPage() {
               onSchucoStatusClick={handleSchucoStatusClick}
               onGlassDiscrepancyClick={handleGlassDiscrepancyClick}
               onManualStatusChange={handleManualStatusChange}
+              canDeleteOrders={canDeleteOrders}
+              onDeleteOrder={handleDeleteOrder}
               getGroupLabel={getGroupLabel}
               missingOrderNumbers={missingOrderNumbers}
               showOnlyMissing={false}
@@ -380,6 +470,32 @@ export default function ZestawienieZlecenPage() {
         }}
         orderNumber={glassDiscrepancyOrderNumber}
       />
+
+      {/* Dialog potwierdzenia usunięcia zlecenia */}
+      <AlertDialog open={!!orderToDelete} onOpenChange={(open) => !open && setOrderToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Czy na pewno chcesz usunąć zlecenie?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Zlecenie <strong>{orderToDelete?.orderNumber}</strong> zostanie oznaczone jako usunięte.
+              {'\n\n'}
+              Ta operacja jest odwracalna - zlecenie można przywrócić z poziomu bazy danych.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteOrderMutation.isPending}>
+              Anuluj
+            </AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteOrder}
+              disabled={deleteOrderMutation.isPending}
+            >
+              {deleteOrderMutation.isPending ? 'Usuwanie...' : 'Usuń zlecenie'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

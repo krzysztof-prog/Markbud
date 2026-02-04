@@ -59,7 +59,7 @@ export interface UseDeliveryFiltersReturn {
  * - Computing months to fetch for API queries
  */
 export function useDeliveryFilters(): UseDeliveryFiltersReturn {
-  const [pageViewMode, setPageViewMode] = useState<PageViewMode>('calendar');
+  const [pageViewMode, setPageViewMode] = useState<PageViewMode>('list');
   const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
   const [weekOffset, setWeekOffset] = useState(0);
 

@@ -70,6 +70,24 @@ export class DeliveryRepository {
                   totalWindows: true,
                   totalSashes: true,
                   totalGlasses: true,
+                  // Statusy dla widoku listy dostaw
+                  okucDemandStatus: true,
+                  glassDeliveryDate: true,
+                  // Dane o szybach - potrzebne do wyświetlenia statusu
+                  orderedGlassCount: true,
+                  deliveredGlassCount: true,
+                  // Powiązania ze Schuco - do wyświetlenia statusu profili
+                  schucoLinks: {
+                    select: {
+                      id: true,
+                      schucoDelivery: {
+                        select: {
+                          shippingStatus: true,
+                          deliveryWeek: true,
+                        },
+                      },
+                    },
+                  },
                   windows: {
                     select: {
                       reference: true,
@@ -84,6 +102,22 @@ export class DeliveryRepository {
           },
           _count: {
             select: { deliveryOrders: true },
+          },
+          // Wyniki weryfikacji etykiet - potrzebne do wyświetlenia statusu per zlecenie
+          labelChecks: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'desc' },
+            take: 1, // Tylko ostatni check
+            select: {
+              id: true,
+              status: true,
+              results: {
+                select: {
+                  orderId: true,
+                  status: true,
+                },
+              },
+            },
           },
         },
         orderBy: { deliveryDate: 'asc' },
@@ -455,10 +489,14 @@ export class DeliveryRepository {
     // Pobierz zlecenia bez aktywnej dostawy
     // (wykluczamy zlecenia przypisane do soft-deleted dostaw)
     // UWAGA: Wykluczamy zlecenia ze statusem "on_hold" (Wstrzymane) - nie powinny być widoczne w kalendarzu
+    // UWAGA: Pokazujemy tylko zlecenia Akrobudu (client zawiera 'AKROBUD') - Markbud ma osobny system
     const unassignedOrders = await this.prisma.order.findMany({
       where: {
         archivedAt: null,
         status: { notIn: ['archived'] },
+        deletedAt: null, // Nie pokazuj soft-deleted zleceń
+        // Filtruj tylko zlecenia Akrobudu (client zawiera 'AKROBUD')
+        client: { contains: 'AKROBUD' },
         // Wyklucz zlecenia wstrzymane (on_hold) z kalendarza dostaw
         // UWAGA: NOT: { manualStatus: 'on_hold' } wyklucza też null w Prisma!
         // Dlatego używamy AND z dwoma warunkami OR

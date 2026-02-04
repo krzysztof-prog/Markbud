@@ -40,6 +40,7 @@ export const getCellValueForExport = (order: ExtendedOrder, columnId: ColumnId):
     case 'totalSashes':
       return String(order.totalSashes || 0);
     case 'glasses':
+      // totalGlasses = ile szyb potrzeba (z OrderGlass)
       return String(order.totalGlasses || 0);
     case 'valuePln':
       return typeof order.valuePln === 'number' ? formatGrosze(order.valuePln as Grosze) : '';
@@ -58,26 +59,32 @@ export const getCellValueForExport = (order: ExtendedOrder, columnId: ColumnId):
       return order.pvcDeliveryDate ? formatDate(order.pvcDeliveryDate) : '';
     }
     case 'glassDeliveryDate': {
+      // totalGlasses = ile szyb potrzeba, orderedGlassCount = ile zamówiono, deliveredGlassCount = ile dostarczono
+      const neededCsv = order.totalGlasses ?? 0;
       const orderedCsv = order.orderedGlassCount ?? 0;
       const deliveredCsv = order.deliveredGlassCount ?? 0;
       const deadlineCsv = order.deadline ? new Date(order.deadline) : null;
       const nowCsv = new Date();
       const twoWeeksFromNowCsv = new Date(nowCsv.getTime() + 14 * 24 * 60 * 60 * 1000);
 
+      if (neededCsv === 0) {
+        return ''; // Brak szyb w zleceniu
+      }
       if (orderedCsv === 0) {
-        // Sprawdź czy zbliża się deadline
+        // Potrzebne ale nie zamówione
         if (deadlineCsv && deadlineCsv <= twoWeeksFromNowCsv) {
           return 'ZAMÓW';
         }
-        return '';
+        return 'Nie zamówione';
       }
-      if (deliveredCsv >= orderedCsv && deliveredCsv > 0) {
-        if (deliveredCsv > orderedCsv) return 'Nadwyżka';
+      if (deliveredCsv >= neededCsv && deliveredCsv > 0) {
+        if (deliveredCsv > neededCsv) return 'Nadwyżka';
         return 'Dostarczone';
       }
-      if (deliveredCsv > 0) return `Częściowo: ${deliveredCsv}/${orderedCsv}`;
+      if (deliveredCsv > 0 && deliveredCsv < neededCsv) {
+        return `Częściowo: ${deliveredCsv}/${neededCsv}`;
+      }
       if (orderedCsv > 0 && deliveredCsv === 0) {
-        // Pokaż datę oczekiwanej dostawy w formacie DD.MM zamiast "Zamówione"
         return order.glassDeliveryDate ? formatDateShort(order.glassDeliveryDate) : 'Zamówione';
       }
       return '';

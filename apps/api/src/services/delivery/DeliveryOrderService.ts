@@ -17,6 +17,7 @@ import { NotFoundError, ValidationError } from '../../utils/errors.js';
 import { OrderVariantService, type VariantType } from '../orderVariantService.js';
 import { CsvParser } from '../parsers/csv-parser.js';
 import { DeliveryNotificationService, deliveryNotificationService } from './DeliveryNotificationService.js';
+import { DeliveryReadinessAggregator } from '../readiness/index.js';
 import { logger } from '../../utils/logger.js';
 import type { PrismaClient } from '@prisma/client';
 
@@ -53,6 +54,7 @@ export class DeliveryOrderService {
   private csvParser: CsvParser;
   private notificationService: DeliveryNotificationService;
   private palletOptimizerRepository: PalletOptimizerRepository;
+  private readinessAggregator: DeliveryReadinessAggregator;
 
   constructor(
     private repository: DeliveryRepository,
@@ -62,6 +64,7 @@ export class DeliveryOrderService {
     this.csvParser = new CsvParser();
     this.notificationService = deliveryNotificationService;
     this.palletOptimizerRepository = new PalletOptimizerRepository(prisma);
+    this.readinessAggregator = new DeliveryReadinessAggregator(prisma);
   }
 
   // ===================
@@ -122,6 +125,9 @@ export class DeliveryOrderService {
     // Notify about order addition
     this.notificationService.notifyOrderAdded(deliveryId, orderId, order.orderNumber);
 
+    // Auto-recalculate readiness status
+    await this.readinessAggregator.recalculateIfNeeded(deliveryId);
+
     return deliveryOrder;
   }
 
@@ -136,6 +142,9 @@ export class DeliveryOrderService {
 
     // Notify about order removal
     this.notificationService.notifyOrderRemoved(deliveryId, orderId);
+
+    // Auto-recalculate readiness status
+    await this.readinessAggregator.recalculateIfNeeded(deliveryId);
   }
 
   /**
@@ -177,6 +186,9 @@ export class DeliveryOrderService {
     // Pozycja okien na paletach zależy od kolejności zamówień
     await this.invalidatePalletOptimization(deliveryId);
 
+    // Auto-recalculate readiness status
+    await this.readinessAggregator.recalculateIfNeeded(deliveryId);
+
     return { success: true };
   }
 
@@ -203,6 +215,12 @@ export class DeliveryOrderService {
 
     // Notify about order move after successful transaction
     this.notificationService.notifyOrderMoved(sourceDeliveryId, targetDeliveryId, orderId);
+
+    // Auto-recalculate readiness status for BOTH deliveries
+    await Promise.all([
+      this.readinessAggregator.recalculateIfNeeded(sourceDeliveryId),
+      this.readinessAggregator.recalculateIfNeeded(targetDeliveryId),
+    ]);
 
     return deliveryOrder;
   }

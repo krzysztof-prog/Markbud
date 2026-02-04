@@ -7,13 +7,8 @@
 'use client';
 
 import { Suspense } from 'react';
-import { createDynamicComponent } from '@/lib/dynamic-import';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
-
-const LogistykaPageContent = createDynamicComponent(
-  () => import('@/features/logistics/components/LogistykaPageContent').then((mod) => mod.LogistykaPageContent),
-  { loading: () => <TableSkeleton /> }
-);
+import { LogistykaPageContent } from '@/features/logistics/components/LogistykaPageContent';
 
 export default function LogistykaPage() {
   return (

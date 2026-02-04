@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { deliveriesApi, profilesApi, colorsApi, ordersApi } from '@/lib/api';
+import { getTodayWarsaw } from '@/lib/date-utils';
 import {
   DndContext,
   closestCenter,
@@ -151,10 +152,7 @@ export function ProfileDeliveryTable() {
   });
 
   const [colorGroups, setColorGroups] = useState<ColorGroup[]>([]);
-  const [startDate, setStartDate] = useState<string>(() => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+  const [startDate, setStartDate] = useState<string>(() => getTodayWarsaw());
 
   // Zapisz liczbę kolumn do localStorage przy każdej zmianie (tylko po stronie klienta)
   useEffect(() => {

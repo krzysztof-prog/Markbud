@@ -82,6 +82,21 @@ export class ReadinessOrchestrator {
           include: { profile: true, color: true },
         },
         okucDemands: true,
+        // Pobierz zamówienia Schuco z datami dostaw
+        schucoLinks: {
+          include: {
+            schucoDelivery: {
+              include: {
+                items: {
+                  select: {
+                    deliveryDate: true,
+                    articleNumber: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -107,7 +122,25 @@ export class ReadinessOrchestrator {
       (req): req is typeof req & { colorId: number; color: NonNullable<typeof req.color> } =>
         req.colorId !== null && req.color !== null
     );
-    const warehouseSignal = await this.checkWarehouseStock(orderId, akrobudRequirements);
+
+    // Pobierz najwcześniejszą datę dostawy z Schuco (jeśli jest zamówienie)
+    const schucoDeliveryDates = order.schucoLinks
+      .flatMap((link) => link.schucoDelivery.items)
+      .map((item) => item.deliveryDate)
+      .filter((date): date is Date => date !== null);
+
+    const earliestSchucoDelivery = schucoDeliveryDates.length > 0
+      ? new Date(Math.min(...schucoDeliveryDates.map((d) => d.getTime())))
+      : null;
+
+    // Użyj pvcDeliveryDate, a jeśli brak to deliveryDate jako fallback
+    const profileDeadline = order.pvcDeliveryDate || order.deliveryDate;
+
+    const warehouseSignal = await this.checkWarehouseStock(
+      akrobudRequirements,
+      profileDeadline,
+      earliestSchucoDelivery
+    );
     signals.push(warehouseSignal);
     checklist.push({
       id: 'warehouse_stock',
@@ -281,14 +314,15 @@ export class ReadinessOrchestrator {
   // ============================================
 
   private async checkWarehouseStock(
-    orderId: number,
     requirements: Array<{
       profileId: number;
       colorId: number;
       beamsCount: number;
       profile: { number: string };
       color: { code: string };
-    }>
+    }>,
+    orderPvcDeliveryDate: Date | null,
+    schucoDeliveryDate: Date | null
   ): Promise<ReadinessSignal> {
     // Sprawdź stan magazynowy dla każdego wymagania
     const shortages: string[] = [];
@@ -312,6 +346,58 @@ export class ReadinessOrchestrator {
     }
 
     if (shortages.length > 0) {
+      // Sprawdź czy jest zamówienie Schuco które zdąży na czas
+      if (schucoDeliveryDate) {
+        // Brak daty dostawy profili w zleceniu - pokazujemy warning z datą Schuco
+        if (!orderPvcDeliveryDate) {
+          return {
+            module: 'warehouse',
+            requirement: 'sufficient_stock',
+            status: 'warning',
+            message: `Brak profili na magazynie, ale dostawa Schuco zaplanowana na ${schucoDeliveryDate.toLocaleDateString('pl-PL')}`,
+            actionRequired: 'Poczekaj na dostawę profili ze Schuco',
+            metadata: {
+              shortages,
+              schucoDeliveryDate: schucoDeliveryDate.toISOString(),
+              willArriveOnTime: true,
+            },
+          };
+        }
+
+        // Mamy obie daty - porównaj czy Schuco zdąży
+        if (schucoDeliveryDate <= orderPvcDeliveryDate) {
+          // Schuco zdąży na czas - ostrzeżenie zamiast blokady
+          return {
+            module: 'warehouse',
+            requirement: 'sufficient_stock',
+            status: 'warning',
+            message: `Brak profili na magazynie, ale dostawa Schuco zaplanowana na ${schucoDeliveryDate.toLocaleDateString('pl-PL')}`,
+            actionRequired: 'Poczekaj na dostawę profili ze Schuco',
+            metadata: {
+              shortages,
+              schucoDeliveryDate: schucoDeliveryDate.toISOString(),
+              willArriveOnTime: true,
+            },
+          };
+        } else {
+          // Schuco NIE zdąży na czas - blokada z informacją
+          return {
+            module: 'warehouse',
+            requirement: 'sufficient_stock',
+            status: 'blocking',
+            message: `Brak profili - dostawa Schuco (${schucoDeliveryDate.toLocaleDateString('pl-PL')}) po terminie dostawy (${orderPvcDeliveryDate.toLocaleDateString('pl-PL')})`,
+            actionRequired: 'Dostawa Schuco nie zdąży na czas - rozważ przyspieszenie lub zmianę terminu',
+            metadata: {
+              shortages,
+              schucoDeliveryDate: schucoDeliveryDate.toISOString(),
+              orderDeliveryDate: orderPvcDeliveryDate.toISOString(),
+              willArriveOnTime: false,
+            },
+          };
+        }
+      }
+
+      // Brak zamówienia Schuco - blokada
       return {
         module: 'warehouse',
         requirement: 'sufficient_stock',

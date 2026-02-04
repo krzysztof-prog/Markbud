@@ -74,8 +74,8 @@ export function useDeliverySelection(): UseDeliverySelectionReturn {
   // Drag state
   const [activeDragItem, setActiveDragItem] = useState<ActiveDragItem | null>(null);
 
-  // Right panel collapse state
-  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  // Right panel collapse state - domyślnie zwinięty
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(true);
 
   // DnD Kit sensors configuration
   const sensors = useSensors(

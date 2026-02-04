@@ -21,6 +21,8 @@ import type { ParseResult } from '../types';
 interface MailParserFormProps {
   /** Callback wywoływany po pomyślnym sparsowaniu emaila */
   onParsed: (result: ParseResult, rawMailText: string) => void;
+  /** Tryb kompaktowy dla panelu bocznego */
+  compact?: boolean;
 }
 
 // ========== Komponent ==========
@@ -33,7 +35,7 @@ interface MailParserFormProps {
  *   onParsed={(result) => setPreviewData(result)}
  * />
  */
-export function MailParserForm({ onParsed }: MailParserFormProps) {
+export function MailParserForm({ onParsed, compact = false }: MailParserFormProps) {
   // Stan lokalny - tekst maila wklejony przez użytkownika
   const [mailText, setMailText] = useState('');
 
@@ -67,21 +69,25 @@ export function MailParserForm({ onParsed }: MailParserFormProps) {
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Pole tekstowe na treść maila */}
       <div className="space-y-2">
-        <label htmlFor="mailText" className="text-sm font-medium text-foreground">
-          Wklej tekst maila
-        </label>
+        {!compact && (
+          <label htmlFor="mailText" className="text-sm font-medium text-foreground">
+            Wklej tekst maila
+          </label>
+        )}
         <Textarea
           id="mailText"
           value={mailText}
           onChange={(e) => setMailText(e.target.value)}
           placeholder="Wklej tutaj treść maila z awizacją dostaw..."
-          rows={12}
-          className="min-h-[280px] resize-y font-mono text-sm"
+          rows={compact ? 8 : 12}
+          className={compact ? 'min-h-[180px] resize-y font-mono text-sm' : 'min-h-[280px] resize-y font-mono text-sm'}
           disabled={isPending}
         />
-        <p className="text-xs text-muted-foreground">
-          Skopiuj całą treść maila z listą projektów i wklej powyżej
-        </p>
+        {!compact && (
+          <p className="text-xs text-muted-foreground">
+            Skopiuj całą treść maila z listą projektów i wklej powyżej
+          </p>
+        )}
       </div>
 
       {/* Przycisk parsowania */}

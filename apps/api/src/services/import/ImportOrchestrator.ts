@@ -23,6 +23,7 @@ import { emitOrderUpdated, emitDeliveryCreated } from '../event-emitter.js';
 import type { VariantResolutionAction } from '../orderVariantService.js';
 import { ImportLockService } from '../importLockService.js';
 import { prisma } from '../../index.js';
+import { formatDateWarsaw } from '../../utils/date-helpers.js';
 
 import {
   ImportFileSystemService,
@@ -371,7 +372,7 @@ export class ImportOrchestrator {
             name: folderName,
             path: fullPath,
             hasDate: !!extractedDate,
-            date: extractedDate ? extractedDate.toISOString().split('T')[0] : null,
+            date: extractedDate ? formatDateWarsaw(extractedDate) : null,
           };
         })
         .filter((folder) => folder.hasDate)

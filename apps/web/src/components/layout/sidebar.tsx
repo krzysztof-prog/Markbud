@@ -161,12 +161,6 @@ const navigation: NavigationItem[] = [
     requiredRoles: [UserRole.OWNER, UserRole.ADMIN]
   },
   {
-    name: 'Archiwum zleceń',
-    href: '/zestawienia/archiwum',
-    icon: Archive,
-    requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.USER]
-  },
-  {
     name: 'Admin',
     href: '/admin',
     icon: Users,

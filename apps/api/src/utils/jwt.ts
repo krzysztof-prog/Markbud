@@ -9,6 +9,7 @@ import { logger } from './logger.js';
 interface TokenPayload {
   userId: string | number;
   email?: string;
+  role?: string;
   iat?: number;
   exp?: number;
 }
