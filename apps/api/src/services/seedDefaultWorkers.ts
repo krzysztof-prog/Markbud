@@ -13,13 +13,16 @@ import { logger } from '../utils/logger.js';
 // STANOWISKA PRODUKCYJNE
 // ============================================
 const DEFAULT_POSITIONS = [
-  { name: 'Szklenie', shortName: 'SZK' },
+  { name: 'Cięcie', shortName: 'CIĘ' },
+  { name: 'Zbrojenie', shortName: 'ZBR' },
   { name: 'Słupki', shortName: 'SŁU' },
+  { name: 'Spawanie', shortName: 'SPA' },
   { name: 'Okuwanie skrzydeł', shortName: 'OKS' },
+  { name: 'Szklenie', shortName: 'SZK' },
   { name: 'Okuwanie ram', shortName: 'OKR' },
+  { name: 'Pakowanie', shortName: 'PAK' },
   { name: 'Słupki - frez', shortName: 'SŁF' },
   { name: 'Piła', shortName: 'PIŁ' },
-  { name: 'Zbrojenie', shortName: 'ZBR' },
   { name: 'Zgrzewanie', shortName: 'ZGR' },
   { name: 'Kierowca', shortName: 'KIE' },
   { name: 'Nieprzypisane', shortName: '-' },
@@ -29,12 +32,16 @@ const DEFAULT_POSITIONS = [
 // ZADANIA NIEPRODUKCYJNE
 // ============================================
 const DEFAULT_NON_PRODUCTIVE_TASKS = [
+  'Urlop',
   'Serwis',
+  'L4',
   'Pakowanie',
+  'Sprzątanie',
   'Przygotowywanie profili',
+  'Szkolenie',
   'Paletówki',
-  'Kierowca',
   'Inne',
+  'Kierowca',
 ] as const;
 
 // ============================================
