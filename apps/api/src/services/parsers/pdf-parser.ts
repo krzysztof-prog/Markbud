@@ -1,6 +1,7 @@
 import fs from 'fs';
 import pdf from 'pdf-parse';
 import { prisma } from '../../index.js';
+import { logger } from '../../utils/logger.js';
 
 export interface ParsedPdfCeny {
   orderNumber: string;
@@ -27,35 +28,51 @@ export class PdfParser {
 
   /**
    * Przetwarza plik PDF i aktualizuje zlecenie
+   * Używa transakcji i oznacza pending prices jako applied
    */
   async processCenyPdf(filepath: string): Promise<{ orderId: number; updated: boolean }> {
     const parsed = await this.parseCenyPdf(filepath);
 
-    // Znajdź zlecenie po numerze
-    const order = await prisma.order.findUnique({
-      where: { orderNumber: parsed.orderNumber },
+    // Użyj transakcji aby atomowo zaktualizować zlecenie i oznaczyć pending price
+    return prisma.$transaction(async (tx) => {
+      // Znajdź zlecenie po numerze
+      const order = await tx.order.findUnique({
+        where: { orderNumber: parsed.orderNumber },
+      });
+
+      if (!order) {
+        throw new Error(`Zlecenie ${parsed.orderNumber} nie znalezione w bazie danych`);
+      }
+
+      // Zaktualizuj zlecenie o dane z PDF
+      // WAŻNE: Wartości w bazie są przechowywane w groszach/centach
+      const valueInSmallestUnit = Math.round(parsed.valueNetto * 100);
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          ...(parsed.currency === 'EUR' ? { valueEur: valueInSmallestUnit } : { valuePln: valueInSmallestUnit }),
+        },
+      });
+
+      // Oznacz powiązane pending prices jako applied
+      await tx.pendingOrderPrice.updateMany({
+        where: {
+          orderNumber: parsed.orderNumber,
+          status: 'pending',
+        },
+        data: {
+          status: 'applied',
+          appliedAt: new Date(),
+          appliedToOrderId: order.id,
+        },
+      });
+
+      return {
+        orderId: order.id,
+        updated: true,
+      };
     });
-
-    if (!order) {
-      throw new Error(`Zlecenie ${parsed.orderNumber} nie znalezione w bazie danych`);
-    }
-
-    // Zaktualizuj zlecenie o dane z PDF
-    // WAŻNE: Wartości w bazie są przechowywane w groszach/centach
-    // parsed.valueNetto to wartość w EUR/PLN (np. 590.00), trzeba pomnożyć przez 100
-    const valueInSmallestUnit = Math.round(parsed.valueNetto * 100);
-
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        ...(parsed.currency === 'EUR' ? { valueEur: valueInSmallestUnit } : { valuePln: valueInSmallestUnit }),
-      },
-    });
-
-    return {
-      orderId: order.id,
-      updated: true,
-    };
   }
 
   /**
@@ -66,11 +83,8 @@ export class PdfParser {
     const data = await pdf(dataBuffer);
     const text = data.text;
 
-    // Debug: tekst PDF jest dostepny w zmiennej 'text' do debugowania
-
-    // Wyciągnij numer zlecenia (5-cyfrowy numer na początku, zwykle po "SUMA:")
-    const orderNumberMatch = text.match(/SUMA:.*?(\d{5})/s) || text.match(/(\d{5})\s*ZAMÓWIENIE/);
-    const orderNumber = orderNumberMatch ? orderNumberMatch[1] : this.extractOrderNumber(text);
+    // Wyciągnij numer zlecenia Akrobud (5-cyfrowy) - kilka strategii
+    const orderNumber = this.extractAkrobudOrderNumber(text);
 
     // Wyciągnij referencję (np. D3056)
     const referenceMatch = text.match(/Nr Referencyjny\s*([A-Z]\d+)/i) ||
@@ -117,24 +131,53 @@ export class PdfParser {
   }
 
   /**
-   * Wyciąga numer zlecenia z tekstu
+   * Wyciąga numer zlecenia Akrobud (5-cyfrowy) z tekstu PDF
+   * Używa wielu strategii w kolejności od najdokładniejszej do fallbacku
    */
-  private extractOrderNumber(text: string): string {
-    // Szukaj 5-cyfrowego numeru na początku tekstu (numer zlecenia Akrobud)
+  private extractAkrobudOrderNumber(text: string): string {
+    // Strategia 1: Po "SUMA:" (format Schuco/POLY)
+    const sumaMatch = text.match(/SUMA:.*?(\d{5})/s);
+    if (sumaMatch) {
+      logger.debug(`PDF parser: numer zlecenia z wzorca SUMA: ${sumaMatch[1]}`);
+      return sumaMatch[1];
+    }
+
+    // Strategia 2: 5 cyfr + ZAMÓWIENIE (format Schuco)
+    const beforeZamMatch = text.match(/(\d{5})\s*ZAMÓWIENIE/);
+    if (beforeZamMatch) {
+      logger.debug(`PDF parser: numer zlecenia z wzorca przed-ZAMÓWIENIE: ${beforeZamMatch[1]}`);
+      return beforeZamMatch[1];
+    }
+
+    // Strategia 3: ZAMÓWIENIE + numer zewnętrzny, numer Akrobud na osobnej linii niżej
+    // Format BEENEN: "ZAMÓWIENIE   2512150419" a dalej "53672" jako standalone
     const lines = text.split('\n');
-    for (const line of lines.slice(0, 20)) {
+
+    // Strategia 4: 5-cyfrowy numer na osobnej linii (w pierwszych 40 liniach)
+    for (const line of lines.slice(0, 40)) {
       const match = line.match(/^\s*(\d{5})\s*$/);
       if (match) {
+        logger.debug(`PDF parser: numer zlecenia ze standalone linii: ${match[1]}`);
         return match[1];
       }
     }
 
-    // Alternatywnie szukaj wzorca "53375" itp.
-    const fiveDigitMatch = text.match(/\b(5\d{4})\b/);
-    if (fiveDigitMatch) {
-      return fiveDigitMatch[1];
+    // Strategia 5: Dowolny 5-cyfrowy numer w tekście (nie jako część dłuższego numeru)
+    // Szukamy w całym tekście, ale pomijamy numery > 5 cyfr (np. 2512150419)
+    const allFiveDigit = text.match(/\b(\d{5})\b/g);
+    if (allFiveDigit) {
+      // Weź pierwszy który nie jest częścią daty ani numeru zamówienia zewnętrznego
+      for (const num of allFiveDigit) {
+        const n = parseInt(num);
+        // Numery zleceń Akrobud są w zakresie 40000-99999
+        if (n >= 40000 && n <= 99999) {
+          logger.debug(`PDF parser: numer zlecenia z generic 5-digit match: ${num}`);
+          return num;
+        }
+      }
     }
 
+    logger.warn('PDF parser: nie udało się wyciągnąć numeru zlecenia - zwracam UNKNOWN');
     return 'UNKNOWN';
   }
 

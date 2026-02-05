@@ -65,9 +65,67 @@ export class OrderService {
   async createOrder(data: { orderNumber: string; status?: string; valuePln?: number; valueEur?: number }) {
     const order = await this.repository.create(data);
 
+    // Sprawdź czy istnieje pending price dla tego numeru zlecenia
+    // Jeśli zlecenie nie ma ceny, a pending price istnieje - przypisz automatycznie
+    await this.applyPendingPriceIfExists(order.id, data.orderNumber, data.valuePln, data.valueEur);
+
     emitOrderCreated(order);
 
     return order;
+  }
+
+  /**
+   * Sprawdza i przypisuje pending price do nowo utworzonego zlecenia
+   * Jeśli zlecenie nie ma jeszcze ceny, a w pending_order_prices jest pasujący rekord
+   */
+  private async applyPendingPriceIfExists(
+    orderId: number,
+    orderNumber: string,
+    existingPln?: number,
+    existingEur?: number
+  ): Promise<void> {
+    try {
+      const pendingPrice = await prisma.pendingOrderPrice.findFirst({
+        where: { orderNumber, status: 'pending' },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (!pendingPrice) return;
+
+      // Sprawdź czy zlecenie nie ma już ceny w odpowiedniej walucie
+      const priceField = pendingPrice.currency === 'EUR' ? existingEur : existingPln;
+      if (priceField != null) {
+        logger.debug(`Pending price dla ${orderNumber} pominięta - zlecenie już ma cenę ${pendingPrice.currency}`);
+        return;
+      }
+
+      // Przypisz cenę do zlecenia
+      await prisma.$transaction(async (tx) => {
+        await tx.order.update({
+          where: { id: orderId },
+          data: pendingPrice.currency === 'EUR'
+            ? { valueEur: pendingPrice.valueNetto }
+            : { valuePln: pendingPrice.valueNetto },
+        });
+
+        await tx.pendingOrderPrice.update({
+          where: { id: pendingPrice.id },
+          data: {
+            status: 'applied',
+            appliedAt: new Date(),
+            appliedToOrderId: orderId,
+          },
+        });
+      });
+
+      logger.info(
+        `Pending price automatycznie przypisana: ${orderNumber} -> ${pendingPrice.currency} ${pendingPrice.valueNetto / 100}`
+      );
+    } catch (error) {
+      // Nie blokuj tworzenia zlecenia jeśli pending price matching się nie powiedzie
+      const errMsg = error instanceof Error ? error.message : 'Nieznany błąd';
+      logger.warn(`Błąd przy matching pending price dla ${orderNumber}: ${errMsg}`);
+    }
   }
 
   async updateOrder(id: number, data: Prisma.OrderUpdateInput) {
@@ -461,6 +519,119 @@ export class OrderService {
         error: error instanceof Error ? error.message : 'Nieznany błąd',
       });
     }
+  }
+
+  /**
+   * Cofnij RW dla okuć asynchronicznie
+   */
+  private async reverseOkucRwAsync(orderIds: number[]): Promise<void> {
+    try {
+      const rwService = new OkucRwService(prisma);
+      for (const orderId of orderIds) {
+        const result = await rwService.reverseRwForOrder(orderId);
+        if (result.errors.length > 0) {
+          logger.warn('Błędy podczas cofania RW okuć', {
+            orderId, orderNumber: result.orderNumber, errors: result.errors,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('Błąd podczas cofania RW dla okuć', {
+        orderIds, error: error instanceof Error ? error.message : 'Nieznany błąd',
+      });
+    }
+  }
+
+  /**
+   * Cofnij RW dla profili asynchronicznie
+   */
+  private async reverseProfileRwAsync(orderIds: number[]): Promise<void> {
+    try {
+      const rwService = new WarehouseRwService(prisma);
+      for (const orderId of orderIds) {
+        const result = await rwService.reverseRwForOrder(orderId);
+        if (result.errors.length > 0) {
+          logger.warn('Błędy podczas cofania RW profili', {
+            orderId, orderNumber: result.orderNumber, errors: result.errors,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('Błąd podczas cofania RW dla profili', {
+        orderIds, error: error instanceof Error ? error.message : 'Nieznany błąd',
+      });
+    }
+  }
+
+  /**
+   * Cofnij RW dla stali asynchronicznie
+   */
+  private async reverseSteelRwAsync(orderIds: number[]): Promise<void> {
+    try {
+      const rwService = new SteelRwService(prisma);
+      for (const orderId of orderIds) {
+        const result = await rwService.reverseRwForOrder(orderId);
+        if (result.errors.length > 0) {
+          logger.warn('Błędy podczas cofania RW stali', {
+            orderId, orderNumber: result.orderNumber, errors: result.errors,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('Błąd podczas cofania RW dla stali', {
+        orderIds, error: error instanceof Error ? error.message : 'Nieznany błąd',
+      });
+    }
+  }
+
+  /**
+   * Cofnij produkcję - zmień status z completed na in_progress
+   * Cofa również RW (rozchody wewnętrzne) dla okuć, profili i stali
+   */
+  async revertProduction(orderIds: number[]) {
+    // Waliduj że wszystkie zlecenia istnieją i mają status completed
+    const orders = await Promise.all(
+      orderIds.map(id => this.repository.findById(id))
+    );
+
+    const notFoundIds = orderIds.filter((id, index) => !orders[index]);
+    if (notFoundIds.length > 0) {
+      throw new NotFoundError(`Orders with IDs ${notFoundIds.join(', ')} not found`);
+    }
+
+    const notCompleted = orders.filter(o => o && o.status !== 'completed');
+    if (notCompleted.length > 0) {
+      const details = notCompleted
+        .map(o => `${o!.orderNumber} (${o!.status})`)
+        .join(', ');
+      throw new ValidationError(
+        `Można cofnąć tylko zlecenia ze statusem "completed". Nieprawidłowe: ${details}`
+      );
+    }
+
+    // Zmień status na in_progress (repository wyczyści completedAt i productionDate)
+    const updatedOrders = await this.repository.bulkUpdateStatus(
+      orderIds,
+      ORDER_STATUSES.IN_PROGRESS
+    );
+
+    // Emituj eventy
+    updatedOrders.forEach(order => emitOrderUpdated(order));
+
+    // Cofnij RW asynchronicznie
+    this.reverseOkucRwAsync(orderIds);
+    this.reverseProfileRwAsync(orderIds);
+    this.reverseSteelRwAsync(orderIds);
+
+    // Przelicz readiness dostaw
+    await this.recalculateDeliveryReadinessForOrders(orderIds);
+
+    logger.info('Production reverted for orders', {
+      orderIds,
+      orderNumbers: updatedOrders.map(o => o.orderNumber),
+    });
+
+    return updatedOrders;
   }
 
   async getForProduction(params: {
