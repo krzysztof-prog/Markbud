@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState, useCallback, useMemo } from 'react';
+
+// Domyślny kurs EUR/PLN
+const DEFAULT_EUR_RATE = 4.30;
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Loader2, Lock, Unlock } from 'lucide-react';
@@ -39,6 +42,9 @@ export const ProductionReportPage: React.FC<ProductionReportPageProps> = ({
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+
+  // Kurs EUR/PLN (współdzielony między tabelą a podsumowaniem)
+  const [eurRate, setEurRate] = useState<number>(DEFAULT_EUR_RATE);
 
   // Dialogi
   const [showCloseDialog, setShowCloseDialog] = useState(false);
@@ -332,6 +338,8 @@ export const ProductionReportPage: React.FC<ProductionReportPageProps> = ({
               }
               year={year}
               month={month}
+              eurRate={eurRate}
+              onEurRateChange={setEurRate}
             />
           )}
         </>

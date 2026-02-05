@@ -12,6 +12,7 @@ import {
   orderParamsSchema,
   orderQuerySchema,
   bulkUpdateStatusSchema,
+  revertProductionSchema,
   forProductionQuerySchema,
   monthlyProductionQuerySchema,
   variantTypeSchema,
@@ -20,6 +21,7 @@ import {
   type UpdateOrderInput,
   type PatchOrderInput,
   type BulkUpdateStatusInput,
+  type RevertProductionInput,
   type ForProductionQuery,
   type MonthlyProductionQuery,
   type ManualStatusInput,
@@ -153,6 +155,27 @@ export class OrderHandler {
       validated.productionDate,
       validated.skipWarehouseValidation
     );
+    return reply.status(200).send(orders);
+  }
+
+  /**
+   * Cofnij produkcję - zmień status z completed na in_progress
+   * Tylko kierownik i admin
+   */
+  async revertProduction(
+    request: AuthenticatedRequest & FastifyRequest<{ Body: RevertProductionInput }>,
+    reply: FastifyReply
+  ) {
+    // Sprawdzenie uprawnień - tylko admin/kierownik
+    const userRole = request.user?.role;
+    if (!userRole || !DELETE_ALLOWED_ROLES.includes(userRole)) {
+      throw new ForbiddenError(
+        'Tylko administrator lub kierownik może cofać produkcję'
+      );
+    }
+
+    const validated = revertProductionSchema.parse(request.body);
+    const orders = await this.service.revertProduction(validated.orderIds);
     return reply.status(200).send(orders);
   }
 

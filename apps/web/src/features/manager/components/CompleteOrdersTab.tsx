@@ -9,12 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
+import { showUndoToast } from '@/lib/toast-undo';
 import { DeliveryCheckbox } from './DeliveryCheckbox';
 import { OrderCheckbox } from './OrderCheckbox';
+import { fetchApi } from '@/lib/api-client';
 import { managerApi } from '../api/managerApi';
 import { getTodayISOString } from '../helpers/dateHelpers';
 import type { Order, Delivery } from '@/types';
-import { Loader2, CheckCircle2, Package, FileCheck } from 'lucide-react';
+import { Loader2, CheckCircle2, Package, FileCheck, Undo2, Clock } from 'lucide-react';
 
 /**
  * Zakładka "Zakończ zlecenia" - Panel Kierownika
@@ -100,6 +102,30 @@ export const CompleteOrdersTab: React.FC = () => {
       toast({
         title: 'Błąd',
         description: error instanceof Error ? error.message : 'Nie udało się zakończyć dostawy',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Fetch ostatnio wyprodukowanych zleceń (do sekcji "Ostatnio wyprodukowane")
+  const { data: recentlyCompletedResponse } = useQuery({
+    queryKey: ['orders', 'recently-completed'],
+    queryFn: () => fetchApi<Order[]>('/api/orders?status=completed&take=20'),
+  });
+
+  const recentlyCompleted: Order[] = (recentlyCompletedResponse as { data?: Order[] })?.data ?? [];
+
+  // Mutation do cofania produkcji
+  const revertMutation = useMutation({
+    mutationFn: (orderIds: number[]) => managerApi.revertProduction(orderIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries'] });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Błąd cofania',
+        description: error instanceof Error ? error.message : 'Nie udało się cofnąć produkcji',
         variant: 'destructive',
       });
     },
@@ -193,6 +219,10 @@ export const CompleteOrdersTab: React.FC = () => {
       }
     }
 
+    // Zbierz IDs wszystkich zleceń które zostały oznaczone jako wyprodukowane
+    // (zarówno pojedyncze jak i z dostaw - do toast undo)
+    const allCompletedOrderIds = [...Array.from(selectedOrderIds)];
+
     // Wyświetl wyniki
     if (results.failed > 0 && results.succeeded > 0) {
       toast({
@@ -200,7 +230,6 @@ export const CompleteOrdersTab: React.FC = () => {
         description: `Zakończono: ${results.succeeded}, Błędy: ${results.failed}. Sprawdź szczegóły.`,
         variant: 'default',
       });
-      // Pokazanie szczegółowych błędów w console dla debugging
       console.error('Partial failure details:', results.errors);
     } else if (results.failed > 0) {
       toast({
@@ -208,13 +237,23 @@ export const CompleteOrdersTab: React.FC = () => {
         description: results.errors[0] || 'Nie udało się zakończyć żadnej pozycji',
         variant: 'destructive',
       });
+    } else if (results.succeeded > 0 && allCompletedOrderIds.length > 0) {
+      // Toast z możliwością cofnięcia (Opcja B)
+      showUndoToast({
+        title: `Wyprodukowano ${results.succeeded} pozycji`,
+        description: 'Kliknij "Cofnij" aby przywrócić do produkcji',
+        onUndo: async () => {
+          await revertMutation.mutateAsync(allCompletedOrderIds);
+        },
+        duration: 8000,
+      });
     } else if (results.succeeded > 0) {
       toast({
         title: 'Sukces',
         description: `Oznaczono ${results.succeeded} pozycji jako wyprodukowane`,
       });
     }
-  }, [selectedOrderIds, selectedDeliveryIds, productionDate, bulkUpdateMutation, completeDeliveryMutation, toast]);
+  }, [selectedOrderIds, selectedDeliveryIds, productionDate, bulkUpdateMutation, completeDeliveryMutation, revertMutation, toast]);
 
   // Filtrowanie zleceń - tylko te, które NIE są przypisane do żadnej dostawy w produkcji
   const standaloneOrders = useMemo(() => {
@@ -343,6 +382,58 @@ export const CompleteOrdersTab: React.FC = () => {
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* Sekcja 3: Ostatnio wyprodukowane (Opcja A - cofanie z przyciskiem) */}
+      {recentlyCompleted.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-orange-500" />
+              <CardTitle>Ostatnio wyprodukowane</CardTitle>
+              <Badge variant="outline">{recentlyCompleted.length}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {recentlyCompleted.map((order: Order) => (
+                <div
+                  key={order.id}
+                  className="flex items-center justify-between py-2 px-3 rounded-lg border bg-gray-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono font-medium text-sm">{order.orderNumber}</span>
+                    {order.productionDate && (
+                      <span className="text-xs text-gray-500">
+                        {new Date(order.productionDate).toLocaleDateString('pl-PL')}
+                      </span>
+                    )}
+                    {order.clientName && (
+                      <span className="text-xs text-gray-400">{order.clientName}</span>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={revertMutation.isPending}
+                    onClick={() => {
+                      if (window.confirm(`Cofnąć zlecenie ${order.orderNumber} do produkcji?`)) {
+                        revertMutation.mutate([order.id]);
+                      }
+                    }}
+                  >
+                    {revertMutation.isPending ? (
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    ) : (
+                      <Undo2 className="mr-1 h-3 w-3" />
+                    )}
+                    Cofnij do produkcji
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

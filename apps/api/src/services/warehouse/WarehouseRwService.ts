@@ -190,6 +190,139 @@ export class WarehouseRwService {
   }
 
   /**
+   * Cofnij RW dla zlecenia - przywróć stany magazynowe profili
+   * Używaj gdy zlecenie wraca z completed do in_progress
+   */
+  async reverseRwForOrder(orderId: number, userId?: number): Promise<RwProcessResult> {
+    const result: RwProcessResult = {
+      orderId,
+      orderNumber: '',
+      processed: 0,
+      skipped: 0,
+      errors: [],
+    };
+
+    // Znajdź zlecenie z completed requirements
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        orderNumber: true,
+        requirements: {
+          where: { status: 'completed' },
+          include: {
+            profile: { select: { id: true, name: true, articleNumber: true } },
+            color: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      logger.warn('Order not found for Profile RW reversal', { orderId });
+      return result;
+    }
+
+    result.orderNumber = order.orderNumber;
+
+    if (order.requirements.length === 0) {
+      logger.info('No completed profile requirements to reverse', { orderId });
+      return result;
+    }
+
+    logger.info('Reversing Profile RW for order', {
+      orderId,
+      orderNumber: order.orderNumber,
+      requirementsCount: order.requirements.length,
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const requirement of order.requirements) {
+        try {
+          const stock = await tx.warehouseStock.findFirst({
+            where: {
+              profileId: requirement.profileId,
+              colorId: requirement.colorId ?? 0,
+              deletedAt: null,
+            },
+          });
+
+          if (!stock) {
+            result.errors.push({
+              profileId: requirement.profileId,
+              colorId: requirement.colorId,
+              error: `Brak stanu magazynowego dla profilu ${requirement.profile.articleNumber}`,
+            });
+            result.skipped++;
+
+            // Mimo braku stanu, cofnij status requirement
+            await tx.orderRequirement.update({
+              where: { id: requirement.id },
+              data: { status: 'pending' },
+            });
+            continue;
+          }
+
+          // Cofnij zmianę (dodaj z powrotem odjęte bele)
+          const reverseQty = requirement.beamsCount;
+          const newQty = stock.currentStockBeams + reverseQty;
+
+          await tx.warehouseStock.update({
+            where: { id: stock.id },
+            data: {
+              currentStockBeams: newQty,
+              version: { increment: 1 },
+              updatedById: userId ?? null,
+            },
+          });
+
+          // Cofnij status requirement na pending
+          await tx.orderRequirement.update({
+            where: { id: requirement.id },
+            data: { status: 'pending' },
+          });
+
+          result.processed++;
+
+          logger.debug('Reversed Profile RW', {
+            profileId: requirement.profileId,
+            colorId: requirement.colorId,
+            orderId,
+            reverseQty,
+            newQty,
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Nieznany błąd';
+          result.errors.push({
+            profileId: requirement.profileId,
+            colorId: requirement.colorId,
+            error: errorMessage,
+          });
+          result.skipped++;
+        }
+      }
+    });
+
+    logger.info('Profile RW reversal completed', {
+      orderId,
+      orderNumber: order.orderNumber,
+      processed: result.processed,
+      skipped: result.skipped,
+    });
+
+    if (result.processed > 0) {
+      emitProfileRwProcessed({
+        orderId,
+        orderNumber: order.orderNumber,
+        processed: result.processed,
+      });
+      emitWarehouseStockUpdated({ source: 'rw_reverse', orderId });
+    }
+
+    return result;
+  }
+
+  /**
    * Przetworz RW dla wielu zleceń (batch)
    * Używane przy masowej zmianie statusu
    */

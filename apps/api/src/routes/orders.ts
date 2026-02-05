@@ -5,7 +5,7 @@ import { OrderService } from '../services/orderService.js';
 import { OrderHandler } from '../handlers/orderHandler.js';
 import { OrderArchiveService } from '../services/orderArchiveService.js';
 import { verifyAuth } from '../middleware/auth.js';
-import type { BulkUpdateStatusInput, ForProductionQuery, MonthlyProductionQuery, ManualStatusInput } from '../validators/order.js';
+import type { BulkUpdateStatusInput, RevertProductionInput, ForProductionQuery, MonthlyProductionQuery, ManualStatusInput } from '../validators/order.js';
 
 
 export const orderRoutes: FastifyPluginAsync = async (fastify) => {
@@ -112,6 +112,11 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Body: BulkUpdateStatusInput }>('/bulk-update-status', {
     preHandler: verifyAuth,
   }, handler.bulkUpdateStatus.bind(handler));
+
+  // POST /api/orders/revert-production - Cofnij produkcję (completed -> in_progress)
+  fastify.post<{ Body: RevertProductionInput }>('/revert-production', {
+    preHandler: verifyAuth,
+  }, handler.revertProduction.bind(handler));
 
   fastify.get<{ Querystring: ForProductionQuery }>('/for-production', {
     preHandler: verifyAuth,

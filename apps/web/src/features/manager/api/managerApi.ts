@@ -56,4 +56,16 @@ export const managerApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  /**
+   * Cofnij produkcję - przywróć zlecenia z completed do in_progress
+   * Cofa również RW (rozchody wewnętrzne) dla okuć, profili i stali
+   * @param orderIds - IDs zleceń do cofnięcia
+   * @returns Zaktualizowane zlecenia
+   */
+  revertProduction: (orderIds: number[]) =>
+    fetchApi<Order[]>('/api/orders/revert-production', {
+      method: 'POST',
+      body: JSON.stringify({ orderIds }),
+    }),
 };

@@ -34,10 +34,10 @@ export default function MagazynAkrobudPageContent() {
     }
   }, [tabParam]);
 
-  // Pobierz wszystkie kolory
+  // Pobierz kolory AKROBUD (isAkrobud=true)
   const { data: colors } = useQuery({
-    queryKey: ['colors'],
-    queryFn: () => colorsApi.getAll(),
+    queryKey: ['colors', { isAkrobud: true }],
+    queryFn: () => colorsApi.getAll({ isAkrobud: true }),
   });
 
   // Pobierz tabel zleceD dla wybranego koloru
@@ -63,9 +63,8 @@ export default function MagazynAkrobudPageContent() {
 
   const selectedColor = colors?.find((c: Color) => c.id === selectedColorId);
 
-  // Grupuj kolory
-  const typicalColors = colors?.filter((c: Color) => c.type === 'typical') || [];
-  const atypicalColors = colors?.filter((c: Color) => c.type === 'atypical') || [];
+  // Wszystkie kolory AKROBUD (posortowane po kodzie z API)
+  const allColors = colors || [];
 
   return (
     <div className="flex flex-col min-h-full">
@@ -97,56 +96,26 @@ export default function MagazynAkrobudPageContent() {
               Kolory
             </h3>
 
-            {/* Typowe */}
-            <div className="mb-4">
-              <p className="text-xs text-slate-400 mb-2">Typowe</p>
-              <div className="space-y-1">
-                {typicalColors.map((color: Color) => (
-                  <button
-                    key={color.id}
-                    onClick={() => setSelectedColorId(color.id)}
-                    className={cn(
-                      'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left',
-                      selectedColorId === color.id
-                        ? 'bg-blue-50 text-blue-700 font-medium'
-                        : 'hover:bg-slate-50'
-                    )}
-                  >
-                    <div
-                      className="w-4 h-4 rounded border"
-                      style={{ backgroundColor: color.hexColor || '#ccc' }}
-                    />
-                    <span className="font-mono text-xs">{color.code}</span>
-                    <span className="flex-1 truncate">{color.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Nietypowe */}
-            <div>
-              <p className="text-xs text-slate-400 mb-2">Nietypowe</p>
-              <div className="space-y-1">
-                {atypicalColors.map((color: Color) => (
-                  <button
-                    key={color.id}
-                    onClick={() => setSelectedColorId(color.id)}
-                    className={cn(
-                      'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left',
-                      selectedColorId === color.id
-                        ? 'bg-blue-50 text-blue-700 font-medium'
-                        : 'hover:bg-slate-50'
-                    )}
-                  >
-                    <div
-                      className="w-4 h-4 rounded border"
-                      style={{ backgroundColor: color.hexColor || '#ccc' }}
-                    />
-                    <span className="font-mono text-xs">{color.code}</span>
-                    <span className="flex-1 truncate">{color.name}</span>
-                  </button>
-                ))}
-              </div>
+            <div className="space-y-1">
+              {allColors.map((color: Color) => (
+                <button
+                  key={color.id}
+                  onClick={() => setSelectedColorId(color.id)}
+                  className={cn(
+                    'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left',
+                    selectedColorId === color.id
+                      ? 'bg-blue-50 text-blue-700 font-medium'
+                      : 'hover:bg-slate-50'
+                  )}
+                >
+                  <div
+                    className="w-4 h-4 rounded border"
+                    style={{ backgroundColor: color.hexColor || '#ccc' }}
+                  />
+                  <span className="font-mono text-xs">{color.code}</span>
+                  <span className="flex-1 truncate">{color.name}</span>
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -164,7 +133,7 @@ export default function MagazynAkrobudPageContent() {
                   <h2 className="text-lg md:text-xl font-semibold truncate">
                     {selectedColor.code} - {selectedColor.name}
                   </h2>
-                  <Badge variant={selectedColor.type === 'typical' ? 'secondary' : 'outline'} className="mt-1">
+                  <Badge variant={selectedColor.type === 'atypical' ? 'outline' : 'secondary'} className="mt-1">
                     {selectedColor.type === 'typical' ? 'Typowy' : 'Nietypowy'}
                   </Badge>
                 </div>

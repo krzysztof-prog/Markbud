@@ -45,6 +45,7 @@ export interface Order {
   deliveredGlassCount?: number;
   glassOrderStatus?: string;
   notes?: string;
+  completedAt?: Timestamp;
   archivedAt?: Timestamp;
   createdAt: Timestamp;
   updatedAt?: Timestamp;

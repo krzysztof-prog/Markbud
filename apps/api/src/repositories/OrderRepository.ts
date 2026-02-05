@@ -62,6 +62,7 @@ export class OrderRepository {
           glassDeliveryDate: true,
           valuePln: true,
           valueEur: true,
+          priceInheritedFromOrder: true,
           totalWindows: true,
           totalSashes: true,
           totalGlasses: true,
@@ -149,6 +150,7 @@ export class OrderRepository {
         pvcDeliveryDate: true,
         valuePln: true,
         valueEur: true,
+        priceInheritedFromOrder: true,
         totalWindows: true,
         totalSashes: true,
         totalGlasses: true,
@@ -255,6 +257,7 @@ export class OrderRepository {
         pvcDeliveryDate: true,
         valuePln: true,
         valueEur: true,
+        priceInheritedFromOrder: true,
         totalWindows: true,
         totalSashes: true,
         totalGlasses: true,
@@ -396,6 +399,12 @@ export class OrderRepository {
         if (productionDate) {
           updateData.productionDate = new Date(productionDate);
         }
+      }
+
+      // Cofnięcie produkcji - wyczyść daty zakończenia
+      if (status === 'in_progress') {
+        updateData.completedAt = null;
+        updateData.productionDate = null;
       }
 
       // Update all orders

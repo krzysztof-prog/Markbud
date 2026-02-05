@@ -102,6 +102,11 @@ export const bulkUpdateStatusSchema = z.object({
   skipWarehouseValidation: z.boolean().optional().default(false),
 });
 
+// Revert production schema - cofnięcie statusu completed -> in_progress
+export const revertProductionSchema = z.object({
+  orderIds: z.array(z.number().int().positive()).min(1, 'Przynajmniej jedno zlecenie musi być wybrane'),
+});
+
 // For production query schema
 export const forProductionQuerySchema = z.object({
   overdueDays: z.coerce.number().nonnegative().optional().default(0),
@@ -128,5 +133,6 @@ export type PatchOrderInput = z.infer<typeof patchOrderSchema>;
 export type OrderParams = z.infer<typeof orderParamsSchema>;
 export type OrderQuery = z.infer<typeof orderQuerySchema>;
 export type BulkUpdateStatusInput = z.infer<typeof bulkUpdateStatusSchema>;
+export type RevertProductionInput = z.infer<typeof revertProductionSchema>;
 export type ForProductionQuery = z.infer<typeof forProductionQuerySchema>;
 export type MonthlyProductionQuery = z.infer<typeof monthlyProductionQuerySchema>;
