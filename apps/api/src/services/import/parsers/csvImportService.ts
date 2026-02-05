@@ -327,19 +327,37 @@ export class CsvImportService implements ICsvImportService {
   }
 
   /**
-   * Pobiera oczekujaca cene dla zlecenia
+   * Pobiera oczekujaca cene dla zlecenia.
+   * Szuka exact match, a jesli nie znajdzie - probuje prefix match
+   * (np. zlecenie "53526-a" dopasowuje pending z orderNumber "53526")
    */
   private async getPendingPrice(
     tx: PrismaTransaction,
     orderNumber: string
   ) {
-    return tx.pendingOrderPrice.findFirst({
+    // Exact match
+    const exact = await tx.pendingOrderPrice.findFirst({
       where: {
         orderNumber,
         status: 'pending',
       },
       orderBy: { createdAt: 'desc' },
     });
+    if (exact) return exact;
+
+    // Prefix match: zlecenie "53526-a" -> pending "53526"
+    const baseNumber = orderNumber.split('-')[0];
+    if (baseNumber !== orderNumber) {
+      return tx.pendingOrderPrice.findFirst({
+        where: {
+          orderNumber: baseNumber,
+          status: 'pending',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    return null;
   }
 
   /**
@@ -641,8 +659,9 @@ export class CsvImportService implements ICsvImportService {
         // Parsuj wiersz requirement
         if (parts.length >= 4 && parts[0] && parts[1]) {
           // Pierwszy wiersz danych - wyciagnij numer zlecenia
-          if (orderNumber === 'UNKNOWN' && parts[0].match(/^\d+(?:[-\s][a-zA-Z0-9]{1,3})?$/)) {
-            orderNumber = parts[0];
+          // Akceptuj też trailing dash bez sufiksu: 51737- → traktuj jako 51737
+          if (orderNumber === 'UNKNOWN' && parts[0].match(/^\d+(?:[-\s][a-zA-Z0-9]{1,3})?-?$/)) {
+            orderNumber = parts[0].replace(/-$/, '');
           }
 
           const numArt = parts[1];

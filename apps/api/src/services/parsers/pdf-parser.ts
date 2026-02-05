@@ -35,10 +35,18 @@ export class PdfParser {
 
     // Użyj transakcji aby atomowo zaktualizować zlecenie i oznaczyć pending price
     return prisma.$transaction(async (tx) => {
-      // Znajdź zlecenie po numerze
-      const order = await tx.order.findUnique({
+      // Znajdź zlecenie po numerze (z fallbackiem na prefix match np. 53614 -> 53614-a)
+      let order = await tx.order.findUnique({
         where: { orderNumber: parsed.orderNumber },
       });
+
+      if (!order) {
+        // Fallback: prefix match
+        order = await tx.order.findFirst({
+          where: { orderNumber: { startsWith: parsed.orderNumber } },
+          orderBy: { orderNumber: 'asc' },
+        });
+      }
 
       if (!order) {
         throw new Error(`Zlecenie ${parsed.orderNumber} nie znalezione w bazie danych`);
@@ -84,7 +92,9 @@ export class PdfParser {
     const text = data.text;
 
     // Wyciągnij numer zlecenia Akrobud (5-cyfrowy) - kilka strategii
-    const orderNumber = this.extractAkrobudOrderNumber(text);
+    // Przekaż też nazwę pliku jako fallback (np. "ZAM 53810.pdf")
+    const filename = filepath.split(/[\\/]/).pop() || '';
+    const orderNumber = this.extractAkrobudOrderNumber(text, filename);
 
     // Wyciągnij referencję (np. D3056)
     const referenceMatch = text.match(/Nr Referencyjny\s*([A-Z]\d+)/i) ||
@@ -134,7 +144,7 @@ export class PdfParser {
    * Wyciąga numer zlecenia Akrobud (5-cyfrowy) z tekstu PDF
    * Używa wielu strategii w kolejności od najdokładniejszej do fallbacku
    */
-  private extractAkrobudOrderNumber(text: string): string {
+  private extractAkrobudOrderNumber(text: string, filename?: string): string {
     // Strategia 1: Po "SUMA:" (format Schuco/POLY)
     const sumaMatch = text.match(/SUMA:.*?(\d{5})/s);
     if (sumaMatch) {
@@ -162,17 +172,34 @@ export class PdfParser {
       }
     }
 
-    // Strategia 5: Dowolny 5-cyfrowy numer w tekście (nie jako część dłuższego numeru)
-    // Szukamy w całym tekście, ale pomijamy numery > 5 cyfr (np. 2512150419)
-    const allFiveDigit = text.match(/\b(\d{5})\b/g);
+    // Strategia 5: Dokładnie 5-cyfrowy numer nie będący częścią dłuższego numeru
+    // Używamy lookahead/lookbehind aby uniknąć wyciągania "41017" z "241017"
+    const allFiveDigit = text.match(/(?<!\d)(\d{5})(?!\d)/g);
     if (allFiveDigit) {
-      // Weź pierwszy który nie jest częścią daty ani numeru zamówienia zewnętrznego
       for (const num of allFiveDigit) {
         const n = parseInt(num);
         // Numery zleceń Akrobud są w zakresie 40000-99999
         if (n >= 40000 && n <= 99999) {
           logger.debug(`PDF parser: numer zlecenia z generic 5-digit match: ${num}`);
           return num;
+        }
+      }
+    }
+
+    // Strategia 6: Numer zlecenia z nazwy pliku (np. "ZAM 53810.pdf", "ZAM 53839.pdf")
+    if (filename) {
+      const zamMatch = filename.match(/ZAM\s+(\d{5})/i);
+      if (zamMatch) {
+        logger.debug(`PDF parser: numer zlecenia z nazwy pliku ZAM: ${zamMatch[1]}`);
+        return zamMatch[1];
+      }
+      // Fallback: dowolny 5-cyfrowy numer w nazwie pliku
+      const fiveDigitMatch = filename.match(/(?<!\d)(\d{5})(?!\d)/);
+      if (fiveDigitMatch) {
+        const n = parseInt(fiveDigitMatch[1]);
+        if (n >= 40000 && n <= 99999) {
+          logger.debug(`PDF parser: numer zlecenia z nazwy pliku (5-digit): ${fiveDigitMatch[1]}`);
+          return fiveDigitMatch[1];
         }
       }
     }
