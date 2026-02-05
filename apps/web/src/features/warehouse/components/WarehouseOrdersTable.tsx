@@ -64,7 +64,7 @@ export const WarehouseOrdersTable = React.memo(function WarehouseOrdersTable({
       <MobileScrollHint />
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto max-w-full max-h-[600px] overflow-y-auto">
+          <div className="overflow-x-auto max-w-full">
             <table className="w-full text-sm min-w-[800px] table-fixed">
               <thead className="bg-slate-50 border-b sticky top-0 z-20">
                 <tr>

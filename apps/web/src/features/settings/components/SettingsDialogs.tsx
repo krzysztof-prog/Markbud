@@ -17,8 +17,8 @@ import { cn } from '@/lib/utils';
 interface PalletType {
   id?: number;
   name: string;
-  lengthMm: number;
-  loadDepthMm: number;
+  widthMm: number;
+  loadWidthMm: number;
 }
 
 interface Color {
@@ -57,8 +57,8 @@ interface PalletDialogProps {
   isPending: boolean;
   errors: Record<string, string | undefined>;
   touched: Record<string, boolean>;
-  onValidateField: (field: 'name' | 'lengthMm' | 'loadDepthMm', value: string | number) => void;
-  onTouchField: (field: 'name' | 'lengthMm' | 'loadDepthMm') => void;
+  onValidateField: (field: 'name' | 'widthMm' | 'loadWidthMm', value: string | number) => void;
+  onTouchField: (field: 'name' | 'widthMm' | 'loadWidthMm') => void;
 }
 
 export function PalletDialog({
@@ -110,20 +110,20 @@ export function PalletDialog({
               </label>
               <Input
                 type="number"
-                value={data?.lengthMm || ''}
+                value={data?.widthMm || ''}
                 onChange={(e) => {
                   const value = parseInt(e.target.value) || 0;
-                  onDataChange({ ...data, lengthMm: value });
-                  onValidateField('lengthMm', value);
+                  onDataChange({ ...data, widthMm: value });
+                  onValidateField('widthMm', value);
                 }}
-                onBlur={() => onTouchField('lengthMm')}
+                onBlur={() => onTouchField('widthMm')}
                 className={cn(
-                  touched.lengthMm && errors.lengthMm && 'border-red-500 focus-visible:ring-red-500'
+                  touched.widthMm && errors.widthMm && 'border-red-500 focus-visible:ring-red-500'
                 )}
-                aria-invalid={touched.lengthMm && !!errors.lengthMm}
+                aria-invalid={touched.widthMm && !!errors.widthMm}
               />
-              {touched.lengthMm && errors.lengthMm && (
-                <p className="text-sm text-red-600 mt-1">{errors.lengthMm}</p>
+              {touched.widthMm && errors.widthMm && (
+                <p className="text-sm text-red-600 mt-1">{errors.widthMm}</p>
               )}
             </div>
             <div>
@@ -132,22 +132,22 @@ export function PalletDialog({
               </label>
               <Input
                 type="number"
-                value={data?.loadDepthMm || ''}
+                value={data?.loadWidthMm || ''}
                 onChange={(e) => {
                   const value = parseInt(e.target.value) || 0;
-                  onDataChange({ ...data, loadDepthMm: value });
-                  onValidateField('loadDepthMm', value);
+                  onDataChange({ ...data, loadWidthMm: value });
+                  onValidateField('loadWidthMm', value);
                 }}
-                onBlur={() => onTouchField('loadDepthMm')}
+                onBlur={() => onTouchField('loadWidthMm')}
                 className={cn(
-                  touched.loadDepthMm &&
-                    errors.loadDepthMm &&
+                  touched.loadWidthMm &&
+                    errors.loadWidthMm &&
                     'border-red-500 focus-visible:ring-red-500'
                 )}
-                aria-invalid={touched.loadDepthMm && !!errors.loadDepthMm}
+                aria-invalid={touched.loadWidthMm && !!errors.loadWidthMm}
               />
-              {touched.loadDepthMm && errors.loadDepthMm && (
-                <p className="text-sm text-red-600 mt-1">{errors.loadDepthMm}</p>
+              {touched.loadWidthMm && errors.loadWidthMm && (
+                <p className="text-sm text-red-600 mt-1">{errors.loadWidthMm}</p>
               )}
             </div>
           </div>

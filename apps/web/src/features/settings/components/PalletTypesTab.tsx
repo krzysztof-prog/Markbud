@@ -4,12 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { ProfileDepthsTab } from './ProfileDepthsTab';
+import { ProfilePalletConfigTab } from './ProfilePalletConfigTab';
 
 interface PalletType {
   id: number;
   name: string;
-  lengthMm: number;
-  loadDepthMm: number;
+  widthMm: number;
+  loadWidthMm: number;
 }
 
 interface PalletTypesTabProps {
@@ -45,7 +46,6 @@ export function PalletTypesTab({
                 <tr>
                   <th className="px-4 py-3 text-left">Nazwa</th>
                   <th className="px-4 py-3 text-center">Dlugosc (mm)</th>
-                  <th className="px-4 py-3 text-center">Szer. zaladunku (mm)</th>
                   <th className="px-4 py-3 text-center">Akcje</th>
                 </tr>
               </thead>
@@ -56,8 +56,7 @@ export function PalletTypesTab({
                     className={`border-t hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
                   >
                     <td className="px-4 py-3 font-medium">{pallet.name}</td>
-                    <td className="px-4 py-3 text-center">{pallet.lengthMm}</td>
-                    <td className="px-4 py-3 text-center">{pallet.loadDepthMm}</td>
+                    <td className="px-4 py-3 text-center">{pallet.widthMm}</td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex justify-center gap-1">
                         <Button variant="ghost" size="sm" onClick={() => onEdit(pallet)}>
@@ -72,7 +71,7 @@ export function PalletTypesTab({
                 ))}
                 {(!palletTypes || palletTypes.length === 0) && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                    <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
                       Brak typow palet
                     </td>
                   </tr>
@@ -84,6 +83,7 @@ export function PalletTypesTab({
       </Card>
 
       <ProfileDepthsTab />
+      <ProfilePalletConfigTab />
     </div>
   );
 }

@@ -1,21 +1,28 @@
 import cron, { ScheduledTask } from 'node-cron';
 import { PrismaClient } from '@prisma/client';
 import { SchucoService } from './schucoService.js';
+import { SchucoItemService } from './schucoItemService.js';
 import { logger } from '../../utils/logger.js';
+
+// Opóźnienie między pobraniem zamówień a pobieraniem pozycji (2 minuty)
+const ITEM_FETCH_DELAY_MS = 2 * 60 * 1000;
 
 /**
  * Schuco Scheduler - automatyczne pobieranie danych 3 razy dziennie
  * Harmonogram: 8:00, 12:00, 15:00
+ * Po pobraniu zamówień automatycznie pobiera pozycje dla nowych i zmienionych
  */
 export class SchucoScheduler {
   private prisma: PrismaClient;
   private schucoService: SchucoService;
+  private schucoItemService: SchucoItemService;
   private tasks: ScheduledTask[] = [];
   private isRunning = false;
 
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
     this.schucoService = new SchucoService(prisma);
+    this.schucoItemService = new SchucoItemService(prisma);
   }
 
   /**
@@ -82,7 +89,7 @@ export class SchucoScheduler {
   }
 
   /**
-   * Run fetch task
+   * Run fetch task - pobiera zamówienia, a po sukcesie automatycznie pobiera pozycje
    */
   private async runFetch(scheduledTime: string): Promise<void> {
     logger.info(`[SchucoScheduler] Running scheduled fetch (${scheduledTime})...`);
@@ -99,11 +106,55 @@ export class SchucoScheduler {
             `Records: ${result.recordsCount}, New: ${result.newRecords}, ` +
             `Updated: ${result.updatedRecords}, Unchanged: ${result.unchangedRecords}`
         );
+
+        // Automatyczne pobieranie pozycji dla nowych i zmienionych zamówień
+        const hasNewOrUpdated = (result.newRecords ?? 0) > 0 || (result.updatedRecords ?? 0) > 0;
+        if (hasNewOrUpdated) {
+          await this.runItemAutoFetch(scheduledTime, result.newRecords ?? 0, result.updatedRecords ?? 0);
+        } else {
+          logger.info(`[SchucoScheduler] No new/updated orders - skipping item auto-fetch`);
+        }
       } else {
         logger.error(`[SchucoScheduler] Scheduled fetch failed (${scheduledTime}): ${result.errorMessage}`);
       }
     } catch (error) {
       logger.error(`[SchucoScheduler] Scheduled fetch error (${scheduledTime}):`, error);
+    }
+  }
+
+  /**
+   * Automatyczne pobieranie pozycji po pobraniu zamówień
+   * Czeka 2 minuty po fetch zamówień, potem pobiera pozycje dla nowych/zmienionych
+   */
+  private async runItemAutoFetch(scheduledTime: string, newOrders: number, updatedOrders: number): Promise<void> {
+    logger.info(
+      `[SchucoScheduler] Waiting ${ITEM_FETCH_DELAY_MS / 1000}s before item auto-fetch ` +
+        `(${newOrders} new, ${updatedOrders} updated orders)...`
+    );
+
+    // Czekaj aby sesja Schuco się zakończyła i baza się ustabilizowała
+    await new Promise((resolve) => setTimeout(resolve, ITEM_FETCH_DELAY_MS));
+
+    try {
+      if (this.schucoItemService.isItemFetchRunning()) {
+        logger.warn('[SchucoScheduler] Item fetch already running - skipping auto-fetch');
+        return;
+      }
+
+      const itemResult = await this.schucoItemService.autoFetchChangedItems();
+
+      if (itemResult) {
+        logger.info(
+          `[SchucoScheduler] Item auto-fetch completed (${scheduledTime}). ` +
+            `Deliveries: ${itemResult.processedDeliveries}/${itemResult.totalDeliveries}, ` +
+            `Items - new: ${itemResult.newItems}, updated: ${itemResult.updatedItems}, errors: ${itemResult.errors}`
+        );
+      } else {
+        logger.info(`[SchucoScheduler] Item auto-fetch skipped (${scheduledTime}) - already running or no items needed`);
+      }
+    } catch (error) {
+      // Błąd pobierania pozycji NIE powinien wpływać na główny flow
+      logger.error(`[SchucoScheduler] Item auto-fetch error (${scheduledTime}):`, error);
     }
   }
 
@@ -128,11 +179,12 @@ export class SchucoScheduler {
   /**
    * Get scheduler status
    */
-  getStatus(): { isRunning: boolean; scheduledTimes: string[]; archiveTime: string } {
+  getStatus(): { isRunning: boolean; scheduledTimes: string[]; archiveTime: string; itemAutoFetchEnabled: boolean } {
     return {
       isRunning: this.isRunning,
       scheduledTimes: this.isRunning ? ['8:00', '12:00', '15:00'] : [],
       archiveTime: this.isRunning ? '2:00' : '',
+      itemAutoFetchEnabled: this.isRunning,
     };
   }
 }

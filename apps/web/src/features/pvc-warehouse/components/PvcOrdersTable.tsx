@@ -131,8 +131,8 @@ export const PvcOrdersTable: React.FC<PvcOrdersTableProps> = ({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {week.items.map((item) => (
-                        <TableRow key={item.id}>
+                      {week.items.map((item, itemIdx) => (
+                        <TableRow key={item.id} className={itemIdx % 2 === 1 ? 'bg-slate-50/70' : ''}>
                           <TableCell className="font-mono text-sm">{item.articleNumber}</TableCell>
                           <TableCell className="max-w-[300px] truncate" title={item.articleDescription}>
                             {item.articleDescription}

@@ -15,8 +15,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import type { PvcProfileWithStock, SystemType } from '../types';
+import type { PvcProfileWithStock, SystemType, StockDetailItem } from '../types';
 import { SYSTEM_LABELS } from '../types';
 
 interface PvcStockTableProps {
@@ -53,11 +59,55 @@ interface FlatRow {
   privateColorName: string | null;
   initialBeams: number;
   deliveriesBeams: number;
+  deliveriesDetails: StockDetailItem[];
   rwBeams: number;
+  rwDetails: StockDetailItem[];
   currentBeams: number;
   orderedBeams: number;
   demandBeams: number;
+  demandDetails: StockDetailItem[];
   afterDemandBeams: number;
+  palletDeliveriesRaw: number;
+  palletOrderedRaw: number;
+  hasUnconvertedPallets: boolean;
+}
+
+/**
+ * Komponent tooltipa ze szczegółami - wyświetla listę zleceń/dostaw składających się na wartość
+ */
+function DetailTooltip({
+  details,
+  title,
+  children,
+}: {
+  details: StockDetailItem[];
+  title: string;
+  children: React.ReactNode;
+}) {
+  if (!details || details.length === 0) {
+    return <>{children}</>;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help border-b border-dotted border-current">
+          {children}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs">
+        <div className="space-y-1">
+          <p className="font-medium text-xs mb-1">{title}</p>
+          {details.map((d, i) => (
+            <div key={i} className="flex justify-between gap-4 text-xs">
+              <span className="text-muted-foreground">{d.label}</span>
+              <span className="font-mono">{d.beams}</span>
+            </div>
+          ))}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 // Liczba kolumn danych (bez profilu/nazwy/systemu/koloru)
@@ -90,11 +140,17 @@ export const PvcStockTable: React.FC<PvcStockTableProps> = ({
           privateColorName: stock.privateColorName,
           initialBeams: stock.initialStockBeams ?? 0,
           deliveriesBeams: stock.deliveriesBeams ?? 0,
+          deliveriesDetails: stock.deliveriesDetails ?? [],
           rwBeams: stock.rwBeams ?? 0,
+          rwDetails: stock.rwDetails ?? [],
           currentBeams: stock.currentStockBeams ?? 0,
           orderedBeams: stock.orderedBeams ?? 0,
           demandBeams: stock.demandBeams ?? 0,
+          demandDetails: stock.demandDetails ?? [],
           afterDemandBeams: stock.afterDemandBeams ?? 0,
+          palletDeliveriesRaw: stock.palletDeliveriesRaw ?? 0,
+          palletOrderedRaw: stock.palletOrderedRaw ?? 0,
+          hasUnconvertedPallets: stock.hasUnconvertedPallets ?? false,
         });
       }
     }
@@ -157,6 +213,7 @@ export const PvcStockTable: React.FC<PvcStockTableProps> = ({
   const totalAfterDemand = filteredRows.reduce((acc, r) => acc + r.afterDemandBeams, 0);
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="rounded-md border overflow-x-auto">
       <Table>
         <TableHeader>{headerCells}</TableHeader>
@@ -167,7 +224,7 @@ export const PvcStockTable: React.FC<PvcStockTableProps> = ({
               : `${row.profileId}-c${row.colorCode}-${idx}`;
 
             return (
-              <TableRow key={rowKey}>
+              <TableRow key={rowKey} className={idx % 2 === 1 ? 'bg-slate-50/70' : ''}>
                 {/* Numer profilu */}
                 <TableCell className="font-mono text-sm">{row.profileNumber}</TableCell>
 
@@ -213,20 +270,42 @@ export const PvcStockTable: React.FC<PvcStockTableProps> = ({
                   {row.initialBeams || '-'}
                 </TableCell>
 
-                {/* Dostawy (zielony) */}
+                {/* Dostawy (zielony) z tooltipem + nieprzeliczone palety amber */}
                 <TableCell className={cn(
                   'text-right font-mono text-sm',
                   row.deliveriesBeams > 0 && 'text-green-600'
                 )}>
-                  {row.deliveriesBeams || '-'}
+                  <span className="inline-flex items-center gap-1">
+                    {row.deliveriesBeams ? (
+                      <DetailTooltip details={row.deliveriesDetails} title="Dostawy Schuco:">
+                        {row.deliveriesBeams}
+                      </DetailTooltip>
+                    ) : row.palletDeliveriesRaw === 0 ? '-' : null}
+                    {row.palletDeliveriesRaw > 0 && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-amber-600 cursor-help">
+                            +{row.palletDeliveriesRaw} pal
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          <p className="text-xs">Nieprzeliczone palety - brak konfiguracji przelicznika dla tego profilu</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </span>
                 </TableCell>
 
-                {/* RW (pomarańczowy) */}
+                {/* RW (pomarańczowy) z tooltipem */}
                 <TableCell className={cn(
                   'text-right font-mono text-sm',
                   row.rwBeams > 0 && 'text-orange-600'
                 )}>
-                  {row.rwBeams || '-'}
+                  {row.rwBeams ? (
+                    <DetailTooltip details={row.rwDetails} title="Zlecenia (RW):">
+                      {row.rwBeams}
+                    </DetailTooltip>
+                  ) : '-'}
                 </TableCell>
 
                 {/* Stan aktualny (bold, czerwony jeśli < 0) */}
@@ -237,20 +316,38 @@ export const PvcStockTable: React.FC<PvcStockTableProps> = ({
                   {row.currentBeams}
                 </TableCell>
 
-                {/* Zamówione (niebieski) */}
+                {/* Zamówione (niebieski) + nieprzeliczone palety amber */}
                 <TableCell className={cn(
                   'text-right font-mono text-sm',
                   row.orderedBeams > 0 && 'text-blue-600'
                 )}>
-                  {row.orderedBeams || '-'}
+                  <span className="inline-flex items-center gap-1">
+                    {row.orderedBeams ? row.orderedBeams : row.palletOrderedRaw === 0 ? '-' : null}
+                    {row.palletOrderedRaw > 0 && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-amber-600 cursor-help">
+                            +{row.palletOrderedRaw} pal
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          <p className="text-xs">Nieprzeliczone palety - brak konfiguracji przelicznika dla tego profilu</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </span>
                 </TableCell>
 
-                {/* Zapotrzebowanie (pomarańczowy) */}
+                {/* Zapotrzebowanie (pomarańczowy) z tooltipem */}
                 <TableCell className={cn(
                   'text-right font-mono text-sm',
                   row.demandBeams > 0 && 'text-orange-600'
                 )}>
-                  {row.demandBeams || '-'}
+                  {row.demandBeams ? (
+                    <DetailTooltip details={row.demandDetails} title="Aktywne zlecenia:">
+                      {row.demandBeams}
+                    </DetailTooltip>
+                  ) : '-'}
                 </TableCell>
 
                 {/* Stan po zapotrzebowaniu (bold, czerwony jeśli < 0) */}
@@ -285,6 +382,7 @@ export const PvcStockTable: React.FC<PvcStockTableProps> = ({
         </div>
       </div>
     </div>
+    </TooltipProvider>
   );
 };
 

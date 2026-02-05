@@ -41,10 +41,12 @@ export {
   settingsApi,
   currencyConfigApi,
   profileDepthsApi,
+  profilePalletConfigApi,
   steelApi,
 } from './settings';
 export type {
   ProfileDepth,
+  ProfilePalletConfig,
   DocumentAuthorMapping,
   CreateDocumentAuthorMappingData,
   UpdateDocumentAuthorMappingData,

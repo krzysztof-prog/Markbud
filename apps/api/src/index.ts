@@ -26,6 +26,7 @@ import { palletRoutes } from './routes/pallets.js';
 import { currencyConfigRoutes } from './routes/currency-config.js';
 import { monthlyReportsRoutes } from './routes/monthly-reports.js';
 import { profileDepthRoutes } from './routes/profileDepths.js';
+import { profilePalletConfigRoutes } from './routes/profilePalletConfig.js';
 import { glassOrderRoutes } from './routes/glass-orders.js';
 import { glassDeliveryRoutes } from './routes/glass-deliveries.js';
 import { glassValidationRoutes } from './routes/glass-validations.js';
@@ -50,7 +51,6 @@ import { gmailRoutes } from './routes/gmail.js';
 // Services
 import { FileWatcherService } from './services/file-watcher/index.js';
 import { startSchucoScheduler, stopSchucoScheduler } from './services/schuco/schucoScheduler.js';
-import { SchucoItemService } from './services/schuco/schucoItemService.js';
 import { startPendingPriceCleanupScheduler, stopPendingPriceCleanupScheduler } from './services/pendingOrderPriceCleanupScheduler.js';
 import { startImportLockCleanupScheduler, stopImportLockCleanupScheduler } from './services/importLockCleanupScheduler.js';
 import { startOrderArchiveScheduler, stopOrderArchiveScheduler } from './services/orderArchiveScheduler.js';
@@ -78,8 +78,7 @@ export { prisma } from "./utils/prisma.js";
 // FileWatcher - eksportowany do restartu z API
 export let fileWatcher: FileWatcherService | null = null;
 
-// SchucoItemService - eksportowany do globalnego dostępu (scheduler)
-export let schucoItemService: SchucoItemService | null = null;
+// SchucoItemService - auto-fetch pozycji jest teraz częścią SchucoScheduler
 
 // Inicjalizacja Fastify
 const fastify = Fastify({
@@ -188,6 +187,7 @@ await fastify.register(palletRoutes, { prefix: '/api/pallets' });
 await fastify.register(currencyConfigRoutes, { prefix: '/api/currency-config' });
 await fastify.register(monthlyReportsRoutes, { prefix: '/api/monthly-reports' });
 await fastify.register(profileDepthRoutes, { prefix: '/api/profile-depths' });
+await fastify.register(profilePalletConfigRoutes, { prefix: '/api/profile-pallet-configs' });
 
 // Glass Tracking Routes
 await fastify.register(glassOrderRoutes, { prefix: '/api/glass-orders' });
@@ -325,10 +325,6 @@ const closeGracefully = async (signal: string) => {
   DeliveryAlertScheduler.stop();
   LabelCheckScheduler.stop();
   stopGmailScheduler();
-  // Zatrzymaj Schuco Item Scheduler
-  if (schucoItemService) {
-    schucoItemService.stopAutoFetchScheduler();
-  }
   await fastify.close();
   await prisma.$disconnect();
   process.exit(0);
@@ -384,10 +380,8 @@ const start = async () => {
     // Uruchom Gmail IMAP Scheduler (pobieranie CSV z Gmail co godzinę)
     startGmailScheduler(prisma);
 
-    // Uruchom Schuco Item Scheduler (automatyczne pobieranie pozycji co 45 minut)
-    // WYŁĄCZONE - scheduler powodował problemy ze współbieżnością
-    schucoItemService = new SchucoItemService(prisma);
-    // schucoItemService.startAutoFetchScheduler();
+    // Auto-fetch pozycji zamówień jest teraz częścią SchucoScheduler
+    // (uruchamia się automatycznie po każdym pobraniu zamówień)
 
   } catch (err) {
     logger.error('Failed to start server', err);

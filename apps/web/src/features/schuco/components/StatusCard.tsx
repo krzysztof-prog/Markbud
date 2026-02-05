@@ -43,14 +43,11 @@ import {
   Calendar,
   ListChecks,
   Zap,
-  Play,
-  Square,
 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -71,8 +68,6 @@ import { useSchucoRealtimeProgress } from '../hooks/useSchucoRealtimeProgress';
 import {
   useSchucoItemsFetch,
   useSchucoItemsStats,
-  useSchucoItemsSchedulerStatus,
-  useSchucoItemsSchedulerControl,
 } from '../hooks/useSchucoItems';
 
 interface StatusCardProps {
@@ -243,8 +238,6 @@ export const StatusCard: React.FC<StatusCardProps> = ({
   // Pobieranie pozycji zamówień
   const itemsStats = useSchucoItemsStats();
   const fetchItemsMutation = useSchucoItemsFetch();
-  const schedulerStatus = useSchucoItemsSchedulerStatus();
-  const { startScheduler, stopScheduler, isStarting, isStopping } = useSchucoItemsSchedulerControl();
 
   // Stan dla dialogu wyboru daty
   const [isFromDateDialogOpen, setIsFromDateDialogOpen] = useState(false);
@@ -326,29 +319,6 @@ export const StatusCard: React.FC<StatusCardProps> = ({
         },
       }
     );
-  };
-
-  // Handler przełączania schedulera
-  const handleToggleScheduler = () => {
-    if (schedulerStatus.data?.isSchedulerRunning) {
-      stopScheduler(undefined, {
-        onSuccess: () => {
-          toast({ variant: 'success', title: 'Scheduler zatrzymany' });
-        },
-        onError: () => {
-          toast({ variant: 'destructive', title: 'Błąd zatrzymywania schedulera' });
-        },
-      });
-    } else {
-      startScheduler(undefined, {
-        onSuccess: () => {
-          toast({ variant: 'success', title: 'Scheduler uruchomiony (co 45 min)' });
-        },
-        onError: () => {
-          toast({ variant: 'destructive', title: 'Błąd uruchamiania schedulera' });
-        },
-      });
-    }
   };
 
   return (
@@ -643,19 +613,12 @@ export const StatusCard: React.FC<StatusCardProps> = ({
                     'Ładowanie statystyk...'
                   )}
                 </p>
-                {/* Status schedulera */}
+                {/* Status auto-pobierania pozycji */}
                 <p className="text-xs text-slate-400 mt-0.5">
                   Auto-pobieranie:{' '}
-                  {schedulerStatus.data?.isSchedulerRunning ? (
-                    <span className="text-green-600 font-medium">aktywne (co 45 min)</span>
-                  ) : (
-                    <span className="text-slate-500">wyłączone</span>
-                  )}
-                  {schedulerStatus.data?.lastAutoFetchTime && (
-                    <span className="ml-2">
-                      | ostatnie: {formatDatePL(schedulerStatus.data.lastAutoFetchTime)}
-                    </span>
-                  )}
+                  <span className="text-green-600 font-medium">
+                    automatyczne (po pobraniu zamówień)
+                  </span>
                 </p>
               </div>
             </div>
@@ -709,31 +672,6 @@ export const StatusCard: React.FC<StatusCardProps> = ({
                   </div>
                 </DropdownMenuItem>
 
-                <DropdownMenuSeparator />
-
-                {/* Włącz/wyłącz scheduler */}
-                <DropdownMenuItem
-                  onClick={handleToggleScheduler}
-                  disabled={isStarting || isStopping}
-                >
-                  {schedulerStatus.data?.isSchedulerRunning ? (
-                    <>
-                      <Square className="h-4 w-4 mr-2 text-red-600" />
-                      <div>
-                        <p className="font-medium">Zatrzymaj auto-pobieranie</p>
-                        <p className="text-xs text-slate-500">Wyłącz scheduler (45 min)</p>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-4 w-4 mr-2 text-green-600" />
-                      <div>
-                        <p className="font-medium">Włącz auto-pobieranie</p>
-                        <p className="text-xs text-slate-500">Scheduler co 45 min</p>
-                      </div>
-                    </>
-                  )}
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

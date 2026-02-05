@@ -39,7 +39,10 @@ export interface OptimizedWindow {
 export interface PalletType {
   id: number;
   name: string;
-  lengthMm: number;      // Długość palety (odpowiada szerokości okien)
+  lengthMm: number;
+  widthMm: number;       // Szerokość palety (np. 4000, 3500, 3000)
+  heightMm: number;
+  loadWidthMm: number;   // Szerokość załadunku
   loadDepthMm: number;   // Głębokość załadunku
   createdAt: string;
   updatedAt: string;

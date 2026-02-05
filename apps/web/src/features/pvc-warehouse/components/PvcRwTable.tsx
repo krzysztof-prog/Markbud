@@ -5,7 +5,7 @@
 
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Table,
   TableBody,
@@ -21,12 +21,27 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import type { PvcRwItem, SystemType } from '../types';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import type { PvcRwItem, RwOrder, SystemType } from '../types';
 import { SYSTEM_LABELS } from '../types';
+
+/** Maksymalna liczba zleceń widocznych inline */
+const MAX_INLINE_ORDERS = 3;
 
 interface PvcRwTableProps {
   rw: PvcRwItem[];
   isLoading?: boolean;
+}
+
+interface OrdersModalData {
+  profileNumber: string;
+  profileName: string;
+  orders: RwOrder[];
 }
 
 /**
@@ -43,6 +58,8 @@ function getActiveSystems(profile: PvcRwItem['profile']): SystemType[] {
 }
 
 export const PvcRwTable: React.FC<PvcRwTableProps> = ({ rw, isLoading = false }) => {
+  const [ordersModal, setOrdersModal] = useState<OrdersModalData | null>(null);
+
   if (isLoading) {
     return (
       <div className="rounded-md border">
@@ -92,7 +109,7 @@ export const PvcRwTable: React.FC<PvcRwTableProps> = ({ rw, isLoading = false })
               <TableHead className="w-40">System</TableHead>
               <TableHead className="w-32">Kolor</TableHead>
               <TableHead className="w-32 text-right">Zużycie</TableHead>
-              <TableHead className="w-40">Zlecenia</TableHead>
+              <TableHead>Zlecenia</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -101,7 +118,7 @@ export const PvcRwTable: React.FC<PvcRwTableProps> = ({ rw, isLoading = false })
               const colorKey = item.color?.id ?? `private-${item.privateColor?.id}`;
 
               return (
-                <TableRow key={`${item.profile.id}-${colorKey}-${idx}`}>
+                <TableRow key={`${item.profile.id}-${colorKey}-${idx}`} className={idx % 2 === 1 ? 'bg-slate-50/70' : ''}>
                   {/* Numer profilu - pełny numer */}
                   <TableCell className="font-mono text-sm">
                     {item.profile.number}
@@ -112,12 +129,12 @@ export const PvcRwTable: React.FC<PvcRwTableProps> = ({ rw, isLoading = false })
 
                   {/* Systemy */}
                   <TableCell>
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex gap-0.5 flex-nowrap">
                       {activeSystems.map((system) => (
                         <Badge
                           key={system}
                           variant="outline"
-                          className="text-xs px-1.5 py-0"
+                          className="text-[10px] px-1 py-0 leading-4"
                         >
                           {SYSTEM_LABELS[system]}
                         </Badge>
@@ -149,10 +166,10 @@ export const PvcRwTable: React.FC<PvcRwTableProps> = ({ rw, isLoading = false })
                     {item.totalBeams} beli
                   </TableCell>
 
-                  {/* Zlecenia */}
+                  {/* Zlecenia - max 3 inline, reszta w modalu */}
                   <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {item.orders.slice(0, 3).map((order) => (
+                    <div className="flex flex-nowrap gap-1 items-center">
+                      {item.orders.slice(0, MAX_INLINE_ORDERS).map((order) => (
                         <Tooltip key={order.id}>
                           <TooltipTrigger asChild>
                             <Badge
@@ -167,23 +184,18 @@ export const PvcRwTable: React.FC<PvcRwTableProps> = ({ rw, isLoading = false })
                           </TooltipContent>
                         </Tooltip>
                       ))}
-                      {item.orders.length > 3 && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Badge variant="outline" className="text-xs cursor-help">
-                              +{item.orders.length - 3}
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <div className="text-sm">
-                              {item.orders.slice(3).map((o) => (
-                                <div key={o.id}>
-                                  {o.number}: {o.beams} beli
-                                </div>
-                              ))}
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
+                      {item.orders.length > MAX_INLINE_ORDERS && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs cursor-pointer hover:bg-slate-100"
+                          onClick={() => setOrdersModal({
+                            profileNumber: item.profile.number,
+                            profileName: item.profile.name,
+                            orders: item.orders,
+                          })}
+                        >
+                          +{item.orders.length - MAX_INLINE_ORDERS}
+                        </Badge>
                       )}
                     </div>
                   </TableCell>
@@ -201,6 +213,35 @@ export const PvcRwTable: React.FC<PvcRwTableProps> = ({ rw, isLoading = false })
           Łączne zużycie: <strong>{totalBeams} beli</strong>
         </span>
       </div>
+
+      {/* Modal ze wszystkimi zleceniami */}
+      <Dialog open={ordersModal !== null} onOpenChange={(open) => { if (!open) setOrdersModal(null); }}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Zlecenia - profil {ordersModal?.profileNumber} {ordersModal?.profileName}
+            </DialogTitle>
+          </DialogHeader>
+          {ordersModal && (
+            <div className="mt-2">
+              <p className="text-sm text-muted-foreground mb-3">
+                Łącznie {ordersModal.orders.length} zleceń
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {ordersModal.orders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-md border bg-slate-50/50 text-sm"
+                  >
+                    <span className="font-mono font-medium">{order.number}</span>
+                    <span className="text-muted-foreground text-xs">{order.beams} beli</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

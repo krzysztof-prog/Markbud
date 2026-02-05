@@ -11,7 +11,10 @@ export type Settings = Record<string, string>;
 export interface PalletType {
   id: ID;
   name: string;
-  lengthMm: number;      // Długość palety (odpowiada szerokości okien)
+  lengthMm: number;
+  widthMm: number;       // Szerokość palety (np. 4000, 3500, 3000)
+  heightMm: number;
+  loadWidthMm: number;   // Szerokość załadunku
   loadDepthMm: number;   // Głębokość załadunku
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -20,13 +23,15 @@ export interface PalletType {
 export interface CreatePalletTypeData {
   name: string;
   lengthMm: number;
-  loadDepthMm: number;
+  widthMm: number;
+  heightMm: number;
+  loadWidthMm: number;
 }
 
 export interface UpdatePalletTypeData {
   name?: string;
-  lengthMm?: number;
-  loadDepthMm?: number;
+  widthMm?: number;
+  loadWidthMm?: number;
 }
 
 /**

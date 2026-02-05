@@ -40,8 +40,8 @@ import { toast } from '@/hooks/useToast';
 interface PalletType {
   id: number;
   name: string;
-  lengthMm: number;
-  loadDepthMm: number;
+  widthMm: number;
+  loadWidthMm: number;
 }
 
 interface Color {
@@ -147,8 +147,8 @@ export default function UstawieniaPage() {
       { validate: (v: string) => !!v?.trim(), message: 'Nazwa jest wymagana' },
       { validate: (v: string) => v?.trim().length >= 2, message: 'Nazwa musi mieć min. 2 znaki' },
     ],
-    lengthMm: [{ validate: (v: number) => v > 0, message: 'Długość musi być większa od 0' }],
-    loadDepthMm: [
+    widthMm: [{ validate: (v: number) => v > 0, message: 'Długość musi być większa od 0' }],
+    loadWidthMm: [
       { validate: (v: number) => v > 0, message: 'Szer. załadunku musi być większa od 0' },
     ],
   });
@@ -405,8 +405,8 @@ export default function UstawieniaPage() {
 
     const formData = {
       name: data.name || '',
-      lengthMm: Number(data.lengthMm) || 0,
-      loadDepthMm: Number(data.loadDepthMm) || 0,
+      widthMm: Number(data.widthMm) || 0,
+      loadWidthMm: Number(data.loadWidthMm) || 0,
     };
 
     if (!validatePalletForm(formData)) {
@@ -415,7 +415,11 @@ export default function UstawieniaPage() {
     }
 
     if (palletDialog.mode === 'add') {
-      createPalletMutation.mutate(formData);
+      createPalletMutation.mutate({
+        ...formData,
+        lengthMm: 6000,
+        heightMm: 2000,
+      });
     } else if (data.id) {
       updatePalletMutation.mutate({ id: data.id, data: formData });
     }
@@ -682,7 +686,7 @@ export default function UstawieniaPage() {
                 setPalletDialog({
                   open: true,
                   mode: 'add',
-                  data: { name: '', lengthMm: 0, loadDepthMm: 0 },
+                  data: { name: '', widthMm: 0, loadWidthMm: 0 },
                 })
               }
               onEdit={(pallet) => setPalletDialog({ open: true, mode: 'edit', data: pallet })}

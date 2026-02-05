@@ -343,8 +343,7 @@ async function main() {
   // ==================== KOLORY AKROBUD (z importów) ====================
   // Kolory tworzone automatycznie przez import - seedujemy aby baza dev miała je od razu
   const akrobudColors = [
-    { code: ' 1x', name: ' 1x' },
-    { code: ' 2x', name: ' 2x' },
+    // Usunięto ' 1x' i ' 2x' - to były duplikaty kolorów 'RAL1x'/'RAL2x' (atypical)
     { code: '127', name: '1x Antracyt 7016 gładki' },
     { code: '144', name: 'Golden oak 1x | KREM' },
     { code: '152', name: 'Cremeweiss folia 2x cz.uszcz | KREM' },

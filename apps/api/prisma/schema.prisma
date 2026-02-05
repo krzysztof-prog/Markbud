@@ -85,11 +85,12 @@ model Profile {
   efficiencyCoeff   Decimal?           @map("efficiency_coeff") // Współczynnik wydajności (np. 0.9 = wolniejszy o 10%)
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
-  orderRequirements OrderRequirement[]
-  profileColors     ProfileColor[]
-  warehouseHistory  WarehouseHistory[]
-  warehouseOrders   WarehouseOrder[]
-  warehouseStock    WarehouseStock[]
+  orderRequirements   OrderRequirement[]
+  profileColors       ProfileColor[]
+  warehouseHistory    WarehouseHistory[]
+  warehouseOrders     WarehouseOrder[]
+  warehouseStock      WarehouseStock[]
+  profilePalletConfig ProfilePalletConfig?
 
   @@map("profiles")
 }
@@ -512,6 +513,19 @@ model ProfileDepth {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("profile_depths")
+}
+
+// Przelicznik: ile beli profilu mieści się w jednej palecie Schuco
+model ProfilePalletConfig {
+  id             Int      @id @default(autoincrement())
+  profileId      Int      @unique @map("profile_id")
+  beamsPerPallet Int      @map("beams_per_pallet")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  profile Profile @relation(fields: [profileId], references: [id])
+
+  @@map("profile_pallet_configs")
 }
 
 model PackingRule {

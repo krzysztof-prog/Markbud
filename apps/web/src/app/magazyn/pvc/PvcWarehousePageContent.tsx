@@ -17,7 +17,7 @@ import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PeriodSelector } from '@/components/ui/period-selector';
 import { BackButton } from '@/components/ui/back-button';
-import { Box, Package, FileText, History, ShoppingCart } from 'lucide-react';
+import { Box, Package, FileText, History, ShoppingCart, Info } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 
@@ -200,6 +200,22 @@ export default function PvcWarehousePageContent() {
 
             {/* Stan magazynowy */}
             <TabsContent value="stan" className="mt-4">
+              {/* Informacja o dacie remanentu */}
+              {stockData?.remanentDate && (
+                <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700">
+                  <Info className="h-4 w-4 flex-shrink-0" />
+                  <span>
+                    Wszystkie wartości liczone są od ostatniego remanentu z dnia{' '}
+                    <strong>
+                      {new Date(stockData.remanentDate).toLocaleDateString('pl-PL', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                      })}
+                    </strong>
+                  </span>
+                </div>
+              )}
               <div className="flex items-center gap-2 mb-3">
                 <Checkbox
                   id="hide-zero-stock"

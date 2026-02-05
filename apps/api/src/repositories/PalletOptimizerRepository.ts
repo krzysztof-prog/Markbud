@@ -25,12 +25,12 @@ export class PalletOptimizerRepository {
    */
   async getPalletTypes(): Promise<PalletDefinition[]> {
     const palletTypes = await this.prisma.palletType.findMany({
-      orderBy: { lengthMm: 'desc' }, // Od najdłuższej do najkrótszej
+      orderBy: { widthMm: 'desc' }, // Od najdłuższej do najkrótszej
     });
 
     return palletTypes.map(pt => ({
       name: pt.name,
-      lengthMm: pt.lengthMm,
+      lengthMm: pt.widthMm, // widthMm to "Dlugosc" palety z ustawień (2400/3000/3500/4000)
       maxLoadDepthMm: pt.loadDepthMm,
       maxOverhangMm: 700, // Stała wartość zgodnie z wymaganiami
     }));
@@ -210,7 +210,7 @@ export class PalletOptimizerRepository {
    */
   async getAllPalletTypes() {
     return this.prisma.palletType.findMany({
-      orderBy: { lengthMm: 'desc' },
+      orderBy: { widthMm: 'desc' },
     });
   }
 

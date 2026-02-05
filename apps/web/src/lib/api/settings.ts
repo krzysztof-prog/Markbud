@@ -248,6 +248,41 @@ export const profileDepthsApi = {
     }),
 };
 
+// Przeliczniki palet na bele
+export interface ProfilePalletConfig {
+  id: number;
+  profileId: number;
+  beamsPerPallet: number;
+  createdAt: string;
+  updatedAt: string;
+  profile: {
+    id: number;
+    number: string;
+    name: string;
+  };
+}
+
+export const profilePalletConfigApi = {
+  getAll: () => fetchApi<ProfilePalletConfig[]>('/api/profile-pallet-configs'),
+
+  create: (data: { profileId: number; beamsPerPallet: number }) =>
+    fetchApi<ProfilePalletConfig>('/api/profile-pallet-configs', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: number, data: { beamsPerPallet: number }) =>
+    fetchApi<ProfilePalletConfig>(`/api/profile-pallet-configs/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: number) =>
+    fetchApi(`/api/profile-pallet-configs/${id}`, {
+      method: 'DELETE',
+    }),
+};
+
 // Stal (wzmocnienia stalowe)
 export const steelApi = {
   /**

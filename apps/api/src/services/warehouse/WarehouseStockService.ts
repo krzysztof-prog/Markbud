@@ -77,6 +77,55 @@ export class WarehouseStockService {
       throw new NotFoundError('Color');
     }
 
+    // 6. Pobierz dane z zamowien Schuco dla tego koloru
+    // Format articleNumber w Schuco: "1" + profileNumber + colorCode (np. "18866000")
+    const profileNumbers = stocks.map((s) => s.profile.number);
+    const schucoArticleNumbers = profileNumbers.map(
+      (pn) => `1${pn}${color.code}`
+    );
+
+    // Pozycje Schuco ze statusem "Potwierdzona dostawa" (w drodze, jeszcze nie dostarczone)
+    const schucoItems = schucoArticleNumbers.length > 0
+      ? await prisma.schucoOrderItem.findMany({
+          where: {
+            articleNumber: { in: schucoArticleNumbers },
+            schucoDelivery: {
+              shippingStatus: 'Potwierdzona dostawa',
+              archivedAt: null,
+            },
+          },
+          select: {
+            articleNumber: true,
+            orderedQty: true,
+            shippedQty: true,
+            deliveryDate: true,
+            schucoDelivery: {
+              select: { deliveryDate: true },
+            },
+          },
+        })
+      : [];
+
+    // Mapa: profileNumber -> { inTransitBeams, nearestDate }
+    const schucoDataMap = new Map<string, { inTransitBeams: number; nearestDate: Date | null }>();
+    for (const item of schucoItems) {
+      // Wyciagnij numer profilu z articleNumber: "1PPPPKKK" -> PPPP
+      const profileNumber = item.articleNumber.substring(1, item.articleNumber.length - color.code.length);
+      const inTransit = item.orderedQty - item.shippedQty;
+      if (inTransit <= 0) continue; // Juz w pelni dostarczone - pomijamy
+
+      const existing = schucoDataMap.get(profileNumber) || { inTransitBeams: 0, nearestDate: null };
+      existing.inTransitBeams += inTransit;
+
+      // Data dostawy - najpierw z pozycji, potem z naglowka zamowienia
+      const deliveryDate = item.deliveryDate || item.schucoDelivery.deliveryDate;
+      if (deliveryDate && (!existing.nearestDate || deliveryDate < existing.nearestDate)) {
+        existing.nearestDate = deliveryDate;
+      }
+
+      schucoDataMap.set(profileNumber, existing);
+    }
+
     // Build demand map
     const demandMap = new Map(
       demands.map((d) => [
@@ -103,13 +152,27 @@ export class WarehouseStockService {
       const pendingOrdersList = pendingOrdersMap.get(stock.profileId) || [];
       const receivedOrdersList = receivedOrdersMap.get(stock.profileId) || [];
 
-      // Calculate total ordered beams and nearest delivery date
-      const totalOrderedBeams = pendingOrdersList.reduce(
+      // Dane z recznych zamowien magazynowych (WarehouseOrder)
+      const manualOrderedBeams = pendingOrdersList.reduce(
         (sum, order) => sum + order.orderedBeams,
         0
       );
-      const nearestDeliveryDate =
+      const manualNearestDate =
         pendingOrdersList.length > 0 ? pendingOrdersList[0].expectedDeliveryDate : null;
+
+      // Dane z zamowien Schuco (automatyczne - ilosc w drodze)
+      const schucoData = schucoDataMap.get(stock.profile.number);
+      const schucoOrderedBeams = schucoData?.inTransitBeams || 0;
+      const schucoNearestDate = schucoData?.nearestDate || null;
+
+      // Polacz oba zrodla: suma ilosci, najblisza data z obu
+      const totalOrderedBeams = manualOrderedBeams + schucoOrderedBeams;
+      let nearestDeliveryDate: Date | null = null;
+      if (manualNearestDate && schucoNearestDate) {
+        nearestDeliveryDate = manualNearestDate < schucoNearestDate ? manualNearestDate : schucoNearestDate;
+      } else {
+        nearestDeliveryDate = manualNearestDate || schucoNearestDate;
+      }
 
       return {
         profileId: stock.profileId,

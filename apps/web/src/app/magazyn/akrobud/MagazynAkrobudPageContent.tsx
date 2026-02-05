@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createDynamicComponent } from '@/lib/dynamic-import';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
@@ -13,12 +12,8 @@ import { cn } from '@/lib/utils';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Warehouse, ClipboardCheck, History } from 'lucide-react';
-
-// OrderDetailModal - ciężki komponent (551 linii) - eager w PROD, lazy w DEV
-const OrderDetailModal = createDynamicComponent(
-  () => import('@/features/orders/components/OrderDetailModal').then((mod) => ({ default: mod.OrderDetailModal }))
-);
 import Link from 'next/link';
+import { OrderDetailModal } from '@/features/orders/components/OrderDetailModal';
 import type { Color } from '@/types';
 import { WarehouseHistory } from '@/features/warehouse/components/WarehouseHistory';
 import { WarehouseOrdersTable } from '@/features/warehouse/components/WarehouseOrdersTable';
@@ -73,7 +68,7 @@ export default function MagazynAkrobudPageContent() {
   const atypicalColors = colors?.filter((c: Color) => c.type === 'atypical') || [];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col min-h-full">
       <Header title="Magazyn AKROBUD">
         <div className="flex gap-2">
           <Link href="/magazyn/akrobud/remanent">
@@ -94,7 +89,7 @@ export default function MagazynAkrobudPageContent() {
         />
       </div>
 
-      <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
+      <div className="flex flex-1 flex-col md:flex-row">
         {/* Sidebar z kolorami */}
         <div className="w-full md:w-64 border-r border-b md:border-b-0 bg-white overflow-y-auto max-h-48 md:max-h-full">
           <div className="p-4">
@@ -157,7 +152,7 @@ export default function MagazynAkrobudPageContent() {
         </div>
 
         {/* Główna zawartość */}
-        <div className="flex-1 overflow-auto p-4 md:p-6">
+        <div className="flex-1 p-4 md:p-6">
           {selectedColor && (
             <>
               <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6 flex-wrap">

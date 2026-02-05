@@ -111,7 +111,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
       }
       const hasProfileWhere = Object.keys(profileWhere).length > 0;
 
-      // 7 równoczesnych zapytań do bazy
+      // 8 równoczesnych zapytań do bazy
       const [
         sidebarColors,
         allProfiles,
@@ -120,6 +120,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         rwRequirements,
         demandRequirements,
         privateColors,
+        palletConfigs,
       ] = await Promise.all([
         // 1. Kolory do sidebara
         prisma.color.findMany({
@@ -148,33 +149,47 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
           },
         }),
 
-        // 4. Pozycje zamówień Schuco (dostawy + zamówione)
+        // 4. Pozycje zamówień Schuco (dostawy + zamówione) + numer zamówienia + jednostka + status
         prisma.schucoOrderItem.findMany({
+          where: {
+            schucoDelivery: {
+              shippingStatus: { not: 'Zlecenie anulowane' },
+              archivedAt: null,
+            },
+          },
           select: {
             articleNumber: true, shippedQty: true, orderedQty: true, createdAt: true,
+            unit: true,
+            schucoDelivery: { select: { orderNumber: true, shippingStatus: true } },
           },
         }),
 
-        // 5. RW - OrderRequirement ze zleceń ukończonych
+        // 5. RW - OrderRequirement ze zleceń ukończonych + numer zlecenia
         prisma.orderRequirement.findMany({
           where: { order: { status: 'completed' } },
           select: {
             profileId: true, colorId: true, privateColorId: true, beamsCount: true,
-            order: { select: { completedAt: true, updatedAt: true } },
+            order: { select: { orderNumber: true, completedAt: true, updatedAt: true } },
           },
         }),
 
-        // 6. Zapotrzebowanie - OrderRequirement z aktywnych zleceń (BEZ filtra daty)
+        // 6. Zapotrzebowanie - OrderRequirement z aktywnych zleceń (BEZ filtra daty) + numer zlecenia
         prisma.orderRequirement.findMany({
           where: { order: { status: { in: ['new', 'in_progress'] } } },
           select: {
             profileId: true, colorId: true, privateColorId: true, beamsCount: true,
+            order: { select: { orderNumber: true } },
           },
         }),
 
         // 7. Prywatne kolory (lookup)
         prisma.privateColor.findMany({
           select: { id: true, code: true, name: true },
+        }),
+
+        // 8. Przeliczniki palet na bele (profileId -> beamsPerPallet)
+        prisma.profilePalletConfig.findMany({
+          select: { profileId: true, beamsPerPallet: true },
         }),
       ]);
 
@@ -188,6 +203,9 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
 
       const privateColorById = new Map(privateColors.map((pc) => [pc.id, pc]));
 
+      // Mapa przeliczników palet: profileId -> beamsPerPallet
+      const palletConfigMap = new Map(palletConfigs.map((pc) => [pc.profileId, pc.beamsPerPallet]));
+
       // Mapa daty remanentu: "profileId-colorId" -> Date
       const remanentDateMap = new Map<string, Date>();
       for (const ws of warehouseStocks) {
@@ -195,6 +213,11 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
       }
 
       // --- Typ wiersza agregacji ---
+      interface AggDetailItem {
+        label: string;   // np. numer zlecenia lub numer dostawy
+        beams: number;
+      }
+
       interface AggRow {
         profileId: number;
         colorId: number | null;
@@ -204,6 +227,13 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         rwBeams: number;
         orderedBeams: number;
         demandBeams: number;
+        // Nieprzeliczone palety (brak przelicznika w konfiguracji)
+        palletDeliveriesRaw: number;
+        palletOrderedRaw: number;
+        // Szczegóły do tooltipów
+        deliveriesDetails: AggDetailItem[];
+        rwDetails: AggDetailItem[];
+        demandDetails: AggDetailItem[];
       }
 
       // Mapa agregacji: klucz -> AggRow
@@ -222,6 +252,8 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
             profileId, colorId, privateColorId,
             initialStockBeams: 0, deliveriesBeams: 0, rwBeams: 0,
             orderedBeams: 0, demandBeams: 0,
+            palletDeliveriesRaw: 0, palletOrderedRaw: 0,
+            deliveriesDetails: [], rwDetails: [], demandDetails: [],
           };
           aggMap.set(key, row);
         }
@@ -260,10 +292,45 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         if (remanentDate && item.createdAt < remanentDate) continue;
 
         const row = getOrCreate(profile.id, color.id, null);
-        if (item.shippedQty > 0) {
-          row.deliveriesBeams += item.shippedQty;
+        const isPallet = item.unit?.toLowerCase().includes('palet') ?? false;
+        const beamsPerPallet = palletConfigMap.get(profile.id);
+        const isFullyDelivered = item.schucoDelivery?.shippingStatus === 'Całkowicie dostarczone';
+
+        // Dostawy - tylko pozycje ze statusem "Całkowicie dostarczone"
+        if (isFullyDelivered && item.shippedQty > 0) {
+          if (isPallet && beamsPerPallet) {
+            // Przelicz palety na bele
+            const beams = item.shippedQty * beamsPerPallet;
+            row.deliveriesBeams += beams;
+            row.deliveriesDetails.push({
+              label: `${item.schucoDelivery?.orderNumber ?? item.articleNumber} (${item.shippedQty} pal × ${beamsPerPallet})`,
+              beams,
+            });
+          } else if (isPallet && !beamsPerPallet) {
+            // Brak przelicznika - zachowaj jako surowe palety
+            row.palletDeliveriesRaw += item.shippedQty;
+            row.deliveriesDetails.push({
+              label: `${item.schucoDelivery?.orderNumber ?? item.articleNumber} (${item.shippedQty} pal - brak przelicznika)`,
+              beams: 0,
+            });
+          } else {
+            // Jednostka to sztuki/bele - bez przeliczania
+            row.deliveriesBeams += item.shippedQty;
+            row.deliveriesDetails.push({
+              label: item.schucoDelivery?.orderNumber ?? item.articleNumber,
+              beams: item.shippedQty,
+            });
+          }
         }
-        row.orderedBeams += item.orderedQty;
+
+        // Zamówione - wszystkie (anulowane już odfiltrowane w query)
+        if (isPallet && beamsPerPallet) {
+          row.orderedBeams += item.orderedQty * beamsPerPallet;
+        } else if (isPallet && !beamsPerPallet) {
+          row.palletOrderedRaw += item.orderedQty;
+        } else {
+          row.orderedBeams += item.orderedQty;
+        }
       }
 
       // --- 3. RW (ukończone zlecenia) ---
@@ -285,6 +352,10 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
 
         const row = getOrCreate(req.profileId, req.colorId, req.privateColorId);
         row.rwBeams += req.beamsCount;
+        row.rwDetails.push({
+          label: req.order.orderNumber,
+          beams: req.beamsCount,
+        });
       }
 
       // --- 4. Zapotrzebowanie (aktywne zlecenia, BEZ filtra daty) ---
@@ -297,6 +368,10 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
 
         const row = getOrCreate(req.profileId, req.colorId, req.privateColorId);
         row.demandBeams += req.beamsCount;
+        row.demandDetails.push({
+          label: req.order.orderNumber,
+          beams: req.beamsCount,
+        });
       }
 
       // --- Buduj odpowiedź: pogrupowane wg profilu ---
@@ -334,6 +409,27 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
               const color = row.colorId != null ? colorById.get(row.colorId) : null;
               const pc = row.privateColorId != null ? privateColorById.get(row.privateColorId) : null;
 
+              // Agreguj szczegóły dostaw wg numeru zamówienia (mogą być duplikaty)
+              const deliveriesAgg = new Map<string, number>();
+              for (const d of row.deliveriesDetails) {
+                deliveriesAgg.set(d.label, (deliveriesAgg.get(d.label) ?? 0) + d.beams);
+              }
+              const deliveriesDetails = Array.from(deliveriesAgg.entries()).map(([label, beams]) => ({ label, beams }));
+
+              // Agreguj szczegóły RW wg numeru zlecenia
+              const rwAgg = new Map<string, number>();
+              for (const d of row.rwDetails) {
+                rwAgg.set(d.label, (rwAgg.get(d.label) ?? 0) + d.beams);
+              }
+              const rwDetails = Array.from(rwAgg.entries()).map(([label, beams]) => ({ label, beams }));
+
+              // Agreguj szczegóły zapotrzebowania wg numeru zlecenia
+              const demandAgg = new Map<string, number>();
+              for (const d of row.demandDetails) {
+                demandAgg.set(d.label, (demandAgg.get(d.label) ?? 0) + d.beams);
+              }
+              const demandDetails = Array.from(demandAgg.entries()).map(([label, beams]) => ({ label, beams }));
+
               return {
                 colorId: row.colorId,
                 color: color ? { id: color.id, code: color.code, name: color.name, hexColor: color.hexColor } : null,
@@ -341,11 +437,17 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
                 privateColorName: pc?.name ?? null,
                 initialStockBeams: row.initialStockBeams,
                 deliveriesBeams: row.deliveriesBeams,
+                deliveriesDetails,
                 rwBeams: row.rwBeams,
+                rwDetails,
                 currentStockBeams,
                 orderedBeams: row.orderedBeams,
                 demandBeams: row.demandBeams,
+                demandDetails,
                 afterDemandBeams,
+                palletDeliveriesRaw: row.palletDeliveriesRaw,
+                palletOrderedRaw: row.palletOrderedRaw,
+                hasUnconvertedPallets: row.palletDeliveriesRaw > 0 || row.palletOrderedRaw > 0,
               };
             }),
           };
@@ -366,6 +468,14 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // Oblicz datę ostatniego remanentu (najstarsza updatedAt z warehouseStocks)
+      let oldestRemanentDate: Date | null = null;
+      for (const ws of warehouseStocks) {
+        if (!oldestRemanentDate || ws.updatedAt < oldestRemanentDate) {
+          oldestRemanentDate = ws.updatedAt;
+        }
+      }
+
       return reply.send({
         profiles: profilesWithStock,
         colors: sidebarColors,
@@ -374,6 +484,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
           totalProfiles,
           totalPositions,
         },
+        remanentDate: oldestRemanentDate?.toISOString() ?? null,
       });
     }
   );

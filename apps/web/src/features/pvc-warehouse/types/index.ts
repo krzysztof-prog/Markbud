@@ -18,6 +18,11 @@ export interface ProfileSystems {
   isFocusing: boolean;
 }
 
+export interface StockDetailItem {
+  label: string;
+  beams: number;
+}
+
 export interface PvcStock {
   colorId: number | null;
   color: PvcColor | null;
@@ -25,11 +30,20 @@ export interface PvcStock {
   privateColorName: string | null;
   initialStockBeams: number;
   deliveriesBeams: number;
+  deliveriesDetails?: StockDetailItem[];
   rwBeams: number;
+  rwDetails?: StockDetailItem[];
   currentStockBeams: number;
   orderedBeams: number;
   demandBeams: number;
+  demandDetails?: StockDetailItem[];
   afterDemandBeams: number;
+  /** Nieprzeliczone palety w dostawach (brak konfiguracji przelicznika) */
+  palletDeliveriesRaw?: number;
+  /** Nieprzeliczone palety w zamówieniach (brak konfiguracji przelicznika) */
+  palletOrderedRaw?: number;
+  /** Flaga: czy istnieją nieprzeliczone palety */
+  hasUnconvertedPallets?: boolean;
 }
 
 export interface PvcProfileWithStock {
@@ -49,6 +63,7 @@ export interface PvcWarehouseResponse {
     totalProfiles: number;
     totalPositions: number;
   };
+  remanentDate: string | null;
 }
 
 export interface DemandOrder {
