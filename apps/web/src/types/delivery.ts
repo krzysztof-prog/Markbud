@@ -42,6 +42,9 @@ export interface Delivery {
   labelChecks?: Array<{
     id: number;
     status: string;
+    okCount: number;
+    mismatchCount: number;
+    errorCount: number;
     results: Array<{
       orderId: number;
       status: string;

@@ -69,6 +69,10 @@ interface OrderTableRowProps {
   // Manual status callback
   onManualStatusChange?: (orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => void;
 
+  // Zmiana autora zlecenia
+  onAuthorChange?: (orderId: number, userId: number | null) => void;
+  users?: Array<{ id: number; name: string }>;
+
   // Delete order (tylko dla admin/kierownik)
   canDeleteOrders?: boolean;
   onDeleteOrder?: (orderId: number, orderNumber: string) => void;
@@ -85,8 +89,6 @@ const getCellValue = (order: ExtendedOrder, columnId: ColumnId): string => {
   switch (columnId) {
     case 'system':
       return order.system || '';
-    case 'documentAuthor':
-      return order.documentAuthor || '';
     case 'productionDate':
       return order.productionDate ? formatDate(order.productionDate) : '';
     default:
@@ -114,6 +116,8 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
   onGlassDiscrepancyClick,
   onGlassDeliveryDateSet,
   onManualStatusChange,
+  onAuthorChange,
+  users,
   canDeleteOrders,
   onDeleteOrder,
 }) => {
@@ -809,6 +813,53 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
             </td>
           );
 
+        case 'documentAuthor':
+          return (
+            <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
+              {onAuthorChange && users ? (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      className="text-left text-muted-foreground hover:text-foreground hover:underline cursor-pointer whitespace-nowrap"
+                      title="Kliknij aby zmienić autora"
+                    >
+                      {order.documentAuthor || '-'}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-48 p-1" align="start">
+                    <div className="max-h-60 overflow-y-auto">
+                      {users.map((user) => (
+                        <button
+                          key={user.id}
+                          className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-slate-100 flex items-center gap-2 ${
+                            order.documentAuthorUserId === user.id ? 'bg-slate-100 font-medium' : ''
+                          }`}
+                          onClick={() => onAuthorChange(order.id, user.id)}
+                        >
+                          {order.documentAuthorUserId === user.id && <Check className="h-3 w-3" />}
+                          <span>{user.name}</span>
+                        </button>
+                      ))}
+                      {order.documentAuthorUserId && (
+                        <>
+                          <div className="border-t my-1" />
+                          <button
+                            className="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-red-50 text-red-600"
+                            onClick={() => onAuthorChange(order.id, null)}
+                          >
+                            Usuń autora
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              ) : (
+                <span className="text-muted-foreground">{order.documentAuthor || '-'}</span>
+              )}
+            </td>
+          );
+
         default:
           return (
             <td key={column.id} className={`px-4 py-3 text-muted-foreground ${alignClass}`}>
@@ -817,7 +868,7 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           );
       }
     },
-    [order, isEditing, editingCell, editValue, setEditValue, startEdit, cancelEdit, saveEdit, eurRate, onOrderClick, onSchucoStatusClick, onGlassDiscrepancyClick, onGlassDeliveryDateSet, onManualStatusChange]
+    [order, isEditing, editingCell, editValue, setEditValue, startEdit, cancelEdit, saveEdit, eurRate, onOrderClick, onSchucoStatusClick, onGlassDiscrepancyClick, onGlassDeliveryDateSet, onManualStatusChange, onAuthorChange, users]
   );
 
   // Wyróżnienie wiersza w zależności od statusu

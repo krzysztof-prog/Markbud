@@ -46,6 +46,10 @@ interface OrdersTableProps {
   // Manual status callback
   onManualStatusChange?: (orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => void;
 
+  // Zmiana autora zlecenia
+  onAuthorChange?: (orderId: number, userId: number | null) => void;
+  users?: Array<{ id: number; name: string }>;
+
   // Delete order (tylko dla admin/kierownik)
   canDeleteOrders?: boolean;
   onDeleteOrder?: (orderId: number, orderNumber: string) => void;
@@ -87,6 +91,8 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   onGlassDiscrepancyClick,
   onGlassDeliveryDateSet,
   onManualStatusChange,
+  onAuthorChange,
+  users,
   canDeleteOrders,
   onDeleteOrder,
   getGroupLabel,
@@ -261,6 +267,8 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                     onGlassDiscrepancyClick={onGlassDiscrepancyClick}
                     onGlassDeliveryDateSet={onGlassDeliveryDateSet}
                     onManualStatusChange={onManualStatusChange}
+                    onAuthorChange={onAuthorChange}
+                    users={users}
                     canDeleteOrders={canDeleteOrders}
                     onDeleteOrder={onDeleteOrder}
                   />

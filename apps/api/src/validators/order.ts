@@ -47,6 +47,7 @@ export const patchOrderSchema = z.object({
   deadline: z.string().nullable().optional(),
   status: z.string().nullable().optional(),
   glassDeliveryDate: z.string().nullable().optional(),
+  documentAuthorUserId: z.number().int().positive().nullable().optional(),
 });
 
 // Manual status schema - do ręcznego ustawiania statusu zlecenia przez użytkownika

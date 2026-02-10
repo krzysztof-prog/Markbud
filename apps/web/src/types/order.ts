@@ -51,6 +51,8 @@ export interface Order {
   archivedAt?: Timestamp;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
+  documentAuthor?: string | null;
+  documentAuthorUserId?: number | null;
   // Ręczny status zlecenia: 'do_not_cut' (NIE CIĄĆ), 'cancelled' (Anulowane), 'on_hold' (Wstrzymane)
   manualStatus?: 'do_not_cut' | 'cancelled' | 'on_hold' | null;
   manualStatusSetAt?: Timestamp;

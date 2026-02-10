@@ -9,6 +9,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Header } from '@/components/layout/header';
 import { ordersApi, settingsApi } from '@/lib/api';
+import { usersApi } from '@/lib/api/users';
 import { useToast } from '@/components/ui/use-toast';
 import { getTodayWarsaw } from '@/lib/date-utils';
 import { useRoleCheck } from '@/features/auth/hooks/useRoleCheck';
@@ -92,6 +93,18 @@ export default function ZestawienieZlecenPage() {
     queryKey: ['settings'],
     queryFn: settingsApi.getAll,
   });
+
+  // Lista użytkowników systemu (do dropdown zmiany autora)
+  const { data: usersData } = useQuery({
+    queryKey: ['users'],
+    queryFn: usersApi.getAll,
+  });
+  const users = useMemo(() =>
+    (usersData || [])
+      .filter((u) => u.isActive)
+      .map((u) => ({ id: u.id, name: u.name })),
+    [usersData]
+  );
 
   const isLoading = isLoadingActive || isLoadingArchived;
   const eurRate = parseFloat(settings?.eurToPlnRate || '4.35');
@@ -324,6 +337,59 @@ export default function ZestawienieZlecenPage() {
     },
   });
 
+  // Mutacja do zmiany autora zlecenia
+  const authorChangeMutation = useMutation({
+    mutationFn: ({ orderId, userId }: { orderId: number; userId: number | null }) =>
+      ordersApi.patch(orderId, { documentAuthorUserId: userId }),
+    onMutate: async ({ orderId, userId }) => {
+      await queryClient.cancelQueries({ queryKey: ['orders'] });
+
+      const previousActive = queryClient.getQueryData(['orders', 'all-active']);
+      const previousArchived = queryClient.getQueryData(['orders', 'all-archived']);
+
+      const newAuthorName = userId ? users.find((u) => u.id === userId)?.name || null : null;
+
+      const updateOrders = (oldData: unknown) => {
+        if (!oldData || typeof oldData !== 'object' || !('data' in oldData)) return oldData;
+        const typedData = oldData as { data: ExtendedOrder[] };
+        return {
+          ...typedData,
+          data: typedData.data.map((order: ExtendedOrder) =>
+            order.id === orderId ? { ...order, documentAuthor: newAuthorName, documentAuthorUserId: userId } : order
+          ),
+        };
+      };
+
+      queryClient.setQueryData(['orders', 'all-active'], updateOrders);
+      queryClient.setQueryData(['orders', 'all-archived'], updateOrders);
+
+      return { previousActive, previousArchived };
+    },
+    onSuccess: (_data, variables) => {
+      const userName = variables.userId ? users.find((u) => u.id === variables.userId)?.name : null;
+      toast({
+        title: 'Autor zmieniony',
+        description: userName ? `Ustawiono autora: ${userName}` : 'Autor został usunięty',
+      });
+    },
+    onError: (error: Error, _variables, context) => {
+      if (context?.previousActive) {
+        queryClient.setQueryData(['orders', 'all-active'], context.previousActive);
+      }
+      if (context?.previousArchived) {
+        queryClient.setQueryData(['orders', 'all-archived'], context.previousArchived);
+      }
+      toast({
+        title: 'Błąd',
+        description: error.message || 'Nie udało się zmienić autora',
+        variant: 'destructive',
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+
   // ================================
   // Callbacks
   // ================================
@@ -347,6 +413,10 @@ export default function ZestawienieZlecenPage() {
   const handleManualStatusChange = useCallback((orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => {
     manualStatusMutation.mutate({ orderId, manualStatus });
   }, [manualStatusMutation]);
+
+  const handleAuthorChange = useCallback((orderId: number, userId: number | null) => {
+    authorChangeMutation.mutate({ orderId, userId });
+  }, [authorChangeMutation]);
 
   // Handler do usuwania zlecenia - otwiera confirmation dialog
   const handleDeleteOrder = useCallback((orderId: number, orderNumber: string) => {
@@ -447,6 +517,8 @@ export default function ZestawienieZlecenPage() {
             onGlassDiscrepancyClick={handleGlassDiscrepancyClick}
             onGlassDeliveryDateSet={handleGlassDeliveryDateSet}
             onManualStatusChange={handleManualStatusChange}
+            onAuthorChange={handleAuthorChange}
+            users={users}
             canDeleteOrders={canDeleteOrders}
             onDeleteOrder={handleDeleteOrder}
             getGroupLabel={getGroupLabel}
@@ -478,6 +550,8 @@ export default function ZestawienieZlecenPage() {
               onGlassDiscrepancyClick={handleGlassDiscrepancyClick}
               onGlassDeliveryDateSet={handleGlassDeliveryDateSet}
               onManualStatusChange={handleManualStatusChange}
+              onAuthorChange={handleAuthorChange}
+              users={users}
               canDeleteOrders={canDeleteOrders}
               onDeleteOrder={handleDeleteOrder}
               getGroupLabel={getGroupLabel}

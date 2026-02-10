@@ -57,6 +57,7 @@ export class OrderRepository {
           project: true,
           system: true,
           documentAuthor: true,
+          documentAuthorUserId: true,
           deadline: true,
           pvcDeliveryDate: true,
           glassDeliveryDate: true,

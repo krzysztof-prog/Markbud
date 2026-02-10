@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { OrderRow } from './OrderRow';
 import { DeliveryGroup } from './DeliveryGroup';
 import type {
@@ -89,6 +90,59 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
     return map;
   }, [items]);
 
+  // Oblicz ostrzeżenia dla zleceń (współczynnik poza zakresem, brak wartości/materiału)
+  const { flaggedOrders, warningsByOrderId } = useMemo(() => {
+    const flagged: Array<{ orderId: number; orderNumber: string; warnings: string[] }> = [];
+    const warnMap = new Map<number, string[]>();
+
+    for (const order of orders) {
+      const item = itemsByOrderId.get(order.id) || null;
+      const warnings: string[] = [];
+
+      // Sprawdź współczynnik
+      let coeffNum: number | null = null;
+      if (item) {
+        if (item.isAkrobud && item.valueEur && item.materialValue > 0) {
+          // Dla AKROBUD: wartość EUR / materiał EUR
+          coeffNum = item.valueEur / item.materialValue;
+        } else if (item.coefficient && item.coefficient !== '—') {
+          const parsed = parseFloat(item.coefficient);
+          if (!isNaN(parsed)) coeffNum = parsed;
+        }
+      }
+
+      if (coeffNum !== null) {
+        if (coeffNum < 1.4) {
+          warnings.push(`Wsp. ${coeffNum.toFixed(2)} < 1.4`);
+        } else if (coeffNum > 2) {
+          warnings.push(`Wsp. ${coeffNum.toFixed(2)} > 2.0`);
+        }
+      }
+
+      // Sprawdź brak wartości (PLN i EUR)
+      const effectiveValuePln = item?.overrideValuePln ?? order.valuePln;
+      const effectiveValueEur = item?.overrideValueEur ?? order.valueEur;
+      if ((!effectiveValuePln || effectiveValuePln === 0) && (!effectiveValueEur || effectiveValueEur === 0)) {
+        warnings.push('Brak wartości');
+      }
+
+      // Sprawdź brak materiału
+      if (!item?.materialValue || item.materialValue <= 0) {
+        warnings.push('Brak materiału');
+      }
+
+      if (warnings.length > 0) {
+        flagged.push({ orderId: order.id, orderNumber: order.orderNumber, warnings });
+        warnMap.set(order.id, warnings);
+      }
+    }
+
+    return { flaggedOrders: flagged, warningsByOrderId: warnMap };
+  }, [orders, itemsByOrderId]);
+
+  // Stan zwinięcia sekcji ostrzeżeń
+  const [warningsExpanded, setWarningsExpanded] = useState(true);
+
   // Toggle grupy dostaw
   const toggleDelivery = (deliveryId: number) => {
     setExpandedDeliveries((prev) => {
@@ -138,6 +192,41 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
           )}
         </div>
       </CardHeader>
+
+      {/* Sekcja ostrzeżeń - zlecenia do sprawdzenia */}
+      {flaggedOrders.length > 0 && (
+        <div className="mx-4 mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <button
+            onClick={() => setWarningsExpanded((prev) => !prev)}
+            className="flex items-center gap-2 w-full text-left"
+          >
+            <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+            <h4 className="font-semibold text-amber-800 text-sm flex-1">
+              Zlecenia do sprawdzenia ({flaggedOrders.length})
+            </h4>
+            {warningsExpanded ? (
+              <ChevronUp className="h-4 w-4 text-amber-600" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-amber-600" />
+            )}
+          </button>
+          {warningsExpanded && (
+            <div className="mt-2 max-h-[250px] overflow-y-auto">
+              <ul className="text-sm text-amber-700 space-y-0.5">
+                {flaggedOrders.map((f) => (
+                  <li key={f.orderId} className="flex items-start gap-1.5">
+                    <span className="text-amber-400 mt-0.5">&#x2022;</span>
+                    <span className="font-mono font-medium whitespace-nowrap">{f.orderNumber}</span>
+                    <span className="text-amber-400">—</span>
+                    <span>{f.warnings.join(', ')}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
       <CardContent className="p-0">
         <div className="overflow-x-auto">
           <Table>
@@ -187,6 +276,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                         isPending={isPending}
                         isEven={index % 2 === 0}
                         eurRate={eurRate}
+                        warnings={warningsByOrderId.get(order.id)}
                       />
                     ))}
                   </DeliveryGroup>
@@ -207,6 +297,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                   isPending={isPending}
                   isEven={index % 2 === 0}
                   eurRate={eurRate}
+                  warnings={warningsByOrderId.get(order.id)}
                 />
               ))}
 

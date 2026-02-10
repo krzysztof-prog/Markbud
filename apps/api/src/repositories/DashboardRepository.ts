@@ -189,7 +189,7 @@ export class DashboardRepository {
     // Filtruje tylko aktywne dostawy (bez soft-deleted)
     const weekStats = await this.prisma.$queryRaw<WeekStatRaw[]>`
       SELECT
-        DATE(datetime(d.delivery_date/1000, 'unixepoch')) as "deliveryDate",
+        DATE(datetime(d.delivery_date/1000, 'unixepoch', 'localtime')) as "deliveryDate",
         COUNT(DISTINCT d.id) as "deliveriesCount",
         COUNT(DISTINCT do.order_id) as "ordersCount",
         COALESCE(SUM(o.total_windows), 0) as "windowsCount",
@@ -201,7 +201,7 @@ export class DashboardRepository {
       WHERE d.delivery_date >= ${startDate}
         AND d.delivery_date < ${endDate}
         AND d.deleted_at IS NULL
-      GROUP BY DATE(datetime(d.delivery_date/1000, 'unixepoch'))
+      GROUP BY DATE(datetime(d.delivery_date/1000, 'unixepoch', 'localtime'))
       ORDER BY d.delivery_date ASC
     `;
 

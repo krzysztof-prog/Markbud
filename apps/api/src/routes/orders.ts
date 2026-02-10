@@ -147,6 +147,7 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
       valueEur?: string | null;
       deadline?: string | null;
       status?: string | null;
+      documentAuthorUserId?: number | null;
     };
   }>('/:id', {
     preHandler: verifyAuth,
