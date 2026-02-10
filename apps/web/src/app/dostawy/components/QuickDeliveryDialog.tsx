@@ -110,8 +110,9 @@ export function QuickDeliveryDialog({ open, onOpenChange }: QuickDeliveryDialogP
         `Dostawa ${result.delivery.deliveryNumber || result.delivery.id} utworzona. ${messages.join(', ')}.`
       );
 
-      // Odśwież dane
+      // Odśwież dane w obu widokach (kalendarz + lista)
       queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
       onOpenChange(false);
     },
     onError: (error: Error) => {
@@ -294,7 +295,16 @@ lub
                         <tbody>
                           {validationResult.found.map((order) => (
                             <tr key={order.orderId}>
-                              <td className="py-1 font-mono">{order.orderNumber}</td>
+                              <td className="py-1 font-mono">
+                                {order.matchedFrom ? (
+                                  <span title={`Wpisano: ${order.matchedFrom}`}>
+                                    <span className="text-muted-foreground line-through mr-1">{order.matchedFrom}</span>
+                                    <span className="text-green-600">{order.orderNumber}</span>
+                                  </span>
+                                ) : (
+                                  order.orderNumber
+                                )}
+                              </td>
                               <td className="py-1">{order.orderInfo?.client || '-'}</td>
                               <td className="py-1">{order.orderInfo?.totalWindows ?? '-'}</td>
                             </tr>
@@ -333,7 +343,16 @@ lub
                             htmlFor={`reassign-${order.orderId}`}
                             className="flex-1 cursor-pointer"
                           >
-                            <span className="font-mono font-medium">{order.orderNumber}</span>
+                            <span className="font-mono font-medium">
+                              {order.matchedFrom ? (
+                                <>
+                                  <span className="text-muted-foreground line-through mr-1">{order.matchedFrom}</span>
+                                  <span>{order.orderNumber}</span>
+                                </>
+                              ) : (
+                                order.orderNumber
+                              )}
+                            </span>
                             <span className="text-muted-foreground ml-2">
                               obecnie w: {order.currentDelivery?.deliveryNumber || 'brak numeru'}
                             </span>

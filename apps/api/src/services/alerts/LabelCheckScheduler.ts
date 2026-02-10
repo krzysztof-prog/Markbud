@@ -1,7 +1,8 @@
 /**
  * LabelCheckScheduler - Automatyczne sprawdzanie etykiet
  *
- * Codziennie o 7:00 sprawdza etykiety dla dostaw na najbliższe 14 dni.
+ * Codziennie o 7:00 sprawdza etykiety dla dostaw.
+ * Zakres: od najbliższej niezrealizowanej dostawy + 21 dni do przodu.
  * Dla każdej dostawy która jeszcze nie ma sprawdzenia etykiet
  * (lub ma sprawdzenie starsze niż 24h), uruchamia LabelCheckService.
  *
@@ -23,8 +24,8 @@ const SCHEDULER_CONFIG = {
   cronExpression: '0 7 * * *',
   // Strefa czasowa
   timezone: 'Europe/Warsaw',
-  // Ile dni do przodu sprawdzać
-  daysAhead: 14,
+  // Ile dni do przodu sprawdzać (od najbliższej niezrealizowanej dostawy)
+  daysAhead: 21,
   // Ile godzin od ostatniego sprawdzenia żeby pominąć (24h)
   skipIfCheckedWithinHours: 24,
 };
@@ -72,7 +73,7 @@ class LabelCheckSchedulerClass {
   }
 
   /**
-   * Sprawdza etykiety dla dostaw na najbliższe 14 dni
+   * Sprawdza etykiety dla dostaw - od najbliższej niezrealizowanej + 21 dni
    */
   async checkUpcomingDeliveries(): Promise<void> {
     if (this.isRunning) {
@@ -84,27 +85,52 @@ class LabelCheckSchedulerClass {
     const startTime = Date.now();
 
     try {
-      // Oblicz zakres dat: od dziś do +14 dni
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Znajdź najbliższą dostawę która NIE jest completed (zrealizowana)
+      const nearestUncompletedDelivery = await prisma.delivery.findFirst({
+        where: {
+          status: {
+            not: 'completed',
+          },
+          deletedAt: null,
+          deliveryOrders: {
+            some: {},
+          },
+        },
+        orderBy: {
+          deliveryDate: 'asc',
+        },
+        select: {
+          deliveryDate: true,
+        },
+      });
 
-      const endDate = new Date(today);
+      // Jeśli nie ma żadnej niezrealizowanej dostawy, kończymy
+      if (!nearestUncompletedDelivery) {
+        logger.info('[LabelCheckScheduler] No uncompleted deliveries found, skipping');
+        return;
+      }
+
+      // Zakres: od daty najbliższej niezrealizowanej dostawy + 21 dni
+      const startDate = new Date(nearestUncompletedDelivery.deliveryDate);
+      startDate.setHours(0, 0, 0, 0);
+
+      const endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + SCHEDULER_CONFIG.daysAhead);
       endDate.setHours(23, 59, 59, 999);
 
       logger.info(
-        `[LabelCheckScheduler] Checking deliveries from ${formatDateWarsaw(today)} to ${formatDateWarsaw(endDate)}`
+        `[LabelCheckScheduler] Checking deliveries from ${formatDateWarsaw(startDate)} to ${formatDateWarsaw(endDate)}`
       );
 
-      // Pobierz dostawy w zakresie dat (nie wysłane, nie usunięte, mają zlecenia)
+      // Pobierz dostawy w zakresie dat (nie zrealizowane, nie usunięte, mają zlecenia)
       const deliveries = await prisma.delivery.findMany({
         where: {
           deliveryDate: {
-            gte: today,
+            gte: startDate,
             lte: endDate,
           },
           status: {
-            not: 'shipped',
+            not: 'completed',
           },
           deletedAt: null,
           // Tylko dostawy które mają przypisane zlecenia
@@ -128,7 +154,7 @@ class LabelCheckSchedulerClass {
       });
 
       logger.info(
-        `[LabelCheckScheduler] Found ${deliveries.length} deliveries with orders in the next ${SCHEDULER_CONFIG.daysAhead} days`
+        `[LabelCheckScheduler] Found ${deliveries.length} uncompleted deliveries with orders in range`
       );
 
       // Oblicz próg czasowy dla pominięcia (ostatnie sprawdzenie < 24h temu)

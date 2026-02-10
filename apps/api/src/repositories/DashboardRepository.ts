@@ -178,23 +178,26 @@ export class DashboardRepository {
 
   /**
    * Get weekly statistics using optimized raw SQL query
-   * Groups deliveries, orders, and windows by delivery date
+   * Groups deliveries, orders, and windows/sashes/glasses by delivery date
    *
    * @param startDate - Start of date range
    * @param endDate - End of date range
    */
   async getWeeklyStats(startDate: Date, endDate: Date): Promise<WeekStatRaw[]> {
     // Note: delivery_date is stored as INTEGER (unix timestamp in milliseconds)
+    // Pobiera totalWindows, totalSashes, totalGlasses bezpośrednio z orders
     // Filtruje tylko aktywne dostawy (bez soft-deleted)
     const weekStats = await this.prisma.$queryRaw<WeekStatRaw[]>`
       SELECT
         DATE(datetime(d.delivery_date/1000, 'unixepoch')) as "deliveryDate",
         COUNT(DISTINCT d.id) as "deliveriesCount",
         COUNT(DISTINCT do.order_id) as "ordersCount",
-        COALESCE(SUM(ow.quantity), 0) as "windowsCount"
+        COALESCE(SUM(o.total_windows), 0) as "windowsCount",
+        COALESCE(SUM(o.total_sashes), 0) as "sashesCount",
+        COALESCE(SUM(o.total_glasses), 0) as "glassesCount"
       FROM deliveries d
       LEFT JOIN delivery_orders do ON do.delivery_id = d.id
-      LEFT JOIN order_windows ow ON ow.order_id = do.order_id
+      LEFT JOIN orders o ON o.id = do.order_id
       WHERE d.delivery_date >= ${startDate}
         AND d.delivery_date < ${endDate}
         AND d.deleted_at IS NULL

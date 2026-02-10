@@ -153,7 +153,8 @@ export class OrderHandler {
       validated.orderIds,
       validated.status,
       validated.productionDate,
-      validated.skipWarehouseValidation
+      validated.skipWarehouseValidation,
+      validated.deliveryIds
     );
     return reply.status(200).send(orders);
   }

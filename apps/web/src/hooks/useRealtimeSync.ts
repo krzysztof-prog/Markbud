@@ -101,20 +101,95 @@ export function useRealtimeSync({ enabled = true }: UseRealtimeSyncOptions = {})
       wsLogger.debug('Data change event:', event.type);
 
       // Mapowanie event types do React Query query keys
+      // UWAGA: Predicate dopasowuje queryKey[0], więc 'orders' invaliduje wszystkie ['orders', ...]
       const queryKeyMap: Record<string, string[]> = {
-        'delivery:created': ['deliveries-calendar-continuous', 'deliveries-calendar-batch'],
-        'delivery:updated': ['deliveries-calendar-continuous', 'deliveries-calendar-batch', 'deliveries'],
-        'delivery:deleted': ['deliveries-calendar-continuous', 'deliveries-calendar-batch', 'deliveries'],
-        'order:created': ['orders', 'deliveries-calendar-continuous', 'deliveries-calendar-batch'],
-        'order:updated': ['orders', 'deliveries-calendar-continuous', 'deliveries-calendar-batch'],
-        'order:deleted': ['orders', 'deliveries-calendar-continuous', 'deliveries-calendar-batch'],
-        'warehouse:stock_updated': ['warehouse', 'profile-requirements'],
-        'warehouse:stock_changed': ['warehouse', 'profile-requirements'],
-        'warehouse:rw_processed': ['warehouse', 'profile-requirements'],
-        'steel:stock_updated': ['steel-stock'],
-        'steel:rw_processed': ['steel-stock'],
-        'price:imported': ['pending-prices', 'orders'],
+        // Delivery events
+        'delivery:created': [
+          'deliveries-calendar-continuous',
+          'deliveries-calendar-batch',
+          'deliveries',
+          'deliveries-list',
+          'dashboard',
+          'dashboard-stats',
+        ],
+        'delivery:updated': [
+          'deliveries-calendar-continuous',
+          'deliveries-calendar-batch',
+          'deliveries',
+          'deliveries-list',
+          'dashboard',
+          'dashboard-stats',
+        ],
+        'delivery:deleted': [
+          'deliveries-calendar-continuous',
+          'deliveries-calendar-batch',
+          'deliveries',
+          'deliveries-list',
+          'dashboard',
+          'dashboard-stats',
+        ],
+        // Order events - invaliduje WSZYSTKIE widoki z zleceniami
+        'order:created': [
+          'orders',
+          'orders-list',
+          'orders-active',
+          'all-active-orders',
+          'deliveries-calendar-continuous',
+          'deliveries-calendar-batch',
+          'deliveries',
+          'deliveries-list',
+          'dashboard',
+          'dashboard-stats',
+          'production-reports',
+          'manager',
+        ],
+        'order:updated': [
+          'orders',
+          'orders-list',
+          'orders-active',
+          'all-active-orders',
+          'archived-orders',
+          'deliveries-calendar-continuous',
+          'deliveries-calendar-batch',
+          'deliveries',
+          'deliveries-list',
+          'dashboard',
+          'dashboard-stats',
+          'production-reports',
+          'manager',
+          'glass-orders',
+          'glass-deliveries',
+        ],
+        'order:deleted': [
+          'orders',
+          'orders-list',
+          'orders-active',
+          'all-active-orders',
+          'archived-orders',
+          'deliveries-calendar-continuous',
+          'deliveries-calendar-batch',
+          'deliveries',
+          'deliveries-list',
+          'dashboard',
+          'dashboard-stats',
+          'production-reports',
+          'manager',
+        ],
+        // Warehouse events
+        'warehouse:stock_updated': ['warehouse', 'warehouse-stock', 'profile-requirements', 'dashboard'],
+        'warehouse:stock_changed': ['warehouse', 'warehouse-stock', 'profile-requirements', 'dashboard'],
+        'warehouse:rw_processed': ['warehouse', 'warehouse-stock', 'profile-requirements', 'okuc-rw'],
+        // Steel events
+        'steel:stock_updated': ['steel-stock', 'warehouse'],
+        'steel:rw_processed': ['steel-stock', 'warehouse'],
+        // Price events
+        'price:imported': ['pending-prices', 'orders', 'orders-list', 'production-reports', 'dashboard'],
         'price:pending': ['pending-prices'],
+        // Glass events
+        'glass:order_created': ['glass-orders', 'orders', 'dashboard'],
+        'glass:order_updated': ['glass-orders', 'orders', 'dashboard'],
+        'glass:delivery_created': ['glass-deliveries', 'glass-orders', 'orders', 'dashboard'],
+        'glass:delivery_updated': ['glass-deliveries', 'glass-orders', 'orders', 'dashboard'],
         // Schuco events - obsługiwane przez custom event dispatch
         'schuco:fetch_started': [],
         'schuco:fetch_progress': [],
@@ -122,8 +197,17 @@ export function useRealtimeSync({ enabled = true }: UseRealtimeSyncOptions = {})
         'schuco:fetch_failed': ['schuco-status', 'schuco-logs'],
         // Gmail events
         'gmail:fetch_started': ['gmail-status', 'gmail-logs'],
-        'gmail:fetch_completed': ['gmail-status', 'gmail-logs'],
+        'gmail:fetch_completed': ['gmail-status', 'gmail-logs', 'logistics-mail'],
         'gmail:fetch_failed': ['gmail-status', 'gmail-logs'],
+        // Archive events
+        'order:archived': ['orders', 'archived-orders', 'dashboard'],
+        'order:unarchived': ['orders', 'archived-orders', 'dashboard'],
+        // Settings events
+        'settings:updated': ['settings', 'colors'],
+        // OKUC order events - zamówienia okuć do dostawców
+        'okuc:order_created': ['okuc-orders', 'okuc-stock'],
+        'okuc:order_updated': ['okuc-orders', 'okuc-stock'],
+        'okuc:order_deleted': ['okuc-orders', 'okuc-stock'],
       };
 
       // Emituj custom event dla Schuco progress (używane przez useSchucoRealtimeProgress)

@@ -102,6 +102,26 @@ export class ImportRepository {
     });
   }
 
+  /**
+   * Szuka zlecenia po numerze z fallbackiem na prefix match
+   * Np. "53614" znajdzie "53614-a" gdy dokładny match nie istnieje
+   */
+  async findOrderByNumberWithPrefix(orderNumber: string) {
+    // Najpierw dokładny match
+    const exact = await this.prisma.order.findUnique({
+      where: { orderNumber },
+    });
+    if (exact) return exact;
+
+    // Fallback: prefix match (np. 53614 -> 53614-a)
+    return this.prisma.order.findFirst({
+      where: {
+        orderNumber: { startsWith: orderNumber },
+      },
+      orderBy: { orderNumber: 'asc' },
+    });
+  }
+
   async findOrderById(orderId: number) {
     return this.prisma.order.findUnique({
       where: { id: orderId },

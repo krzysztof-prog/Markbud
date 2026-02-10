@@ -25,6 +25,7 @@ import {
   normalizeDateWarsaw,
   isSameDayWarsaw,
 } from '../../utils/date-helpers.js';
+import { emitOrderUpdated } from '../event-emitter.js';
 
 // Typy dla wyniku parsowania z dodatkowym kontekstem
 export interface ParseResultItem extends ParsedItem {
@@ -179,15 +180,43 @@ class LogisticsMailService {
     );
 
     // 3. Znajdź odpowiadające Orders w bazie (szukamy po polu `project`)
+    // UWAGA: Pole project może zawierać wiele projektów, np. "D6015, D6286, D6387"
     const orders = await logisticsRepository.findOrdersByProjectNumbers(allProjectNumbers);
-    // Mapujemy po polu project (np. "D3995"), nie orderNumber (np. "53642")
-    const orderMap = new Map(orders.map((o) => [o.project?.toUpperCase() ?? '', o]));
 
     // 4. Wzbogać wynik o matchowane Orders i statusy
+    // Funkcja pomocnicza - szuka zlecenia które ZAWIERA dany numer projektu
+    const findMatchingOrder = (projectNumber: string) => {
+      const upperProject = projectNumber.toUpperCase();
+      return orders.find((o) => {
+        if (!o.project) return false;
+        // Sprawdź czy projekt jest częścią pola project (może być wiele projektów oddzielonych przecinkami)
+        const projectUpper = o.project.toUpperCase();
+        // Dopasowanie: dokładne słowo lub część listy oddzielonej przecinkami
+        return (
+          projectUpper === upperProject ||
+          projectUpper.includes(upperProject + ',') ||
+          projectUpper.includes(', ' + upperProject) ||
+          projectUpper.includes(',' + upperProject) ||
+          projectUpper.endsWith(', ' + upperProject) ||
+          projectUpper.endsWith(',' + upperProject)
+        );
+      });
+    };
+
     const enrichedDeliveries: ParseResultDelivery[] = parsed.deliveries.map((delivery) => {
       const enrichedItems: ParseResultItem[] = delivery.items.map((item) => {
-        const matchedOrder = orderMap.get(item.projectNumber.toUpperCase());
+        const matchedOrder = findMatchingOrder(item.projectNumber);
         const itemStatus = calculateItemStatus(item.flags);
+
+        // Parsuj listę projektów ze zlecenia (mogą być oddzielone przecinkami)
+        const orderProjects = matchedOrder?.project
+          ? matchedOrder.project.split(/,\s*/).map((p) => p.trim().toUpperCase())
+          : [];
+        const hasMultipleProjects = orderProjects.length > 1;
+        // Filtruj tylko te projekty które NIE są na aktualnej liście mailowej
+        const otherProjects = hasMultipleProjects
+          ? orderProjects.filter((p) => p !== item.projectNumber.toUpperCase())
+          : [];
 
         return {
           ...item,
@@ -200,6 +229,9 @@ class LogisticsMailService {
                 project: matchedOrder.project,
                 status: matchedOrder.status,
                 deliveryDate: matchedOrder.deliveryDate,
+                // Dodatkowe info o wielu projektach w jednym zleceniu
+                hasMultipleProjects,
+                otherProjects, // Lista innych projektów w tym zleceniu
               }
             : undefined,
           orderNotFound: !matchedOrder,
@@ -1021,6 +1053,9 @@ class LogisticsMailService {
       data: { deliveryDate },
     });
 
+    // Emit realtime update
+    emitOrderUpdated({ id: orderId });
+
     // 6. Dodaj zlecenie do dostawy (jeśli jeszcze nie jest przypisane)
     const existingAssignment = await prisma.deliveryOrder.findFirst({
       where: {
@@ -1187,6 +1222,9 @@ class LogisticsMailService {
       where: { id: orderId },
       data: { deliveryDate: null },
     });
+
+    // Emit realtime update
+    emitOrderUpdated({ id: orderId });
 
     // 3. Usuń z DeliveryOrder (jeśli jest przypisane)
     await prisma.deliveryOrder.deleteMany({

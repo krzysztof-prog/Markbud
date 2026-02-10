@@ -51,6 +51,7 @@ interface Color {
   name: string;
   type: string;
   hexColor?: string | null;
+  isAkrobud?: boolean;
 }
 
 interface Profile {
@@ -449,6 +450,7 @@ export default function UstawieniaPage() {
       name: formData.name,
       type: (data.type as 'typical' | 'atypical') || 'typical',
       hexColor: formData.hexColor || undefined,
+      isAkrobud: data.isAkrobud ?? false,
     };
 
     if (colorDialog.mode === 'add') {

@@ -124,6 +124,7 @@ export function useDeliveryActions({
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
       showSuccessToast('Dostawa utworzona', 'Pomyslnie utworzono nowa dostawe');
       onDeliveryCreated?.();
     },
@@ -137,6 +138,7 @@ export function useDeliveryActions({
 
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
     },
   });
 
@@ -146,6 +148,7 @@ export function useDeliveryActions({
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
       showSuccessToast('Dostawa usunieta', 'Pomyslnie usunieto dostawe');
       onDeliveryDeleted?.();
     },
@@ -194,6 +197,7 @@ export function useDeliveryActions({
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
       showSuccessToast('Zlecenie dodane', 'Zlecenie zostalo dodane do dostawy');
     },
 
@@ -206,6 +210,7 @@ export function useDeliveryActions({
 
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
     },
   });
 
@@ -216,6 +221,7 @@ export function useDeliveryActions({
 
     onSuccess: async (_result, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
       updateSelectedDeliveryFromCache(variables.deliveryId);
       showSuccessToast('Zlecenie usuniete', 'Zlecenie zostalo usuniete z dostawy');
     },
@@ -277,6 +283,7 @@ export function useDeliveryActions({
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
       showSuccessToast('Zlecenie przeniesione', 'Zlecenie zostalo przeniesione miedzy dostawami');
     },
 
@@ -289,6 +296,7 @@ export function useDeliveryActions({
 
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
     },
   });
 
@@ -303,6 +311,7 @@ export function useDeliveryActions({
 
     onSuccess: async (_result, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
       updateSelectedDeliveryFromCache(variables.deliveryId);
       showSuccessToast('Artykul dodany', 'Pomyslnie dodano artykul do dostawy');
     },
@@ -319,6 +328,7 @@ export function useDeliveryActions({
 
     onSuccess: async (_result, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
       updateSelectedDeliveryFromCache(variables.deliveryId);
       showSuccessToast('Artykul usuniety', 'Pomyslnie usunieto artykul z dostawy');
     },
@@ -335,6 +345,7 @@ export function useDeliveryActions({
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
       showSuccessToast('Zlecenia zakonczone', 'Pomyslnie oznaczono zlecenia jako wyprodukowane');
       onOrdersCompleted?.();
     },
@@ -351,6 +362,7 @@ export function useDeliveryActions({
 
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['deliveries-calendar-batch'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
       showSuccessToast(
         variables.isWorking ? 'Dzien roboczy' : 'Dzien wolny',
         `Oznaczono jako ${variables.isWorking ? 'dzien roboczy' : 'dzien wolny'}`

@@ -12,6 +12,9 @@ import type {
   UserDelivery,
   UserGlassOrder,
   DaySummary,
+  AlertsResponse,
+  OrderWithoutPrice,
+  DeliveryWithLabelIssues,
 } from '../types';
 
 // Query keys
@@ -25,6 +28,9 @@ export const mojaPracaKeys = {
   deliveries: (date: string) => [...mojaPracaKeys.all, 'deliveries', date] as const,
   glassOrders: (date: string) => [...mojaPracaKeys.all, 'glass-orders', date] as const,
   summary: (date: string) => [...mojaPracaKeys.all, 'summary', date] as const,
+  alerts: () => [...mojaPracaKeys.all, 'alerts'] as const,
+  ordersWithoutPrice: () => [...mojaPracaKeys.alerts(), 'orders-without-price'] as const,
+  labelIssues: () => [...mojaPracaKeys.alerts(), 'label-issues'] as const,
 };
 
 // API functions
@@ -76,6 +82,19 @@ const mojaPracaApi = {
   // Podsumowanie dnia
   getSummary: async (date: string): Promise<DaySummary> => {
     return fetchApi<DaySummary>(`/api/moja-praca/summary?date=${date}`);
+  },
+
+  // Alerty
+  getAlerts: async (): Promise<AlertsResponse> => {
+    return fetchApi<AlertsResponse>('/api/moja-praca/alerts');
+  },
+
+  getOrdersWithoutPrice: async (): Promise<OrderWithoutPrice[]> => {
+    return fetchApi<OrderWithoutPrice[]>('/api/moja-praca/alerts/orders-without-price');
+  },
+
+  getLabelIssues: async (): Promise<DeliveryWithLabelIssues[]> => {
+    return fetchApi<DeliveryWithLabelIssues[]>('/api/moja-praca/alerts/label-issues');
   },
 };
 
@@ -168,5 +187,34 @@ export function useDaySummary(date: string) {
     queryKey: mojaPracaKeys.summary(date),
     queryFn: () => mojaPracaApi.getSummary(date),
     enabled: !!date,
+  });
+}
+
+// ============================================
+// Alerty
+// ============================================
+
+// Pobierz wszystkie alerty (zlecenia bez cen + problemy z etykietami)
+export function useAlerts() {
+  return useQuery({
+    queryKey: mojaPracaKeys.alerts(),
+    queryFn: mojaPracaApi.getAlerts,
+    refetchInterval: 60000, // Odśwież co minutę
+  });
+}
+
+// Pobierz zlecenia Akrobud bez cen
+export function useOrdersWithoutPrice() {
+  return useQuery({
+    queryKey: mojaPracaKeys.ordersWithoutPrice(),
+    queryFn: mojaPracaApi.getOrdersWithoutPrice,
+  });
+}
+
+// Pobierz dostawy z problemami etykiet
+export function useLabelIssues() {
+  return useQuery({
+    queryKey: mojaPracaKeys.labelIssues(),
+    queryFn: mojaPracaApi.getLabelIssues,
   });
 }

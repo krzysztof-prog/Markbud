@@ -48,8 +48,12 @@ export interface UpdateDocumentAuthorMappingData {
 
 // Kolory
 export const colorsApi = {
-  getAll: (type?: 'typical' | 'atypical') =>
-    fetchApi<Color[]>(`/api/colors${type ? `?type=${type}` : ''}`),
+  getAll: (params?: { type?: 'typical' | 'atypical'; isAkrobud?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.type) query.append('type', params.type);
+    if (params?.isAkrobud !== undefined) query.append('isAkrobud', String(params.isAkrobud));
+    return fetchApi<Color[]>(`/api/colors${query.toString() ? `?${query}` : ''}`);
+  },
   getById: (id: number) => fetchApi<Color>(`/api/colors/${id}`),
   create: (data: CreateColorData) =>
     fetchApi<Color>('/api/colors', { method: 'POST', body: JSON.stringify(data) }),

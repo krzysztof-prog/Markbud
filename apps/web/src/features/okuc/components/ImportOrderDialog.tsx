@@ -188,7 +188,7 @@ export function ImportOrderDialog({
           quantity: item.quantity,
           priceEur: item.priceEur,
         })),
-        expectedDeliveryDate: expectedDeliveryDate.toISOString(),
+        expectedDeliveryDate: expectedDeliveryDate.toISOString().split('T')[0],
         createMissingArticles,
         missingArticlesToCreate: createMissingArticles
           ? Array.from(missingArticlesToCreate.values())
@@ -222,6 +222,27 @@ export function ImportOrderDialog({
     toast,
     onSuccess,
   ]);
+
+  // Obsługa drag & drop
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (isLoading) return;
+
+      const file = e.dataTransfer.files?.[0];
+      if (file) {
+        handleFileUpload(file);
+      }
+    },
+    [isLoading, handleFileUpload]
+  );
 
   // Formatowanie ceny EUR
   const formatPriceEur = (cents: number) => {
@@ -268,6 +289,8 @@ export function ImportOrderDialog({
             <Label
               htmlFor="xlsx-file"
               className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
             >
               {isLoading ? (
                 <div className="flex flex-col items-center">

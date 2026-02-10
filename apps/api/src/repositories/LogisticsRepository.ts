@@ -349,6 +349,9 @@ export class LogisticsRepository {
    * Szuka wielu Orders po numerach projektów (pole project) - case-insensitive
    * SQLite: używamy UPPER() w raw query
    * UWAGA: Szukamy po polu `project` (np. "D3995"), NIE po `order_number` (np. "53642")
+   *
+   * WAŻNE: Pole project może zawierać wiele projektów oddzielonych przecinkami,
+   * np. "D6015, D6286, D6387" - dlatego używamy LIKE z % zamiast dokładnego IN
    */
   async findOrdersByProjectNumbers(projectNumbers: string[]) {
     if (projectNumbers.length === 0) {
@@ -359,9 +362,11 @@ export class LogisticsRepository {
     const upperProjectNumbers = projectNumbers.map((pn) => pn.toUpperCase());
 
     // SQLite raw query z UPPER() dla case-insensitive
-    // Budujemy dynamiczne IN clause
-    // Szukamy po polu `project` które zawiera numer projektu typu D3995
-    const placeholders = upperProjectNumbers.map(() => '?').join(', ');
+    // Używamy LIKE zamiast IN, bo pole project może zawierać wiele projektów
+    // np. "D6015, D6286, D6387" - szukamy czy projekt jest CZĘŚCIĄ pola
+    // Budujemy: (UPPER(project) LIKE '%D6015%' OR UPPER(project) LIKE '%D6286%' ...)
+    const likeConditions = upperProjectNumbers.map(() => `UPPER(project) LIKE ?`).join(' OR ');
+    const likeParams = upperProjectNumbers.map((pn) => `%${pn}%`);
 
     const orders = await prisma.$queryRawUnsafe<
       { id: number; orderNumber: string; client: string | null; project: string | null; status: string | null; deliveryDate: string | null }[]
@@ -369,10 +374,10 @@ export class LogisticsRepository {
       `
       SELECT id, order_number as orderNumber, client, project, status, delivery_date as deliveryDate
       FROM orders
-      WHERE UPPER(project) IN (${placeholders})
+      WHERE (${likeConditions})
         AND archived_at IS NULL
     `,
-      ...upperProjectNumbers
+      ...likeParams
     );
 
     return orders;

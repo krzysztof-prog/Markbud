@@ -132,6 +132,10 @@ export interface ParseResultItem extends ParsedItem {
     status: string | null;
     /** Data dostawy zlecenia - null jeśli nie ustawiona */
     deliveryDate: string | null;
+    /** Czy zlecenie ma wiele projektów (oddzielonych przecinkami) */
+    hasMultipleProjects?: boolean;
+    /** Lista innych projektów w tym zleceniu (bez aktualnego) */
+    otherProjects?: string[];
   };
   orderNotFound?: boolean;
 }

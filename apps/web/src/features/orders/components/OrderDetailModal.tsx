@@ -48,7 +48,7 @@ interface OrderDetail extends Order {
   notes?: string;
   requirements?: Requirement[];
   schucoLinks?: SchucoDeliveryLink[];
-  // Sumy z materiałówki (wartości w groszach)
+  // Sumy z materiałówki (wartości w centach EUR)
   windowsNetValue?: number | null;
   windowsMaterial?: number | null;
   assemblyValue?: number | null;
@@ -217,7 +217,7 @@ export function OrderDetailModal({
                 }
               >
                 <FileText className="h-4 w-4 mr-2" />
-                {hasGlassTxt ? 'Szyby TXT' : 'Brak szyb'}
+                {hasGlassTxt ? 'Szyby TXT' : 'Brak zam. szyb'}
               </Button>
             </div>
           </DialogTitle>
@@ -332,15 +332,24 @@ export function OrderDetailModal({
                             : order.status}
                         </Badge>
                       </div>
-                      {order.deliveryDate && (
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4 text-slate-400" />
-                          <span className="text-slate-500">Data dostawy:</span>{' '}
-                          <span className="font-medium">
-                            {new Date(order.deliveryDate).toLocaleDateString('pl-PL')}
-                          </span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4 text-slate-400" />
+                        <span className="text-slate-500">Data dostawy:</span>{' '}
+                        <span className="font-medium">
+                          {order.deliveryDate
+                            ? new Date(order.deliveryDate).toLocaleDateString('pl-PL')
+                            : <span className="text-slate-400">-</span>}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4 text-slate-400" />
+                        <span className="text-slate-500">Data produkcji:</span>{' '}
+                        <span className="font-medium">
+                          {order.productionDate
+                            ? new Date(order.productionDate).toLocaleDateString('pl-PL')
+                            : <span className="text-slate-400">-</span>}
+                        </span>
+                      </div>
                       {order.valuePln && (
                         <div>
                           <span className="text-slate-500">Wartość PLN:</span>{' '}
@@ -415,7 +424,7 @@ export function OrderDetailModal({
                           <div className="bg-white rounded-lg p-3 border border-emerald-100">
                             <div className="text-xs text-slate-500 mb-1">Wartość netto okien</div>
                             <div className="font-semibold text-emerald-700">
-                              {formatGrosze(order.windowsNetValue as Grosze)}
+                              {formatCenty(order.windowsNetValue as Centy)}
                             </div>
                           </div>
                         )}
@@ -423,7 +432,7 @@ export function OrderDetailModal({
                           <div className="bg-white rounded-lg p-3 border border-emerald-100">
                             <div className="text-xs text-slate-500 mb-1">Materiał okien</div>
                             <div className="font-semibold text-emerald-700">
-                              {formatGrosze(order.windowsMaterial as Grosze)}
+                              {formatCenty(order.windowsMaterial as Centy)}
                             </div>
                           </div>
                         )}
@@ -431,7 +440,7 @@ export function OrderDetailModal({
                           <div className="bg-white rounded-lg p-3 border border-emerald-100">
                             <div className="text-xs text-slate-500 mb-1">Wartość montażu</div>
                             <div className="font-semibold text-emerald-700">
-                              {formatGrosze(order.assemblyValue as Grosze)}
+                              {formatCenty(order.assemblyValue as Centy)}
                             </div>
                           </div>
                         )}
@@ -439,7 +448,7 @@ export function OrderDetailModal({
                           <div className="bg-white rounded-lg p-3 border border-emerald-100">
                             <div className="text-xs text-slate-500 mb-1">Wartość dodatków</div>
                             <div className="font-semibold text-emerald-700">
-                              {formatGrosze(order.extrasValue as Grosze)}
+                              {formatCenty(order.extrasValue as Centy)}
                             </div>
                           </div>
                         )}
@@ -447,7 +456,7 @@ export function OrderDetailModal({
                           <div className="bg-white rounded-lg p-3 border border-emerald-100">
                             <div className="text-xs text-slate-500 mb-1">Inne</div>
                             <div className="font-semibold text-emerald-700">
-                              {formatGrosze(order.otherValue as Grosze)}
+                              {formatCenty(order.otherValue as Centy)}
                             </div>
                           </div>
                         )}

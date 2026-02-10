@@ -46,6 +46,7 @@ export const patchOrderSchema = z.object({
   valueEur: z.string().nullable().optional(),
   deadline: z.string().nullable().optional(),
   status: z.string().nullable().optional(),
+  glassDeliveryDate: z.string().nullable().optional(),
 });
 
 // Manual status schema - do ręcznego ustawiania statusu zlecenia przez użytkownika
@@ -71,6 +72,8 @@ export const orderQuerySchema = paginationQuerySchema.extend({
 // Bulk update status schema
 export const bulkUpdateStatusSchema = z.object({
   orderIds: z.array(z.number().int().positive()).min(1, 'Przynajmniej jedno zlecenie musi być wybrane'),
+  // Opcjonalne deliveryIds - gdy użytkownik zaznaczył całe dostawy, zmień też ich status
+  deliveryIds: z.array(z.number().int().positive()).optional(),
   status: z.enum(['new', 'in_progress', 'completed', 'archived'], {
     errorMap: () => ({ message: 'Nieprawidłowy status' }),
   }),

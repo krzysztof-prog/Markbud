@@ -422,14 +422,27 @@ export class GlassWatcher implements IFileWatcher {
       // Dopasuj do zleceń produkcyjnych
       await glassOrderService.matchWithProductionOrders(glassOrder.id);
 
-      // Jeśli jest notatka (np. "Zam. - szprosy"), zaktualizuj powiązane zlecenia
-      if (parsed.metadata.orderedBy) {
+      // Ustaw glassOrderNote z metadanych lub nazwy pliku
+      // Priorytet: orderedBy z dokumentu > "szprosy"/"kształt" z nazwy pliku
+      let glassNote = parsed.metadata.orderedBy || null;
+
+      // Jeśli brak orderedBy, sprawdź czy nazwa pliku zawiera "szprosy" lub "kształt"
+      if (!glassNote) {
+        const filenameLower = filename.toLowerCase();
+        if (filenameLower.includes('szprosy')) {
+          glassNote = 'szprosy';
+        } else if (filenameLower.includes('kształt') || filenameLower.includes('ksztalt')) {
+          glassNote = 'kształt';
+        }
+      }
+
+      if (glassNote) {
         const orderNumbers = [...new Set(parsed.items.map(item => item.orderNumber))];
         await this.prisma.order.updateMany({
           where: { orderNumber: { in: orderNumbers } },
-          data: { glassOrderNote: parsed.metadata.orderedBy },
+          data: { glassOrderNote: glassNote },
         });
-        logger.info(`   Ustawiono notatkę "${parsed.metadata.orderedBy}" dla ${orderNumbers.length} zleceń`);
+        logger.info(`   Ustawiono notatkę "${glassNote}" dla ${orderNumbers.length} zleceń`);
       }
 
       logger.info(`   Zaimportowano zamowienie PDF (ID: ${glassOrder.id})`);

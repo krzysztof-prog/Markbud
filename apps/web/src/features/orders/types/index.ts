@@ -68,6 +68,8 @@ export interface ExtendedOrder extends Order {
   deliveryOrders?: DeliveryOrderInfo[];
   // Status okuć: 'none' | 'imported' | 'has_atypical' | 'pending'
   okucDemandStatus?: string;
+  // Notatka z zamówienia szyb (np. "Zam. - szprosy")
+  glassOrderNote?: string | null;
 }
 
 // ================================
@@ -115,6 +117,7 @@ export type ClientFilter = 'all' | 'akrobud' | 'private';
 export interface FilterState {
   clientFilter: ClientFilter;
   hideProduced: boolean;
+  showOnlyProduced: boolean; // pokaż tylko wyprodukowane (completed/archived)
   dateFrom: string; // format YYYY-MM-DD
   showOnlyMissing: boolean; // pokazuj tylko brakujące numery zleceń
   hideMissing: boolean; // ukryj brakujące numery w normalnym widoku

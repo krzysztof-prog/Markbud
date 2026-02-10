@@ -56,6 +56,17 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['@radix-ui/*', 'lucide-react'],
   },
+
+  // Webpack watcher ignore patterns - zapobiega pętlom indeksowania
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: ['**/node_modules/**', '**/.git/**', '**/.cache/**', '**/.next/**', '**/.turbo/**'],
+      };
+    }
+    return config;
+  },
 };
 
 module.exports = nextConfig;

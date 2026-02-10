@@ -27,6 +27,7 @@ interface Color {
   name: string;
   type: string;
   hexColor?: string | null;
+  isAkrobud?: boolean;
 }
 
 interface Profile {
@@ -291,6 +292,21 @@ export function ColorDialog({
                 />
               </div>
             </div>
+          </div>
+          <div className="flex items-center gap-2 pt-2">
+            <input
+              type="checkbox"
+              id="color-is-akrobud"
+              checked={data?.isAkrobud ?? false}
+              onChange={(e) => onDataChange({ ...data, isAkrobud: e.target.checked })}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            <label htmlFor="color-is-akrobud" className="text-sm font-medium">
+              Magazyn AKROBUD
+            </label>
+            <span className="text-xs text-muted-foreground">
+              (kolor widoczny w Magazynie AKROBUD)
+            </span>
           </div>
         </div>
         <DialogFooter>

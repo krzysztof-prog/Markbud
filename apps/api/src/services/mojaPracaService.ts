@@ -513,4 +513,73 @@ export class MojaPracaService {
       glassOrdersCount: glassOrders.length,
     };
   }
+
+  // ============================================
+  // Alerty
+  // ============================================
+
+  /**
+   * Pobiera zlecenia Akrobud w produkcji bez cen
+   * Widoczne dla: autora zlecenia + admin + kierownik
+   */
+  async getAkrobudOrdersWithoutPrice(userId: number) {
+    // Sprawdź rolę użytkownika
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
+    const isAdminOrKierownik = user && ADMIN_ROLES.includes(user.role);
+
+    const orders = await this.repository.getAkrobudOrdersInProductionWithoutPrice(
+      userId,
+      isAdminOrKierownik ?? false
+    );
+
+    return orders.map((order) => ({
+      ...order,
+      productionDate: order.productionDate?.toISOString() ?? null,
+    }));
+  }
+
+  /**
+   * Pobiera dostawy z problemami etykiet
+   * Widoczne dla: autora zleceń w dostawie + admin + kierownik
+   */
+  async getDeliveriesWithLabelIssues(userId: number) {
+    // Sprawdź rolę użytkownika
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
+    const isAdminOrKierownik = user && ADMIN_ROLES.includes(user.role);
+
+    const deliveries = await this.repository.getUpcomingDeliveriesWithLabelIssues(
+      userId,
+      isAdminOrKierownik ?? false
+    );
+
+    return deliveries.map((delivery) => ({
+      ...delivery,
+      deliveryDate: delivery.deliveryDate.toISOString(),
+      lastCheckDate: delivery.lastCheckDate?.toISOString() ?? null,
+    }));
+  }
+
+  /**
+   * Pobiera wszystkie alerty dla użytkownika (do wyświetlenia na górze strony)
+   */
+  async getAlerts(userId: number) {
+    const [ordersWithoutPrice, deliveriesWithLabelIssues] = await Promise.all([
+      this.getAkrobudOrdersWithoutPrice(userId),
+      this.getDeliveriesWithLabelIssues(userId),
+    ]);
+
+    return {
+      ordersWithoutPrice,
+      deliveriesWithLabelIssues,
+      hasAlerts: ordersWithoutPrice.length > 0 || deliveriesWithLabelIssues.length > 0,
+    };
+  }
 }

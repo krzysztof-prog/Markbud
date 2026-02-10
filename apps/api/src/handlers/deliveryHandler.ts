@@ -37,7 +37,7 @@ export class DeliveryHandler {
   }
 
   async getAll(
-    request: FastifyRequest<{ Querystring: { from?: string; to?: string; status?: string } }>,
+    request: FastifyRequest<{ Querystring: { from?: string; to?: string; status?: string; includeOverdue?: string; hasOrdersInStatus?: string } }>,
     reply: FastifyReply
   ) {
     const validated = deliveryQuerySchema.parse(request.query);

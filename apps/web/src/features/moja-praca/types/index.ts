@@ -150,3 +150,38 @@ export interface DaySummary {
   deliveriesCount: number;
   glassOrdersCount: number;
 }
+
+// ============================================
+// Alerty
+// ============================================
+
+// Zlecenie Akrobud w produkcji bez ceny
+export interface OrderWithoutPrice {
+  id: number;
+  orderNumber: string;
+  client: string | null;
+  project: string | null;
+  productionDate: string | null;
+  documentAuthor: string | null;
+  documentAuthorUserId: number | null;
+  valueEur: number | null;
+  totalWindows: number | null;
+}
+
+// Dostawa z problemami etykiet
+export interface DeliveryWithLabelIssues {
+  id: number;
+  deliveryDate: string;
+  deliveryNumber: string | null;
+  status: string;
+  akrobudOrdersCount: number;
+  issues: string[];
+  lastCheckDate: string | null;
+}
+
+// Odpowiedź alertów
+export interface AlertsResponse {
+  ordersWithoutPrice: OrderWithoutPrice[];
+  deliveriesWithLabelIssues: DeliveryWithLabelIssues[];
+  hasAlerts: boolean;
+}

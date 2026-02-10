@@ -617,7 +617,7 @@ export const StatusCard: React.FC<StatusCardProps> = ({
                 <p className="text-xs text-slate-400 mt-0.5">
                   Auto-pobieranie:{' '}
                   <span className="text-green-600 font-medium">
-                    automatyczne (po pobraniu zamówień)
+                    automatyczne (1h po pobraniu zamówień)
                   </span>
                 </p>
               </div>

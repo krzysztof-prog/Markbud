@@ -25,7 +25,8 @@ export class OrderNumberParser {
       throw new Error('Numer zlecenia nie może być pusty');
     }
 
-    const trimmed = orderNumber.trim();
+    // Usuń trailing dash (np. "51737-" → "51737") - traktuj jak numer bez sufiksu
+    const trimmed = orderNumber.trim().replace(/-$/, '');
 
     // Limit długości
     if (trimmed.length > 20) {

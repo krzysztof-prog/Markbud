@@ -198,8 +198,8 @@ export class SchucoOrderMatcher {
       return 0;
     }
 
-    // Batch lookup: znajdź wszystkie zlecenia pasujące do numerów
-    const orders = await this.prisma.order.findMany({
+    // Batch lookup: znajdź zlecenia - najpierw dokładne dopasowanie
+    let orders = await this.prisma.order.findMany({
       where: {
         orderNumber: {
           in: orderNumbers,
@@ -207,6 +207,26 @@ export class SchucoOrderMatcher {
       },
       select: { id: true, orderNumber: true },
     });
+
+    // Fallback: szukaj zlecen z suffixami (-a, -b, itp.) dla nieznalezionych numerow
+    const foundExact = new Set(orders.map((o) => o.orderNumber));
+    const notFound = orderNumbers.filter((n) => !foundExact.has(n));
+    if (notFound.length > 0) {
+      const suffixOrders = await this.prisma.order.findMany({
+        where: {
+          OR: notFound.map((num) => ({
+            orderNumber: { startsWith: `${num}-` },
+          })),
+        },
+        select: { id: true, orderNumber: true },
+      });
+      if (suffixOrders.length > 0) {
+        orders = [...orders, ...suffixOrders];
+        logger.info(
+          `[SchucoOrderMatcher] Found ${suffixOrders.length} suffix-matched orders for ${delivery.orderNumber}: ${suffixOrders.map((o) => o.orderNumber).join(', ')}`
+        );
+      }
+    }
 
     if (orders.length === 0) {
       logger.info(

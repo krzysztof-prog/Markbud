@@ -12,6 +12,7 @@ interface OrderData {
   id: number;
   orderNumber: string;
   client: string;
+  project: string | null; // Projekt ze zlecenia
   totalWindows: number;
   totalSashes: number;
   totalGlasses: number | null; // Liczba szkleń
@@ -32,6 +33,7 @@ interface OrderRowProps {
   onAutoFillInvoice?: (orderId: number, orderNumber: string, invoiceNumber: string | null) => void; // Auto-fill callback
   isPending?: boolean;
   isEven?: boolean; // zebra striping - co drugi wiersz ciemniejszy
+  eurRate?: number; // kurs EUR/PLN do przeliczania Wsp. i Jedn. dla AKROBUD
 }
 
 export const OrderRow: React.FC<OrderRowProps> = ({
@@ -44,6 +46,7 @@ export const OrderRow: React.FC<OrderRowProps> = ({
   onAutoFillInvoice,
   isPending = false,
   isEven = false,
+  eurRate,
 }) => {
   // Wartości do wyświetlenia (override jeśli istnieje, inaczej z Order)
   const displayWindows = item?.overrideWindows ?? order.totalWindows;
@@ -57,6 +60,26 @@ export const OrderRow: React.FC<OrderRowProps> = ({
     return ord.totalGlasses ?? 0;
   }
 
+  // Przelicz Wsp. i Jedn. dla AKROBUD (EUR → PLN po kursie)
+  // Dla AKROBUD zarówno valueEur jak i materialValue są w EUR
+  const computedCoefficient = (() => {
+    if (!item) return '—';
+    if (item.isAkrobud && item.valueEur && item.materialValue > 0) {
+      // Wsp. = wartość / materiał — obie w EUR, kurs się skraca
+      return (item.valueEur / item.materialValue).toFixed(2);
+    }
+    return item.coefficient;
+  })();
+
+  const computedUnitValue = (() => {
+    if (!item) return '—';
+    if (item.isAkrobud && item.valueEur && eurRate && item.totalGlassQuantity > 0) {
+      // Jedn. zł = (wartość EUR - materiał EUR) * kurs / szkła
+      return Math.round(((item.valueEur - item.materialValue) * eurRate) / item.totalGlassQuantity).toString();
+    }
+    return item.unitValue;
+  })();
+
   return (
     <TableRow className={isEven ? '' : 'bg-muted/50'}>
       {/* Dostawa */}
@@ -67,9 +90,9 @@ export const OrderRow: React.FC<OrderRowProps> = ({
       {/* Nr produkcyjny */}
       <TableCell className="font-mono text-sm">{order.orderNumber}</TableCell>
 
-      {/* Klient */}
-      <TableCell className="text-sm max-w-[150px] truncate" title={order.client || '-'}>
-        {order.client || '-'}
+      {/* Projekt */}
+      <TableCell className="text-sm max-w-[150px] truncate" title={order.project || '-'}>
+        {order.project || '-'}
       </TableCell>
 
       {/* Data produkcji */}
@@ -158,14 +181,14 @@ export const OrderRow: React.FC<OrderRowProps> = ({
           : '—'}
       </TableCell>
 
-      {/* Współczynnik PLN/materiał (read-only) */}
+      {/* Współczynnik PLN/materiał (read-only, przeliczony z EUR dla AKROBUD) */}
       <TableCell className="w-[70px] pr-2 text-right text-sm tabular-nums">
-        {item?.coefficient ?? '—'}
+        {computedCoefficient}
       </TableCell>
 
-      {/* Jednostka (PLN - materiał) / szkła (read-only) */}
+      {/* Jednostka (PLN - materiał) / szkła (read-only, przeliczony z EUR dla AKROBUD) */}
       <TableCell className="w-[70px] pr-2 text-right text-sm tabular-nums">
-        {item?.unitValue ?? '—'}
+        {computedUnitValue}
       </TableCell>
 
       {/* RW Okucia */}

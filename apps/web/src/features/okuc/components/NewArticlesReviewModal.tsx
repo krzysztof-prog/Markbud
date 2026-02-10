@@ -114,8 +114,8 @@ export const NewArticlesReviewModal: React.FC<NewArticlesReviewModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-        <DialogHeader className="pr-12">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogHeader className="pr-12 shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
             Nowe artykuły wymagają weryfikacji
@@ -126,7 +126,7 @@ export const NewArticlesReviewModal: React.FC<NewArticlesReviewModalProps> = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto py-4">
           {isLoading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
@@ -219,7 +219,7 @@ export const NewArticlesReviewModal: React.FC<NewArticlesReviewModalProps> = ({
           )}
         </div>
 
-        <DialogFooter className="flex items-center justify-between border-t pt-4">
+        <DialogFooter className="flex items-center justify-between border-t pt-4 shrink-0">
           <p className="text-sm text-muted-foreground">
             Wybrano: <strong>{selectedCount}</strong> z <strong>{totalCount}</strong> artykułów
           </p>

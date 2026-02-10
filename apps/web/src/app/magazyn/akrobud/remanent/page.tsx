@@ -48,10 +48,10 @@ export default function RemanentPage() {
   const [showFinalizeModal, setShowFinalizeModal] = useState(false);
   const [finalizePreview, setFinalizePreview] = useState<FinalizeMonthResponse | null>(null);
 
-  // Pobierz kolory
+  // Pobierz kolory AKROBUD (isAkrobud=true)
   const { data: colors } = useQuery({
-    queryKey: ['colors'],
-    queryFn: () => colorsApi.getAll(),
+    queryKey: ['colors', { isAkrobud: true }],
+    queryFn: () => colorsApi.getAll({ isAkrobud: true }),
   });
 
   // Pobierz dane magazynowe dla wybranego koloru

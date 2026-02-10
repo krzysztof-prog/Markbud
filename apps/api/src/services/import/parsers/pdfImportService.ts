@@ -23,6 +23,7 @@ import type {
   PdfProcessResult,
   ParserServiceConfig,
 } from './types.js';
+import { emitOrderUpdated } from '../../event-emitter.js';
 
 /**
  * PDF Import Service Implementation
@@ -71,6 +72,9 @@ export class PdfImportService implements IPdfImportService {
           : { valuePln: plnToGrosze(parsed.valueNetto) }),
       },
     });
+
+    // Emit realtime update
+    emitOrderUpdated({ id: order.id });
 
     return {
       orderId: order.id,

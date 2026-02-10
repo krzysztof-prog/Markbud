@@ -5,7 +5,7 @@
  * Odpowiada za renderowanie pojedynczego wiersza z wszystkimi komórkami
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import {
   Tooltip,
@@ -13,7 +13,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Check, X, Pencil, MoreVertical, Ban, Clock, XCircle, CircleOff, Trash2 } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Check, X, Pencil, MoreVertical, Ban, Clock, XCircle, CircleOff, Trash2, Link2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,6 +64,7 @@ interface OrderTableRowProps {
   onOrderClick: (id: number, orderNumber: string) => void;
   onSchucoStatusClick: (orderNumber: string, schucoLinks: SchucoDeliveryLink[]) => void;
   onGlassDiscrepancyClick?: (orderNumber: string) => void;
+  onGlassDeliveryDateSet?: (orderId: number, date: string) => void;
 
   // Manual status callback
   onManualStatusChange?: (orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => void;
@@ -105,6 +112,7 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
   onOrderClick,
   onSchucoStatusClick,
   onGlassDiscrepancyClick,
+  onGlassDeliveryDateSet,
   onManualStatusChange,
   canDeleteOrders,
   onDeleteOrder,
@@ -306,11 +314,17 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           const deadline = order.deadline ? new Date(order.deadline) : null;
           const now = new Date();
           const twoWeeksFromNow = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+          // Notatka o typie szyb (np. "Zam. - szprosy" lub "kształt")
+          const glassNote = order.glassOrderNote;
+          const hasSzprosy = glassNote && glassNote.toLowerCase().includes('szprosy');
+          const hasKsztalt = glassNote && (glassNote.toLowerCase().includes('kształt') || glassNote.toLowerCase().includes('ksztalt'));
 
           let content: string;
           let colorClass: string;
           let tooltipContent: string | null = null;
           let isClickable = false;
+          // Czy ten badge to "Zamówione" bez daty - do obsługi Popover z kalendarzem
+          let isZamowioneWithoutDate = false;
 
           // Priorytet statusów:
           // 1. Brak szyb w zleceniu (needed = 0) → "-"
@@ -364,22 +378,85 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
             const expectedDeliveryFull = order.glassDeliveryDate ? formatDate(order.glassDeliveryDate) : null;
             content = expectedDeliveryShort || 'Zamówione';
             colorClass = 'bg-blue-100 text-blue-700';
-            tooltipContent = expectedDeliveryFull
-              ? `Szyby zamówione\nPotrzebne: ${needed} szt.\nOczekiwana dostawa: ${expectedDeliveryFull}`
-              : `Szyby zamówione\nPotrzebne: ${needed} szt.\nOczekiwanie na dostawę`;
+            // Jeśli nie ma daty - oznacz jako klikalny do ręcznego ustawienia
+            if (!order.glassDeliveryDate) {
+              isZamowioneWithoutDate = true;
+              colorClass = 'bg-blue-100 text-blue-700 cursor-pointer hover:bg-blue-200';
+              tooltipContent = `Szyby zamówione\nPotrzebne: ${needed} szt.\nKliknij aby ustawić datę dostawy`;
+            } else {
+              tooltipContent = `Szyby zamówione\nPotrzebne: ${needed} szt.\nOczekiwana dostawa: ${expectedDeliveryFull}`;
+            }
           } else {
             content = '-';
             colorClass = 'text-slate-400';
           }
 
-          // Renderowanie z tooltipem
-          const cellContent = (
+          // Badge ze szprosami
+          const szprosyBadge = hasSzprosy ? (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700 ml-1">
+              szprosy
+            </span>
+          ) : null;
+
+          // Badge z kształtem (szyby o nietypowym kształcie)
+          const ksztaltBadge = hasKsztalt ? (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700 ml-1">
+              kształt
+            </span>
+          ) : null;
+
+          // Badge ze statusem szyb
+          const glassBadge = (
             <span
               className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${colorClass}`}
               onClick={isClickable ? () => onGlassDiscrepancyClick?.(order.orderNumber) : undefined}
             >
               {content}
             </span>
+          );
+
+          // Jeśli "Zamówione" bez daty - opakowujemy w Popover z Calendar
+          if (isZamowioneWithoutDate && onGlassDeliveryDateSet) {
+            return (
+              <td key={column.id} className="px-4 py-3 text-center">
+                <div className="inline-flex items-center gap-0.5">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${colorClass}`}
+                        title="Kliknij aby ustawić datę dostawy"
+                      >
+                        {content}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="center">
+                      <Calendar
+                        mode="single"
+                        selected={undefined}
+                        onSelect={(date) => {
+                          if (date) {
+                            onGlassDeliveryDateSet(order.id as number, date.toISOString());
+                          }
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {szprosyBadge}
+                  {ksztaltBadge}
+                </div>
+              </td>
+            );
+          }
+
+          // Standardowe renderowanie z tooltipem
+          const cellContent = (
+            <div className="inline-flex items-center gap-0.5">
+              {glassBadge}
+              {szprosyBadge}
+              {ksztaltBadge}
+            </div>
           );
 
           if (tooltipContent) {
@@ -573,6 +650,7 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
             );
           }
           const eurValueCenty = typeof order.valueEur === 'number' ? order.valueEur : null;
+          const isInherited = !!order.priceInheritedFromOrder;
           return (
             <td
               key={column.id}
@@ -580,8 +658,24 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
               onClick={() => startEdit(order.id, 'valueEur', order.valueEur != null ? String(order.valueEur) : '')}
             >
               <div className="flex items-center gap-2 justify-between">
-                <span>{eurValueCenty != null ? formatCenty(eurValueCenty as Centy) : '-'}</span>
-                <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50" />
+                <span className={isInherited ? 'text-blue-600' : ''}>
+                  {eurValueCenty != null ? formatCenty(eurValueCenty as Centy) : '-'}
+                </span>
+                <div className="flex items-center gap-1">
+                  {isInherited && (
+                    <TooltipProvider delayDuration={0}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Link2 className="h-3.5 w-3.5 text-blue-500" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {`Cena odziedziczona z zamówienia ${order.priceInheritedFromOrder}`}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50" />
+                </div>
               </div>
             </td>
           );
@@ -723,7 +817,7 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           );
       }
     },
-    [order, isEditing, editingCell, editValue, setEditValue, startEdit, cancelEdit, saveEdit, eurRate, onOrderClick, onSchucoStatusClick, onGlassDiscrepancyClick, onManualStatusChange]
+    [order, isEditing, editingCell, editValue, setEditValue, startEdit, cancelEdit, saveEdit, eurRate, onOrderClick, onSchucoStatusClick, onGlassDiscrepancyClick, onGlassDeliveryDateSet, onManualStatusChange]
   );
 
   // Wyróżnienie wiersza w zależności od statusu

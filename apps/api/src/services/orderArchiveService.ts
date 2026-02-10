@@ -8,6 +8,7 @@
 
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger.js';
+import { emitOrderUpdated } from './event-emitter.js';
 
 // Domyślna wartość jeśli nie ma w bazie
 const DEFAULT_ARCHIVE_AFTER_DAYS = 40;
@@ -115,6 +116,11 @@ export class OrderArchiveService {
         },
       });
 
+      // Emit realtime update dla każdego zarchiwizowanego zlecenia
+      for (const order of ordersToArchive) {
+        emitOrderUpdated({ id: order.id });
+      }
+
       result.archivedCount = ordersToArchive.length;
       result.archivedOrderNumbers = ordersToArchive.map((o) => o.orderNumber);
 
@@ -195,6 +201,11 @@ export class OrderArchiveService {
         },
       });
 
+      // Emit realtime update dla każdego zarchiwizowanego zlecenia
+      for (const order of ordersToArchive) {
+        emitOrderUpdated({ id: order.id });
+      }
+
       result.archivedCount = ordersToArchive.length;
       result.archivedOrderNumbers = ordersToArchive.map((o) => o.orderNumber);
 
@@ -237,6 +248,9 @@ export class OrderArchiveService {
         },
       });
 
+      // Emit realtime update
+      emitOrderUpdated({ id: orderId });
+
       logger.info(`[OrderArchiveService] Ręcznie zarchiwizowano zlecenie ${order.orderNumber}`);
       return { success: true };
     } catch (error) {
@@ -274,6 +288,9 @@ export class OrderArchiveService {
           status: newStatus,
         },
       });
+
+      // Emit realtime update
+      emitOrderUpdated({ id: orderId });
 
       logger.info(`[OrderArchiveService] Odarchiwizowano zlecenie ${order.orderNumber}, nowy status: ${newStatus}`);
       return { success: true };

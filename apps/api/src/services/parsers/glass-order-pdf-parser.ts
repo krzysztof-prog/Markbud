@@ -151,9 +151,10 @@ export async function parseGlassOrderPdf(
   const glassTypeNote = extractGlassTypeNoteFromFilename(filename);
 
   // Szukaj numeru zamówienia szyb (glassOrderNumber)
-  // Format: "Zamówienie na szyby  53731" lub "Zamówienie na szyby 53731"
+  // Format: "Zamówienie na szyby  53731" lub "Zamówienie na szyby 53956-a"
+  // Obsługuje sufixy typu "-a", "-b" itp.
   let glassOrderNumber = '';
-  const orderMatch = text.match(/Zam[oó]wienie\s+na\s+szyby\s+(\d+)/i);
+  const orderMatch = text.match(/Zam[oó]wienie\s+na\s+szyby\s+(\d+(?:-[a-zA-Z])?)/i);
   if (orderMatch) {
     glassOrderNumber = orderMatch[1];
   } else {
@@ -232,22 +233,26 @@ export async function parseGlassOrderPdf(
     // Ilość = 1 (każda pozycja to 1 szyba w tym formacie)
     const quantity = 1;
 
+    // Użyj glassOrderNumber z treści PDF (ma sufiks np. "-a")
+    // Fallback do orderNumber z nazwy pliku tylko gdy brak w treści
+    const effectiveOrderNumber = glassOrderNumber || orderNumber;
+
     items.push({
       glassType,
       quantity,
       widthMm,
       heightMm,
       position,
-      orderNumber,
-      fullReference: `${orderNumber} poz.${position}`,
+      orderNumber: effectiveOrderNumber,
+      fullReference: `${effectiveOrderNumber} poz.${position}`,
     });
 
     // Dodaj do breakdown
-    if (!orderBreakdown[orderNumber]) {
-      orderBreakdown[orderNumber] = { count: 0, quantity: 0 };
+    if (!orderBreakdown[effectiveOrderNumber]) {
+      orderBreakdown[effectiveOrderNumber] = { count: 0, quantity: 0 };
     }
-    orderBreakdown[orderNumber].count++;
-    orderBreakdown[orderNumber].quantity += quantity;
+    orderBreakdown[effectiveOrderNumber].count++;
+    orderBreakdown[effectiveOrderNumber].quantity += quantity;
   }
 
   // Jeśli brak pozycji, rzuć błąd

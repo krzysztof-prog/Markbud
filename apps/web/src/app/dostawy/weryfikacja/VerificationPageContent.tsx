@@ -436,10 +436,6 @@ export const VerificationPageContent: React.FC = () => {
                   listId={selectedListId}
                   currentVersion={selectedList.version}
                   versions={versionHistoryData}
-                  onCreateNewVersion={() => {
-                    // Otwórz dialog lub wklej mail
-                    // Na razie pomiń - użytkownik wkleja mail poniżej
-                  }}
                   onSelectVersion={handleSelectVersion}
                   onCompareVersions={handleCompareVersions}
                   isLoading={compareVersions.isPending}

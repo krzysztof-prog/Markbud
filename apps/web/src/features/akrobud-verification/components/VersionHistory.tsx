@@ -7,7 +7,7 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
-import { Plus, GitCompare, Check, Clock, FileCheck, History } from 'lucide-react';
+import { GitCompare, Check, Clock, FileCheck, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -41,7 +41,6 @@ interface VersionHistoryProps {
   listId: number;
   currentVersion: number;
   versions: VersionData[];
-  onCreateNewVersion: () => void;
   onSelectVersion: (versionId: number) => void;
   onCompareVersions: (oldVersionId: number, newVersionId: number) => void;
   isLoading?: boolean;
@@ -51,7 +50,6 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
   listId: _listId,
   currentVersion,
   versions,
-  onCreateNewVersion,
   onSelectVersion,
   onCompareVersions,
   isLoading = false,
@@ -139,28 +137,17 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
             <History className="h-5 w-5" />
             Historia wersji
           </CardTitle>
-          <div className="flex gap-2">
-            {canCompare && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={openCompareDialog}
-                disabled={isLoading}
-              >
-                <GitCompare className="h-4 w-4 mr-2" />
-                Porownaj
-              </Button>
-            )}
+          {canCompare && (
             <Button
-              variant="default"
+              variant="outline"
               size="sm"
-              onClick={onCreateNewVersion}
+              onClick={openCompareDialog}
               disabled={isLoading}
             >
-              <Plus className="h-4 w-4 mr-2" />
-              Nowa wersja
+              <GitCompare className="h-4 w-4 mr-2" />
+              Porownaj
             </Button>
-          </div>
+          )}
         </div>
       </CardHeader>
       <CardContent>

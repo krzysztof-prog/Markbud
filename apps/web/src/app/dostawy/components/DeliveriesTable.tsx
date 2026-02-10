@@ -19,8 +19,9 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, Package, CheckCircle2, XCircle, AlertTriangle, Clock } from 'lucide-react';
+import { ChevronDown, ChevronUp, Package, CheckCircle2, XCircle, AlertTriangle, Clock, AlertCircle } from 'lucide-react';
 import type { ReadinessResult, AggregatedReadinessStatus } from '@/lib/api/orders';
+import { getTodayWarsaw } from '@/lib/date-utils';
 import DeliveryStats from './DeliveryStats';
 import DeliveryValue from './DeliveryValue';
 import DeliveryActions from './DeliveryActions';
@@ -39,6 +40,13 @@ const formatDate = (dateStr: string) => {
 const getWeekdayName = (dateStr: string) => {
   const date = new Date(dateStr);
   return date.toLocaleDateString('pl-PL', { weekday: 'long' });
+};
+
+// Sprawdza czy dostawa jest przeterminowana (data w przeszłości i niezakończona)
+const isDeliveryOverdue = (dateStr: string, status?: string) => {
+  const today = getTodayWarsaw();
+  const deliveryDate = dateStr.split('T')[0];
+  return deliveryDate < today && status !== 'completed';
 };
 
 // Types
@@ -65,6 +73,9 @@ interface DeliveryItem {
 interface LabelCheckData {
   id: number;
   status: string;
+  okCount: number;
+  mismatchCount: number;
+  errorCount: number;
   results: Array<{
     orderId: number;
     status: string;
@@ -90,9 +101,12 @@ interface DeliveriesTableProps {
   onOptimize: (deliveryId: number) => void;
   onProtocol: (deliveryId: number) => void;
   onVerify: (deliveryId: number, deliveryDate: string) => void;
-  onCheckLabels: (labelCheckId: number | null) => void;
+  onCheckLabels: (deliveryId: number, labelCheckId: number | null) => void;
   onViewOrder: (orderId: number) => void;
+  onRemoveOrder?: (deliveryId: number, orderId: number) => void;
   protocolLoadingId?: number | null;
+  checkLabelsLoadingId?: number | null;
+  isRemovingOrder?: boolean;
   /** QW-1: Mapa statusów readiness z batch query */
   readinessMap?: Record<number, ReadinessResult>;
 }
@@ -155,7 +169,10 @@ export default function DeliveriesTable({
   onVerify,
   onCheckLabels,
   onViewOrder,
+  onRemoveOrder,
   protocolLoadingId,
+  checkLabelsLoadingId,
+  isRemovingOrder,
   readinessMap,
 }: DeliveriesTableProps) {
   // Sorting state: default by date ascending (oldest first)
@@ -179,11 +196,20 @@ export default function DeliveriesTable({
         header: 'Data',
         cell: (info) => {
           const dateStr = info.getValue();
+          const delivery = info.row.original;
+          const overdue = isDeliveryOverdue(dateStr, delivery.status);
           return (
             <div className="flex flex-col">
-              <span className="font-medium">{formatDate(dateStr)}</span>
-              <span className="text-xs text-slate-500 capitalize">
-                {getWeekdayName(dateStr)}
+              <div className="flex items-center gap-1.5">
+                {overdue && (
+                  <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                )}
+                <span className={`font-medium ${overdue ? 'text-red-600' : ''}`}>
+                  {formatDate(dateStr)}
+                </span>
+              </div>
+              <span className={`text-xs capitalize ${overdue ? 'text-red-400' : 'text-slate-500'}`}>
+                {overdue ? 'Przeterminowana' : getWeekdayName(dateStr)}
               </span>
             </div>
           );
@@ -237,10 +263,15 @@ export default function DeliveriesTable({
       }),
       columnHelper.display({
         id: 'actions',
-        header: 'Akcje',
+        header: () => <span className="text-center block">Akcje</span>,
+        meta: {
+          className: 'text-center',
+        },
         cell: (info) => {
           const delivery = info.row.original;
-          const isLoading = protocolLoadingId === delivery.id;
+          const isProtocolLoading = protocolLoadingId === delivery.id;
+          const isCheckLabelsLoading = checkLabelsLoadingId === delivery.id;
+          const hasLabelCheck = Boolean(delivery.labelChecks?.[0]?.id);
 
           return (
             <DeliveryActions
@@ -249,14 +280,16 @@ export default function DeliveriesTable({
               onOptimize={() => onOptimize(delivery.id)}
               onProtocol={() => onProtocol(delivery.id)}
               onVerify={() => onVerify(delivery.id, delivery.deliveryDate)}
-              onCheckLabels={() => onCheckLabels(delivery.labelChecks?.[0]?.id ?? null)}
-              isProtocolLoading={isLoading}
+              onCheckLabels={() => onCheckLabels(delivery.id, delivery.labelChecks?.[0]?.id ?? null)}
+              isProtocolLoading={isProtocolLoading}
+              isCheckLabelsLoading={isCheckLabelsLoading}
+              hasLabelCheck={hasLabelCheck}
             />
           );
         },
       }),
     ],
-    [onComplete, onOptimize, onProtocol, onVerify, onCheckLabels, protocolLoadingId, readinessMap]
+    [onComplete, onOptimize, onProtocol, onVerify, onCheckLabels, protocolLoadingId, checkLabelsLoadingId, readinessMap]
   );
 
   // Expand column - depends on expandedRows
@@ -315,16 +348,19 @@ export default function DeliveriesTable({
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <TableHead key={header.id}>
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
-                </TableHead>
-              ))}
+              {headerGroup.headers.map((header) => {
+                const meta = header.column.columnDef.meta as { className?: string } | undefined;
+                return (
+                  <TableHead key={header.id} className={meta?.className}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
+                  </TableHead>
+                );
+              })}
             </TableRow>
           ))}
         </TableHeader>
@@ -347,18 +383,22 @@ export default function DeliveriesTable({
           ) : (
             table.getRowModel().rows.map((row) => {
               const isExpanded = expandedRows.has(row.original.id);
+              const overdue = isDeliveryOverdue(row.original.deliveryDate, row.original.status);
 
               return (
                 <React.Fragment key={row.id}>
-                  <TableRow>
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext()
-                        )}
-                      </TableCell>
-                    ))}
+                  <TableRow className={overdue ? 'bg-red-50 hover:bg-red-100' : ''}>
+                    {row.getVisibleCells().map((cell) => {
+                      const meta = cell.column.columnDef.meta as { className?: string } | undefined;
+                      return (
+                        <TableCell key={cell.id} className={meta?.className}>
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </TableCell>
+                      );
+                    })}
                   </TableRow>
 
                   {/* Expanded row with details */}
@@ -368,6 +408,8 @@ export default function DeliveriesTable({
                         <DeliveryDetails
                           delivery={row.original}
                           onViewOrder={onViewOrder}
+                          onRemoveOrder={onRemoveOrder}
+                          isRemovingOrder={isRemovingOrder}
                         />
                       </TableCell>
                     </TableRow>

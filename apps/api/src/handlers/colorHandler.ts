@@ -16,11 +16,12 @@ export class ColorHandler {
   constructor(private service: ColorService) {}
 
   async getAll(
-    request: FastifyRequest<{ Querystring: { type?: string } }>,
+    request: FastifyRequest<{ Querystring: { type?: string; isAkrobud?: string } }>,
     reply: FastifyReply
   ) {
-    const { type } = request.query;
-    const colors = await this.service.getAllColors(type);
+    const { type, isAkrobud } = request.query;
+    const isAkrobudBool = isAkrobud === 'true' ? true : isAkrobud === 'false' ? false : undefined;
+    const colors = await this.service.getAllColors(type, isAkrobudBool);
     return reply.send(colors);
   }
 

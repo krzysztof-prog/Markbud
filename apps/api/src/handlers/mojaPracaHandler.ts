@@ -198,4 +198,43 @@ export const mojaPracaHandler = {
 
     return reply.send(summary);
   },
+
+  /**
+   * GET /api/moja-praca/alerts
+   * Wszystkie alerty dla użytkownika (zlecenia bez cen + problemy z etykietami)
+   */
+  async getAlerts(request: AuthenticatedRequest, reply: FastifyReply) {
+    const userId = getUserId(request);
+
+    const service = new MojaPracaService(prisma);
+    const alerts = await service.getAlerts(userId);
+
+    return reply.send(alerts);
+  },
+
+  /**
+   * GET /api/moja-praca/alerts/orders-without-price
+   * Zlecenia Akrobud w produkcji bez cen
+   */
+  async getOrdersWithoutPrice(request: AuthenticatedRequest, reply: FastifyReply) {
+    const userId = getUserId(request);
+
+    const service = new MojaPracaService(prisma);
+    const orders = await service.getAkrobudOrdersWithoutPrice(userId);
+
+    return reply.send(orders);
+  },
+
+  /**
+   * GET /api/moja-praca/alerts/label-issues
+   * Dostawy z problemami etykiet
+   */
+  async getLabelIssues(request: AuthenticatedRequest, reply: FastifyReply) {
+    const userId = getUserId(request);
+
+    const service = new MojaPracaService(prisma);
+    const deliveries = await service.getDeliveriesWithLabelIssues(userId);
+
+    return reply.send(deliveries);
+  },
 };

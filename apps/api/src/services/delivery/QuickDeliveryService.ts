@@ -15,6 +15,7 @@ import { DeliveryNotificationService, deliveryNotificationService } from './Deli
 import { NotFoundError, ValidationError } from '../../utils/errors.js';
 import { parseDate } from '../../utils/date-helpers.js';
 import { logger } from '../../utils/logger.js';
+import { OrderNumberParser } from '../parsers/OrderNumberParser.js';
 
 /**
  * Wynik walidacji pojedynczego numeru zlecenia
@@ -23,6 +24,8 @@ export interface ValidatedOrder {
   orderNumber: string;
   orderId: number;
   status: 'found' | 'not_found' | 'already_assigned';
+  // Oryginalny numer wpisany przez użytkownika (jeśli dopasowanie elastyczne)
+  matchedFrom?: string;
   // Jeśli już przypisane do dostawy
   currentDelivery?: {
     deliveryId: number;
@@ -145,11 +148,14 @@ export class QuickDeliveryService {
     const notFound: string[] = [];
     const alreadyAssigned: ValidatedOrder[] = [];
 
+    // Zbierz numery do elastycznego wyszukiwania (nie znalezione po exact match)
+    const notFoundExact: string[] = [];
+
     for (const orderNumber of orderNumbers) {
       const order = orderMap.get(orderNumber);
 
       if (!order) {
-        notFound.push(orderNumber);
+        notFoundExact.push(orderNumber);
         continue;
       }
 
@@ -178,6 +184,119 @@ export class QuickDeliveryService {
         alreadyAssigned.push(validatedOrder);
       } else {
         found.push(validatedOrder);
+      }
+    }
+
+    // Elastyczne wyszukiwanie: szukaj po bazowym numerze zlecenia
+    // np. użytkownik wpisuje "53578" → znajduje "53578-a"
+    // lub wpisuje "53578-a" ale w DB jest "53578"
+    if (notFoundExact.length > 0) {
+      const parser = new OrderNumberParser();
+
+      for (const orderNumber of notFoundExact) {
+        let baseNumber: string;
+        try {
+          const parsed = parser.parse(orderNumber);
+          baseNumber = parsed.base;
+        } catch {
+          // Nieprawidłowy format - nie szukaj elastycznie
+          notFound.push(orderNumber);
+          continue;
+        }
+
+        // Szukaj zleceń zaczynających się od bazowego numeru
+        const fuzzyMatches = await this.prisma.order.findMany({
+          where: {
+            orderNumber: { startsWith: baseNumber },
+          },
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            totalWindows: true,
+            client: true,
+            deliveryOrders: {
+              select: {
+                delivery: {
+                  select: {
+                    id: true,
+                    deliveryNumber: true,
+                    deliveryDate: true,
+                    deletedAt: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (fuzzyMatches.length === 1) {
+          // Jednoznaczne dopasowanie - użyj go
+          const match = fuzzyMatches[0];
+          logger.info(`Quick Delivery: elastyczne dopasowanie "${orderNumber}" → "${match.orderNumber}"`);
+
+          const activeDeliveryOrder = match.deliveryOrders.find(
+            (dOrder) => dOrder.delivery.deletedAt === null
+          );
+
+          const validatedOrder: ValidatedOrder = {
+            orderNumber: match.orderNumber,
+            orderId: match.id,
+            status: activeDeliveryOrder ? 'already_assigned' : 'found',
+            matchedFrom: orderNumber, // Informacja o oryginalnym wpisie
+            orderInfo: {
+              client: match.client ?? null,
+              totalWindows: match.totalWindows,
+              status: match.status,
+            },
+          };
+
+          if (activeDeliveryOrder) {
+            validatedOrder.currentDelivery = {
+              deliveryId: activeDeliveryOrder.delivery.id,
+              deliveryNumber: activeDeliveryOrder.delivery.deliveryNumber,
+              deliveryDate: activeDeliveryOrder.delivery.deliveryDate,
+            };
+            alreadyAssigned.push(validatedOrder);
+          } else {
+            found.push(validatedOrder);
+          }
+        } else if (fuzzyMatches.length > 1) {
+          // Wiele dopasowań - weź najnowsze (ostatnio zmodyfikowane)
+          // Przy replaceBase nowe zlecenie (z sufiksem) jest najnowsze
+          const sorted = fuzzyMatches.sort((a, b) => b.id - a.id);
+          const match = sorted[0];
+          logger.info(`Quick Delivery: elastyczne dopasowanie "${orderNumber}" → "${match.orderNumber}" (z ${fuzzyMatches.length} kandydatów: ${fuzzyMatches.map(m => m.orderNumber).join(', ')})`);
+
+          const activeDeliveryOrder = match.deliveryOrders.find(
+            (dOrder) => dOrder.delivery.deletedAt === null
+          );
+
+          const validatedOrder: ValidatedOrder = {
+            orderNumber: match.orderNumber,
+            orderId: match.id,
+            status: activeDeliveryOrder ? 'already_assigned' : 'found',
+            matchedFrom: orderNumber,
+            orderInfo: {
+              client: match.client ?? null,
+              totalWindows: match.totalWindows,
+              status: match.status,
+            },
+          };
+
+          if (activeDeliveryOrder) {
+            validatedOrder.currentDelivery = {
+              deliveryId: activeDeliveryOrder.delivery.id,
+              deliveryNumber: activeDeliveryOrder.delivery.deliveryNumber,
+              deliveryDate: activeDeliveryOrder.delivery.deliveryDate,
+            };
+            alreadyAssigned.push(validatedOrder);
+          } else {
+            found.push(validatedOrder);
+          }
+        } else {
+          notFound.push(orderNumber);
+        }
       }
     }
 

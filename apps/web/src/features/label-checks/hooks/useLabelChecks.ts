@@ -76,7 +76,9 @@ export function useCheckLabels() {
       queryClient.invalidateQueries({ queryKey: labelCheckKeys.lists() });
       // Invalidate delivery-specific query
       queryClient.invalidateQueries({ queryKey: labelCheckKeys.deliveryLatest(data.deliveryId) });
-      showSuccessToast('Sprawdzanie uruchomione', 'Proces OCR został rozpoczęty');
+      // Invalidate deliveries list - aby przycisk "Sprawdź etykiety" zmienił się na "Wyniki etykiet"
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
+      showSuccessToast('Sprawdzanie zakończone', 'Etykiety zostały sprawdzone');
     },
     onError: (error: unknown) => {
       showErrorToast('Błąd', getErrorMessage(error));

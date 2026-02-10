@@ -355,6 +355,217 @@ export class MojaPracaRepository {
     });
   }
 
+  // ============================================
+  // Alerty - Zlecenia Akrobud bez cen
+  // ============================================
+
+  /**
+   * Pobiera zlecenia Akrobud które są w produkcji ale nie mają cen (valueEur = 0 lub null)
+   * "W produkcji" = zlecenie przypisane do dostawy ze statusem 'in_progress'
+   * Dla admina/kierownika - wszystkie takie zlecenia
+   * Dla zwykłego użytkownika - tylko jego zlecenia (documentAuthorUserId)
+   */
+  async getAkrobudOrdersInProductionWithoutPrice(
+    userId: number,
+    isAdminOrKierownik: boolean
+  ) {
+    // Warunek bazowy: Akrobud, w produkcji (przypisane do dostawy in_progress), bez ceny
+    // SQLite nie obsługuje mode: 'insensitive', więc szukamy AKROBUD (wielkie litery jak w bazie)
+    const baseWhere: Prisma.OrderWhereInput = {
+      client: { contains: 'AKROBUD' },
+      completedAt: null,
+      archivedAt: null,
+      // "W produkcji" = zlecenie przypisane do dostawy ze statusem 'in_progress'
+      deliveryOrders: {
+        some: {
+          delivery: {
+            status: 'in_progress',
+            deletedAt: null,
+          },
+        },
+      },
+      OR: [
+        { valueEur: null },
+        { valueEur: 0 },
+      ],
+    };
+
+    // Dla admina/kierownika - wszystkie zlecenia
+    // Dla zwykłego użytkownika - tylko jego zlecenia
+    const where = isAdminOrKierownik
+      ? baseWhere
+      : { ...baseWhere, documentAuthorUserId: userId };
+
+    return this.prisma.order.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        orderNumber: true,
+        client: true,
+        project: true,
+        productionDate: true,
+        documentAuthor: true,
+        documentAuthorUserId: true,
+        valueEur: true,
+        totalWindows: true,
+      },
+    });
+  }
+
+  // ============================================
+  // Alerty - Dostawy z problemami etykiet
+  // ============================================
+
+  /**
+   * Pobiera 5 najbliższych dostaw (od ostatniej wyprodukowanej) które mają problemy z etykietami
+   * Problemy: brak kontroli etykiet, błędne etykiety (mismatchCount > 0), błędy OCR
+   */
+  async getUpcomingDeliveriesWithLabelIssues(
+    userId: number,
+    isAdminOrKierownik: boolean
+  ) {
+    // Znajdź ostatnią wyprodukowaną lub w produkcji dostawę
+    const lastProductionDelivery = await this.prisma.delivery.findFirst({
+      where: {
+        status: { in: ['completed', 'in_progress'] },
+        deletedAt: null,
+        deliveryOrders: { some: {} },
+      },
+      orderBy: { deliveryDate: 'desc' },
+      select: { deliveryDate: true },
+    });
+
+    // Punkt startowy - ostatnia data produkcji lub dzisiaj
+    const startDate = lastProductionDelivery?.deliveryDate || new Date();
+
+    // Znajdź 5 najbliższych dostaw PO tej dacie które NIE są jeszcze w produkcji ani ukończone
+    // Używamy gt (greater than) aby nie uwzględniać dostawy która jest już w produkcji
+    const upcomingDeliveries = await this.prisma.delivery.findMany({
+      where: {
+        deliveryDate: { gt: startDate },
+        status: { notIn: ['completed', 'in_progress'] },
+        deletedAt: null,
+        deliveryOrders: { some: {} },
+        // Dla zwykłego użytkownika - tylko dostawy z jego zleceniami
+        ...(isAdminOrKierownik
+          ? {}
+          : {
+              deliveryOrders: {
+                some: {
+                  order: {
+                    documentAuthorUserId: userId,
+                    archivedAt: null,
+                  },
+                },
+              },
+            }),
+      },
+      orderBy: { deliveryDate: 'asc' },
+      take: 5,
+      include: {
+        deliveryOrders: {
+          include: {
+            order: {
+              select: {
+                id: true,
+                orderNumber: true,
+                client: true,
+                documentAuthor: true,
+                documentAuthorUserId: true,
+              },
+            },
+          },
+        },
+        labelChecks: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: {
+            results: true,
+          },
+        },
+      },
+    });
+
+    // Filtruj dostawy z problemami etykiet
+    const deliveriesWithIssues = upcomingDeliveries
+      .map((delivery) => {
+        const latestCheck = delivery.labelChecks[0];
+
+        // Zlicz zlecenia Akrobud w dostawie
+        const akrobudOrders = delivery.deliveryOrders.filter((dOrder) =>
+          dOrder.order.client?.toLowerCase().includes('akrobud')
+        );
+
+        // Jeśli nie ma zleceń Akrobud - pomiń tę dostawę
+        if (akrobudOrders.length === 0) {
+          return null;
+        }
+
+        // Problemy z etykietami - zbieraj szczegóły z numerami zleceń
+        const issues: string[] = [];
+        let hasIssues = false;
+
+        if (!latestCheck) {
+          // Brak kontroli etykiet
+          issues.push('Brak kontroli etykiet');
+          hasIssues = true;
+        } else if (latestCheck.status === 'failed') {
+          issues.push('Kontrola zakończona błędem');
+          hasIssues = true;
+        } else {
+          // Sprawdź wyniki - zbieraj numery zleceń z problemami
+          const mismatchOrders = latestCheck.results
+            .filter((r) => r.status === 'MISMATCH')
+            .map((r) => r.orderNumber);
+          const errorOrders = latestCheck.results
+            .filter((r) => r.status === 'ERROR')
+            .map((r) => r.orderNumber);
+          const noFolderOrders = latestCheck.results
+            .filter((r) => r.status === 'NO_FOLDER')
+            .map((r) => r.orderNumber);
+          const noBmpOrders = latestCheck.results
+            .filter((r) => r.status === 'NO_BMP')
+            .map((r) => r.orderNumber);
+
+          if (mismatchOrders.length > 0) {
+            issues.push(`Błędne daty: ${mismatchOrders.join(', ')}`);
+            hasIssues = true;
+          }
+          if (errorOrders.length > 0) {
+            issues.push(`Błędy OCR: ${errorOrders.join(', ')}`);
+            hasIssues = true;
+          }
+          if (noFolderOrders.length > 0) {
+            issues.push(`Brak folderów: ${noFolderOrders.join(', ')}`);
+            hasIssues = true;
+          }
+          if (noBmpOrders.length > 0) {
+            issues.push(`Brak etykiet BMP: ${noBmpOrders.join(', ')}`);
+            hasIssues = true;
+          }
+        }
+
+        if (!hasIssues) {
+          return null;
+        }
+
+        return {
+          id: delivery.id,
+          deliveryDate: delivery.deliveryDate,
+          deliveryNumber: delivery.deliveryNumber,
+          status: delivery.status,
+          akrobudOrdersCount: akrobudOrders.length,
+          issues,
+          lastCheckDate: latestCheck?.completedAt || latestCheck?.createdAt || null,
+        };
+      })
+      .filter((d): d is NonNullable<typeof d> => d !== null);
+
+    return deliveriesWithIssues;
+  }
+
   /**
    * Uproszczona wersja - pobiera zamówienia szyb z danego dnia
    * z pozycjami pasującymi do zleceń użytkownika

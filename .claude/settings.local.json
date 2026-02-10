@@ -460,7 +460,22 @@
       "Bash(Remove-Item -Recurse -Force apps/api/node_modules/.cache -ErrorAction SilentlyContinue)",
       "Bash(Remove-Item -Recurse -Force apps/web/node_modules/.cache -ErrorAction SilentlyContinue)",
       "Bash(pnpm:*)",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "Bash(git log:*)",
+      "Bash(if [ -f \"c:/Users/Krzysztof/Desktop/AKROBUD/apps/web/.env\" ])",
+      "Bash(then cat \"c:/Users/Krzysztof/Desktop/AKROBUD/apps/web/.env\")",
+      "Bash(elif [ -f \"c:/Users/Krzysztof/Desktop/AKROBUD/apps/web/.env.local\" ])",
+      "Bash(then cat \"c:/Users/Krzysztof/Desktop/AKROBUD/apps/web/.env.local\")",
+      "Bash(else echo \"NO .env FILE FOUND\")",
+      "Bash(xxd:*)",
+      "Bash(pip --version:*)",
+      "Bash(cmd /c:*)",
+      "Bash(Select-Object -First 20 FullName)",
+      "Bash(if [ -f \"C:/DEV_DATA/ceny/_archiwum/D5486    16.01.pdf\" ])",
+      "Bash(then echo \"Plik istnieje\")",
+      "Bash(else echo \"Plik nie istnieje\")",
+      "Bash(Select-Object FullName, LastWriteTime)",
+      "Bash(Select-Object -First 5 Name, LastWriteTime, Length)"
     ],
     "deny": [],
     "ask": []

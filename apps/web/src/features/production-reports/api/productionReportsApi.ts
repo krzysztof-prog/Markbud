@@ -115,6 +115,7 @@ function mapBackendReportToFrontend(backend: BackendFullReport): ProductionRepor
     id: item.orderId,
     orderNumber: item.orderNumber,
     client: item.client || '',
+    project: item.project, // Projekt ze zlecenia
     totalWindows: item.windows,
     totalSashes: item.sashes,
     totalGlasses: item.units, // Backend zwraca units jako liczbę szkleń (z totalGlasses)

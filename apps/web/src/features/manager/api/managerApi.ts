@@ -39,11 +39,12 @@ export const managerApi = {
     fetchApi<Order[]>('/api/orders?status=in_progress'),
 
   /**
-   * Get deliveries in production (status: in_progress)
-   * @returns Deliveries currently in production
+   * Get deliveries that have at least one order in production
+   * Używa hasOrdersInStatus zamiast status - pobiera dostawy po statusie ZLECEŃ, nie dostawy
+   * @returns Deliveries with orders in production
    */
   getDeliveriesInProduction: () =>
-    fetchApi<Delivery[]>('/api/deliveries?status=in_progress'),
+    fetchApi<Delivery[]>('/api/deliveries?hasOrdersInStatus=in_progress'),
 
   /**
    * Complete all orders in a delivery

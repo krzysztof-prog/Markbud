@@ -4,7 +4,6 @@ import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 // import compress from '@fastify/compress'; // DISABLED - causes empty responses
 // import rateLimit from '@fastify/rate-limit'; // DISABLED
-import { config as dotenvConfig } from 'dotenv';
 import { prisma, initializeSQLiteOptimizations } from './utils/prisma.js';
 
 // Routes
@@ -68,9 +67,6 @@ import { config } from './utils/config.js';
 import { setupErrorHandler } from './middleware/error-handler.js';
 import { setupRequestLogging } from './middleware/request-logger.js';
 import { preloadHeavyModules } from './utils/eager-import.js';
-
-// Załaduj zmienne środowiskowe
-dotenvConfig();
 
 // Re-export prisma from utils for backwards compatibility
 export { prisma } from "./utils/prisma.js";

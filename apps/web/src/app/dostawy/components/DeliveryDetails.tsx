@@ -1,8 +1,19 @@
 'use client';
 
-import { Eye } from 'lucide-react';
+import { useState } from 'react';
+import { Eye, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { groszeToPln, centyToEur, type Grosze, type Centy } from '@/lib/money';
 import { ReadinessChecklist } from '@/components/ReadinessChecklist';
 import {
@@ -50,26 +61,26 @@ function getGlassStatusDisplay(
     return { label: '-', colorClass: 'text-slate-400' };
   }
 
-  // Wszystkie dostarczone
-  if (ordered > 0 && delivered >= ordered) {
+  // Wszystkie dostarczone (porównuj z totalGlasses - ile szyb potrzebuje zlecenie)
+  if (delivered >= total) {
     return { label: 'OK', colorClass: 'bg-green-100 text-green-700' };
   }
 
-  // Częściowo dostarczone
-  if (delivered > 0 && delivered < ordered) {
-    return { label: `${delivered}/${ordered}`, colorClass: 'bg-yellow-100 text-yellow-700' };
+  // Częściowo dostarczone (porównuj z totalGlasses)
+  if (delivered > 0 && delivered < total) {
+    return { label: `${delivered}/${total}`, colorClass: 'bg-yellow-100 text-yellow-700' };
   }
 
-  // Zamówione ale nie dostarczone - pokazujemy datę dostawy
+  // Zamówione ale nie dostarczone - pokazujemy "Zam." + datę dostawy jeśli jest
   if (ordered > 0 && glassDeliveryDate) {
     const date = new Date(glassDeliveryDate);
     const formatted = date.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' });
-    return { label: formatted, colorClass: 'bg-blue-100 text-blue-700' };
+    return { label: `Zam. ${formatted}`, colorClass: 'bg-blue-100 text-blue-700' };
   }
 
-  // Zamówione ale brak daty dostawy
+  // Zamówione ale brak daty dostawy - pokazuj "Zam." zamiast mylącego X/Y
   if (ordered > 0) {
-    return { label: 'Oczekuje', colorClass: 'bg-orange-100 text-orange-700' };
+    return { label: 'Zam.', colorClass: 'bg-orange-100 text-orange-700' };
   }
 
   // Nie zamówione
@@ -141,6 +152,7 @@ interface DeliveryDetailsProps {
       order: {
         id: number;
         orderNumber: string;
+        status?: string; // Status zlecenia (new, in_progress, completed, archived)
         totalWindows?: number | null;
         totalSashes?: number | null;
         totalGlasses?: number | null;
@@ -169,12 +181,23 @@ interface DeliveryDetailsProps {
     labelChecks?: LabelCheckData[];
   };
   onViewOrder?: (orderId: number) => void;
+  onRemoveOrder?: (deliveryId: number, orderId: number) => void;
+  isRemovingOrder?: boolean; // Czy trwa usuwanie zlecenia (dla disabled state)
 }
 
 export default function DeliveryDetails({
   delivery,
   onViewOrder,
+  onRemoveOrder,
+  isRemovingOrder = false,
 }: DeliveryDetailsProps) {
+  // State dla dialogu potwierdzenia usunięcia
+  const [orderToRemove, setOrderToRemove] = useState<{
+    orderId: number;
+    orderNumber: string;
+    isCompleted: boolean;
+  } | null>(null);
+
   const hasOrders =
     delivery.deliveryOrders && delivery.deliveryOrders.length > 0;
   const hasItems =
@@ -183,6 +206,14 @@ export default function DeliveryDetails({
 
   // Pokazuj checklist tylko dla dostaw które nie zostały jeszcze wysłane
   const showReadinessChecklist = delivery.status && !['shipped', 'in_transit', 'delivered'].includes(delivery.status);
+
+  // Handler potwierdzenia usunięcia
+  const handleConfirmRemove = () => {
+    if (orderToRemove && onRemoveOrder) {
+      onRemoveOrder(delivery.id, orderToRemove.orderId);
+      setOrderToRemove(null);
+    }
+  };
 
   return (
     <div className="p-4 bg-slate-50 rounded-lg space-y-4">
@@ -245,42 +276,42 @@ export default function DeliveryDetails({
                   </div>
 
                   {/* Kolumny statusów - stała szerokość dla wyrównania */}
-                  <div className="flex items-center gap-1 mr-3">
+                  <div className="flex items-center gap-2">
                     {/* Szyby */}
-                    <div className="flex flex-col items-center w-[72px]" title="Status szyb">
+                    <div className="flex flex-col items-center w-[78px]" title="Status szyb">
                       <span className="text-[10px] text-slate-400 uppercase">Szyby</span>
-                      <span className={`inline-flex items-center justify-center w-full px-1 py-0.5 rounded text-xs font-medium ${glassStatus.colorClass}`}>
+                      <span className={`inline-flex items-center justify-center w-full px-1.5 py-0.5 rounded text-xs font-medium ${glassStatus.colorClass}`}>
                         {glassStatus.label}
                       </span>
                     </div>
 
                     {/* Okucia */}
-                    <div className="flex flex-col items-center w-[72px]" title="Status okuć">
+                    <div className="flex flex-col items-center w-[78px]" title="Status okuć">
                       <span className="text-[10px] text-slate-400 uppercase">Okucia</span>
-                      <span className={`inline-flex items-center justify-center w-full px-1 py-0.5 rounded text-xs font-medium ${okucStatus.colorClass}`}>
+                      <span className={`inline-flex items-center justify-center w-full px-1.5 py-0.5 rounded text-xs font-medium ${okucStatus.colorClass}`}>
                         {okucStatus.label}
                       </span>
                     </div>
 
                     {/* Profile */}
-                    <div className="flex flex-col items-center w-[72px]" title="Status profili Schuco">
+                    <div className="flex flex-col items-center w-[78px]" title="Status profili Schuco">
                       <span className="text-[10px] text-slate-400 uppercase">Profile</span>
-                      <span className={`inline-flex items-center justify-center w-full px-1 py-0.5 rounded text-xs font-medium ${profileStatus.colorClass}`}>
+                      <span className={`inline-flex items-center justify-center w-full px-1.5 py-0.5 rounded text-xs font-medium ${profileStatus.colorClass}`}>
                         {profileStatus.label}
                       </span>
                     </div>
 
                     {/* Etykiety */}
-                    <div className="flex flex-col items-center w-[72px]" title="Status weryfikacji etykiet">
+                    <div className="flex flex-col items-center w-[78px]" title="Status weryfikacji etykiet">
                       <span className="text-[10px] text-slate-400 uppercase">Etykiety</span>
-                      <span className={`inline-flex items-center justify-center w-full px-1 py-0.5 rounded text-xs font-medium ${labelStatus.colorClass}`}>
+                      <span className={`inline-flex items-center justify-center w-full px-1.5 py-0.5 rounded text-xs font-medium ${labelStatus.colorClass}`}>
                         {labelStatus.label}
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <div className="text-xs text-right">
+                  <div className="flex items-center gap-3 ml-3">
+                    <div className="text-xs text-right min-w-[110px]">
                       <div className="font-medium">
                         {/* valuePln jest w groszach - konwertuj na PLN */}
                         {order.valuePln
@@ -322,6 +353,25 @@ export default function DeliveryDetails({
                         <Eye className="h-4 w-4" />
                       </Button>
                     )}
+
+                    {/* Przycisk usuwania zlecenia z dostawy */}
+                    {onRemoveOrder && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => setOrderToRemove({
+                          orderId: order.id,
+                          orderNumber: order.orderNumber,
+                          isCompleted: order.status === 'completed',
+                        })}
+                        disabled={isRemovingOrder}
+                        title="Usuń zlecenie z dostawy"
+                        aria-label="Remove order from delivery"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
@@ -329,6 +379,42 @@ export default function DeliveryDetails({
           </div>
         </div>
       )}
+
+      {/* Dialog potwierdzenia usunięcia zlecenia z dostawy */}
+      <AlertDialog open={!!orderToRemove} onOpenChange={(open) => !open && setOrderToRemove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć zlecenie z dostawy?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {orderToRemove?.isCompleted ? (
+                <>
+                  <span className="text-orange-600 font-medium">
+                    Uwaga: Zlecenie {orderToRemove.orderNumber} jest zakończone (wyprodukowane).
+                  </span>
+                  <br />
+                  Usunięcie z dostawy spowoduje cofnięcie RW okuć i zmianę statusu zlecenia na &quot;nowe&quot;.
+                </>
+              ) : (
+                <>
+                  Czy na pewno chcesz usunąć zlecenie <strong>{orderToRemove?.orderNumber}</strong> z tej dostawy?
+                  <br />
+                  Zlecenie wróci do puli nieprzypisanych.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRemovingOrder}>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmRemove}
+              disabled={isRemovingOrder}
+              className={orderToRemove?.isCompleted ? 'bg-orange-600 hover:bg-orange-700' : 'bg-red-600 hover:bg-red-700'}
+            >
+              {isRemovingOrder ? 'Usuwanie...' : 'Usuń z dostawy'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Additional Items Section */}
       {hasItems && delivery.deliveryItems && (

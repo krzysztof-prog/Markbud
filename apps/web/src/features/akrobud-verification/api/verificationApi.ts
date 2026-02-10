@@ -19,6 +19,7 @@ import type {
   ProjectMatchResult,
   VersionDiff,
   ProjectVerificationResult,
+  CreateListVersionResult,
 } from '@/types';
 
 export const verificationApi = {
@@ -170,7 +171,7 @@ export const verificationApi = {
     title?: string;
     notes?: string;
   }) =>
-    fetchApi<AkrobudVerificationList>('/api/akrobud-verification/versions', {
+    fetchApi<CreateListVersionResult>('/api/akrobud-verification/versions', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

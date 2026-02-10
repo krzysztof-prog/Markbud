@@ -21,7 +21,7 @@ import type { ReadinessResult } from './orders';
 
 // Dostawy
 export const deliveriesApi = {
-  getAll: async (params?: { from?: string; to?: string; status?: string }): Promise<Delivery[]> => {
+  getAll: async (params?: { from?: string; to?: string; status?: string; includeOverdue?: string }): Promise<Delivery[]> => {
     const query = new URLSearchParams(params as Record<string, string>).toString();
     const response = await fetchApi<{ data: Delivery[]; total: number } | Delivery[]>(`/api/deliveries${query ? `?${query}` : ''}`);
     // Handle both paginated response { data: [...] } and direct array response
@@ -47,7 +47,7 @@ export const deliveriesApi = {
     console.log('[API] Query string:', queryString);
     const url = `/api/deliveries/profile-requirements${queryString ? `?${queryString}` : ''}`;
     console.log('[API] Final URL:', url);
-    return fetchApi<Array<{ deliveryId: number; deliveryDate: string; profileId: number; colorCode: string; totalBeams: number }>>(url);
+    return fetchApi<Array<{ deliveryId: number; deliveryDate: string; profileId: number; colorCode: string; totalBeams: number; inProduction: boolean }>>(url);
   },
   create: (data: CreateDeliveryData) =>
     fetchApi<Delivery>('/api/deliveries', { method: 'POST', body: JSON.stringify(data) }),

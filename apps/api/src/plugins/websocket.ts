@@ -173,9 +173,13 @@ function sanitizeWebSocketData(data: unknown): unknown {
 
 /**
  * Generate unique connection ID
+ * Fallback na losowy identyfikator gdy remoteAddress/remotePort niedostępne
+ * (np. przy trustProxy: true bez nagłówków proxy, lub localhost WebSocket upgrade)
  */
 function generateConnectionId(connection: SocketStream): string {
-  return `${connection.socket.remoteAddress}:${connection.socket.remotePort}:${Date.now()}`;
+  const address = connection.socket.remoteAddress || 'unknown';
+  const port = connection.socket.remotePort || Math.random().toString(36).substring(2, 8);
+  return `${address}:${port}:${Date.now()}`;
 }
 
 /**
@@ -420,14 +424,18 @@ export async function setupWebSocket(fastify: FastifyInstance) {
         return;
       }
 
-      // Check rate limit before sending
-      if (!checkRateLimit(connectionId)) {
-        logger.warn('WebSocket rate limit exceeded', {
+      // Server-side events (importy, matching) omijają rate limiter
+      // - te eventy generuje serwer, nie klient
+      // - przy bulk importach (np. 1000 plików) rate limit 100/min jest za niski
+      // Rate limiter chroni przed spamem od klienta, nie przed server-side notyfikacjami
+      const isServerSideEvent = event.type.startsWith('import:') || event.type.startsWith('matching:');
+
+      if (!isServerSideEvent && !checkRateLimit(connectionId)) {
+        logger.debug('WebSocket rate limit exceeded', {
           userId: authConnection.userId,
           connectionId,
           eventType: event.type,
         });
-        // Don't send the message but don't close connection either
         return;
       }
 

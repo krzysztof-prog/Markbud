@@ -1,6 +1,12 @@
 /**
  * Centralized configuration management with validation
  */
+import { config as dotenvConfig } from 'dotenv';
+import { resolve } from 'path';
+
+// Załaduj .env PRZED odczytem zmiennych środowiskowych
+// override: true - wymuszamy wartości z .env nad systemowymi zmiennymi
+dotenvConfig({ path: resolve(process.cwd(), '.env'), override: true });
 
 export interface AppConfig {
   api: {

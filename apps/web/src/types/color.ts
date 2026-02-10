@@ -10,6 +10,7 @@ export interface Color {
   type: 'typical' | 'atypical';
   hexColor?: string;
   isVisible: boolean;
+  isAkrobud?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -20,6 +21,7 @@ export interface CreateColorData {
   type: 'typical' | 'atypical';
   hexColor?: string;
   isVisible?: boolean;
+  isAkrobud?: boolean;
 }
 
 export interface UpdateColorData {
@@ -28,4 +30,5 @@ export interface UpdateColorData {
   type?: 'typical' | 'atypical';
   hexColor?: string;
   isVisible?: boolean;
+  isAkrobud?: boolean;
 }

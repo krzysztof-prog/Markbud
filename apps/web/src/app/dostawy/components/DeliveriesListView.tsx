@@ -19,6 +19,7 @@ import { deliveriesApi } from '@/lib/api';
 import { showSuccessToast, showErrorToast, getErrorMessage } from '@/lib/toast-helpers';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
 import { useDownloadDeliveryProtocol, useBatchReadiness } from '@/features/deliveries/hooks';
+import { useCheckLabels } from '@/features/label-checks/hooks/useLabelChecks';
 import { getTodayWarsaw, formatDateWarsaw } from '@/lib/date-utils';
 
 // OrderDetailModal - lazy loaded
@@ -30,7 +31,7 @@ import { DeliveryFilters } from './DeliveryFilters';
 import DeliveriesTable from './DeliveriesTable';
 import type { Delivery } from '@/types/delivery';
 
-type DateFilterValue = '7' | '14' | '30' | 'archive';
+type DateFilterValue = '30' | '60' | 'archive';
 
 interface DeliveriesListViewProps {
   initialDateRange?: DateFilterValue;
@@ -51,22 +52,16 @@ const getDateRange = (
   const startDate = customStartDate || getTodayWarsaw();
 
   switch (filter) {
-    case '7': {
-      const from = new Date(startDate);
-      const to = new Date(from);
-      to.setDate(from.getDate() + 7);
-      return { from: formatDate(from), to: formatDate(to) };
-    }
-    case '14': {
-      const from = new Date(startDate);
-      const to = new Date(from);
-      to.setDate(from.getDate() + 14);
-      return { from: formatDate(from), to: formatDate(to) };
-    }
     case '30': {
       const from = new Date(startDate);
       const to = new Date(from);
       to.setDate(from.getDate() + 30);
+      return { from: formatDate(from), to: formatDate(to) };
+    }
+    case '60': {
+      const from = new Date(startDate);
+      const to = new Date(from);
+      to.setDate(from.getDate() + 60);
       return { from: formatDate(from), to: formatDate(to) };
     }
     case 'archive': {
@@ -81,7 +76,7 @@ const getDateRange = (
 };
 
 export function DeliveriesListView({
-  initialDateRange = '14',
+  initialDateRange = '30',
   onShowNewDeliveryDialog,
   onShowQuickDeliveryDialog,
 }: DeliveriesListViewProps) {
@@ -96,6 +91,7 @@ export function DeliveriesListView({
   const [productionDate, setProductionDate] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [protocolLoadingId, setProtocolLoadingId] = useState<number | null>(null);
+  const [checkLabelsLoadingId, setCheckLabelsLoadingId] = useState<number | null>(null);
 
   // Calculate date range
   const dateRange = useMemo(
@@ -103,12 +99,14 @@ export function DeliveriesListView({
     [dateFilter, customStartDate]
   );
 
-  // Fetch deliveries
+  // Fetch deliveries (includeOverdue dla filtrów przyszłościowych, nie dla archiwum)
+  const includeOverdue = dateFilter !== 'archive';
   const { data: deliveries, isLoading, isError, error } = useQuery({
-    queryKey: ['deliveries-list', dateRange],
+    queryKey: ['deliveries-list', dateRange, includeOverdue],
     queryFn: () => deliveriesApi.getAll({
       from: dateRange.from,
       to: dateRange.to,
+      ...(includeOverdue ? { includeOverdue: 'true' } : {}),
     }),
   });
 
@@ -124,6 +122,9 @@ export function DeliveriesListView({
   // Protocol download mutation
   const downloadProtocolMutation = useDownloadDeliveryProtocol();
 
+  // Label check mutation - uruchamianie sprawdzania etykiet
+  const checkLabelsMutation = useCheckLabels();
+
   // Complete orders mutation
   const completeOrdersMutation = useMutation({
     mutationFn: ({ deliveryId, productionDate }: { deliveryId: number; productionDate: string }) =>
@@ -136,6 +137,19 @@ export function DeliveriesListView({
     },
     onError: (error) => {
       showErrorToast('Błąd kończenia zleceń', getErrorMessage(error));
+    },
+  });
+
+  // Remove order from delivery mutation
+  const removeOrderFromDeliveryMutation = useMutation({
+    mutationFn: ({ deliveryId, orderId }: { deliveryId: number; orderId: number }) =>
+      deliveriesApi.removeOrder(deliveryId, orderId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
+      showSuccessToast('Zlecenie usunięte', 'Zlecenie zostało usunięte z dostawy');
+    },
+    onError: (error) => {
+      showErrorToast('Błąd usuwania zlecenia', getErrorMessage(error));
     },
   });
 
@@ -184,13 +198,28 @@ export function DeliveriesListView({
     setSelectedOrderId(orderId);
   }, []);
 
-  const handleCheckLabels = useCallback((labelCheckId: number | null) => {
+  const handleCheckLabels = useCallback((deliveryId: number, labelCheckId: number | null) => {
     if (labelCheckId) {
+      // Jest sprawdzenie - nawiguj do wyników
       router.push(`/kontrola-etykiet/${labelCheckId}`);
     } else {
-      showErrorToast('Brak weryfikacji', 'Ta dostawa nie ma jeszcze sprawdzenia etykiet');
+      // Brak sprawdzenia - uruchom OCR
+      setCheckLabelsLoadingId(deliveryId);
+      checkLabelsMutation.mutate(
+        { deliveryId },
+        {
+          onSuccess: (data) => {
+            setCheckLabelsLoadingId(null);
+            // Po zakończeniu nawiguj do wyników
+            router.push(`/kontrola-etykiet/${data.id}`);
+          },
+          onError: () => {
+            setCheckLabelsLoadingId(null);
+          },
+        }
+      );
     }
-  }, [router]);
+  }, [router, checkLabelsMutation]);
 
   const handleConfirmComplete = useCallback(() => {
     if (showCompleteDialog && productionDate) {
@@ -200,6 +229,10 @@ export function DeliveriesListView({
       });
     }
   }, [showCompleteDialog, productionDate, completeOrdersMutation]);
+
+  const handleRemoveOrder = useCallback((deliveryId: number, orderId: number) => {
+    removeOrderFromDeliveryMutation.mutate({ deliveryId, orderId });
+  }, [removeOrderFromDeliveryMutation]);
 
   // Calculate summary stats
   const summaryStats = useMemo(() => {
@@ -309,7 +342,10 @@ export function DeliveriesListView({
               onVerify={handleVerify}
               onCheckLabels={handleCheckLabels}
               onViewOrder={handleViewOrder}
+              onRemoveOrder={handleRemoveOrder}
               protocolLoadingId={protocolLoadingId}
+              checkLabelsLoadingId={checkLabelsLoadingId}
+              isRemovingOrder={removeOrderFromDeliveryMutation.isPending}
               readinessMap={readinessMap}
             />
           ) : (
@@ -320,7 +356,7 @@ export function DeliveriesListView({
               <p className="text-sm text-slate-400">
                 {dateFilter === 'archive'
                   ? 'Nie znaleziono archiwalnych dostaw'
-                  : `Nie ma dostaw w najbliższych ${dateFilter} dniach`}
+                  : `Nie ma dostaw w najbliższych ${dateFilter} dniach ani przeterminowanych`}
               </p>
             </div>
           )}

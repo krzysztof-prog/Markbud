@@ -92,22 +92,29 @@ export const DeliveryCheckbox = ({
   }, [completionStatusCounts]);
 
   // Calculate checkbox state (checked, indeterminate, unchecked)
+  // Tryb 1: Gdy mamy selectedOrderIds (używane w AddToProductionTab z rozwijaniem zleceń)
+  // Tryb 2: Gdy używamy checked prop bezpośrednio (używane w CompleteOrdersTab)
   const checkboxState = useMemo(() => {
+    // Jeśli selectedOrderIds jest puste i nie ma onOrderToggle, użyj checked prop
+    if (selectedOrderIds.size === 0 && !onOrderToggle) {
+      return { checked: _checked, indeterminate: false };
+    }
+
     if (!delivery.deliveryOrders || delivery.deliveryOrders.length === 0) {
-      return { checked: false, indeterminate: false };
+      return { checked: _checked, indeterminate: false };
     }
 
     const orderIds = delivery.deliveryOrders.map((dOrder) => dOrder.order.id);
     const selectedCount = orderIds.filter((id) => selectedOrderIds.has(id)).length;
 
     if (selectedCount === 0) {
-      return { checked: false, indeterminate: false };
+      return { checked: _checked, indeterminate: false };
     } else if (selectedCount === orderIds.length) {
       return { checked: true, indeterminate: false };
     } else {
       return { checked: false, indeterminate: true };
     }
-  }, [delivery.deliveryOrders, selectedOrderIds]);
+  }, [delivery.deliveryOrders, selectedOrderIds, onOrderToggle, _checked]);
 
   // Update checkbox indeterminate state
   useEffect(() => {

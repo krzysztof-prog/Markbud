@@ -1,7 +1,11 @@
 node_modules
 dist
 build
+out
 .next
+.cache
+.tmp
+.vscode
 coverage
 .turbo
 pnpm-lock.yaml

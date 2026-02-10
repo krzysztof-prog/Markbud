@@ -1,0 +1,646 @@
+[
+  {
+    "order": "53678",
+    "status": "FIXED",
+    "file": "D5925  5.02  I.pdf",
+    "currency": "EUR",
+    "value": 677
+  },
+  {
+    "order": "53696",
+    "status": "FIXED",
+    "file": "D5034  5.02  I.pdf",
+    "currency": "EUR",
+    "value": 1165
+  },
+  {
+    "order": "53753",
+    "status": "FIXED",
+    "file": "D3152  5.02  I.pdf",
+    "currency": "EUR",
+    "value": 495
+  },
+  {
+    "order": "53755",
+    "status": "FIXED",
+    "file": "D3889  5.02  I.pdf",
+    "currency": "EUR",
+    "value": 924
+  },
+  {
+    "order": "53769",
+    "status": "FIXED",
+    "file": "D6214  5.02  I.pdf",
+    "currency": "EUR",
+    "value": 910
+  },
+  {
+    "order": "53812",
+    "status": "FIXED",
+    "file": "D5564  6.02.pdf",
+    "currency": "EUR",
+    "value": 693
+  },
+  {
+    "order": "53649",
+    "status": "FIXED",
+    "file": "D5613   2.02.pdf",
+    "currency": "EUR",
+    "value": 698
+  },
+  {
+    "order": "53652",
+    "status": "FIXED",
+    "file": "C8830  5.02 II.pdf",
+    "currency": "EUR",
+    "value": 716
+  },
+  {
+    "order": "53674",
+    "status": "FIXED",
+    "file": "D5763  2.02.pdf",
+    "currency": "EUR",
+    "value": 800
+  },
+  {
+    "order": "53680",
+    "status": "FIXED",
+    "file": "D4416   2.02.pdf",
+    "currency": "EUR",
+    "value": 1446
+  },
+  {
+    "order": "53689",
+    "status": "FIXED",
+    "file": "C7167  5.02  II.pdf",
+    "currency": "EUR",
+    "value": 1009
+  },
+  {
+    "order": "53679",
+    "status": "FIXED",
+    "file": "D4418  2.02.pdf",
+    "currency": "EUR",
+    "value": 1567
+  },
+  {
+    "order": "53715",
+    "status": "FIXED",
+    "file": "D5796  2,02.pdf",
+    "currency": "EUR",
+    "value": 542
+  },
+  {
+    "order": "53746",
+    "status": "FIXED",
+    "file": "D5683  2,02.pdf",
+    "currency": "EUR",
+    "value": 948
+  },
+  {
+    "order": "53747",
+    "status": "FIXED",
+    "file": "D5615  2.02.pdf",
+    "currency": "EUR",
+    "value": 622
+  },
+  {
+    "order": "53771",
+    "status": "FIXED",
+    "file": "D5132  2.02.pdf",
+    "currency": "EUR",
+    "value": 678
+  },
+  {
+    "order": "53772",
+    "status": "FIXED",
+    "file": "D1525   2.02.pdf",
+    "currency": "EUR",
+    "value": 578
+  },
+  {
+    "order": "53811",
+    "status": "FIXED",
+    "file": "C8829   5.02  II.pdf",
+    "currency": "EUR",
+    "value": 896
+  },
+  {
+    "order": "53822",
+    "status": "FIXED",
+    "file": "D1948  5.02 II.pdf",
+    "currency": "EUR",
+    "value": 1458
+  },
+  {
+    "order": "53874",
+    "status": "FIXED",
+    "file": "D3732  5.02  II.pdf",
+    "currency": "EUR",
+    "value": 740
+  },
+  {
+    "order": "53663",
+    "status": "FIXED",
+    "file": "GOOSSENS  3.02.pdf",
+    "currency": "EUR",
+    "value": 595
+  },
+  {
+    "order": "53668",
+    "status": "FIXED",
+    "file": "D4827,D5366  8.01  II.pdf",
+    "currency": "EUR",
+    "value": 1850
+  },
+  {
+    "order": "53675",
+    "status": "FIXED",
+    "file": "D5711  30.01.pdf",
+    "currency": "EUR",
+    "value": 382
+  },
+  {
+    "order": "53716",
+    "status": "FIXED",
+    "file": "D6040  30.01.pdf",
+    "currency": "EUR",
+    "value": 497
+  },
+  {
+    "order": "53736",
+    "status": "FIXED",
+    "file": "D5875  29.01  II.pdf",
+    "currency": "EUR",
+    "value": 597
+  },
+  {
+    "order": "53739",
+    "status": "FIXED",
+    "file": "D5754  29.01 II.pdf",
+    "currency": "EUR",
+    "value": 463
+  },
+  {
+    "order": "53741",
+    "status": "FIXED",
+    "file": "D2734   29.01  II.pdf",
+    "currency": "EUR",
+    "value": 717
+  },
+  {
+    "order": "53743",
+    "status": "FIXED",
+    "file": "D5748  30.01.pdf",
+    "currency": "EUR",
+    "value": 629
+  },
+  {
+    "order": "53745",
+    "status": "FIXED",
+    "file": "D5905  30.01.pdf",
+    "currency": "EUR",
+    "value": 309
+  },
+  {
+    "order": "53784",
+    "status": "FIXED",
+    "file": "D5970  30.01.pdf",
+    "currency": "EUR",
+    "value": 733
+  },
+  {
+    "order": "53788",
+    "status": "FIXED",
+    "file": "D5969  30.01.pdf",
+    "currency": "EUR",
+    "value": 487
+  },
+  {
+    "order": "53758-a",
+    "status": "FIXED",
+    "file": "D6206   29.01  II.pdf",
+    "currency": "EUR",
+    "value": 878
+  },
+  {
+    "order": "53831",
+    "status": "FIXED",
+    "file": "D5378  RAMA  30.01.pdf",
+    "currency": "EUR",
+    "value": 185
+  },
+  {
+    "order": "53832",
+    "status": "FIXED",
+    "file": "D5712,D5858  30.01.pdf",
+    "currency": "EUR",
+    "value": 2592
+  },
+  {
+    "order": "53852",
+    "status": "FIXED",
+    "file": "DOMBURG  3.02.pdf",
+    "currency": "EUR",
+    "value": 825
+  },
+  {
+    "order": "53854",
+    "status": "FIXED",
+    "file": "BROEKHOVEN  3.02.pdf",
+    "currency": "EUR",
+    "value": 575
+  },
+  {
+    "order": "53860",
+    "status": "FIXED",
+    "file": "CHIN  3.02.pdf",
+    "currency": "EUR",
+    "value": 1242
+  },
+  {
+    "order": "53622-a",
+    "status": "FIXED",
+    "file": "C9854  SKRZYDLO  26.01.pdf",
+    "currency": "EUR",
+    "value": 132
+  },
+  {
+    "order": "53702",
+    "status": "FIXED",
+    "file": "D5860    26.01.pdf",
+    "currency": "EUR",
+    "value": 634
+  },
+  {
+    "order": "53712",
+    "status": "FIXED",
+    "file": "D5277   26.01.pdf",
+    "currency": "EUR",
+    "value": 633
+  },
+  {
+    "order": "53721",
+    "status": "FIXED",
+    "file": "C8502   26.01.pdf",
+    "currency": "EUR",
+    "value": 900
+  },
+  {
+    "order": "53724",
+    "status": "FIXED",
+    "file": "ELSENDOORN   27.01.pdf",
+    "currency": "EUR",
+    "value": 734
+  },
+  {
+    "order": "53767",
+    "status": "FIXED",
+    "file": "D5840   26.01.pdf",
+    "currency": "EUR",
+    "value": 620
+  },
+  {
+    "order": "53768",
+    "status": "FIXED",
+    "file": "D5927   26.01.pdf",
+    "currency": "EUR",
+    "value": 1147
+  },
+  {
+    "order": "53777",
+    "status": "FIXED",
+    "file": "SERVICE E   27.01.pdf",
+    "currency": "EUR",
+    "value": 444
+  },
+  {
+    "order": "53778",
+    "status": "FIXED",
+    "file": "KULA   27.01.pdf",
+    "currency": "EUR",
+    "value": 719
+  },
+  {
+    "order": "53621",
+    "status": "FIXED",
+    "file": "D5665  23.01.pdf",
+    "currency": "EUR",
+    "value": 590
+  },
+  {
+    "order": "53682",
+    "status": "FIXED",
+    "file": "D5877  23.01.pdf",
+    "currency": "EUR",
+    "value": 432
+  },
+  {
+    "order": "53683",
+    "status": "FIXED",
+    "file": "D4619  23.01.pdf",
+    "currency": "EUR",
+    "value": 366
+  },
+  {
+    "order": "53685",
+    "status": "FIXED",
+    "file": "D3564   23.01.pdf",
+    "currency": "EUR",
+    "value": 192
+  },
+  {
+    "order": "53687",
+    "status": "FIXED",
+    "file": "D5750  23.01.pdf",
+    "currency": "EUR",
+    "value": 666
+  },
+  {
+    "order": "53688",
+    "status": "FIXED",
+    "file": "D5664  23.01.pdf",
+    "currency": "EUR",
+    "value": 692
+  },
+  {
+    "order": "53686",
+    "status": "FIXED",
+    "file": "D5717   23.01.pdf",
+    "currency": "EUR",
+    "value": 454
+  },
+  {
+    "order": "53707",
+    "status": "FIXED",
+    "file": "D5244   23.01.pdf",
+    "currency": "EUR",
+    "value": 479
+  },
+  {
+    "order": "53752",
+    "status": "FIXED",
+    "file": "D3565  RAMA  23.01.pdf",
+    "currency": "EUR",
+    "value": 139
+  },
+  {
+    "order": "53781",
+    "status": "FIXED",
+    "file": "D5872    23.01.pdf",
+    "currency": "EUR",
+    "value": 628
+  },
+  {
+    "order": "53782",
+    "status": "FIXED",
+    "file": "D6125    23.01.pdf",
+    "currency": "EUR",
+    "value": 488
+  },
+  {
+    "order": "53786-a",
+    "status": "FIXED",
+    "file": "D6257   23.01.pdf",
+    "currency": "EUR",
+    "value": 748
+  },
+  {
+    "order": "53787-a",
+    "status": "FIXED",
+    "file": "D6010   23.01.pdf",
+    "currency": "EUR",
+    "value": 650
+  },
+  {
+    "order": "53709-a",
+    "status": "FIXED",
+    "file": "D5370  9.01.pdf",
+    "currency": "EUR",
+    "value": 838
+  },
+  {
+    "order": "53453",
+    "status": "FIXED",
+    "file": "D3812  22.01  I.pdf",
+    "currency": "EUR",
+    "value": 554
+  },
+  {
+    "order": "53561",
+    "status": "FIXED",
+    "file": "D1844   22.01  I.pdf",
+    "currency": "EUR",
+    "value": 579
+  },
+  {
+    "order": "53644",
+    "status": "FIXED",
+    "file": "D1079   22.01.pdf",
+    "currency": "EUR",
+    "value": 367
+  },
+  {
+    "order": "53677",
+    "status": "FIXED",
+    "file": "D5953   22.01  I.pdf",
+    "currency": "EUR",
+    "value": 1004
+  },
+  {
+    "order": "53701",
+    "status": "FIXED",
+    "file": "D3678   22.01   II.pdf",
+    "currency": "EUR",
+    "value": 483
+  },
+  {
+    "order": "53737",
+    "status": "FIXED",
+    "file": "D2983    22.01  II.pdf",
+    "currency": "EUR",
+    "value": 692
+  },
+  {
+    "order": "53726",
+    "status": "FIXED",
+    "file": "PETERS   20.01.pdf",
+    "currency": "EUR",
+    "value": 272
+  },
+  {
+    "order": "53665",
+    "status": "FIXED",
+    "file": "BAUER  20.01.pdf",
+    "currency": "EUR",
+    "value": 878
+  },
+  {
+    "order": "53666",
+    "status": "FIXED",
+    "file": "BOSMA   20.01.pdf",
+    "currency": "EUR",
+    "value": 822
+  },
+  {
+    "order": "53667",
+    "status": "FIXED",
+    "file": "LEEUWEN   20.01.pdf",
+    "currency": "EUR",
+    "value": 1717
+  },
+  {
+    "order": "53664",
+    "status": "FIXED",
+    "file": "VREE   20.01.pdf",
+    "currency": "EUR",
+    "value": 1433
+  },
+  {
+    "order": "53691",
+    "status": "FIXED",
+    "file": "Wetting   20.01  POLY.pdf",
+    "currency": "EUR",
+    "value": 701
+  },
+  {
+    "order": "53720",
+    "status": "FIXED",
+    "file": "D5287  29.01  I.pdf",
+    "currency": "EUR",
+    "value": 601
+  },
+  {
+    "order": "53722",
+    "status": "FIXED",
+    "file": "BROUWERS   20.01.pdf",
+    "currency": "EUR",
+    "value": 780
+  },
+  {
+    "order": "53723",
+    "status": "FIXED",
+    "file": "TROOST    20.01.pdf",
+    "currency": "EUR",
+    "value": 669
+  },
+  {
+    "order": "53725",
+    "status": "FIXED",
+    "file": "SNEL   20.01.pdf",
+    "currency": "EUR",
+    "value": 606
+  },
+  {
+    "order": "53729",
+    "status": "FIXED",
+    "file": "KREEFT   20.01.pdf",
+    "currency": "EUR",
+    "value": 365
+  },
+  {
+    "order": "53740",
+    "status": "FIXED",
+    "file": "D2871  29.01  I.pdf",
+    "currency": "EUR",
+    "value": 379
+  },
+  {
+    "order": "53757",
+    "status": "FIXED",
+    "file": "jansen rama  20.01.pdf",
+    "currency": "EUR",
+    "value": 79
+  },
+  {
+    "order": "53650",
+    "status": "FIXED",
+    "file": "D5434  19.01.pdf",
+    "currency": "EUR",
+    "value": 387
+  },
+  {
+    "order": "53699",
+    "status": "FIXED",
+    "file": "D4175 skrzydło  19.01.pdf",
+    "currency": "EUR",
+    "value": 80
+  },
+  {
+    "order": "53705",
+    "status": "FIXED",
+    "file": "D5627   19.01.pdf",
+    "currency": "EUR",
+    "value": 426
+  },
+  {
+    "order": "53630-a",
+    "status": "FIXED",
+    "file": "D2536    30.01.pdf",
+    "currency": "EUR",
+    "value": 577
+  },
+  {
+    "order": "53633",
+    "status": "FIXED",
+    "file": "D5751  16.01.pdf",
+    "currency": "EUR",
+    "value": 216
+  },
+  {
+    "order": "53645",
+    "status": "FIXED",
+    "file": "D3898  skrzydlo  16.01.pdf",
+    "currency": "EUR",
+    "value": 88
+  },
+  {
+    "order": "53651",
+    "status": "FIXED",
+    "file": "D5745   16.01.pdf",
+    "currency": "EUR",
+    "value": 335
+  },
+  {
+    "order": "53654",
+    "status": "FIXED",
+    "file": "D5659   16.01.pdf",
+    "currency": "EUR",
+    "value": 1202
+  },
+  {
+    "order": "53692",
+    "status": "FIXED",
+    "file": "D6005  16.01.pdf",
+    "currency": "EUR",
+    "value": 448
+  },
+  {
+    "order": "53711",
+    "status": "FIXED",
+    "file": "D5909    16.01.pdf",
+    "currency": "EUR",
+    "value": 301
+  },
+  {
+    "order": "53641",
+    "status": "FIXED",
+    "file": "D4932   15.01   I.pdf",
+    "currency": "EUR",
+    "value": 605
+  },
+  {
+    "order": "53647",
+    "status": "FIXED",
+    "file": "D3501 SKRZYDŁA 15.01  I.pdf",
+    "currency": "EUR",
+    "value": 213
+  },
+  {
+    "order": "53669",
+    "status": "FIXED",
+    "file": "D5597  15.01   I.pdf",
+    "currency": "EUR",
+    "value": 142
+  }
+]

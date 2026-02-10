@@ -60,6 +60,11 @@ export interface ReportItem {
   coefficient: string; // współczynnik PLN/materiał (formatowany lub '—')
   unitValue: string; // jednostka (PLN - materiał) / szkła (formatowany lub '—')
   totalGlassQuantity: number; // suma ilości szkła z materiałówki
+
+  // Rozbicie materiału na składowe (w PLN)
+  glazingValue: number; // szyby
+  fittingsValue: number; // okucia
+  partsValue: number; // części/profile
 }
 
 /** Podsumowanie raportu */
@@ -224,7 +229,21 @@ export class ProductionReportService {
         0
       );
 
-      // Współczynnik = PLN / materiał (2 miejsca po przecinku)
+      // Rozbicie materiału na składowe (z groszy na PLN)
+      const materialsArr = order.materials ?? [];
+      const glazingValue = groszeToPln(
+        materialsArr.reduce((sum, m) => sum + (m.glazing ?? 0), 0) as Grosze
+      );
+      const fittingsValue = groszeToPln(
+        materialsArr.reduce((sum, m) => sum + (m.fittings ?? 0), 0) as Grosze
+      );
+      const partsValue = groszeToPln(
+        materialsArr.reduce((sum, m) => sum + (m.parts ?? 0), 0) as Grosze
+      );
+
+      // Efektywna wartość w PLN (dla zleceń EUR używamy valueEur, konwersja w PDF)
+      // coefficient i unitValue są obliczane na podstawie valuePln
+      // Dla zleceń EUR te wartości zostaną przeliczone w PDF z użyciem kursu
       const coefficient = materialValue > 0
         ? (valuePln / materialValue).toFixed(2)
         : '—';
@@ -260,6 +279,10 @@ export class ProductionReportService {
         coefficient,
         unitValue,
         totalGlassQuantity,
+        // Rozbicie materiału
+        glazingValue,
+        fittingsValue,
+        partsValue,
       };
     });
 

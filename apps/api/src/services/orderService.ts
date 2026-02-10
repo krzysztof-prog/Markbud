@@ -19,6 +19,7 @@ import { WarehouseRwService } from './warehouse/WarehouseRwService.js';
 import { SteelRwService } from './SteelRwService.js';
 import { logger } from '../utils/logger.js';
 import { DeliveryReadinessAggregator } from './readiness/index.js';
+import { orderNumberParser } from './parsers/OrderNumberParser.js';
 
 export class OrderService {
   private readinessAggregator: DeliveryReadinessAggregator;
@@ -69,14 +70,21 @@ export class OrderService {
     // Jeśli zlecenie nie ma ceny, a pending price istnieje - przypisz automatycznie
     await this.applyPendingPriceIfExists(order.id, data.orderNumber, data.valuePln, data.valueEur);
 
+    // Jeśli zamówienie z sufixem (-a, -b, -c) nadal nie ma ceny EUR,
+    // spróbuj odziedziczyć cenę z zamówienia bazowego
+    await this.inheritPriceFromBaseOrder(order.id, data.orderNumber);
+
     emitOrderCreated(order);
 
     return order;
   }
 
   /**
-   * Sprawdza i przypisuje pending price do nowo utworzonego zlecenia
-   * Jeśli zlecenie nie ma jeszcze ceny, a w pending_order_prices jest pasujący rekord
+   * Sprawdza i przypisuje pending price do nowo utworzonego zlecenia.
+   * Strategie dopasowania (w kolejności):
+   * 1. Exact match po orderNumber
+   * 2. Prefix match (np. "53526-a" -> "53526")
+   * 3. Match po nazwie pliku zawierającej numer zlecenia
    */
   private async applyPendingPriceIfExists(
     orderId: number,
@@ -85,10 +93,37 @@ export class OrderService {
     existingEur?: number
   ): Promise<void> {
     try {
-      const pendingPrice = await prisma.pendingOrderPrice.findFirst({
+      // Strategia 1: Exact match po orderNumber
+      let pendingPrice = await prisma.pendingOrderPrice.findFirst({
         where: { orderNumber, status: 'pending' },
         orderBy: { createdAt: 'desc' },
       });
+
+      // Strategia 2: Prefix match - "53526-a" -> "53526"
+      if (!pendingPrice) {
+        const baseNumber = orderNumber.split('-')[0];
+        if (baseNumber !== orderNumber) {
+          pendingPrice = await prisma.pendingOrderPrice.findFirst({
+            where: { orderNumber: baseNumber, status: 'pending' },
+            orderBy: { createdAt: 'desc' },
+          });
+        }
+      }
+
+      // Strategia 3: Match po nazwie pliku (fallback dla UNKNOWN)
+      if (!pendingPrice) {
+        pendingPrice = await prisma.pendingOrderPrice.findFirst({
+          where: {
+            orderNumber: 'UNKNOWN',
+            status: 'pending',
+            filename: { contains: orderNumber },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (pendingPrice) {
+          logger.info(`Pending price dopasowana po nazwie pliku: ${pendingPrice.filename} -> ${orderNumber}`);
+        }
+      }
 
       if (!pendingPrice) return;
 
@@ -157,14 +192,120 @@ export class OrderService {
       }
     }
 
-    const order = await this.repository.update(id, data);
+    // Sprawdź czy zmienia się cena EUR - potrzebne do propagacji
+    const isEurPriceChange = data.valueEur !== undefined;
+    // Sprawdź czy użytkownik ręcznie ustawia cenę na zamówieniu z odziedziczoną ceną
+    const isManualPriceSet = isEurPriceChange && currentOrder.priceInheritedFromOrder;
+
+    // Przygotuj dane do zapisu - opcjonalnie wyczyść flagę dziedziczenia
+    let updateData = data;
+    if (isManualPriceSet) {
+      updateData = { ...data, priceInheritedFromOrder: null };
+    }
+
+    const order = await this.repository.update(id, updateData);
 
     emitOrderUpdated(order);
+
+    // Jeśli zmieniono cenę EUR zamówienia bazowego (bez sufiksu),
+    // propaguj cenę do zamówień zastępczych (-a, -b, -c)
+    if (isEurPriceChange) {
+      await this.propagatePriceToVariants(currentOrder.orderNumber, order.valueEur);
+    }
 
     // Auto-recalculate readiness dla powiązanych dostaw
     await this.recalculateDeliveryReadinessForOrder(id);
 
     return order;
+  }
+
+  /**
+   * Dziedziczenie ceny EUR z zamówienia bazowego dla zamówień z sufixem (-a, -b, -c)
+   * Wywoływane przy tworzeniu zamówienia, po sprawdzeniu pending prices
+   */
+  private async inheritPriceFromBaseOrder(orderId: number, orderNumber: string): Promise<void> {
+    try {
+      // Sprawdź czy zamówienie ma sufiks
+      if (!orderNumberParser.hasSuffix(orderNumber)) return;
+
+      // Pobierz aktualne dane zamówienia (mogły się zmienić po applyPendingPrice)
+      const currentOrder = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { valueEur: true },
+      });
+
+      // Jeśli zamówienie już ma cenę EUR - nie dziedzicz
+      if (currentOrder?.valueEur != null) return;
+
+      // Szukaj zamówienia bazowego
+      const baseOrderNumber = orderNumberParser.getBase(orderNumber);
+      const baseOrder = await prisma.order.findUnique({
+        where: { orderNumber: baseOrderNumber },
+        select: { valueEur: true },
+      });
+
+      // Jeśli bazowe nie istnieje lub nie ma ceny - nie dziedzicz
+      if (!baseOrder?.valueEur) return;
+
+      // Skopiuj cenę z bazowego + oznacz jako odziedziczoną
+      await prisma.order.update({
+        where: { id: orderId },
+        data: {
+          valueEur: baseOrder.valueEur,
+          priceInheritedFromOrder: baseOrderNumber,
+        },
+      });
+
+      logger.info(
+        `Cena EUR odziedziczona: ${orderNumber} <- ${baseOrderNumber} (${baseOrder.valueEur / 100} EUR)`
+      );
+    } catch (error) {
+      // Nie blokuj tworzenia zamówienia
+      const errMsg = error instanceof Error ? error.message : 'Nieznany błąd';
+      logger.warn(`Błąd przy dziedziczeniu ceny dla ${orderNumber}: ${errMsg}`);
+    }
+  }
+
+  /**
+   * Propagacja ceny EUR do zamówień zastępczych (z sufixem -a, -b, -c)
+   * Wywoływane gdy zmienia się cena EUR zamówienia bazowego
+   */
+  private async propagatePriceToVariants(orderNumber: string, newValueEur: number | null): Promise<void> {
+    try {
+      // Pobierz bazowy numer (dla pewności, gdyby ktoś zmienił cenę na wariancie)
+      const baseNumber = orderNumberParser.getBase(orderNumber);
+
+      // Szukaj zamówień które odziedziczyły cenę z tego bazowego zamówienia
+      const variantOrders = await prisma.order.findMany({
+        where: {
+          priceInheritedFromOrder: baseNumber,
+          deletedAt: null,
+        },
+        select: { id: true, orderNumber: true },
+      });
+
+      if (variantOrders.length === 0) return;
+
+      // Zaktualizuj cenę EUR we wszystkich wariantach
+      await prisma.order.updateMany({
+        where: {
+          priceInheritedFromOrder: baseNumber,
+          deletedAt: null,
+        },
+        data: {
+          valueEur: newValueEur,
+        },
+      });
+
+      const variantNumbers = variantOrders.map(o => o.orderNumber).join(', ');
+      logger.info(
+        `Cena EUR propagowana z ${baseNumber} do wariantów: ${variantNumbers} (${newValueEur ? newValueEur / 100 : 0} EUR)`
+      );
+    } catch (error) {
+      // Nie blokuj aktualizacji zamówienia
+      const errMsg = error instanceof Error ? error.message : 'Nieznany błąd';
+      logger.warn(`Błąd przy propagacji ceny z ${orderNumber}: ${errMsg}`);
+    }
   }
 
   /**
@@ -281,7 +422,8 @@ export class OrderService {
     orderIds: number[],
     status: string,
     productionDate?: string,
-    skipWarehouseValidation = false
+    skipWarehouseValidation = false,
+    deliveryIds?: number[]
   ) {
     // Validate that all orders exist
     const orders = await Promise.all(
@@ -349,16 +491,86 @@ export class OrderService {
 
     // Automatyczne RW gdy status = completed
     // Wykonuj ASYNCHRONICZNIE aby nie blokować odpowiedzi API
+    // SEKWENCYJNIE (nie równolegle!) - SQLite nie obsługuje concurrent writes
     if (status === ORDER_STATUSES.COMPLETED) {
-      this.processOkucRwAsync(orderIds);
-      this.processProfileRwAsync(orderIds);
-      this.processSteelRwAsync(orderIds);
+      this.processAllRwSequentially(orderIds);
     }
 
     // Auto-recalculate readiness dla powiązanych dostaw
     await this.recalculateDeliveryReadinessForOrders(orderIds);
 
+    // Zmień status dostaw jeśli były zaznaczone całe dostawy
+    if (deliveryIds && deliveryIds.length > 0) {
+      await prisma.delivery.updateMany({
+        where: { id: { in: deliveryIds } },
+        data: { status },
+      });
+    }
+
+    // Automatyczne completed dla dostaw gdy wszystkie zlecenia są completed
+    if (status === ORDER_STATUSES.COMPLETED) {
+      await this.autoCompleteDeliveriesIfAllOrdersCompleted(orderIds);
+    }
+
     return updatedOrders;
+  }
+
+  /**
+   * Automatycznie oznacza dostawę jako 'completed' gdy wszystkie jej zlecenia mają status 'completed'
+   * Wywoływane po bulk update statusu zleceń na 'completed'
+   */
+  private async autoCompleteDeliveriesIfAllOrdersCompleted(orderIds: number[]): Promise<void> {
+    try {
+      // Znajdź wszystkie dostawy powiązane z tymi zleceniami
+      const deliveryOrders = await prisma.deliveryOrder.findMany({
+        where: { orderId: { in: orderIds } },
+        select: { deliveryId: true },
+        distinct: ['deliveryId'],
+      });
+
+      const deliveryIds = deliveryOrders.map(d => d.deliveryId);
+
+      if (deliveryIds.length === 0) return;
+
+      // Dla każdej dostawy sprawdź czy wszystkie zlecenia są completed
+      for (const deliveryId of deliveryIds) {
+        // Pobierz dostawę i sprawdź czy jej status to in_progress (nie chcemy zmieniać już zakończonych)
+        const delivery = await prisma.delivery.findUnique({
+          where: { id: deliveryId },
+          select: { id: true, status: true },
+        });
+
+        if (!delivery || delivery.status !== 'in_progress') continue;
+
+        // Sprawdź czy wszystkie zlecenia w tej dostawie mają status 'completed'
+        const incompleteOrders = await prisma.deliveryOrder.findFirst({
+          where: {
+            deliveryId,
+            order: {
+              status: { not: 'completed' },
+            },
+          },
+        });
+
+        // Jeśli nie ma żadnych niezakończonych zleceń - oznacz dostawę jako completed
+        if (!incompleteOrders) {
+          await prisma.delivery.update({
+            where: { id: deliveryId },
+            data: { status: 'completed' },
+          });
+
+          logger.info('Dostawa automatycznie oznaczona jako completed', {
+            deliveryId,
+            reason: 'all_orders_completed',
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('Błąd podczas automatycznego kończenia dostaw', {
+        orderIds,
+        error: error instanceof Error ? error.message : 'Nieznany błąd',
+      });
+    }
   }
 
   /**
@@ -377,6 +589,28 @@ export class OrderService {
       }
     } catch (error) {
       logger.error('Error recalculating delivery readiness for orders', { orderIds, error });
+    }
+  }
+
+  /**
+   * Przetworz wszystkie typy RW SEKWENCYJNIE (nie równolegle)
+   * SQLite nie obsługuje concurrent writes - równoległe transakcje powodują SQLITE_BUSY
+   */
+  private async processAllRwSequentially(orderIds: number[]): Promise<void> {
+    try {
+      // Okucia RW
+      await this.processOkucRwAsync(orderIds);
+      // Profile RW (po zakończeniu okuć)
+      await this.processProfileRwAsync(orderIds);
+      // Stal RW (po zakończeniu profili)
+      await this.processSteelRwAsync(orderIds);
+
+      logger.info('Wszystkie RW przetworzone sekwencyjnie', { orderIds });
+    } catch (error) {
+      logger.error('Błąd podczas sekwencyjnego przetwarzania RW', {
+        orderIds,
+        error: error instanceof Error ? error.message : 'Nieznany błąd',
+      });
     }
   }
 
@@ -737,6 +971,8 @@ export class OrderService {
       valueEur?: string | null;
       deadline?: string | null;
       status?: string | null;
+      glassDeliveryDate?: string | null;
+      documentAuthorUserId?: number | null;
     }
   ) {
     // Verify order exists
@@ -762,6 +998,28 @@ export class OrderService {
     }
     if (data.status !== undefined) {
       updateData.status = data.status ?? undefined;
+    }
+    if (data.glassDeliveryDate !== undefined) {
+      updateData.glassDeliveryDate = data.glassDeliveryDate ? new Date(data.glassDeliveryDate) : null;
+    }
+    if (data.documentAuthorUserId !== undefined) {
+      if (data.documentAuthorUserId === null) {
+        // Usunięcie autora
+        updateData.documentAuthorUser = { disconnect: true };
+        updateData.documentAuthor = null;
+      } else {
+        // Pobierz nazwę użytkownika z bazy
+        const { prisma } = await import('../index.js');
+        const user = await prisma.user.findUnique({
+          where: { id: data.documentAuthorUserId },
+          select: { name: true },
+        });
+        if (!user) {
+          throw new Error(`Nie znaleziono użytkownika o ID ${data.documentAuthorUserId}`);
+        }
+        updateData.documentAuthorUser = { connect: { id: data.documentAuthorUserId } };
+        updateData.documentAuthor = user.name;
+      }
     }
 
     const order = await this.repository.update(id, updateData);

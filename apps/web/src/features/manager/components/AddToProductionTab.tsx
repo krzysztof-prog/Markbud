@@ -47,7 +47,8 @@ export const AddToProductionTab: React.FC = () => {
     open: boolean;
     message: string;
     orderIds: number[];
-  }>({ open: false, message: '', orderIds: [] });
+    deliveryIds: number[];
+  }>({ open: false, message: '', orderIds: [], deliveryIds: [] });
 
   // Custom hook dla selection logic
   const {
@@ -68,25 +69,29 @@ export const AddToProductionTab: React.FC = () => {
 
   // Mutation do bulk update statusu z optimistic update
   const bulkUpdateMutation = useMutation({
-    mutationFn: ({ orderIds, skipWarehouseValidation = false }: { orderIds: number[]; skipWarehouseValidation?: boolean }) =>
+    mutationFn: ({ orderIds, deliveryIds, skipWarehouseValidation = false }: { orderIds: number[]; deliveryIds?: number[]; skipWarehouseValidation?: boolean }) =>
       managerApi.bulkUpdateStatus({
         orderIds,
+        deliveryIds,
         status: 'in_progress',
         productionDate: getTodayISOString(),
         skipWarehouseValidation,
       }),
-    onMutate: async ({ orderIds }) => {
+    onMutate: async ({ orderIds, deliveryIds }) => {
       await queryClient.cancelQueries({ queryKey: ['orders', 'for-production'] });
       const previous = queryClient.getQueryData(['orders', 'for-production']);
 
       queryClient.setQueryData(['orders', 'for-production'], (old: ForProductionData | undefined) => {
         if (!old) return old;
         const orderIdSet = new Set(orderIds);
+        const deliveryIdSet = new Set(deliveryIds || []);
         return {
           ...old,
           overdueOrders: old.overdueOrders.filter((o) => !orderIdSet.has(o.id)),
           upcomingOrders: old.upcomingOrders.filter((o) => !orderIdSet.has(o.id)),
           privateOrders: old.privateOrders.filter((o) => !orderIdSet.has(o.id)),
+          // Filtruj dostawy które zostały zaznaczone jako całość
+          upcomingDeliveries: old.upcomingDeliveries.filter((d) => !deliveryIdSet.has(d.id)),
         };
       });
 
@@ -112,6 +117,7 @@ export const AddToProductionTab: React.FC = () => {
           open: true,
           message: errorMessage,
           orderIds: variables.orderIds,
+          deliveryIds: variables.deliveryIds || [],
         });
         return; // Nie pokazuj toasta - dialog obsłuży komunikację
       }
@@ -131,17 +137,21 @@ export const AddToProductionTab: React.FC = () => {
   // Obsługa dodania do produkcji z useCallback
   const handleAddToProduction = useCallback(() => {
     if (selectedOrderIds.size === 0) return;
-    bulkUpdateMutation.mutate({ orderIds: Array.from(selectedOrderIds) });
-  }, [selectedOrderIds, bulkUpdateMutation]);
+    bulkUpdateMutation.mutate({
+      orderIds: Array.from(selectedOrderIds),
+      deliveryIds: selectedDeliveryIds.size > 0 ? Array.from(selectedDeliveryIds) : undefined,
+    });
+  }, [selectedOrderIds, selectedDeliveryIds, bulkUpdateMutation]);
 
   // Obsługa potwierdzenia dodania mimo braków magazynowych
   const handleConfirmWithShortage = useCallback(() => {
     bulkUpdateMutation.mutate({
       orderIds: warehouseShortageDialog.orderIds,
+      deliveryIds: warehouseShortageDialog.deliveryIds.length > 0 ? warehouseShortageDialog.deliveryIds : undefined,
       skipWarehouseValidation: true,
     });
-    setWarehouseShortageDialog({ open: false, message: '', orderIds: [] });
-  }, [warehouseShortageDialog.orderIds, bulkUpdateMutation]);
+    setWarehouseShortageDialog({ open: false, message: '', orderIds: [], deliveryIds: [] });
+  }, [warehouseShortageDialog.orderIds, warehouseShortageDialog.deliveryIds, bulkUpdateMutation]);
 
   // Delivery toggle wrapper z delivery object
   const handleDeliveryToggleWithData = useCallback(
@@ -311,7 +321,7 @@ export const AddToProductionTab: React.FC = () => {
       <AlertDialog
         open={warehouseShortageDialog.open}
         onOpenChange={(open) => {
-          if (!open) setWarehouseShortageDialog({ open: false, message: '', orderIds: [] });
+          if (!open) setWarehouseShortageDialog({ open: false, message: '', orderIds: [], deliveryIds: [] });
         }}
       >
         <AlertDialogContent className="max-w-2xl">

@@ -237,7 +237,7 @@ export interface OkucDemand {
 
   // Relacje
   article?: OkucArticle;
-  order?: { id: ID; orderNumber: string };
+  order?: { id: ID; orderNumber: string; productionDate?: string };
   editedBy?: { id: ID; name: string };
 }
 

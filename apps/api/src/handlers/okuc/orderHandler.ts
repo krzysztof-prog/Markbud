@@ -13,6 +13,11 @@ import {
   confirmOrderImportSchema,
 } from '../../validators/okuc.js';
 import { OkucOrderImportService } from '../../services/okuc/OkucOrderImportService.js';
+import {
+  emitOkucOrderCreated,
+  emitOkucOrderUpdated,
+  emitOkucOrderDeleted,
+} from '../../services/event-emitter.js';
 import type { MultipartFile as _MultipartFile } from '@fastify/multipart';
 
 const repository = new OkucOrderRepository(prisma);
@@ -95,6 +100,9 @@ export const okucOrderHandler = {
       createdById: userId,
     });
 
+    // Emituj event dla WebSocket synchronizacji
+    emitOkucOrderCreated({ id: order.id, orderNumber: order.orderNumber });
+
     logger.info('Created order', { orderId: order.id });
     return reply.status(201).send(order);
   },
@@ -125,6 +133,9 @@ export const okucOrderHandler = {
       ...data,
       lastEditById: userId,
     });
+
+    // Emituj event dla WebSocket synchronizacji
+    emitOkucOrderUpdated({ id: order.id, orderNumber: order.orderNumber });
 
     logger.info('Updated order', { id });
     return reply.status(200).send(order);
@@ -158,6 +169,9 @@ export const okucOrderHandler = {
       lastEditById: userId,
     });
 
+    // Emituj event dla WebSocket synchronizacji (receive to zmiana statusu)
+    emitOkucOrderUpdated({ id: order.id, orderNumber: order.orderNumber, status: 'received' });
+
     logger.info('Received order', { id });
     return reply.status(200).send(order);
   },
@@ -184,6 +198,9 @@ export const okucOrderHandler = {
     }
 
     await repository.delete(id);
+
+    // Emituj event dla WebSocket synchronizacji
+    emitOkucOrderDeleted(id);
 
     logger.info('Deleted order', { id });
     return reply.status(204).send();
@@ -238,6 +255,9 @@ export const okucOrderHandler = {
     const userId = typeof rawUserId === 'string' ? parseInt(rawUserId, 10) : rawUserId;
 
     const result = await importService.confirmImport(data, userId);
+
+    // Emituj event dla WebSocket synchronizacji (import tworzy nowe zamówienie)
+    emitOkucOrderCreated({ id: result.order.id, orderNumber: result.order.orderNumber });
 
     logger.info('Confirmed OKUC order import', {
       orderId: result.order.id,

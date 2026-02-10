@@ -335,9 +335,9 @@ export function useCreateListVersion(callbacks?: {
       queryClient.invalidateQueries({ queryKey: VERIFICATION_LIST_KEYS.lists() });
       showSuccessToast(
         'Wersja utworzona',
-        `Utworzono wersję ${data.version} z ${data.items.length} projektami`
+        `Utworzono wersję ${data.version} z ${data.projectsCount} projektami`
       );
-      callbacks?.onSuccess?.(data.id);
+      callbacks?.onSuccess?.(data.listId);
     },
 
     onError: (error) => {

@@ -295,8 +295,20 @@ function DeliveryCard({ delivery, deliveryDate, onEditItem, onDeleteItem, onSetD
                           {item.matchedOrder.client}
                         </div>
                       )}
-                      {/* Przycisk "Ustaw datę" gdy zlecenie istnieje ale nie ma daty dostawy */}
-                      {!item.matchedOrder.deliveryDate && (
+                      {/* Komunikat gdy zlecenie ma wiele projektów */}
+                      {item.matchedOrder.hasMultipleProjects && item.matchedOrder.otherProjects && item.matchedOrder.otherProjects.length > 0 && (
+                        <div className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mt-1">
+                          + inne projekty: {item.matchedOrder.otherProjects.join(', ')}
+                        </div>
+                      )}
+                      {/* Wyświetl datę dostawy jeśli jest ustawiona */}
+                      {item.matchedOrder.deliveryDate ? (
+                        <div className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                          <Calendar className="h-3 w-3" />
+                          Data: {new Date(item.matchedOrder.deliveryDate).toLocaleDateString('pl-PL')}
+                        </div>
+                      ) : (
+                        /* Przycisk "Ustaw datę" gdy zlecenie istnieje ale nie ma daty dostawy */
                         <Button
                           variant="outline"
                           size="sm"

@@ -38,6 +38,15 @@ export interface Delivery {
     description: string;
     quantity: number;
   }>;
+  /** Wyniki sprawdzenia etykiet (najnowsze) */
+  labelChecks?: Array<{
+    id: number;
+    status: string;
+    results: Array<{
+      orderId: number;
+      status: string;
+    }>;
+  }>;
 }
 
 export interface DeliveryWithOrders extends Delivery {

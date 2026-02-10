@@ -226,7 +226,8 @@ export class ImportValidationService {
    * Check if order exists by order number
    */
   async checkOrderExists(orderNumber: string): Promise<OrderExistenceCheckResult> {
-    const order = await this.repository.findOrderByNumber(orderNumber);
+    // Szukaj z fallbackiem na prefix match (np. "53614" -> "53614-a")
+    const order = await this.repository.findOrderByNumberWithPrefix(orderNumber);
 
     if (order) {
       return {

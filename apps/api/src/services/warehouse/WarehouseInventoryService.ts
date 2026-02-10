@@ -74,7 +74,7 @@ export class WarehouseInventoryService {
           },
         });
 
-        // Update stock
+        // Update stock + ustaw datę remanentu na TERAZ
         await tx.warehouseStock.update({
           where: {
             profileId_colorId: {
@@ -85,6 +85,7 @@ export class WarehouseInventoryService {
           data: {
             currentStockBeams: update.actualStock,
             initialStockBeams: calculatedStock,
+            remanentDate: new Date(), // Data nowego remanentu
             version: { increment: 1 },
           },
         });

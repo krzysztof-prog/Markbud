@@ -161,6 +161,7 @@ export interface ValidatedOrder {
   orderNumber: string;
   orderId: number;
   status: 'found' | 'not_found' | 'already_assigned';
+  matchedFrom?: string;
   currentDelivery?: {
     deliveryId: number;
     deliveryNumber: string | null;

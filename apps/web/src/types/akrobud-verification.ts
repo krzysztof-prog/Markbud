@@ -313,3 +313,16 @@ export interface ProjectVerificationResult {
     notFound: number; // projekt bez zleceń w systemie
   };
 }
+
+/**
+ * Wynik tworzenia nowej wersji listy
+ * Zwracany przez POST /api/akrobud-verification/versions
+ */
+export interface CreateListVersionResult {
+  listId: number;
+  version: number;
+  deliveryDate: Timestamp;
+  projectsCount: number;
+  ordersCount: number;
+  parentId: number | null;
+}

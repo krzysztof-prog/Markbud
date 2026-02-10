@@ -15,6 +15,7 @@ import {
   UserOrdersList,
   UserDeliveriesList,
   UserGlassOrdersList,
+  AlertsSection,
   useConflictsCount,
   useDaySummary,
 } from '@/features/moja-praca';
@@ -79,6 +80,9 @@ export default function MojaPracaPage() {
           </PopoverContent>
         </Popover>
       </div>
+
+      {/* Alerty - zlecenia bez cen i problemy z etykietami */}
+      <AlertsSection />
 
       {/* Podsumowanie */}
       {summary && (

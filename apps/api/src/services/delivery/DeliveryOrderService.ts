@@ -18,6 +18,8 @@ import { OrderVariantService, type VariantType } from '../orderVariantService.js
 import { CsvParser } from '../parsers/csv-parser.js';
 import { DeliveryNotificationService, deliveryNotificationService } from './DeliveryNotificationService.js';
 import { DeliveryReadinessAggregator } from '../readiness/index.js';
+import { OkucRwService } from '../okuc/OkucRwService.js';
+import { ORDER_STATUSES } from '../../utils/order-status-machine.js';
 import { logger } from '../../utils/logger.js';
 import type { PrismaClient } from '@prisma/client';
 
@@ -133,9 +135,50 @@ export class DeliveryOrderService {
 
   /**
    * Remove an order from a delivery
+   * Jeśli zlecenie jest zakończone (status='completed'), cofnij RW okuć i ustaw status na 'new'
    */
   async removeOrderFromDelivery(deliveryId: number, orderId: number): Promise<void> {
+    // Sprawdź status zlecenia przed usunięciem
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, orderNumber: true, status: true },
+    });
+
+    if (!order) {
+      throw new NotFoundError('Order');
+    }
+
+    const isCompleted = order.status === ORDER_STATUSES.COMPLETED;
+
+    // Usuń zlecenie z dostawy
     await this.repository.removeOrderFromDelivery(deliveryId, orderId);
+
+    // Jeśli zlecenie było zakończone, cofnij RW okuć i zmień status na 'new'
+    if (isCompleted) {
+      logger.info('Order was completed, reverting RW and resetting status', {
+        orderId,
+        orderNumber: order.orderNumber,
+        deliveryId,
+      });
+
+      // Cofnij RW okuć (asynchronicznie)
+      this.reverseOkucRwAsync(orderId, order.orderNumber);
+
+      // Zmień status zlecenia na 'new' i wyczyść daty zakończenia
+      await this.prisma.order.update({
+        where: { id: orderId },
+        data: {
+          status: ORDER_STATUSES.NEW,
+          completedAt: null,
+          productionDate: null,
+        },
+      });
+
+      logger.info('Order status reset to new after removal from delivery', {
+        orderId,
+        orderNumber: order.orderNumber,
+      });
+    }
 
     // P1-4: Invalidate pallet optimization when orders change
     await this.invalidatePalletOptimization(deliveryId);
@@ -145,6 +188,37 @@ export class DeliveryOrderService {
 
     // Auto-recalculate readiness status
     await this.readinessAggregator.recalculateIfNeeded(deliveryId);
+  }
+
+  /**
+   * Cofanie RW okuć asynchronicznie (fire-and-forget)
+   * Używane gdy usuwamy zakończone zlecenie z dostawy
+   */
+  private async reverseOkucRwAsync(orderId: number, orderNumber: string): Promise<void> {
+    try {
+      const rwService = new OkucRwService(this.prisma);
+      const result = await rwService.reverseRwForOrder(orderId);
+
+      if (result.errors.length > 0) {
+        logger.warn('Błędy podczas cofania RW okuć przy usuwaniu z dostawy', {
+          orderId,
+          orderNumber,
+          errors: result.errors,
+        });
+      } else {
+        logger.info('RW okuć cofnięte pomyślnie', {
+          orderId,
+          orderNumber,
+          processed: result.processed,
+        });
+      }
+    } catch (error) {
+      logger.error('Błąd podczas cofania RW okuć przy usuwaniu z dostawy', {
+        orderId,
+        orderNumber,
+        error,
+      });
+    }
   }
 
   /**

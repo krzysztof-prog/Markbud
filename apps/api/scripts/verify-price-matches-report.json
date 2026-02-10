@@ -1,0 +1,672 @@
+{
+  "timestamp": "2026-02-10T14:25:25.953Z",
+  "summary": {
+    "total": 92,
+    "correct": 88,
+    "mismatched": 4,
+    "unverifiable": 0,
+    "errors": 0
+  },
+  "mismatches": [
+    {
+      "targetOrder": "53668",
+      "pdfOrderNumber": "53526",
+      "file": "D4827,D5366  8.01  II.pdf",
+      "assignedValue": 1850,
+      "reparsedValue": 1850,
+      "actualOrderExists": false,
+      "actualOrderNumber": null,
+      "actualOrderHasPrice": false
+    },
+    {
+      "targetOrder": "53832",
+      "pdfOrderNumber": "53632",
+      "file": "D5712,D5858  30.01.pdf",
+      "assignedValue": 2592,
+      "reparsedValue": 2592,
+      "actualOrderExists": true,
+      "actualOrderNumber": "53632",
+      "actualOrderHasPrice": true
+    },
+    {
+      "targetOrder": "53709-a",
+      "pdfOrderNumber": "53545",
+      "file": "D5370  9.01.pdf",
+      "assignedValue": 838,
+      "reparsedValue": 838,
+      "actualOrderExists": false,
+      "actualOrderNumber": null,
+      "actualOrderHasPrice": false
+    },
+    {
+      "targetOrder": "53630-a",
+      "pdfOrderNumber": "52737",
+      "file": "D2536    30.01.pdf",
+      "assignedValue": 577,
+      "reparsedValue": 577,
+      "actualOrderExists": true,
+      "actualOrderNumber": "52737",
+      "actualOrderHasPrice": true
+    }
+  ],
+  "noOrderInPdf": [],
+  "matches": [
+    {
+      "order": "53678",
+      "file": "D5925  5.02  I.pdf",
+      "value": 677,
+      "reparsedValue": 677,
+      "valueMatch": true
+    },
+    {
+      "order": "53696",
+      "file": "D5034  5.02  I.pdf",
+      "value": 1165,
+      "reparsedValue": 1165,
+      "valueMatch": true
+    },
+    {
+      "order": "53753",
+      "file": "D3152  5.02  I.pdf",
+      "value": 495,
+      "reparsedValue": 495,
+      "valueMatch": true
+    },
+    {
+      "order": "53755",
+      "file": "D3889  5.02  I.pdf",
+      "value": 924,
+      "reparsedValue": 924,
+      "valueMatch": true
+    },
+    {
+      "order": "53769",
+      "file": "D6214  5.02  I.pdf",
+      "value": 910,
+      "reparsedValue": 910,
+      "valueMatch": true
+    },
+    {
+      "order": "53812",
+      "file": "D5564  6.02.pdf",
+      "value": 693,
+      "reparsedValue": 693,
+      "valueMatch": true
+    },
+    {
+      "order": "53649",
+      "file": "D5613   2.02.pdf",
+      "value": 698,
+      "reparsedValue": 698,
+      "valueMatch": true
+    },
+    {
+      "order": "53652",
+      "file": "C8830  5.02 II.pdf",
+      "value": 716,
+      "reparsedValue": 716,
+      "valueMatch": true
+    },
+    {
+      "order": "53674",
+      "file": "D5763  2.02.pdf",
+      "value": 800,
+      "reparsedValue": 800,
+      "valueMatch": true
+    },
+    {
+      "order": "53680",
+      "file": "D4416   2.02.pdf",
+      "value": 1446,
+      "reparsedValue": 1446,
+      "valueMatch": true
+    },
+    {
+      "order": "53689",
+      "file": "C7167  5.02  II.pdf",
+      "value": 1009,
+      "reparsedValue": 1009,
+      "valueMatch": true
+    },
+    {
+      "order": "53679",
+      "file": "D4418  2.02.pdf",
+      "value": 1567,
+      "reparsedValue": 1567,
+      "valueMatch": true
+    },
+    {
+      "order": "53715",
+      "file": "D5796  2,02.pdf",
+      "value": 542,
+      "reparsedValue": 542,
+      "valueMatch": true
+    },
+    {
+      "order": "53746",
+      "file": "D5683  2,02.pdf",
+      "value": 948,
+      "reparsedValue": 948,
+      "valueMatch": true
+    },
+    {
+      "order": "53747",
+      "file": "D5615  2.02.pdf",
+      "value": 622,
+      "reparsedValue": 622,
+      "valueMatch": true
+    },
+    {
+      "order": "53771",
+      "file": "D5132  2.02.pdf",
+      "value": 678,
+      "reparsedValue": 678,
+      "valueMatch": true
+    },
+    {
+      "order": "53772",
+      "file": "D1525   2.02.pdf",
+      "value": 578,
+      "reparsedValue": 578,
+      "valueMatch": true
+    },
+    {
+      "order": "53811",
+      "file": "C8829   5.02  II.pdf",
+      "value": 896,
+      "reparsedValue": 896,
+      "valueMatch": true
+    },
+    {
+      "order": "53822",
+      "file": "D1948  5.02 II.pdf",
+      "value": 1458,
+      "reparsedValue": 1458,
+      "valueMatch": true
+    },
+    {
+      "order": "53874",
+      "file": "D3732  5.02  II.pdf",
+      "value": 740,
+      "reparsedValue": 740,
+      "valueMatch": true
+    },
+    {
+      "order": "53663",
+      "file": "GOOSSENS  3.02.pdf",
+      "value": 595,
+      "reparsedValue": 595,
+      "valueMatch": true
+    },
+    {
+      "order": "53675",
+      "file": "D5711  30.01.pdf",
+      "value": 382,
+      "reparsedValue": 382,
+      "valueMatch": true
+    },
+    {
+      "order": "53716",
+      "file": "D6040  30.01.pdf",
+      "value": 497,
+      "reparsedValue": 497,
+      "valueMatch": true
+    },
+    {
+      "order": "53736",
+      "file": "D5875  29.01  II.pdf",
+      "value": 597,
+      "reparsedValue": 597,
+      "valueMatch": true
+    },
+    {
+      "order": "53739",
+      "file": "D5754  29.01 II.pdf",
+      "value": 463,
+      "reparsedValue": 463,
+      "valueMatch": true
+    },
+    {
+      "order": "53741",
+      "file": "D2734   29.01  II.pdf",
+      "value": 717,
+      "reparsedValue": 717,
+      "valueMatch": true
+    },
+    {
+      "order": "53743",
+      "file": "D5748  30.01.pdf",
+      "value": 629,
+      "reparsedValue": 629,
+      "valueMatch": true
+    },
+    {
+      "order": "53745",
+      "file": "D5905  30.01.pdf",
+      "value": 309,
+      "reparsedValue": 309,
+      "valueMatch": true
+    },
+    {
+      "order": "53784",
+      "file": "D5970  30.01.pdf",
+      "value": 733,
+      "reparsedValue": 733,
+      "valueMatch": true
+    },
+    {
+      "order": "53788",
+      "file": "D5969  30.01.pdf",
+      "value": 487,
+      "reparsedValue": 487,
+      "valueMatch": true
+    },
+    {
+      "order": "53758-a",
+      "file": "D6206   29.01  II.pdf",
+      "value": 878,
+      "reparsedValue": 878,
+      "valueMatch": true
+    },
+    {
+      "order": "53831",
+      "file": "D5378  RAMA  30.01.pdf",
+      "value": 185,
+      "reparsedValue": 185,
+      "valueMatch": true
+    },
+    {
+      "order": "53852",
+      "file": "DOMBURG  3.02.pdf",
+      "value": 825,
+      "reparsedValue": 825,
+      "valueMatch": true
+    },
+    {
+      "order": "53854",
+      "file": "BROEKHOVEN  3.02.pdf",
+      "value": 575,
+      "reparsedValue": 575,
+      "valueMatch": true
+    },
+    {
+      "order": "53860",
+      "file": "CHIN  3.02.pdf",
+      "value": 1242,
+      "reparsedValue": 1242,
+      "valueMatch": true
+    },
+    {
+      "order": "53622-a",
+      "file": "C9854  SKRZYDLO  26.01.pdf",
+      "value": 132,
+      "reparsedValue": 132,
+      "valueMatch": true
+    },
+    {
+      "order": "53702",
+      "file": "D5860    26.01.pdf",
+      "value": 634,
+      "reparsedValue": 634,
+      "valueMatch": true
+    },
+    {
+      "order": "53712",
+      "file": "D5277   26.01.pdf",
+      "value": 633,
+      "reparsedValue": 633,
+      "valueMatch": true
+    },
+    {
+      "order": "53721",
+      "file": "C8502   26.01.pdf",
+      "value": 900,
+      "reparsedValue": 900,
+      "valueMatch": true
+    },
+    {
+      "order": "53724",
+      "file": "ELSENDOORN   27.01.pdf",
+      "value": 734,
+      "reparsedValue": 734,
+      "valueMatch": true
+    },
+    {
+      "order": "53767",
+      "file": "D5840   26.01.pdf",
+      "value": 620,
+      "reparsedValue": 620,
+      "valueMatch": true
+    },
+    {
+      "order": "53768",
+      "file": "D5927   26.01.pdf",
+      "value": 1147,
+      "reparsedValue": 1147,
+      "valueMatch": true
+    },
+    {
+      "order": "53777",
+      "file": "SERVICE E   27.01.pdf",
+      "value": 444,
+      "reparsedValue": 444,
+      "valueMatch": true
+    },
+    {
+      "order": "53778",
+      "file": "KULA   27.01.pdf",
+      "value": 719,
+      "reparsedValue": 719,
+      "valueMatch": true
+    },
+    {
+      "order": "53621",
+      "file": "D5665  23.01.pdf",
+      "value": 590,
+      "reparsedValue": 590,
+      "valueMatch": true
+    },
+    {
+      "order": "53682",
+      "file": "D5877  23.01.pdf",
+      "value": 432,
+      "reparsedValue": 432,
+      "valueMatch": true
+    },
+    {
+      "order": "53683",
+      "file": "D4619  23.01.pdf",
+      "value": 366,
+      "reparsedValue": 366,
+      "valueMatch": true
+    },
+    {
+      "order": "53685",
+      "file": "D3564   23.01.pdf",
+      "value": 192,
+      "reparsedValue": 192,
+      "valueMatch": true
+    },
+    {
+      "order": "53687",
+      "file": "D5750  23.01.pdf",
+      "value": 666,
+      "reparsedValue": 666,
+      "valueMatch": true
+    },
+    {
+      "order": "53688",
+      "file": "D5664  23.01.pdf",
+      "value": 692,
+      "reparsedValue": 692,
+      "valueMatch": true
+    },
+    {
+      "order": "53686",
+      "file": "D5717   23.01.pdf",
+      "value": 454,
+      "reparsedValue": 454,
+      "valueMatch": true
+    },
+    {
+      "order": "53707",
+      "file": "D5244   23.01.pdf",
+      "value": 479,
+      "reparsedValue": 479,
+      "valueMatch": true
+    },
+    {
+      "order": "53752",
+      "file": "D3565  RAMA  23.01.pdf",
+      "value": 139,
+      "reparsedValue": 139,
+      "valueMatch": true
+    },
+    {
+      "order": "53781",
+      "file": "D5872    23.01.pdf",
+      "value": 628,
+      "reparsedValue": 628,
+      "valueMatch": true
+    },
+    {
+      "order": "53782",
+      "file": "D6125    23.01.pdf",
+      "value": 488,
+      "reparsedValue": 488,
+      "valueMatch": true
+    },
+    {
+      "order": "53786-a",
+      "file": "D6257   23.01.pdf",
+      "value": 748,
+      "reparsedValue": 748,
+      "valueMatch": true
+    },
+    {
+      "order": "53787-a",
+      "file": "D6010   23.01.pdf",
+      "value": 650,
+      "reparsedValue": 650,
+      "valueMatch": true
+    },
+    {
+      "order": "53453",
+      "file": "D3812  22.01  I.pdf",
+      "value": 554,
+      "reparsedValue": 554,
+      "valueMatch": true
+    },
+    {
+      "order": "53561",
+      "file": "D1844   22.01  I.pdf",
+      "value": 579,
+      "reparsedValue": 579,
+      "valueMatch": true
+    },
+    {
+      "order": "53644",
+      "file": "D1079   22.01.pdf",
+      "value": 367,
+      "reparsedValue": 367,
+      "valueMatch": true
+    },
+    {
+      "order": "53677",
+      "file": "D5953   22.01  I.pdf",
+      "value": 1004,
+      "reparsedValue": 1004,
+      "valueMatch": true
+    },
+    {
+      "order": "53701",
+      "file": "D3678   22.01   II.pdf",
+      "value": 483,
+      "reparsedValue": 483,
+      "valueMatch": true
+    },
+    {
+      "order": "53737",
+      "file": "D2983    22.01  II.pdf",
+      "value": 692,
+      "reparsedValue": 692,
+      "valueMatch": true
+    },
+    {
+      "order": "53726",
+      "file": "PETERS   20.01.pdf",
+      "value": 272,
+      "reparsedValue": 272,
+      "valueMatch": true
+    },
+    {
+      "order": "53665",
+      "file": "BAUER  20.01.pdf",
+      "value": 878,
+      "reparsedValue": 878,
+      "valueMatch": true
+    },
+    {
+      "order": "53666",
+      "file": "BOSMA   20.01.pdf",
+      "value": 822,
+      "reparsedValue": 822,
+      "valueMatch": true
+    },
+    {
+      "order": "53667",
+      "file": "LEEUWEN   20.01.pdf",
+      "value": 1717,
+      "reparsedValue": 1717,
+      "valueMatch": true
+    },
+    {
+      "order": "53664",
+      "file": "VREE   20.01.pdf",
+      "value": 1433,
+      "reparsedValue": 1433,
+      "valueMatch": true
+    },
+    {
+      "order": "53691",
+      "file": "Wetting   20.01  POLY.pdf",
+      "value": 701,
+      "reparsedValue": 701,
+      "valueMatch": true
+    },
+    {
+      "order": "53720",
+      "file": "D5287  29.01  I.pdf",
+      "value": 601,
+      "reparsedValue": 601,
+      "valueMatch": true
+    },
+    {
+      "order": "53722",
+      "file": "BROUWERS   20.01.pdf",
+      "value": 780,
+      "reparsedValue": 780,
+      "valueMatch": true
+    },
+    {
+      "order": "53723",
+      "file": "TROOST    20.01.pdf",
+      "value": 669,
+      "reparsedValue": 669,
+      "valueMatch": true
+    },
+    {
+      "order": "53725",
+      "file": "SNEL   20.01.pdf",
+      "value": 606,
+      "reparsedValue": 606,
+      "valueMatch": true
+    },
+    {
+      "order": "53729",
+      "file": "KREEFT   20.01.pdf",
+      "value": 365,
+      "reparsedValue": 365,
+      "valueMatch": true
+    },
+    {
+      "order": "53740",
+      "file": "D2871  29.01  I.pdf",
+      "value": 379,
+      "reparsedValue": 379,
+      "valueMatch": true
+    },
+    {
+      "order": "53757",
+      "file": "jansen rama  20.01.pdf",
+      "value": 79,
+      "reparsedValue": 79,
+      "valueMatch": true
+    },
+    {
+      "order": "53650",
+      "file": "D5434  19.01.pdf",
+      "value": 387,
+      "reparsedValue": 387,
+      "valueMatch": true
+    },
+    {
+      "order": "53699",
+      "file": "D4175 skrzydło  19.01.pdf",
+      "value": 80,
+      "reparsedValue": 80,
+      "valueMatch": true
+    },
+    {
+      "order": "53705",
+      "file": "D5627   19.01.pdf",
+      "value": 426,
+      "reparsedValue": 426,
+      "valueMatch": true
+    },
+    {
+      "order": "53633",
+      "file": "D5751  16.01.pdf",
+      "value": 216,
+      "reparsedValue": 216,
+      "valueMatch": true
+    },
+    {
+      "order": "53645",
+      "file": "D3898  skrzydlo  16.01.pdf",
+      "value": 88,
+      "reparsedValue": 88,
+      "valueMatch": true
+    },
+    {
+      "order": "53651",
+      "file": "D5745   16.01.pdf",
+      "value": 335,
+      "reparsedValue": 335,
+      "valueMatch": true
+    },
+    {
+      "order": "53654",
+      "file": "D5659   16.01.pdf",
+      "value": 1202,
+      "reparsedValue": 1202,
+      "valueMatch": true
+    },
+    {
+      "order": "53692",
+      "file": "D6005  16.01.pdf",
+      "value": 448,
+      "reparsedValue": 448,
+      "valueMatch": true
+    },
+    {
+      "order": "53711",
+      "file": "D5909    16.01.pdf",
+      "value": 301,
+      "reparsedValue": 301,
+      "valueMatch": true
+    },
+    {
+      "order": "53641",
+      "file": "D4932   15.01   I.pdf",
+      "value": 605,
+      "reparsedValue": 605,
+      "valueMatch": true
+    },
+    {
+      "order": "53647",
+      "file": "D3501 SKRZYDŁA 15.01  I.pdf",
+      "value": 213,
+      "reparsedValue": 213,
+      "valueMatch": true
+    },
+    {
+      "order": "53669",
+      "file": "D5597  15.01   I.pdf",
+      "value": 142,
+      "reparsedValue": 142,
+      "valueMatch": true
+    }
+  ],
+  "errors": []
+}

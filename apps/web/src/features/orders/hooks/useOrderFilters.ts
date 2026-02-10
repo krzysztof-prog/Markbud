@@ -51,6 +51,7 @@ export const getDefaultDateFrom = (): string => {
 const DEFAULT_FILTERS: FilterState = {
   clientFilter: 'all',
   hideProduced: true, // domyślnie ukryj wyprodukowane
+  showOnlyProduced: false, // domyślnie wyłączony
   dateFrom: getDefaultDateFrom(),
   showOnlyMissing: false, // domyślnie pokazuj wszystkie zlecenia
   hideMissing: true, // domyślnie ukryj brakujące numery
@@ -138,6 +139,7 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
         setFilters({
           clientFilter: parsed.clientFilter || 'all',
           hideProduced: typeof parsed.hideProduced === 'boolean' ? parsed.hideProduced : true,
+          showOnlyProduced: typeof parsed.showOnlyProduced === 'boolean' ? parsed.showOnlyProduced : false,
           dateFrom: parsed.dateFrom || getDefaultDateFrom(),
           showOnlyMissing: typeof parsed.showOnlyMissing === 'boolean' ? parsed.showOnlyMissing : false,
           hideMissing: typeof parsed.hideMissing === 'boolean' ? parsed.hideMissing : false,
@@ -357,6 +359,13 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
       );
     }
 
+    // Filtrowanie - tylko wyprodukowane (archiwalne LUB completed)
+    if (filters.showOnlyProduced) {
+      result = result.filter((order: ExtendedOrder) =>
+        !!order.archivedAt || order.status === 'completed'
+      );
+    }
+
     // Filtrowanie po dacie "od"
     // Logika: pokaż jeśli KTÓRAKOLWIEK data (deadline LUB dostawa AKR) >= filtr
     // Zlecenia BEZ obu dat są zawsze pokazywane (bezpieczniej - nie wiemy kiedy mają termin)
@@ -494,7 +503,7 @@ export function useOrderFilters({ allOrders }: UseOrderFiltersOptions): UseOrder
   }, [allOrders]);
 
   // Sprawdź czy jakikolwiek filtr jest aktywny
-  const hasActiveFilter = filters.clientFilter !== 'all' || filters.hideProduced || filters.dateFrom !== '' || filters.showOnlyMissing || filters.privateUpcoming2Weeks;
+  const hasActiveFilter = filters.clientFilter !== 'all' || filters.hideProduced || filters.showOnlyProduced || filters.dateFrom !== '' || filters.showOnlyMissing || filters.privateUpcoming2Weeks;
 
   return {
     // Filtry główne

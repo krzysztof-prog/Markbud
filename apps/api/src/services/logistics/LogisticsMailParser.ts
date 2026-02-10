@@ -69,8 +69,11 @@ const RAL_PATTERN = /RAL\s*(\d{4})/i;
 // Wzorzec numeru projektu: litera + 3-5 cyfr
 const PROJECT_NUMBER_PATTERN = /\b([A-Z]\d{3,5})\b/g;
 
-// Wzorzec daty: na DD.MM lub na DD.MM.YYYY
-const DATE_PATTERN = /na\s+(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?/gi;
+// Wzorzec daty: na DD.MM lub na DD.MM.YYYY (kropka jako separator)
+const DATE_PATTERN_PL = /na\s+(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?/gi;
+
+// Wzorzec daty: "Delivery for DD-MM-YYYY" (myślnik jako separator, format angielski)
+const DATE_PATTERN_EN = /Delivery\s+for\s+(\d{1,2})-(\d{1,2})-(\d{4})/gi;
 
 // Wzorzec "Klient nr X"
 const CLIENT_PATTERN = /Klient\s*nr\s*(\d+)/gi;
@@ -100,15 +103,26 @@ function parseDate(text: string): ParsedDate {
   const matches: { day: number; month: number; year?: number }[] = [];
   let match;
 
-  // Reset regex
-  DATE_PATTERN.lastIndex = 0;
-
-  while ((match = DATE_PATTERN.exec(text)) !== null) {
+  // 1. Najpierw szukaj formatu angielskiego "Delivery for DD-MM-YYYY" (wyższy priorytet - ma pełną datę)
+  DATE_PATTERN_EN.lastIndex = 0;
+  while ((match = DATE_PATTERN_EN.exec(text)) !== null) {
     matches.push({
       day: parseInt(match[1], 10),
       month: parseInt(match[2], 10),
-      year: match[3] ? parseInt(match[3], 10) : undefined,
+      year: parseInt(match[3], 10),
     });
+  }
+
+  // 2. Jeśli nie znaleziono, szukaj formatu polskiego "na DD.MM" lub "na DD.MM.YYYY"
+  if (matches.length === 0) {
+    DATE_PATTERN_PL.lastIndex = 0;
+    while ((match = DATE_PATTERN_PL.exec(text)) !== null) {
+      matches.push({
+        day: parseInt(match[1], 10),
+        month: parseInt(match[2], 10),
+        year: match[3] ? parseInt(match[3], 10) : undefined,
+      });
+    }
   }
 
   if (matches.length === 0) {

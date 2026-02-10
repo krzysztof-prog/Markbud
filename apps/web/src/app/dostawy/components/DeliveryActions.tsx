@@ -1,12 +1,15 @@
 'use client';
 
-import { CheckCircle2, Package, FileText, Loader2, ListChecks, Tags } from 'lucide-react';
+import { CheckCircle2, Package, FileText, Loader2, ListChecks, Tags, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface LabelCheckInfo {
   id: number;
   status: string;
+  okCount: number;
+  mismatchCount: number;
+  errorCount: number;
   results: Array<{
     orderId: number;
     status: string;
@@ -26,6 +29,8 @@ interface DeliveryActionsProps {
   onVerify: () => void;
   onCheckLabels: () => void;
   isProtocolLoading?: boolean;
+  isCheckLabelsLoading?: boolean;
+  hasLabelCheck?: boolean;
 }
 
 export default function DeliveryActions({
@@ -36,33 +41,37 @@ export default function DeliveryActions({
   onVerify,
   onCheckLabels,
   isProtocolLoading = false,
+  isCheckLabelsLoading = false,
+  hasLabelCheck = false,
 }: DeliveryActionsProps) {
   const hasOrders = delivery.deliveryOrders && delivery.deliveryOrders.length > 0;
   const isDisabled = !hasOrders;
 
   // Status sprawdzenia etykiet - kolorowanie przycisku i tooltip
+  // Używamy okCount/mismatchCount/errorCount zamiast iterować po results
   const latestLabelCheck = delivery.labelChecks?.[0];
   const labelCheckStatus = (() => {
     if (!latestLabelCheck || latestLabelCheck.status !== 'completed') return 'none';
-    if (latestLabelCheck.results.length === 0) return 'none';
-    const allOk = latestLabelCheck.results.every(r => r.status === 'OK');
-    return allOk ? 'ok' : 'warning';
+    const { okCount, mismatchCount, errorCount } = latestLabelCheck;
+    const total = okCount + mismatchCount + errorCount;
+    if (total === 0) return 'none';
+    const hasIssues = mismatchCount > 0 || errorCount > 0;
+    return hasIssues ? 'warning' : 'ok';
   })();
 
   const labelCheckTooltip = (() => {
     if (labelCheckStatus === 'none') return null;
-    const results = latestLabelCheck!.results;
-    const okCount = results.filter(r => r.status === 'OK').length;
-    const total = results.length;
+    const { okCount, mismatchCount, errorCount } = latestLabelCheck!;
+    const total = okCount + mismatchCount + errorCount;
     if (labelCheckStatus === 'ok') {
       return `Wszystkie etykiety OK (${okCount}/${total})`;
     }
-    const issues = total - okCount;
+    const issues = mismatchCount + errorCount;
     return `${issues} z ${total} etykiet wymaga uwagi`;
   })();
 
   return (
-    <div className="flex gap-2 flex-wrap">
+    <div className="flex items-center justify-center gap-2 flex-nowrap">
       <Button
         size="sm"
         variant="outline"
@@ -73,7 +82,9 @@ export default function DeliveryActions({
         Weryfikuj
       </Button>
 
-      {labelCheckTooltip ? (
+      {/* Przycisk sprawdzania etykiet - różne stany */}
+      {hasLabelCheck && labelCheckTooltip ? (
+        // Jest sprawdzenie z wynikami - pokaż "Wyniki etykiet" z tooltipem
         <TooltipProvider delayDuration={300}>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -87,10 +98,10 @@ export default function DeliveryActions({
                     ? 'border-green-500 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800'
                     : 'border-orange-500 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:text-orange-800'
                 }
-                aria-label="Sprawdź etykiety"
+                aria-label="Zobacz wyniki sprawdzenia etykiet"
               >
-                <Tags className="h-4 w-4 mr-1.5" aria-hidden="true" />
-                Sprawdź etykiety
+                <Eye className="h-4 w-4 mr-1.5" aria-hidden="true" />
+                Wyniki etykiet
               </Button>
             </TooltipTrigger>
             <TooltipContent>
@@ -98,16 +109,34 @@ export default function DeliveryActions({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-      ) : (
+      ) : hasLabelCheck ? (
+        // Jest sprawdzenie ale brak wyników (pending?) - pokaż "Wyniki etykiet"
         <Button
           size="sm"
           variant="outline"
           onClick={onCheckLabels}
           disabled={isDisabled}
-          aria-label="Sprawdź etykiety"
+          aria-label="Zobacz wyniki sprawdzenia etykiet"
         >
-          <Tags className="h-4 w-4 mr-1.5" aria-hidden="true" />
-          Sprawdź etykiety
+          <Eye className="h-4 w-4 mr-1.5" aria-hidden="true" />
+          Wyniki etykiet
+        </Button>
+      ) : (
+        // Brak sprawdzenia - pokaż "Sprawdź etykiety" (uruchom OCR)
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onCheckLabels}
+          disabled={isDisabled || isCheckLabelsLoading}
+          aria-label="Uruchom sprawdzanie etykiet"
+          aria-busy={isCheckLabelsLoading}
+        >
+          {isCheckLabelsLoading ? (
+            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <Tags className="h-4 w-4 mr-1.5" aria-hidden="true" />
+          )}
+          {isCheckLabelsLoading ? 'Sprawdzam...' : 'Sprawdź etykiety'}
         </Button>
       )}
 

@@ -4,10 +4,11 @@
  * Generuje raport PDF zawierający:
  * - Nagłówek z miesiącem, rokiem i kursem EUR/PLN
  * - Tabelę zleceń z kolumnami (A4 landscape):
- *   Dostawa, Nr prod., Klient, Data prod., Okna, Jedn., Skrzyd., PLN, EUR,
+ *   LP, Nr prod., Klient, Data prod., Okna, Jedn., Skrzyd., PLN, EUR,
  *   Materiał, Wsp., Jedn.zł, Nr FV
  * - Sekcję nietypówek
  * - Podsumowanie z przeliczeniem EUR na PLN
+ * - Sumę materiału z rozbiciem na szyby, okucia, części
  */
 
 import PDFDocument from 'pdfkit';
@@ -37,23 +38,33 @@ export class ProductionReportPdfService {
   // Marginesy i stałe layoutu (landscape A4)
   private readonly PAGE_MARGIN = 30;
   private readonly TABLE_TOP = 100;
+  private readonly ROW_HEIGHT = 14;
 
-  // Szerokości kolumn tabeli (suma = ~757 dla A4 landscape z marginesami 30)
-  // Kolumny bez RW Ok., RW Pr. i Dostawa
+  // Szerokości kolumn tabeli (z kolumną LP)
   private readonly COL_WIDTHS = {
-    orderNumber: 70,     // Nr prod. (zwiększone)
-    client: 130,         // Klient (znacznie więcej miejsca)
-    productionDate: 55,  // Data prod.
-    windows: 40,         // Okna
-    units: 40,           // Jedn.
-    sashes: 40,          // Skrzyd.
-    valuePln: 80,        // PLN (zwiększone)
-    valueEur: 70,        // EUR (zwiększone)
-    materialValue: 75,   // Materiał (zwiększone)
-    coefficient: 45,     // Wsp.
-    unitValue: 55,       // Jedn.zł
-    invoiceNumber: 80,   // Nr FV (zwiększone)
+    lp: 25,              // LP (numer porządkowy)
+    orderNumber: 65,     // Nr prod.
+    client: 120,         // Klient
+    productionDate: 50,  // Data prod.
+    windows: 35,         // Okna
+    units: 35,           // Jedn.
+    sashes: 35,          // Skrzyd.
+    valuePln: 75,        // PLN
+    valueEur: 65,        // EUR
+    materialValue: 70,   // Materiał
+    coefficient: 40,     // Wsp.
+    unitValue: 50,       // Jedn.zł
+    invoiceNumber: 75,   // Nr FV
   };
+
+  /**
+   * Oblicz efektywną wartość PLN dla zlecenia (uwzględniając EUR)
+   */
+  private getEffectivePln(item: ReportItem, eurRate: number): number {
+    if (item.valuePln > 0) return item.valuePln;
+    if (item.valueEur !== null && item.valueEur > 0) return item.valueEur * eurRate;
+    return 0;
+  }
 
   /**
    * Generuj PDF raportu produkcji
@@ -73,6 +84,7 @@ export class ProductionReportPdfService {
           },
           bufferPages: true,
           compress: true,
+          autoFirstPage: true,
         });
 
         // Buffer do przechowywania PDF
@@ -85,11 +97,14 @@ export class ProductionReportPdfService {
         doc.registerFont('Roboto', this.REGULAR_FONT);
         doc.registerFont('Roboto-Bold', this.BOLD_FONT);
 
+        // Śledź ile stron z treścią mamy
+        let contentPageCount = 1;
+
         // ==================== NAGŁÓWEK ====================
         this.drawHeader(doc, report.year, report.month, eurRate);
 
         // ==================== TABELA ZLECEŃ ====================
-        this.drawOrdersTable(doc, report.items);
+        contentPageCount = this.drawOrdersTable(doc, report.items, eurRate);
 
         // ==================== NIETYPÓWKI ====================
         this.drawAtypicalSection(doc, report.summary.atypical);
@@ -97,13 +112,19 @@ export class ProductionReportPdfService {
         // ==================== PODSUMOWANIE ====================
         this.drawSummarySection(doc, report.summary, report.items, eurRate);
 
+        // ==================== SUMA MATERIAŁÓW ====================
+        this.drawMaterialSummary(doc, report.items, eurRate);
+
         // ==================== STOPKI ====================
-        this.addPageFooters(doc);
+        // Pobierz faktyczną liczbę stron z treścią
+        const range = doc.bufferedPageRange();
+        contentPageCount = range.count;
+        this.addPageFooters(doc, contentPageCount);
 
         // Zakończ dokument
         doc.end();
 
-        logger.info(`Generated production report PDF for ${report.year}-${report.month}`);
+        logger.info(`Generated production report PDF for ${report.year}-${report.month} (${contentPageCount} pages)`);
       } catch (error) {
         logger.error('Error generating production report PDF:', error);
         reject(error);
@@ -140,11 +161,12 @@ export class ProductionReportPdfService {
   }
 
   /**
-   * Rysuj tabelę zleceń
+   * Rysuj tabelę zleceń - zwraca liczbę stron
    */
-  private drawOrdersTable(doc: PDFKit.PDFDocument, items: ReportItem[]): void {
+  private drawOrdersTable(doc: PDFKit.PDFDocument, items: ReportItem[], eurRate: number): number {
     const startX = this.PAGE_MARGIN;
     let currentY = doc.y;
+    let pageCount = 1;
 
     // Nagłówki tabeli
     this.drawTableHeader(doc, startX, currentY);
@@ -170,6 +192,7 @@ export class ProductionReportPdfService {
       // Sprawdź czy jest miejsce na wiersz (landscape ma mniej wysokości)
       if (currentY > doc.page.height - 100) {
         doc.addPage();
+        pageCount++;
         currentY = this.PAGE_MARGIN;
         this.drawTableHeader(doc, startX, currentY);
         currentY = doc.y + 10;
@@ -179,15 +202,15 @@ export class ProductionReportPdfService {
       // Zebra striping - co drugi wiersz ciemniejszy
       if (i % 2 === 1) {
         doc
-          .rect(startX, currentY - 2, totalWidth, 14)
+          .rect(startX, currentY - 2, totalWidth, this.ROW_HEIGHT)
           .fillOpacity(0.1)
           .fill('#6B7280')
           .fillOpacity(1)
           .fillColor('#000000');
       }
 
-      this.drawTableRow(doc, item, startX, currentY);
-      currentY += 14;
+      this.drawTableRow(doc, item, startX, currentY, i + 1, eurRate);
+      currentY += this.ROW_HEIGHT;
     }
 
     // Linia zamykająca tabelę
@@ -199,15 +222,19 @@ export class ProductionReportPdfService {
       .stroke();
 
     doc.y = currentY + 15;
+    return pageCount;
   }
 
   /**
-   * Rysuj nagłówek tabeli z wszystkimi kolumnami (bez kolumny Dostawa)
+   * Rysuj nagłówek tabeli z kolumną LP
    */
   private drawTableHeader(doc: PDFKit.PDFDocument, startX: number, startY: number): void {
     doc.fontSize(7).font('Roboto-Bold').fillColor('#374151');
 
     let x = startX;
+
+    doc.text('LP', x, startY, { width: this.COL_WIDTHS.lp, align: 'center' });
+    x += this.COL_WIDTHS.lp;
 
     doc.text('Nr prod.', x, startY, { width: this.COL_WIDTHS.orderNumber, align: 'left' });
     x += this.COL_WIDTHS.orderNumber;
@@ -260,18 +287,29 @@ export class ProductionReportPdfService {
   }
 
   /**
-   * Rysuj wiersz tabeli z wszystkimi kolumnami (bez kolumny Dostawa)
+   * Rysuj wiersz tabeli z kolumną LP i przeliczeniem EUR->PLN dla WSP/JEDN
    */
-  private drawTableRow(doc: PDFKit.PDFDocument, item: ReportItem, startX: number, y: number): void {
+  private drawTableRow(
+    doc: PDFKit.PDFDocument,
+    item: ReportItem,
+    startX: number,
+    y: number,
+    lp: number,
+    eurRate: number
+  ): void {
     let x = startX;
+
+    // LP (numer porządkowy)
+    doc.text(lp.toString(), x, y, { width: this.COL_WIDTHS.lp, align: 'center' });
+    x += this.COL_WIDTHS.lp;
 
     // Nr produkcyjny
     doc.text(item.orderNumber, x, y, { width: this.COL_WIDTHS.orderNumber, align: 'left' });
     x += this.COL_WIDTHS.orderNumber;
 
-    // Klient (obcinamy jeśli za długi - zwiększamy limit bo kolumna szersza)
+    // Klient (obcinamy jeśli za długi)
     const client = item.client || '-';
-    const truncatedClient = client.length > 18 ? client.substring(0, 17) + '…' : client;
+    const truncatedClient = client.length > 16 ? client.substring(0, 15) + '…' : client;
     doc.text(truncatedClient, x, y, { width: this.COL_WIDTHS.client, align: 'left' });
     x += this.COL_WIDTHS.client;
 
@@ -294,7 +332,7 @@ export class ProductionReportPdfService {
     doc.text(item.sashes.toString(), x, y, { width: this.COL_WIDTHS.sashes, align: 'center' });
     x += this.COL_WIDTHS.sashes;
 
-    // Wartość PLN (pokazuj "-" dla 0)
+    // Wartość PLN (pokazuj "—" dla 0)
     if (item.valuePln > 0) {
       doc.text(this.formatNumber(item.valuePln), x, y, { width: this.COL_WIDTHS.valuePln, align: 'right' });
     } else {
@@ -302,7 +340,7 @@ export class ProductionReportPdfService {
     }
     x += this.COL_WIDTHS.valuePln;
 
-    // Wartość EUR (pokazuj "-" dla 0 lub null)
+    // Wartość EUR (pokazuj "—" dla 0 lub null)
     if (item.valueEur !== null && item.valueEur > 0) {
       doc.text(this.formatNumber(item.valueEur), x, y, { width: this.COL_WIDTHS.valueEur, align: 'right' });
     } else {
@@ -318,17 +356,30 @@ export class ProductionReportPdfService {
     }
     x += this.COL_WIDTHS.materialValue;
 
-    // Współczynnik
-    doc.text(item.coefficient || '—', x, y, { width: this.COL_WIDTHS.coefficient, align: 'right' });
+    // Efektywna wartość PLN (uwzględniając EUR * kurs)
+    const effectivePln = this.getEffectivePln(item, eurRate);
+
+    // Współczynnik = efektywne PLN / materiał
+    if (item.materialValue > 0 && effectivePln > 0) {
+      const coeff = (effectivePln / item.materialValue).toFixed(2);
+      doc.text(coeff, x, y, { width: this.COL_WIDTHS.coefficient, align: 'right' });
+    } else {
+      doc.text('—', x, y, { width: this.COL_WIDTHS.coefficient, align: 'right' });
+    }
     x += this.COL_WIDTHS.coefficient;
 
-    // Jednostka wartości
-    doc.text(item.unitValue || '—', x, y, { width: this.COL_WIDTHS.unitValue, align: 'right' });
+    // Jednostka = (efektywne PLN - materiał) / ilość szyb
+    if (item.totalGlassQuantity > 0 && effectivePln > 0) {
+      const unitVal = Math.round((effectivePln - item.materialValue) / item.totalGlassQuantity);
+      doc.text(unitVal.toString(), x, y, { width: this.COL_WIDTHS.unitValue, align: 'right' });
+    } else {
+      doc.text('—', x, y, { width: this.COL_WIDTHS.unitValue, align: 'right' });
+    }
     x += this.COL_WIDTHS.unitValue;
 
-    // Nr FV (zwiększamy limit bo kolumna szersza)
+    // Nr FV
     const invoice = item.invoiceNumber || '';
-    const truncatedInvoice = invoice.length > 12 ? invoice.substring(0, 11) + '…' : invoice;
+    const truncatedInvoice = invoice.length > 10 ? invoice.substring(0, 9) + '…' : invoice;
     doc.text(truncatedInvoice, x, y, { width: this.COL_WIDTHS.invoiceNumber, align: 'center' });
   }
 
@@ -351,7 +402,7 @@ export class ProductionReportPdfService {
 
     doc.moveDown(0.5);
 
-    doc.fontSize(12).font('Roboto-Bold').fillColor('#B45309').text('Nietypówki');
+    doc.fontSize(12).font('Roboto-Bold').fillColor('#B45309').text('Nietypówki', this.PAGE_MARGIN, doc.y);
 
     doc.moveDown(0.3);
 
@@ -364,11 +415,11 @@ export class ProductionReportPdfService {
       `Wartość: ${this.formatNumber(atypical.valuePln)} PLN`,
     ].join('   |   ');
 
-    doc.text(atypicalData);
+    doc.text(atypicalData, this.PAGE_MARGIN, doc.y);
 
     if (atypical.notes) {
       doc.moveDown(0.2);
-      doc.fontSize(9).fillColor('#6B7280').text(`Uwagi: ${atypical.notes}`);
+      doc.fontSize(9).fillColor('#6B7280').text(`Uwagi: ${atypical.notes}`, this.PAGE_MARGIN, doc.y);
     }
 
     doc.moveDown(1);
@@ -422,10 +473,10 @@ export class ProductionReportPdfService {
 
     // Wiersze podsumowania
     const rows = [
-      { label: 'TYPOWE', data: summary.typowe, bg: null, isAkrobud: false },
-      { label: 'AKROBUD', data: summary.akrobud, bg: '#DBEAFE', isAkrobud: true },
-      { label: 'RESZTA', data: summary.reszta, bg: null, isAkrobud: false },
-      { label: 'NIETYPÓWKI', data: summary.atypical, bg: '#FEF3C7', isAkrobud: false },
+      { label: 'TYPOWE', data: summary.typowe, bg: null as string | null, isAkrobud: false, bold: false },
+      { label: 'AKROBUD', data: summary.akrobud, bg: '#DBEAFE', isAkrobud: true, bold: false },
+      { label: 'RESZTA', data: summary.reszta, bg: null as string | null, isAkrobud: false, bold: false },
+      { label: 'NIETYPÓWKI', data: summary.atypical, bg: '#FEF3C7', isAkrobud: false, bold: false },
       { label: 'RAZEM PLN', data: summary.razem, bg: '#F3F4F6', bold: true, isAkrobud: false },
     ];
 
@@ -442,7 +493,7 @@ export class ProductionReportPdfService {
       doc.text(row.label, x, y, { width: colWidths.label });
       x += colWidths.label;
 
-      // Wyświetl "-" dla wartości 0
+      // Wyświetl "—" dla wartości 0
       const windowsText = row.data.windows > 0 ? row.data.windows.toString() : '—';
       doc.text(windowsText, x, y, { width: colWidths.windows, align: 'right' });
       x += colWidths.windows;
@@ -461,7 +512,7 @@ export class ProductionReportPdfService {
         const eurFormatted = this.formatNumber(akrobudEurTotal);
         doc.text(`${plnFormatted} (${eurFormatted} EUR)`, x, y, { width: colWidths.value + 60, align: 'right' });
       } else {
-        // Dla pozostałych wierszy - wyświetl "-" dla 0
+        // Dla pozostałych wierszy - wyświetl "—" dla 0
         if (row.data.valuePln > 0) {
           doc.text(this.formatNumber(row.data.valuePln), x, y, { width: colWidths.value, align: 'right' });
         } else {
@@ -533,12 +584,127 @@ export class ProductionReportPdfService {
     y += 12;
     const avgPerDay = summary.workingDays > 0 ? this.formatNumber(summary.razem.valuePln / summary.workingDays) : '—';
     doc.text(`Średnia wartość na dzień roboczy (${summary.workingDays} dni): ${avgPerDay} PLN`, startX, y);
+
+    doc.y = y + 15;
   }
 
   /**
-   * Dodaj stopki do wszystkich stron
+   * Rysuj sekcję sumy materiałów z rozbiciem na szyby, okucia, części
+   * + współczynniki globalnie i z podziałem AKROBUD / nie-AKROBUD
    */
-  private addPageFooters(doc: PDFKit.PDFDocument): void {
+  private drawMaterialSummary(
+    doc: PDFKit.PDFDocument,
+    items: ReportItem[],
+    eurRate: number
+  ): void {
+    // Sprawdź czy jest miejsce (potrzebujemy ~200px)
+    if (doc.y > doc.page.height - 220) {
+      doc.addPage();
+    }
+
+    doc.moveDown(1);
+    doc.fontSize(12).font('Roboto-Bold').fillColor('#1F2937').text('Zestawienie materiałów', this.PAGE_MARGIN, doc.y);
+    doc.moveDown(0.3);
+
+    const startX = this.PAGE_MARGIN;
+    const colWidths = { label: 120, glazing: 85, fittings: 85, parts: 85, total: 85, coeff: 60 };
+    let y = doc.y;
+
+    // Nagłówki
+    doc.fontSize(9).font('Roboto-Bold').fillColor('#374151');
+    let x = startX;
+    doc.text('Kategoria', x, y, { width: colWidths.label });
+    x += colWidths.label;
+    doc.text('Szyby', x, y, { width: colWidths.glazing, align: 'right' });
+    x += colWidths.glazing;
+    doc.text('Okucia', x, y, { width: colWidths.fittings, align: 'right' });
+    x += colWidths.fittings;
+    doc.text('Części', x, y, { width: colWidths.parts, align: 'right' });
+    x += colWidths.parts;
+    doc.text('Materiał', x, y, { width: colWidths.total, align: 'right' });
+    x += colWidths.total;
+    doc.text('Wsp.', x, y, { width: colWidths.coeff, align: 'right' });
+
+    y += 15;
+
+    // Linia pod nagłówkami
+    const totalColWidth = Object.values(colWidths).reduce((a, b) => a + b, 0);
+    doc
+      .strokeColor('#9CA3AF')
+      .lineWidth(0.5)
+      .moveTo(startX, y - 2)
+      .lineTo(startX + totalColWidth, y - 2)
+      .stroke();
+
+    // Oblicz sumy
+    const akrobudItems = items.filter(i => (i.client ?? '').toUpperCase().includes('AKROBUD'));
+    const resztaItems = items.filter(i => !(i.client ?? '').toUpperCase().includes('AKROBUD'));
+
+    // Funkcja pomocnicza do obliczenia sum
+    const sumMaterials = (list: ReportItem[]) => ({
+      glazing: list.reduce((s, i) => s + i.glazingValue, 0),
+      fittings: list.reduce((s, i) => s + i.fittingsValue, 0),
+      parts: list.reduce((s, i) => s + i.partsValue, 0),
+      material: list.reduce((s, i) => s + i.materialValue, 0),
+      effectivePln: list.reduce((s, i) => s + this.getEffectivePln(i, eurRate), 0),
+    });
+
+    const akrobudSums = sumMaterials(akrobudItems);
+    const resztaSums = sumMaterials(resztaItems);
+    const globalSums = sumMaterials(items);
+
+    // Wiersze tabeli materiałów
+    const materialRows = [
+      { label: 'AKROBUD', sums: akrobudSums, bg: '#DBEAFE' as string | null, bold: false },
+      { label: 'RESZTA', sums: resztaSums, bg: null as string | null, bold: false },
+      { label: 'RAZEM', sums: globalSums, bg: '#F3F4F6' as string | null, bold: true },
+    ];
+
+    for (const row of materialRows) {
+      if (row.bg) {
+        doc.rect(startX - 2, y - 2, totalColWidth + 4, 14).fill(row.bg);
+      }
+
+      doc.fontSize(9).font(row.bold ? 'Roboto-Bold' : 'Roboto').fillColor('#000000');
+      x = startX;
+
+      doc.text(row.label, x, y, { width: colWidths.label });
+      x += colWidths.label;
+
+      doc.text(row.sums.glazing > 0 ? this.formatNumber(row.sums.glazing) : '—', x, y, { width: colWidths.glazing, align: 'right' });
+      x += colWidths.glazing;
+
+      doc.text(row.sums.fittings > 0 ? this.formatNumber(row.sums.fittings) : '—', x, y, { width: colWidths.fittings, align: 'right' });
+      x += colWidths.fittings;
+
+      doc.text(row.sums.parts > 0 ? this.formatNumber(row.sums.parts) : '—', x, y, { width: colWidths.parts, align: 'right' });
+      x += colWidths.parts;
+
+      doc.text(row.sums.material > 0 ? this.formatNumber(row.sums.material) : '—', x, y, { width: colWidths.total, align: 'right' });
+      x += colWidths.total;
+
+      // Współczynnik = efektywne PLN / materiał
+      const coeff = row.sums.material > 0 ? (row.sums.effectivePln / row.sums.material).toFixed(2) : '—';
+      doc.text(coeff, x, y, { width: colWidths.coeff, align: 'right' });
+
+      y += 14;
+    }
+
+    // Linia zamykająca
+    doc
+      .strokeColor('#9CA3AF')
+      .lineWidth(0.5)
+      .moveTo(startX, y)
+      .lineTo(startX + totalColWidth, y)
+      .stroke();
+
+    doc.y = y + 10;
+  }
+
+  /**
+   * Dodaj stopki do wszystkich stron (tylko strony z treścią)
+   */
+  private addPageFooters(doc: PDFKit.PDFDocument, totalPages: number): void {
     const range = doc.bufferedPageRange();
 
     for (let i = 0; i < range.count; i++) {
@@ -549,7 +715,7 @@ export class ProductionReportPdfService {
         .font('Roboto')
         .fillColor('#9CA3AF')
         .text(
-          `Strona ${range.start + i + 1} z ${range.count}`,
+          `Strona ${i + 1} z ${range.count}`,
           this.PAGE_MARGIN,
           doc.page.height - 30,
           {

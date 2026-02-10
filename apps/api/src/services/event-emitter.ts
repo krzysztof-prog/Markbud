@@ -128,6 +128,25 @@ export const emitOkucStockUpdated = (data: EventData) => eventEmitter.emitDataCh
   timestamp: new Date(),
 });
 
+// Okuc order events - dla real-time synchronizacji listy zamówień
+export const emitOkucOrderCreated = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'okuc:order_created',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitOkucOrderUpdated = (data: EventData) => eventEmitter.emitDataChange({
+  type: 'okuc:order_updated',
+  data,
+  timestamp: new Date(),
+});
+
+export const emitOkucOrderDeleted = (id: number) => eventEmitter.emitDataChange({
+  type: 'okuc:order_deleted',
+  data: { id },
+  timestamp: new Date(),
+});
+
 // Price import events
 export const emitPriceImported = (data: EventData) => eventEmitter.emitDataChange({
   type: 'price:imported',

@@ -4,8 +4,8 @@ import { SchucoService } from './schucoService.js';
 import { SchucoItemService } from './schucoItemService.js';
 import { logger } from '../../utils/logger.js';
 
-// Opóźnienie między pobraniem zamówień a pobieraniem pozycji (2 minuty)
-const ITEM_FETCH_DELAY_MS = 2 * 60 * 1000;
+// Opóźnienie między pobraniem zamówień a pobieraniem pozycji (1 godzina)
+const ITEM_FETCH_DELAY_MS = 60 * 60 * 1000;
 
 /**
  * Schuco Scheduler - automatyczne pobieranie danych 3 razy dziennie
@@ -107,13 +107,9 @@ export class SchucoScheduler {
             `Updated: ${result.updatedRecords}, Unchanged: ${result.unchangedRecords}`
         );
 
-        // Automatyczne pobieranie pozycji dla nowych i zmienionych zamówień
-        const hasNewOrUpdated = (result.newRecords ?? 0) > 0 || (result.updatedRecords ?? 0) > 0;
-        if (hasNewOrUpdated) {
-          await this.runItemAutoFetch(scheduledTime, result.newRecords ?? 0, result.updatedRecords ?? 0);
-        } else {
-          logger.info(`[SchucoScheduler] No new/updated orders - skipping item auto-fetch`);
-        }
+        // Automatyczne pobieranie pozycji - ZAWSZE wywołaj (metoda sama sprawdzi które zamówienia potrzebują pozycji)
+        // Dotyczy: nowych zamówień, zmienionych, oraz tych które nigdy nie miały pobranych pozycji
+        await this.runItemAutoFetch(scheduledTime, result.newRecords ?? 0, result.updatedRecords ?? 0);
       } else {
         logger.error(`[SchucoScheduler] Scheduled fetch failed (${scheduledTime}): ${result.errorMessage}`);
       }

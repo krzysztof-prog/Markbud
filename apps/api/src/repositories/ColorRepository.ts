@@ -8,9 +8,13 @@ import type { Color } from '@prisma/client';
 export class ColorRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async findAll(type?: string) {
+  async findAll(type?: string, isAkrobud?: boolean) {
+    const where: Record<string, unknown> = {};
+    if (type) where.type = type;
+    if (isAkrobud !== undefined) where.isAkrobud = isAkrobud;
+
     return this.prisma.color.findMany({
-      where: type ? { type } : undefined,
+      where: Object.keys(where).length > 0 ? where : undefined,
       orderBy: { code: 'asc' },
     });
   }
@@ -50,13 +54,13 @@ export class ColorRepository {
     });
   }
 
-  async create(data: { code: string; name: string; type: string; hexColor?: string }): Promise<Color> {
+  async create(data: { code: string; name: string; type: string; hexColor?: string; isAkrobud?: boolean }): Promise<Color> {
     return this.prisma.color.create({
       data,
     });
   }
 
-  async update(id: number, data: { code?: string; name?: string; type?: string; hexColor?: string }): Promise<Color> {
+  async update(id: number, data: { code?: string; name?: string; type?: string; hexColor?: string; isAkrobud?: boolean }): Promise<Color> {
     return this.prisma.color.update({
       where: { id },
       data,

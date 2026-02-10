@@ -144,7 +144,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
             ...(query.colorId ? { colorId: query.colorId } : {}),
           },
           select: {
-            profileId: true, colorId: true, currentStockBeams: true, updatedAt: true,
+            profileId: true, colorId: true, currentStockBeams: true, remanentDate: true,
             color: { select: { id: true, code: true, name: true, hexColor: true } },
           },
         }),
@@ -160,16 +160,17 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
           select: {
             articleNumber: true, shippedQty: true, orderedQty: true, createdAt: true,
             unit: true,
-            schucoDelivery: { select: { orderNumber: true, shippingStatus: true } },
+            schucoDelivery: { select: { orderNumber: true, shippingStatus: true, deliveryDate: true } },
           },
         }),
 
         // 5. RW - OrderRequirement ze zleceń ukończonych + numer zlecenia
+        // Używamy productionDate z fallback na completedAt (dla starszych zleceń)
         prisma.orderRequirement.findMany({
           where: { order: { status: 'completed' } },
           select: {
-            profileId: true, colorId: true, privateColorId: true, beamsCount: true,
-            order: { select: { orderNumber: true, completedAt: true, updatedAt: true } },
+            profileId: true, colorId: true, privateColorId: true, beamsCount: true, meters: true,
+            order: { select: { orderNumber: true, productionDate: true, completedAt: true, updatedAt: true } },
           },
         }),
 
@@ -177,7 +178,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         prisma.orderRequirement.findMany({
           where: { order: { status: { in: ['new', 'in_progress'] } } },
           select: {
-            profileId: true, colorId: true, privateColorId: true, beamsCount: true,
+            profileId: true, colorId: true, privateColorId: true, beamsCount: true, meters: true,
             order: { select: { orderNumber: true } },
           },
         }),
@@ -207,9 +208,12 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
       const palletConfigMap = new Map(palletConfigs.map((pc) => [pc.profileId, pc.beamsPerPallet]));
 
       // Mapa daty remanentu: "profileId-colorId" -> Date
+      // Używamy remanentDate (ustawiane ręcznie podczas inwentaryzacji)
       const remanentDateMap = new Map<string, Date>();
       for (const ws of warehouseStocks) {
-        remanentDateMap.set(`${ws.profileId}-${ws.colorId}`, ws.updatedAt);
+        if (ws.remanentDate) {
+          remanentDateMap.set(`${ws.profileId}-${ws.colorId}`, ws.remanentDate);
+        }
       }
 
       // --- Typ wiersza agregacji ---
@@ -225,8 +229,10 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         initialStockBeams: number;
         deliveriesBeams: number;
         rwBeams: number;
+        rwMeters: number;
         orderedBeams: number;
         demandBeams: number;
+        demandMeters: number;
         // Nieprzeliczone palety (brak przelicznika w konfiguracji)
         palletDeliveriesRaw: number;
         palletOrderedRaw: number;
@@ -250,8 +256,8 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         if (!row) {
           row = {
             profileId, colorId, privateColorId,
-            initialStockBeams: 0, deliveriesBeams: 0, rwBeams: 0,
-            orderedBeams: 0, demandBeams: 0,
+            initialStockBeams: 0, deliveriesBeams: 0, rwBeams: 0, rwMeters: 0,
+            orderedBeams: 0, demandBeams: 0, demandMeters: 0,
             palletDeliveriesRaw: 0, palletOrderedRaw: 0,
             deliveriesDetails: [], rwDetails: [], demandDetails: [],
           };
@@ -287,9 +293,10 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         // Filtr koloru z query
         if (query.colorId && color.id !== query.colorId) continue;
 
-        // Sprawdź datę remanentu
+        // Sprawdź datę remanentu - używaj daty dostawy (nie daty utworzenia rekordu)
         const remanentDate = remanentDateMap.get(`${profile.id}-${color.id}`);
-        if (remanentDate && item.createdAt < remanentDate) continue;
+        const deliveryDate = item.schucoDelivery?.deliveryDate;
+        if (remanentDate && deliveryDate && deliveryDate < remanentDate) continue;
 
         const row = getOrCreate(profile.id, color.id, null);
         const isPallet = item.unit?.toLowerCase().includes('palet') ?? false;
@@ -341,17 +348,19 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         if (query.colorId && req.colorId !== query.colorId && req.privateColorId != null) continue;
         if (query.colorId && req.colorId !== null && req.colorId !== query.colorId) continue;
 
-        const completedAt = req.order.completedAt ?? req.order.updatedAt;
+        // Używamy productionDate z fallback na completedAt (dla starszych zleceń)
+        const orderDate = req.order.productionDate ?? req.order.completedAt ?? req.order.updatedAt;
 
         // Sprawdź datę remanentu (tylko dla standardowych kolorów)
         if (req.colorId != null) {
           const remanentDate = remanentDateMap.get(`${req.profileId}-${req.colorId}`);
-          if (remanentDate && completedAt < remanentDate) continue;
+          if (remanentDate && orderDate < remanentDate) continue;
         }
         // Prywatne kolory: brak remanent -> brak filtra daty
 
         const row = getOrCreate(req.profileId, req.colorId, req.privateColorId);
         row.rwBeams += req.beamsCount;
+        row.rwMeters += req.meters;
         row.rwDetails.push({
           label: req.order.orderNumber,
           beams: req.beamsCount,
@@ -368,6 +377,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
 
         const row = getOrCreate(req.profileId, req.colorId, req.privateColorId);
         row.demandBeams += req.beamsCount;
+        row.demandMeters += req.meters;
         row.demandDetails.push({
           label: req.order.orderNumber,
           beams: req.beamsCount,
@@ -404,8 +414,13 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
               isFocusing: profile.isFocusing,
             },
             stocks: rows.map((row) => {
-              const currentStockBeams = row.initialStockBeams + row.deliveriesBeams - row.rwBeams;
-              const afterDemandBeams = row.initialStockBeams + row.orderedBeams - row.demandBeams;
+              // Bele z metrów (reszty): zaokrąglenie w górę do pełnej beli
+              const rwBeamsFromMeters = Math.ceil(row.rwMeters / 6);
+              const rwBeamsTotal = row.rwBeams + rwBeamsFromMeters;
+              const currentStockBeams = row.initialStockBeams + row.deliveriesBeams - rwBeamsTotal;
+              const demandBeamsFromMeters = Math.ceil(row.demandMeters / 6);
+              const demandBeamsTotal = row.demandBeams + demandBeamsFromMeters;
+              const afterDemandBeams = currentStockBeams - demandBeamsTotal;
               const color = row.colorId != null ? colorById.get(row.colorId) : null;
               const pc = row.privateColorId != null ? privateColorById.get(row.privateColorId) : null;
 
@@ -438,11 +453,11 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
                 initialStockBeams: row.initialStockBeams,
                 deliveriesBeams: row.deliveriesBeams,
                 deliveriesDetails,
-                rwBeams: row.rwBeams,
+                rwBeams: rwBeamsTotal,
                 rwDetails,
                 currentStockBeams,
                 orderedBeams: row.orderedBeams,
-                demandBeams: row.demandBeams,
+                demandBeams: demandBeamsTotal,
                 demandDetails,
                 afterDemandBeams,
                 palletDeliveriesRaw: row.palletDeliveriesRaw,
@@ -468,11 +483,11 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         }
       }
 
-      // Oblicz datę ostatniego remanentu (najstarsza updatedAt z warehouseStocks)
+      // Oblicz datę ostatniego remanentu (najstarsza remanentDate z warehouseStocks)
       let oldestRemanentDate: Date | null = null;
       for (const ws of warehouseStocks) {
-        if (!oldestRemanentDate || ws.updatedAt < oldestRemanentDate) {
-          oldestRemanentDate = ws.updatedAt;
+        if (ws.remanentDate && (!oldestRemanentDate || ws.remanentDate < oldestRemanentDate)) {
+          oldestRemanentDate = ws.remanentDate;
         }
       }
 
@@ -520,6 +535,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
           profileId: true,
           colorId: true,
           beamsCount: true,
+          meters: true,
           orderId: true,
         },
       });
@@ -571,6 +587,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
           profile: typeof profiles[0];
           color: typeof colors[0] | null;
           totalBeams: number;
+          totalMeters: number;
           orders: Array<{ id: number; number: string; beams: number }>;
         }
       >();
@@ -582,6 +599,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
 
         if (existing && order) {
           existing.totalBeams += req.beamsCount;
+          existing.totalMeters += req.meters;
           existing.orders.push({
             id: order.id,
             number: order.orderNumber,
@@ -595,6 +613,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
               profile,
               color: color || null,
               totalBeams: req.beamsCount,
+              totalMeters: req.meters,
               orders: [
                 {
                   id: order.id,
@@ -607,7 +626,14 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         }
       }
 
-      const demand = Array.from(demandMap.values());
+      // Dodaj bele z metrów: ceil(totalMeters / 6) per profil+kolor
+      const demand = Array.from(demandMap.values()).map((item) => {
+        const beamsFromMeters = Math.ceil(item.totalMeters / 6);
+        return {
+          ...item,
+          totalBeams: item.totalBeams + beamsFromMeters,
+        };
+      });
 
       // Oblicz totale
       const totalBeams = demand.reduce((acc, d) => acc + d.totalBeams, 0);
@@ -650,29 +676,18 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const profileWhere: any = systemsFilter && systemsFilter.length > 0 ? { OR: systemsFilter } : {};
 
-      // Pobierz RW z OrderRequirement - profile ze zleceń ukończonych w danym miesiącu
-      // Preferujemy completedAt, ale używamy updatedAt jako fallback dla starych rekordów
+      // Pobierz RW z OrderRequirement - profile ze zleceń z datą produkcji w danym miesiącu
+      // Używamy productionDate - data ustawiana przy kończeniu zlecenia
       const requirements = await prisma.orderRequirement.findMany({
         where: {
           order: {
             // Zlecenie ukończone (status = completed)
             status: 'completed',
-            // completedAt w zakresie LUB (completedAt jest null i updatedAt w zakresie)
-            OR: [
-              {
-                completedAt: {
-                  gte: startDate,
-                  lte: endDate,
-                },
-              },
-              {
-                completedAt: null,
-                updatedAt: {
-                  gte: startDate,
-                  lte: endDate,
-                },
-              },
-            ],
+            // productionDate w zakresie miesiąca
+            productionDate: {
+              gte: startDate,
+              lte: endDate,
+            },
           },
           profile: Object.keys(profileWhere).length > 0 ? profileWhere : undefined,
           ...(query.colorId ? { colorId: query.colorId } : {}),
@@ -700,12 +715,11 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
             select: {
               id: true,
               orderNumber: true,
-              completedAt: true,
-              updatedAt: true,
+              productionDate: true,
             },
           },
         },
-        orderBy: { order: { updatedAt: 'desc' } },
+        orderBy: { order: { productionDate: 'desc' } },
       });
 
       // Grupuj wg profilu i koloru
@@ -716,11 +730,12 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
           color: (typeof requirements)[0]['color'] | null;
           privateColor: (typeof requirements)[0]['privateColor'] | null;
           totalBeams: number;
+          totalMeters: number;
           orders: Array<{
             id: number;
             number: string;
             beams: number;
-            completedAt: Date | null;
+            productionDate: Date | null;
           }>;
         }
       >();
@@ -732,11 +747,12 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
 
         if (existing) {
           existing.totalBeams += req.beamsCount;
+          existing.totalMeters += req.meters;
           existing.orders.push({
             id: req.order.id,
             number: req.order.orderNumber,
             beams: req.beamsCount,
-            completedAt: req.order.completedAt,
+            productionDate: req.order.productionDate,
           });
         } else {
           rwMap.set(key, {
@@ -744,19 +760,27 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
             color: req.color,
             privateColor: req.privateColor,
             totalBeams: req.beamsCount,
+            totalMeters: req.meters,
             orders: [
               {
                 id: req.order.id,
                 number: req.order.orderNumber,
                 beams: req.beamsCount,
-                completedAt: req.order.completedAt,
+                productionDate: req.order.productionDate,
               },
             ],
           });
         }
       }
 
-      const rw = Array.from(rwMap.values());
+      // Dodaj bele z metrów: ceil(totalMeters / 6) per profil+kolor
+      const rw = Array.from(rwMap.values()).map((item) => {
+        const beamsFromMeters = Math.ceil(item.totalMeters / 6);
+        return {
+          ...item,
+          totalBeams: item.totalBeams + beamsFromMeters,
+        };
+      });
 
       // Oblicz totale
       const totalBeams = rw.reduce((acc, r) => acc + r.totalBeams, 0);

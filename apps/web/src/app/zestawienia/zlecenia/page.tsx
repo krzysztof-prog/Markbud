@@ -274,6 +274,56 @@ export default function ZestawienieZlecenPage() {
     },
   });
 
+  // Mutacja do ustawienia daty dostawy szyb (glassDeliveryDate)
+  const glassDeliveryDateMutation = useMutation({
+    mutationFn: ({ orderId, date }: { orderId: number; date: string }) =>
+      ordersApi.patch(orderId, { glassDeliveryDate: date }),
+    onMutate: async ({ orderId, date }) => {
+      await queryClient.cancelQueries({ queryKey: ['orders'] });
+
+      const previousActive = queryClient.getQueryData(['orders', 'all-active']);
+      const previousArchived = queryClient.getQueryData(['orders', 'all-archived']);
+
+      const updateOrders = (oldData: unknown) => {
+        if (!oldData || typeof oldData !== 'object' || !('data' in oldData)) return oldData;
+        const typedData = oldData as { data: ExtendedOrder[] };
+        return {
+          ...typedData,
+          data: typedData.data.map((order: ExtendedOrder) =>
+            order.id === orderId ? { ...order, glassDeliveryDate: date } : order
+          ),
+        };
+      };
+
+      queryClient.setQueryData(['orders', 'all-active'], updateOrders);
+      queryClient.setQueryData(['orders', 'all-archived'], updateOrders);
+
+      return { previousActive, previousArchived };
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Data dostawy szyb zapisana',
+        description: 'Data planowanej dostawy szyb została ustawiona',
+      });
+    },
+    onError: (error: Error, _variables, context) => {
+      if (context?.previousActive) {
+        queryClient.setQueryData(['orders', 'all-active'], context.previousActive);
+      }
+      if (context?.previousArchived) {
+        queryClient.setQueryData(['orders', 'all-archived'], context.previousArchived);
+      }
+      toast({
+        title: 'Błąd',
+        description: error.message || 'Nie udało się zapisać daty dostawy szyb',
+        variant: 'destructive',
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+
   // ================================
   // Callbacks
   // ================================
@@ -289,6 +339,10 @@ export default function ZestawienieZlecenPage() {
   const handleGlassDiscrepancyClick = useCallback((orderNumber: string) => {
     setGlassDiscrepancyOrderNumber(orderNumber);
   }, []);
+
+  const handleGlassDeliveryDateSet = useCallback((orderId: number, date: string) => {
+    glassDeliveryDateMutation.mutate({ orderId, date });
+  }, [glassDeliveryDateMutation]);
 
   const handleManualStatusChange = useCallback((orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => {
     manualStatusMutation.mutate({ orderId, manualStatus });
@@ -391,6 +445,7 @@ export default function ZestawienieZlecenPage() {
             onOrderClick={handleOrderClick}
             onSchucoStatusClick={handleSchucoStatusClick}
             onGlassDiscrepancyClick={handleGlassDiscrepancyClick}
+            onGlassDeliveryDateSet={handleGlassDeliveryDateSet}
             onManualStatusChange={handleManualStatusChange}
             canDeleteOrders={canDeleteOrders}
             onDeleteOrder={handleDeleteOrder}
@@ -421,6 +476,7 @@ export default function ZestawienieZlecenPage() {
               onOrderClick={handleOrderClick}
               onSchucoStatusClick={handleSchucoStatusClick}
               onGlassDiscrepancyClick={handleGlassDiscrepancyClick}
+              onGlassDeliveryDateSet={handleGlassDeliveryDateSet}
               onManualStatusChange={handleManualStatusChange}
               canDeleteOrders={canDeleteOrders}
               onDeleteOrder={handleDeleteOrder}

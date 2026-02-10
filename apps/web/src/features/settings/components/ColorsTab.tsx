@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 
 interface Color {
@@ -10,6 +11,7 @@ interface Color {
   name: string;
   type: string;
   hexColor?: string | null;
+  isAkrobud?: boolean;
 }
 
 interface ColorsTabProps {
@@ -41,6 +43,7 @@ export function ColorsTab({ colors, onAdd, onEdit, onDelete }: ColorsTabProps) {
                 <th className="px-4 py-3 text-left">Kod</th>
                 <th className="px-4 py-3 text-left">Nazwa</th>
                 <th className="px-4 py-3 text-left">Typ</th>
+                <th className="px-4 py-3 text-center">AKROBUD</th>
                 <th className="px-4 py-3 text-center">Akcje</th>
               </tr>
             </thead>
@@ -60,6 +63,13 @@ export function ColorsTab({ colors, onAdd, onEdit, onDelete }: ColorsTabProps) {
                   <td className="px-4 py-3">{color.name}</td>
                   <td className="px-4 py-3">{color.type === 'typical' ? 'Typowy' : 'Nietypowy'}</td>
                   <td className="px-4 py-3 text-center">
+                    {color.isAkrobud && (
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                        AKROBUD
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-center">
                     <div className="flex justify-center gap-1">
                       <Button variant="ghost" size="sm" onClick={() => onEdit(color)}>
                         <Pencil className="h-4 w-4 text-blue-500" />
@@ -73,7 +83,7 @@ export function ColorsTab({ colors, onAdd, onEdit, onDelete }: ColorsTabProps) {
               ))}
               {(!colors || colors.length === 0) && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                     Brak kolorow
                   </td>
                 </tr>

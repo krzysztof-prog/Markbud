@@ -15,6 +15,8 @@ export interface ForProductionData {
  */
 export interface BulkUpdateStatusData {
   orderIds: number[];
+  /** Opcjonalne - gdy użytkownik zaznaczył całe dostawy, zmień też ich status */
+  deliveryIds?: number[];
   status: 'new' | 'in_progress' | 'completed' | 'archived';
   productionDate?: string;
   /** Pomiń walidację magazynu - gdy użytkownik potwierdził mimo braków */

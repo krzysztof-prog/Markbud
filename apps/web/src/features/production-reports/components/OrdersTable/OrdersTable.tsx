@@ -21,6 +21,7 @@ interface OrderData {
   id: number;
   orderNumber: string;
   client: string;
+  project: string | null; // Projekt ze zlecenia
   totalWindows: number;
   totalSashes: number;
   totalGlasses: number | null; // Liczba szkleń
@@ -40,6 +41,7 @@ interface OrdersTableProps {
   onUpdateInvoice: (orderId: number, data: UpdateInvoiceInput) => void;
   onAutoFillInvoice?: (orderId: number, orderNumber: string, invoiceNumber: string | null) => void;
   isPending?: boolean;
+  eurRate?: number; // kurs EUR/PLN do przeliczania Wsp. i Jedn. dla AKROBUD
 }
 
 export const OrdersTable: React.FC<OrdersTableProps> = ({
@@ -51,6 +53,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   onUpdateInvoice,
   onAutoFillInvoice,
   isPending = false,
+  eurRate,
 }) => {
   // Stan rozwinięcia grup dostaw AKROBUD
   const [expandedDeliveries, setExpandedDeliveries] = useState<Set<number>>(new Set());
@@ -142,7 +145,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
               <TableRow>
                 <TableHead className="w-[100px] text-left">Dostawa</TableHead>
                 <TableHead className="w-[90px] text-left">Nr prod.</TableHead>
-                <TableHead className="text-left">Klient</TableHead>
+                <TableHead className="text-left">Projekt</TableHead>
                 <TableHead className="w-[80px] text-center">Data prod.</TableHead>
                 <TableHead className="w-[60px] text-center">Okna</TableHead>
                 <TableHead className="w-[60px] text-center">Szkleń</TableHead>
@@ -183,6 +186,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                         onAutoFillInvoice={onAutoFillInvoice}
                         isPending={isPending}
                         isEven={index % 2 === 0}
+                        eurRate={eurRate}
                       />
                     ))}
                   </DeliveryGroup>
@@ -202,6 +206,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                   onAutoFillInvoice={onAutoFillInvoice}
                   isPending={isPending}
                   isEven={index % 2 === 0}
+                  eurRate={eurRate}
                 />
               ))}
 

@@ -23,6 +23,7 @@ export interface ProfileRequirement {
   profileId: number;
   colorCode: string;
   totalBeams: number;
+  inProduction: boolean; // Czy WSZYSTKIE zlecenia w tej dostawie mają productionDate
 }
 
 export interface WeekdayStat {
@@ -107,6 +108,14 @@ export class DeliveryStatisticsService {
     deliveries.forEach((delivery) => {
       const profileMap = new Map<string, { beams: number; meters: number }>();
 
+      // Sprawdź czy WSZYSTKIE zlecenia w dostawie mają productionDate
+      // Jeśli tak, cała dostawa jest "w produkcji"
+      const allOrdersInProduction =
+        delivery.deliveryOrders.length > 0 &&
+        delivery.deliveryOrders.every(
+          (deliveryOrder) => deliveryOrder.order.productionDate !== null
+        );
+
       delivery.deliveryOrders.forEach((deliveryOrder) => {
         deliveryOrder.order.requirements.forEach((req) => {
           // Pomijamy requirements z prywatnymi kolorami (bez color)
@@ -139,6 +148,7 @@ export class DeliveryStatisticsService {
           profileId: profileIdNum,
           colorCode,
           totalBeams,
+          inProduction: allOrdersInProduction,
         });
       });
     });

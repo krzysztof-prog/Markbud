@@ -77,4 +77,23 @@ export const mojaPracaRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { date?: string } }>('/summary', {
     preHandler: verifyAuth,
   }, mojaPracaHandler.getDaySummary);
+
+  // ============================================
+  // ALERTS - Alerty dla użytkownika
+  // ============================================
+
+  // GET /moja-praca/alerts - Wszystkie alerty (zlecenia bez cen + problemy z etykietami)
+  fastify.get('/alerts', {
+    preHandler: verifyAuth,
+  }, mojaPracaHandler.getAlerts);
+
+  // GET /moja-praca/alerts/orders-without-price - Zlecenia Akrobud w produkcji bez cen
+  fastify.get('/alerts/orders-without-price', {
+    preHandler: verifyAuth,
+  }, mojaPracaHandler.getOrdersWithoutPrice);
+
+  // GET /moja-praca/alerts/label-issues - Dostawy z problemami etykiet
+  fastify.get('/alerts/label-issues', {
+    preHandler: verifyAuth,
+  }, mojaPracaHandler.getLabelIssues);
 };

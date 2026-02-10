@@ -5,8 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Calendar } from 'lucide-react';
 
 interface DeliveryFiltersProps {
-  value: '7' | '14' | '30' | 'archive';
-  onChange: (value: '7' | '14' | '30' | 'archive') => void;
+  value: '30' | '60' | 'archive';
+  onChange: (value: '30' | '60' | 'archive') => void;
   customStartDate?: string;
   onCustomStartDateChange?: (date: string) => void;
 }
@@ -18,9 +18,8 @@ export function DeliveryFilters({
   onCustomStartDateChange
 }: DeliveryFiltersProps) {
   const filters = [
-    { id: '7', label: '+7 dni' },
-    { id: '14', label: '+14 dni' },
     { id: '30', label: '+30 dni' },
+    { id: '60', label: '+60 dni' },
     { id: 'archive', label: 'Archiwum' },
   ] as const;
 

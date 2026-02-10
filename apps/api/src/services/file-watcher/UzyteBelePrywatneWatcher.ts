@@ -3,12 +3,13 @@ import path from 'path';
 import { existsSync } from 'fs';
 import { readdir, copyFile, readFile, rename, stat } from 'fs/promises';
 import type { PrismaClient } from '@prisma/client';
-import { CsvParser } from '../parsers/csv-parser.js';
+import { CsvParser, type ParsedUzyteBele } from '../parsers/csv-parser.js';
 import { logger } from '../../utils/logger.js';
 import { emitOrderUpdated } from '../event-emitter.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
 import { ensureDirectoryExists, generateSafeFilename, shouldSkipImport } from './utils.js';
 import { importQueue, type ImportJobResult } from '../import/ImportQueueService.js';
+import { MojaPracaRepository } from '../../repositories/MojaPracaRepository.js';
 
 /**
  * Domyślna konfiguracja watchera
@@ -30,10 +31,12 @@ export class UzyteBelePrywatneWatcher implements IFileWatcher {
   private prisma: PrismaClient;
   private watchers: FSWatcher[] = [];
   private config: WatcherConfig;
+  private mojaPracaRepository: MojaPracaRepository;
 
   constructor(prisma: PrismaClient, config: WatcherConfig = DEFAULT_CONFIG) {
     this.prisma = prisma;
     this.config = config;
+    this.mojaPracaRepository = new MojaPracaRepository(prisma);
   }
 
   /**
@@ -218,24 +221,11 @@ export class UzyteBelePrywatneWatcher implements IFileWatcher {
       const hasRealConflict = preview.conflict?.baseOrderExists === true;
 
       if (hasRealConflict) {
-        // Konflikt - zostaw jako PENDING
-        await this.prisma.fileImport.create({
-          data: {
-            filename: safeFilename,
-            filepath: destPath,
-            fileType: 'uzyte_bele_prywatne',
-            status: 'pending',
-            metadata: JSON.stringify({
-              preview,
-              autoDetectedConflict: true,
-              privateClient: true,
-              deadline: deadline?.toISOString(),
-            }),
-          },
-        });
+        // Konflikt - utwórz PendingImportConflict (widoczny w "Moja Praca")
+        await this.createPendingConflict(preview, destPath, safeFilename, deadline);
 
         logger.warn(
-          `   ⚠️ Konflikt: ${originalFilename} → zlecenie ${preview.orderNumber}`
+          `   ⚠️ Konflikt: ${originalFilename} → zlecenie ${preview.orderNumber} (bazowe: ${preview.conflict?.baseOrderNumber})`
         );
 
         // Archiwizuj plik źródłowy żeby nie był importowany ponownie
@@ -367,6 +357,95 @@ export class UzyteBelePrywatneWatcher implements IFileWatcher {
         `   ⚠️ Nie udało się przenieść pliku ${filePath} do pominiętych: ${error instanceof Error ? error.message : 'Nieznany błąd'}`
       );
     }
+  }
+
+  /**
+   * Oblicza sugestię systemu na podstawie porównania okien i szyb
+   */
+  private calculateSuggestion(
+    existingWindows: number | null,
+    existingGlasses: number | null,
+    newWindows: number | null,
+    newGlasses: number | null
+  ): 'replace_base' | 'keep_both' | 'manual' {
+    if (existingWindows === newWindows && existingGlasses === newGlasses) {
+      return 'replace_base';
+    }
+    return 'manual';
+  }
+
+  /**
+   * Tworzy PendingImportConflict dla konfliktu importu prywatnego
+   * Konflikt jest przypisywany do użytkownika na podstawie DocumentAuthorMapping
+   */
+  private async createPendingConflict(
+    preview: ParsedUzyteBele,
+    filepath: string,
+    filename: string,
+    deadline: Date | null
+  ): Promise<void> {
+    if (!preview.conflict?.baseOrderId || !preview.conflict?.baseOrderNumber) {
+      logger.error('Nie można utworzyć konfliktu - brak danych bazowego zlecenia');
+      return;
+    }
+
+    // Pobierz dane bazowego zlecenia do porównania
+    const baseOrder = await this.prisma.order.findUnique({
+      where: { id: preview.conflict.baseOrderId },
+      select: { totalWindows: true, totalGlasses: true },
+    });
+
+    if (!baseOrder) {
+      logger.error(`Nie znaleziono bazowego zlecenia ID: ${preview.conflict.baseOrderId}`);
+      return;
+    }
+
+    // Znajdź użytkownika przypisanego do autora dokumentu
+    let authorUserId: number | null = null;
+    if (preview.documentAuthor) {
+      const authorMapping = await this.prisma.documentAuthorMapping.findFirst({
+        where: { authorName: preview.documentAuthor },
+      });
+      authorUserId = authorMapping?.userId ?? null;
+    }
+
+    // Oblicz sugestię
+    const suggestion = this.calculateSuggestion(
+      baseOrder.totalWindows,
+      baseOrder.totalGlasses,
+      preview.totals?.windows ?? null,
+      preview.totals?.glasses ?? null
+    );
+
+    // Dodaj info o kliencie prywatnym i deadline do parsedData
+    const enrichedParsedData = {
+      ...preview,
+      privateClient: true,
+      deadline: deadline?.toISOString() ?? null,
+    };
+
+    // Utwórz PendingImportConflict
+    await this.mojaPracaRepository.createConflict({
+      orderNumber: preview.orderNumber,
+      baseOrderNumber: preview.conflict.baseOrderNumber,
+      suffix: preview.orderNumberParsed?.suffix || '',
+      baseOrderId: preview.conflict.baseOrderId,
+      documentAuthor: preview.documentAuthor ?? null,
+      authorUserId,
+      filepath,
+      filename,
+      parsedData: JSON.stringify(enrichedParsedData),
+      existingWindowsCount: baseOrder.totalWindows,
+      existingGlassCount: baseOrder.totalGlasses,
+      newWindowsCount: preview.totals?.windows ?? null,
+      newGlassCount: preview.totals?.glasses ?? null,
+      systemSuggestion: suggestion,
+    });
+
+    logger.info(
+      `   📝 Utworzono konflikt prywatny: ${preview.orderNumber} (bazowe: ${preview.conflict.baseOrderNumber})` +
+        (authorUserId ? ` - przypisano do użytkownika ID: ${authorUserId}` : ' - brak mapowania użytkownika')
+    );
   }
 
   /**

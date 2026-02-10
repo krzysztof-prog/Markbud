@@ -4,6 +4,7 @@ import { ConflictError } from '../utils/errors.js';
 import { GlassDeliveryMatchingService } from './glass-delivery/GlassDeliveryMatchingService.js';
 import { matchingQueue } from './import/MatchingQueueService.js';
 import { logger } from '../utils/logger.js';
+import { emitOrderUpdated } from './event-emitter.js';
 
 export class GlassOrderService {
   private matchingService: GlassDeliveryMatchingService;
@@ -180,15 +181,21 @@ export class GlassOrderService {
     // Update existing orders
     for (const [orderNumber, quantity] of byOrder) {
       if (existingSet.has(orderNumber)) {
+        // Przygotuj dane do aktualizacji
+        const updateData: Record<string, unknown> = {
+          orderedGlassCount: { increment: quantity },
+          glassOrderStatus: 'ordered',
+        };
+
+        // Ustaw glassDeliveryDate TYLKO jeśli nowa wartość nie jest null
+        // Zapobiega nadpisaniu istniejącej daty przez późniejszy import PDF (który nie ma daty)
+        if (expectedDeliveryDate !== null) {
+          updateData.glassDeliveryDate = expectedDeliveryDate;
+        }
+
         await tx.order.update({
           where: { orderNumber },
-          data: {
-            orderedGlassCount: { increment: quantity },
-            glassOrderStatus: 'ordered',
-            // Copy expected delivery date from glass order to production order
-            // (will be updated later from delivery confirmation)
-            glassDeliveryDate: expectedDeliveryDate,
-          },
+          data: updateData,
         });
       } else {
         // Create validation warning for missing order
@@ -237,15 +244,25 @@ export class GlassOrderService {
 
     for (const [orderNumber, quantity] of byOrder) {
       if (existingSet.has(orderNumber)) {
-        await this.prisma.order.update({
+        // Przygotuj dane do aktualizacji
+        const updateData: Record<string, unknown> = {
+          orderedGlassCount: { increment: quantity },
+          glassOrderStatus: 'ordered',
+        };
+
+        // Ustaw glassDeliveryDate TYLKO jeśli nowa wartość nie jest null
+        // Zapobiega nadpisaniu istniejącej daty przez późniejszy import PDF (który nie ma daty)
+        if (glassOrder?.expectedDeliveryDate) {
+          updateData.glassDeliveryDate = glassOrder.expectedDeliveryDate;
+        }
+
+        const updatedOrder = await this.prisma.order.update({
           where: { orderNumber },
-          data: {
-            orderedGlassCount: { increment: quantity },
-            glassOrderStatus: 'ordered',
-            // Copy expected delivery date from glass order
-            glassDeliveryDate: glassOrder?.expectedDeliveryDate ?? null,
-          },
+          data: updateData,
         });
+
+        // Emit realtime update
+        emitOrderUpdated({ id: updatedOrder.id });
       } else {
         await this.prisma.glassOrderValidation.create({
           data: {

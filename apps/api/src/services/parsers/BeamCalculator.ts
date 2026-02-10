@@ -7,7 +7,7 @@ import type { BeamCalculationResult } from './types.js';
 
 // Stałe z specyfikacji
 export const BEAM_LENGTH_MM = 6000;
-export const REST_ROUNDING_MM = 500;
+export const REST_ROUNDING_MM = 1000; // Zmienione z 500 na 1000 (2026-02-09)
 
 /**
  * Klasa do obliczania bel i metrów
@@ -15,9 +15,9 @@ export const REST_ROUNDING_MM = 500;
 export class BeamCalculator {
   /**
    * Przelicza bele i resztę według specyfikacji
-   * - zaokrąglić resztę w górę do wielokrotności 500mm
-   * - jeśli reszta > 0 → od nowych bel odjąć 1
-   * - reszta2 = 6000mm - zaokrąglona reszta → na metry
+   * - zaokrąglić resztę W DÓŁ do wielokrotności 1000mm
+   * - jeśli zaokrąglona reszta > 0 → od bel odjąć 1, metry = (6000 - roundedRest) / 1000
+   * - jeśli zaokrąglona reszta = 0 → bele bez zmian, metry = 0
    *
    * @param originalBeams - Oryginalna liczba bel
    * @param restMm - Reszta w milimetrach
@@ -45,25 +45,24 @@ export class BeamCalculator {
       return { beams: originalBeams, meters: 0 };
     }
 
-    // Sprawdź czy można odjąć belę
-    if (originalBeams < 1) {
-      throw new Error('Brak bel do odjęcia (oryginalna liczba < 1, ale reszta > 0)');
+    // Zaokrąglij resztę W DÓŁ do wielokrotności 1000mm
+    const roundedRest = Math.floor(restMm / REST_ROUNDING_MM) * REST_ROUNDING_MM;
+
+    // Jeśli zaokrąglona reszta = 0 → bele bez zmian, metry = 0
+    if (roundedRest === 0) {
+      return { beams: originalBeams, meters: 0 };
     }
 
-    // Zaokrąglij resztę w górę do wielokrotności 500mm
-    const roundedRest = Math.ceil(restMm / REST_ROUNDING_MM) * REST_ROUNDING_MM;
+    // Sprawdź czy można odjąć belę
+    if (originalBeams < 1) {
+      throw new Error('Brak bel do odjęcia (oryginalna liczba < 1, ale zaokrąglona reszta > 0)');
+    }
 
-    // Odjąć 1 belę
+    // Odjąć 1 belę tylko gdy zaokrąglona reszta > 0
     const beams = originalBeams - 1;
 
     // reszta2 = 6000 - roundedRest
     const reszta2Mm = BEAM_LENGTH_MM - roundedRest;
-
-    // Walidacja wyniku (ochrona przed błędami obliczeniowymi)
-    if (reszta2Mm < 0) {
-      console.warn(`Negative reszta2Mm: ${reszta2Mm}, roundedRest: ${roundedRest}`);
-      return { beams, meters: 0 }; // Bezpieczny fallback
-    }
 
     const meters = reszta2Mm / 1000;
 
@@ -87,13 +86,13 @@ export class BeamCalculator {
   }
 
   /**
-   * Zaokrągla resztę w górę do wielokrotności 500mm
+   * Zaokrągla resztę W DÓŁ do wielokrotności 1000mm
    */
   roundRest(restMm: number): number {
     if (restMm < 0) {
       throw new Error('Reszta nie może być ujemna');
     }
-    return Math.ceil(restMm / REST_ROUNDING_MM) * REST_ROUNDING_MM;
+    return Math.floor(restMm / REST_ROUNDING_MM) * REST_ROUNDING_MM;
   }
 }
 

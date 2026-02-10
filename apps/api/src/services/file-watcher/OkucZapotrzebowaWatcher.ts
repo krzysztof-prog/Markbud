@@ -177,7 +177,7 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
       columns: true,
       skip_empty_lines: true,
       trim: true,
-      delimiter: [';', ','], // Najpierw srednik (rzeczywisty format), potem przecinek
+      delimiter: ';', // Pliki okucia sa zawsze rozdzielane srednikami (przecinek powodowal bledy - np. "G.D.15,5" w nazwach)
     }) as Record<string, string>[];
 
     return records.map((row) => ({

@@ -151,6 +151,8 @@ export const weekStatRawSchema = z.object({
   deliveriesCount: z.number(),
   ordersCount: z.number(),
   windowsCount: z.number(),
+  sashesCount: z.number(),
+  glassesCount: z.number(),
 });
 
 export type WeekStatRaw = z.infer<typeof weekStatRawSchema>;

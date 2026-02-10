@@ -34,14 +34,20 @@ function formatMonth(date: Date): string {
   return date.toLocaleDateString('pl-PL', { year: 'numeric', month: 'long' });
 }
 
-// Helper: Pobierz klucz miesiąca (YYYY-MM) z daty lub expectedWeek
+// Helper: Pobierz klucz miesiąca (YYYY-MM) z productionDate zlecenia
+// Grupujemy po dacie produkcji zlecenia (tak samo jak zestawienie produkcji)
 function getMonthKey(demand: OkucDemand): string {
-  // Użyj updatedAt jako daty RW (gdy status zmienił się na completed)
+  // Priorytet 1: productionDate zlecenia (zgodność z zestawieniem produkcji)
+  if (demand.order?.productionDate) {
+    const date = new Date(demand.order.productionDate);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  }
+  // Fallback 2: updatedAt demand (stara logika dla demands bez zlecenia)
   if (demand.updatedAt) {
     const date = new Date(demand.updatedAt);
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   }
-  // Fallback: użyj expectedWeek (format: 2026-W04 -> 2026-01)
+  // Fallback 3: expectedWeek (format: 2026-W04 -> 2026-01)
   if (demand.expectedWeek) {
     const [year, weekPart] = demand.expectedWeek.split('-W');
     const weekNum = parseInt(weekPart, 10);

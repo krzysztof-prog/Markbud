@@ -39,11 +39,13 @@ export interface Order {
   status: Status;
   valuePln?: number | string | null;
   valueEur?: number | string | null;
+  priceInheritedFromOrder?: string | null;
   invoiceNumber?: string;
   glassDeliveryDate?: Timestamp;
   orderedGlassCount?: number;
   deliveredGlassCount?: number;
   glassOrderStatus?: string;
+  glassOrderNote?: string | null;
   notes?: string;
   completedAt?: Timestamp;
   archivedAt?: Timestamp;
@@ -55,7 +57,7 @@ export interface Order {
   totalWindows?: number;
   totalSashes?: number;
   totalGlasses?: number;
-  // Sumy z materiałówki (wartości w groszach)
+  // Sumy z materiałówki (wartości w centach EUR)
   windowsNetValue?: number | null;
   windowsMaterial?: number | null;
   assemblyValue?: number | null;

@@ -6,7 +6,7 @@
  * Zarządzanie zamówieniami okuć do dostawcy
  */
 
-import { fetchApi } from '@/lib/api-client';
+import { fetchApi, uploadFile } from '@/lib/api-client';
 import type {
   OkucOrder,
   CreateOkucOrderInput,
@@ -103,22 +103,8 @@ export const okucOrdersApi = {
    * POST /api/okuc/orders/import/parse
    * Parsuje plik XLSX i zwraca podgląd danych do zatwierdzenia
    */
-  parseImport: async (file: File): Promise<ParsedOrderImport> => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await fetch('/api/okuc/orders/import/parse', {
-      method: 'POST',
-      body: formData,
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Błąd parsowania pliku' }));
-      throw new Error(error.error || 'Błąd parsowania pliku');
-    }
-
-    return response.json();
+  parseImport: (file: File): Promise<ParsedOrderImport> => {
+    return uploadFile<ParsedOrderImport>('/api/okuc/orders/import/parse', file);
   },
 
   /**

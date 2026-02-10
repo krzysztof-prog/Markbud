@@ -24,6 +24,9 @@ export const updateDeliverySchema = z.object({
 
 export const deliveryQuerySchema = dateRangeQuerySchema.extend({
   status: z.string().optional(),
+  includeOverdue: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
+  // Filtruj dostawy które mają przynajmniej jedno zlecenie w podanym statusie
+  hasOrdersInStatus: z.string().optional(),
 });
 
 export const deliveryParamsSchema = idParamsSchema('delivery');

@@ -75,11 +75,13 @@ export class DeliveryService {
   // CRUD Operations
   // ===================
 
-  async getAllDeliveries(filters: { from?: string; to?: string; status?: string }) {
+  async getAllDeliveries(filters: { from?: string; to?: string; status?: string; includeOverdue?: boolean; hasOrdersInStatus?: string }) {
     const deliveryFilters = {
       from: parseDateSafe(filters.from),
       to: parseDateSafe(filters.to),
       status: filters.status,
+      includeOverdue: filters.includeOverdue,
+      hasOrdersInStatus: filters.hasOrdersInStatus,
     };
 
     return this.repository.findAll(deliveryFilters);
@@ -256,9 +258,15 @@ export class DeliveryService {
 
     const orderIds = delivery.deliveryOrders.map((d: { orderId: number }) => d.orderId);
 
-    await this.repository.updateOrdersBatch(orderIds, {
-      productionDate: parseDate(productionDate),
-      status: 'completed',
+    if (orderIds.length > 0) {
+      // Użyj orderService.bulkUpdateStatus aby automatycznie przetworzyć RW (okucia, profile, stal)
+      await this.orderService.bulkUpdateStatus(orderIds, 'completed', productionDate);
+    }
+
+    // Ustaw status dostawy na 'completed'
+    await prisma.delivery.update({
+      where: { id: deliveryId },
+      data: { status: 'completed' },
     });
 
     // Notify about orders completion
@@ -287,6 +295,12 @@ export class DeliveryService {
 
     // Use orderService to update all orders
     await this.orderService.bulkUpdateStatus(orderIds, 'completed', productionDate);
+
+    // Ustaw status dostawy na 'completed'
+    await prisma.delivery.update({
+      where: { id: deliveryId },
+      data: { status: 'completed' },
+    });
 
     // Notify about orders completion
     this.notificationService.notifyOrdersCompleted(deliveryId, orderIds, productionDate);

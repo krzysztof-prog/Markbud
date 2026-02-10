@@ -18,6 +18,9 @@ export interface DeliveryFilters {
   from?: Date;
   to?: Date;
   status?: string;
+  includeOverdue?: boolean;
+  // Filtruj dostawy które mają przynajmniej jedno zlecenie w podanym statusie
+  hasOrdersInStatus?: string;
 }
 
 export class DeliveryRepository {
@@ -33,7 +36,21 @@ export class DeliveryRepository {
     // Exclude soft-deleted deliveries
     where.deletedAt = null;
 
-    if (filters.from || filters.to) {
+    if (filters.includeOverdue && filters.from) {
+      // Pokaż niezakończone dostawy w zakresie dat ORAZ przeterminowane niezakończone
+      const dateRangeCondition: Prisma.DeliveryWhereInput = {
+        deliveryDate: {
+          gte: filters.from,
+          ...(filters.to ? { lte: filters.to } : {}),
+        },
+        status: { not: 'completed' },
+      };
+      const overdueCondition: Prisma.DeliveryWhereInput = {
+        deliveryDate: { lt: filters.from },
+        status: { not: 'completed' },
+      };
+      where.OR = [dateRangeCondition, overdueCondition];
+    } else if (filters.from || filters.to) {
       where.deliveryDate = {};
       if (filters.from) where.deliveryDate.gte = filters.from;
       if (filters.to) where.deliveryDate.lte = filters.to;
@@ -41,6 +58,17 @@ export class DeliveryRepository {
 
     if (filters.status) {
       where.status = filters.status;
+    }
+
+    // Filtruj dostawy które mają przynajmniej jedno zlecenie w podanym statusie
+    if (filters.hasOrdersInStatus) {
+      where.deliveryOrders = {
+        some: {
+          order: {
+            status: filters.hasOrdersInStatus,
+          },
+        },
+      };
     }
 
     // Execute count and findMany in parallel using transaction
@@ -111,6 +139,9 @@ export class DeliveryRepository {
             select: {
               id: true,
               status: true,
+              okCount: true,
+              mismatchCount: true,
+              errorCount: true,
               results: {
                 select: {
                   orderId: true,
@@ -564,12 +595,7 @@ export class DeliveryRepository {
         deliveryDate: true,
         status: true,
         deliveryOrders: {
-          where: {
-            order: {
-              // Ukryj zlecenia zakończone i zarchiwizowane - nie potrzebują profili
-              status: { notIn: ['completed', 'archived'] },
-            },
-          },
+          // Nie filtrujemy po statusie zlecenia - profile mają być widoczne nawet dla ukończonych zleceń
           select: {
             id: true,
             orderId: true,
@@ -578,11 +604,9 @@ export class DeliveryRepository {
                 id: true,
                 orderNumber: true,
                 status: true,
+                productionDate: true, // Potrzebne do określenia czy zlecenie jest "w produkcji"
                 requirements: {
-                  where: {
-                    // Tylko requirements które nie zostały jeszcze przetworzone przez RW
-                    status: { not: 'completed' },
-                  },
+                  // Nie filtrujemy po statusie requirements - pokazujemy wszystkie profile
                   select: {
                     id: true,
                     profileId: true,

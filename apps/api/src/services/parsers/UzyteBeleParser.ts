@@ -69,7 +69,7 @@ export class UzyteBeleParser {
   /**
    * Określa kategorię pozycji materiałówki
    * @param position - numer pozycji
-   * @param windowCount - liczba okien (niezerowych)
+   * @param windowPositions - zbiór pozycji sklasyfikowanych jako okna (na bazie rankingu)
    * @param material - wartość materiału w groszach
    * @param netValue - wartość netto w groszach
    * @param assemblyValueAfterDiscount - wartość montażu po rabacie w groszach
@@ -79,7 +79,7 @@ export class UzyteBeleParser {
    */
   private categorizeMaterial(
     position: number,
-    windowCount: number,
+    windowPositions: Set<number>, // zbiór pozycji sklasyfikowanych jako okna
     material: number,
     netValue: number,
     assemblyValueAfterDiscount: number,
@@ -87,8 +87,10 @@ export class UzyteBeleParser {
     fittings: number,
     parts: number
   ): MaterialCategory {
-    // Jeśli pozycja > liczba okien = dodatki
-    if (position > windowCount) {
+    // Jeśli pozycja NIE należy do pozycji okien = dodatki
+    // Używamy zbioru pozycji okien zamiast prostego porównania position > windowCount,
+    // bo w pod-zleceniach (-a, -b) numery pozycji mogą nie zaczynać się od 1
+    if (!windowPositions.has(position)) {
       return 'dodatki';
     }
 
@@ -422,6 +424,10 @@ export class UzyteBeleParser {
           },
         });
 
+        // Automatyczny re-matching szyb: sprawdź czy istnieją nierozwiązane walidacje
+        // dla tego numeru zlecenia (szyby zaimportowane PRZED zleceniem)
+        await this.rematchGlassValidations(tx, targetOrderNumber);
+
         // Oznacz pending price jako zastosowaną
         if (pendingPrice) {
           await tx.pendingOrderPrice.update({
@@ -664,10 +670,10 @@ export class UzyteBeleParser {
         windowPositionToIdMap.set(win.lp, createdWindow.id);
       }
 
-      // Dodaj glasses (szyby) (w tej samej transakcji)
-      for (const glass of parsed.glasses) {
-        await tx.orderGlass.create({
-          data: {
+      // Dodaj glasses (szyby) - używamy createMany dla lepszej wydajności
+      if (parsed.glasses.length > 0) {
+        await tx.orderGlass.createMany({
+          data: parsed.glasses.map(glass => ({
             orderId: order.id,
             lp: glass.lp,
             position: glass.position,
@@ -676,45 +682,24 @@ export class UzyteBeleParser {
             quantity: glass.quantity,
             packageType: glass.packageType,
             areaSqm: glass.areaSqm,
-          },
+          })),
         });
       }
 
-      // Dodaj materials (materiałówka) (w tej samej transakcji)
-      // Jednocześnie oblicz sumy dla każdej kategorii
+      // Dodaj materials (materiałówka) - przygotuj dane i oblicz sumy przed batch insert
+      // Oblicz sumy dla każdej kategorii
       let windowsNetValue = 0;
       let windowsMaterial = 0;
       let assemblyValue = 0;
       let extrasValue = 0;
       let otherValue = 0;
 
-      for (const mat of parsed.materials) {
+      // Przygotuj dane do batch insert i oblicz sumy jednocześnie
+      const materialsData = parsed.materials.map(mat => {
         // Dla kategorii 'okno' - powiąż z odpowiednim oknem
-        let orderWindowId: number | null = null;
-        if (mat.category === 'okno') {
-          orderWindowId = windowPositionToIdMap.get(mat.position) ?? null;
-        }
-
-        await tx.orderMaterial.create({
-          data: {
-            orderId: order.id,
-            orderWindowId, // Powiązanie z oknem (tylko dla kategorii 'okno')
-            position: mat.position,
-            category: mat.category,
-            glazing: mat.glazing,
-            fittings: mat.fittings,
-            parts: mat.parts,
-            glassQuantity: mat.glassQuantity,
-            material: mat.material,
-            assemblyValueBeforeDiscount: mat.assemblyValueBeforeDiscount,
-            assemblyValueAfterDiscount: mat.assemblyValueAfterDiscount,
-            netValue: mat.netValue,
-            totalNet: mat.totalNet,
-            quantity: mat.quantity,
-            coefficient: mat.coefficient,
-            unit: mat.unit,
-          },
-        });
+        const orderWindowId = mat.category === 'okno'
+          ? (windowPositionToIdMap.get(mat.position) ?? null)
+          : null;
 
         // Oblicz sumy dla każdej kategorii
         // Uwaga: totalNet i material już zawierają pełne wartości dla pozycji,
@@ -734,6 +719,32 @@ export class UzyteBeleParser {
             otherValue += mat.totalNet;
             break;
         }
+
+        return {
+          orderId: order.id,
+          orderWindowId, // Powiązanie z oknem (tylko dla kategorii 'okno')
+          position: mat.position,
+          category: mat.category,
+          glazing: mat.glazing,
+          fittings: mat.fittings,
+          parts: mat.parts,
+          glassQuantity: mat.glassQuantity,
+          material: mat.material,
+          assemblyValueBeforeDiscount: mat.assemblyValueBeforeDiscount,
+          assemblyValueAfterDiscount: mat.assemblyValueAfterDiscount,
+          netValue: mat.netValue,
+          totalNet: mat.totalNet,
+          quantity: mat.quantity,
+          coefficient: mat.coefficient,
+          unit: mat.unit,
+        };
+      });
+
+      // Batch insert materials - jedno zapytanie zamiast N
+      if (materialsData.length > 0) {
+        await tx.orderMaterial.createMany({
+          data: materialsData,
+        });
       }
 
       // Zapisz sumy do zlecenia
@@ -756,7 +767,7 @@ export class UzyteBeleParser {
         materialsCount: parsed.materials.length,
       };
     }, {
-      timeout: 30000, // 30s dla dużych importów
+      timeout: 60000, // 60s dla dużych importów (zwiększone z 30s - fix timeout issues)
     }).then(async (result) => {
       // Re-match unmatched glass delivery items AFTER transaction completes
       try {
@@ -781,8 +792,167 @@ export class UzyteBeleParser {
         logger.warn(`Failed to auto-link Schuco deliveries for ${targetOrderNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
 
+      // AUTOMATYCZNE POWIĄZYWANIE OKUĆ (PO ZAKOŃCZENIU TRANSAKCJI)
+      // Gdy okucia zostały zaimportowane PRZED zleceniem, mają orderId=null.
+      // Po utworzeniu/przeniesieniu zlecenia, linkujemy osierocone okucDemand.
+      try {
+        const finalOrderNumber = parsed.orderNumber;
+
+        // Znajdź FileImport z okuciami czekającymi na to zlecenie
+        const allOkucImports = await prisma.fileImport.findMany({
+          where: {
+            fileType: 'okuc_zapotrzebowanie',
+            status: { in: ['completed', 'pending_review'] },
+          },
+          select: { id: true, filename: true, metadata: true, createdAt: true, processedAt: true },
+        });
+
+        // Filtruj te, które mają pasujący orderNumber i orderId=null w metadata
+        const pendingImports = allOkucImports.filter(imp => {
+          try {
+            const meta = JSON.parse(imp.metadata || '{}');
+            return meta.orderNumber === finalOrderNumber && meta.orderId === null;
+          } catch {
+            return false;
+          }
+        });
+
+        if (pendingImports.length > 0) {
+          const order = await prisma.order.findUnique({
+            where: { orderNumber: finalOrderNumber },
+            select: { id: true },
+          });
+
+          if (order) {
+            // Sprawdź czy zlecenie już ma okucia (mogły być dodane w transakcji)
+            const existingOkuc = await prisma.okucDemand.count({
+              where: { orderId: order.id },
+            });
+
+            if (existingOkuc === 0) {
+              let totalLinked = 0;
+
+              for (const imp of pendingImports) {
+                // Identyfikuj osierocone okucDemand po zakresie czasu importu
+                const importStart = imp.createdAt;
+                const importEnd = imp.processedAt || new Date(importStart.getTime() + 300000); // +5 min fallback
+
+                const updated = await prisma.okucDemand.updateMany({
+                  where: {
+                    orderId: null,
+                    source: 'csv_import',
+                    createdAt: { gte: importStart, lte: importEnd },
+                  },
+                  data: { orderId: order.id },
+                });
+
+                if (updated.count > 0) {
+                  // Aktualizuj FileImport metadata
+                  const oldMeta = JSON.parse(imp.metadata || '{}');
+                  oldMeta.orderId = order.id;
+                  oldMeta.orderExists = true;
+                  oldMeta.autoLinkedAt = new Date().toISOString();
+                  oldMeta.autoLinkReason = 'order-created-after-import';
+
+                  await prisma.fileImport.update({
+                    where: { id: imp.id },
+                    data: { metadata: JSON.stringify(oldMeta) },
+                  });
+
+                  totalLinked += updated.count;
+                  logger.info(`Auto-link okuć: ${imp.filename} → ${finalOrderNumber} (${updated.count} pozycji)`);
+                }
+              }
+
+              if (totalLinked > 0) {
+                await prisma.order.update({
+                  where: { id: order.id },
+                  data: { okucDemandStatus: 'imported' },
+                });
+                logger.info(`Auto-linked ${totalLinked} okucia pozycji do zlecenia ${finalOrderNumber}`);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        logger.warn(`Błąd auto-linkingu okuć dla ${parsed.orderNumber}: ${error instanceof Error ? error.message : 'Nieznany błąd'}`);
+      }
+
       return result;
     });
+  }
+
+  /**
+   * Automatyczny re-matching szyb do nowo utworzonego zlecenia.
+   * Gdy szyby zostały zaimportowane PRZED zleceniem, tworzona jest walidacja
+   * 'missing_production_order'. Ta metoda sprawdza czy takie walidacje istnieją
+   * i automatycznie dopasowuje szyby do zlecenia.
+   */
+  private async rematchGlassValidations(
+    tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+    orderNumber: string
+  ): Promise<void> {
+    const unresolvedValidations = await tx.glassOrderValidation.findMany({
+      where: {
+        orderNumber,
+        validationType: 'missing_production_order',
+        resolved: false,
+        glassOrder: { deletedAt: null },
+      },
+      include: {
+        glassOrder: {
+          select: { expectedDeliveryDate: true, glassOrderNumber: true },
+        },
+      },
+    });
+
+    if (unresolvedValidations.length === 0) return;
+
+    let totalGlassCount = 0;
+    let glassDeliveryDate: Date | null = null;
+
+    for (const validation of unresolvedValidations) {
+      const quantity = validation.orderedQuantity || 0;
+      if (quantity <= 0) continue;
+
+      totalGlassCount += quantity;
+
+      // Użyj daty dostawy z glass order (pierwsza niepusta)
+      if (!glassDeliveryDate && validation.glassOrder?.expectedDeliveryDate) {
+        glassDeliveryDate = validation.glassOrder.expectedDeliveryDate;
+      }
+
+      // Oznacz walidację jako rozwiązaną
+      await tx.glassOrderValidation.update({
+        where: { id: validation.id },
+        data: {
+          resolved: true,
+          resolvedAt: new Date(),
+          resolvedBy: 'auto-rematch-on-import',
+        },
+      });
+    }
+
+    // Zaktualizuj zlecenie z danymi o szybach
+    if (totalGlassCount > 0) {
+      const updateData: Record<string, unknown> = {
+        orderedGlassCount: { increment: totalGlassCount },
+        glassOrderStatus: 'ordered',
+      };
+
+      if (glassDeliveryDate) {
+        updateData.glassDeliveryDate = glassDeliveryDate;
+      }
+
+      await tx.order.update({
+        where: { orderNumber },
+        data: updateData,
+      });
+
+      logger.info(
+        `Auto re-match szyb: zlecenie ${orderNumber} ← ${totalGlassCount} szyb z ${unresolvedValidations.length} walidacji`
+      );
+    }
   }
 
   /**
@@ -921,8 +1091,9 @@ export class UzyteBeleParser {
         if (parts.length >= 4 && parts[0] && parts[1]) {
           // Pierwszy wiersz z danymi - wyciągnij numer zlecenia
           // Akceptuj cyfry opcjonalnie z separatorem + sufiks: 54222, 54222-a, 54222 xxx
-          if (orderNumber === 'UNKNOWN' && parts[0].match(/^\d+(?:[-\s][a-zA-Z0-9]{1,3})?$/)) {
-            orderNumber = parts[0];
+          // Akceptuj też trailing dash bez sufiksu: 51737- → traktuj jako 51737
+          if (orderNumber === 'UNKNOWN' && parts[0].match(/^\d+(?:[-\s][a-zA-Z0-9]{1,3})?-?$/)) {
+            orderNumber = parts[0].replace(/-$/, '');
           }
 
           const numArt = parts[1];
@@ -1057,12 +1228,18 @@ export class UzyteBeleParser {
     const filteredWindows = windows.filter(w => w.szer > 0 || w.wys > 0);
     const nonZeroWindowCount = filteredWindows.length;
 
+    // Wyznacz zbiór pozycji materiałów które odpowiadają oknom
+    // Sortujemy unikalne pozycje rosnąco i bierzemy pierwsze N (= liczba okien)
+    // Dzięki temu pod-zlecenia (-a, -b) z pozycjami np. 3 zamiast 1 są poprawnie klasyfikowane
+    const sortedUniquePositions = [...new Set(materials.map(m => m.position))].sort((a, b) => a - b);
+    const windowPositions = new Set(sortedUniquePositions.slice(0, nonZeroWindowCount));
+
     // Określ kategorie dla pozycji materiałówki
     const categorizedMaterials = materials.map(m => ({
       ...m,
       category: this.categorizeMaterial(
         m.position,
-        nonZeroWindowCount,
+        windowPositions,
         m.material,
         m.netValue,
         m.assemblyValueAfterDiscount,

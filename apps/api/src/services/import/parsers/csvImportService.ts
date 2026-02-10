@@ -191,7 +191,8 @@ export class CsvImportService implements ICsvImportService {
         } else if (!order) {
           // Utworz nowe zlecenie
           const eurValue = await this.getEurValueFromSchuco(tx, targetOrderNumber);
-          const pendingPrice = await this.getPendingPrice(tx, targetOrderNumber);
+          // Przekazujemy projekt jako fallback do dopasowania pending price
+          const pendingPrice = await this.getPendingPrice(tx, targetOrderNumber, parsed.project);
 
           order = await tx.order.create({
             data: {
@@ -328,14 +329,18 @@ export class CsvImportService implements ICsvImportService {
 
   /**
    * Pobiera oczekujaca cene dla zlecenia.
-   * Szuka exact match, a jesli nie znajdzie - probuje prefix match
-   * (np. zlecenie "53526-a" dopasowuje pending z orderNumber "53526")
+   * Strategie dopasowania (w kolejności):
+   * 1. Exact match po orderNumber
+   * 2. Prefix match (np. "53526-a" -> "53526")
+   * 3. Match po projekcie (reference) gdy orderNumber = UNKNOWN
+   * 4. Match po numerze w nazwie pliku (fallback)
    */
   private async getPendingPrice(
     tx: PrismaTransaction,
-    orderNumber: string
+    orderNumber: string,
+    project?: string | null
   ) {
-    // Exact match
+    // Strategia 1: Exact match po orderNumber
     const exact = await tx.pendingOrderPrice.findFirst({
       where: {
         orderNumber,
@@ -345,16 +350,50 @@ export class CsvImportService implements ICsvImportService {
     });
     if (exact) return exact;
 
-    // Prefix match: zlecenie "53526-a" -> pending "53526"
+    // Strategia 2: Prefix match - zlecenie "53526-a" -> pending "53526"
     const baseNumber = orderNumber.split('-')[0];
     if (baseNumber !== orderNumber) {
-      return tx.pendingOrderPrice.findFirst({
+      const prefixMatch = await tx.pendingOrderPrice.findFirst({
         where: {
           orderNumber: baseNumber,
           status: 'pending',
         },
         orderBy: { createdAt: 'desc' },
       });
+      if (prefixMatch) return prefixMatch;
+    }
+
+    // Strategia 3: Match po projekcie (reference) gdy PDF miał UNKNOWN orderNumber
+    // Np. PDF "D5486.pdf" nie zawierał numeru zlecenia, ale reference = "D5486"
+    // Zlecenie z project = "D5486" powinno dostać tę cenę
+    if (project) {
+      const byProject = await tx.pendingOrderPrice.findFirst({
+        where: {
+          orderNumber: 'UNKNOWN',
+          reference: project,
+          status: 'pending',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (byProject) {
+        logger.info(`Pending price dopasowana po projekcie: ${project} -> orderNumber ${orderNumber}`);
+        return byProject;
+      }
+    }
+
+    // Strategia 4: Fallback - szukaj po numerze zlecenia w nazwie pliku
+    // Np. plik "ZAM 53627 D5486.pdf" gdzie parser nie wyciągnął numeru
+    const byFilename = await tx.pendingOrderPrice.findFirst({
+      where: {
+        orderNumber: 'UNKNOWN',
+        status: 'pending',
+        filename: { contains: orderNumber },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (byFilename) {
+      logger.info(`Pending price dopasowana po nazwie pliku: ${byFilename.filename} -> orderNumber ${orderNumber}`);
+      return byFilename;
     }
 
     return null;

@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import type { TransactionClient, RematchResult } from './types.js';
+import { emitOrderUpdated } from '../event-emitter.js';
 
 /**
  * Type for creating new validations (without auto-generated fields)
@@ -32,9 +33,11 @@ export class GlassDeliveryMatchingService {
     });
 
     // Batch fetch all potentially matching order items at once
+    // Dodaj też numery bez suffiksu (-a, -b, -c, etc.) jako fallback
     const orderNumbers = [...new Set(deliveryItems.map((i) => i.orderNumber))];
+    const orderNumbersWithFallbacks = this.expandOrderNumbersWithFallbacks(orderNumbers);
     const allOrderItems = await tx.glassOrderItem.findMany({
-      where: { orderNumber: { in: orderNumbers } },
+      where: { orderNumber: { in: orderNumbersWithFallbacks } },
     });
 
     // Group by orderNumber for quick lookup
@@ -77,7 +80,7 @@ export class GlassDeliveryMatchingService {
         continue;
       }
 
-      // STEP 2: Check for SUFFIX CONFLICT
+      // STEP 2: Check for SUFFIX CONFLICT (same orderNumber, different suffix)
       const conflictMatch = candidates.find(
         (c) =>
           c.orderSuffix !== deliveryItem.orderSuffix &&
@@ -110,6 +113,32 @@ export class GlassDeliveryMatchingService {
         const current = deliveredCountByOrder.get(deliveryItem.orderNumber) || 0;
         deliveredCountByOrder.set(deliveryItem.orderNumber, current + deliveryItem.quantity);
         continue;
+      }
+
+      // STEP 2.5: FALLBACK - jeśli orderNumber ma suffiks (-a, -b, etc.), spróbuj dopasować do wersji bez suffiksu
+      const baseOrderNumber = this.extractBaseOrderNumber(deliveryItem.orderNumber);
+      if (baseOrderNumber && baseOrderNumber !== deliveryItem.orderNumber) {
+        const fallbackCandidates = orderItemsByNumber.get(baseOrderNumber) || [];
+
+        // Szukaj dopasowania wymiarów w zamówieniu bez suffiksu
+        const fallbackMatch = fallbackCandidates.find(
+          (c) =>
+            c.widthMm === deliveryItem.widthMm &&
+            c.heightMm === deliveryItem.heightMm
+        );
+
+        if (fallbackMatch) {
+          // Znaleziono match w zamówieniu bez suffiksu - traktuj jako matched z info
+          matchedUpdates.push({
+            id: deliveryItem.id,
+            matchedItemId: fallbackMatch.id,
+            glassOrderId: fallbackMatch.glassOrderId,
+          });
+          // Aktualizuj licznik dla BAZOWEGO zamówienia (bez suffiksu)
+          const current = deliveredCountByOrder.get(baseOrderNumber) || 0;
+          deliveredCountByOrder.set(baseOrderNumber, current + deliveryItem.quantity);
+          continue;
+        }
       }
 
       // STEP 3: No match found
@@ -201,8 +230,9 @@ export class GlassDeliveryMatchingService {
     });
 
     const orderNumbers = [...new Set(deliveryItems.map((i) => i.orderNumber))];
+    const orderNumbersWithFallbacks = this.expandOrderNumbersWithFallbacks(orderNumbers);
     const allOrderItems = await this.prisma.glassOrderItem.findMany({
-      where: { orderNumber: { in: orderNumbers } },
+      where: { orderNumber: { in: orderNumbersWithFallbacks } },
     });
 
     const orderItemsByNumber = new Map<string, typeof allOrderItems>();
@@ -271,6 +301,30 @@ export class GlassDeliveryMatchingService {
 
         await this.updateOrderDeliveredCount(deliveryItem.orderNumber, deliveryItem.quantity);
         continue;
+      }
+
+      // FALLBACK - jeśli orderNumber ma suffiks, spróbuj dopasować do wersji bez suffiksu
+      const baseOrderNumber = this.extractBaseOrderNumber(deliveryItem.orderNumber);
+      if (baseOrderNumber && baseOrderNumber !== deliveryItem.orderNumber) {
+        const fallbackCandidates = orderItemsByNumber.get(baseOrderNumber) || [];
+        const fallbackMatch = fallbackCandidates.find(
+          (c) =>
+            c.widthMm === deliveryItem.widthMm &&
+            c.heightMm === deliveryItem.heightMm
+        );
+
+        if (fallbackMatch) {
+          await this.prisma.glassDeliveryItem.update({
+            where: { id: deliveryItem.id },
+            data: {
+              matchStatus: 'matched',
+              matchedItemId: fallbackMatch.id,
+              glassOrderId: fallbackMatch.glassOrderId,
+            },
+          });
+          await this.updateOrderDeliveredCount(baseOrderNumber, deliveryItem.quantity);
+          continue;
+        }
       }
 
       await this.prisma.glassDeliveryItem.update({
@@ -735,12 +789,23 @@ export class GlassDeliveryMatchingService {
    * Non-transaction helper for updating delivered count
    */
   private async updateOrderDeliveredCount(orderNumber: string, quantity: number): Promise<void> {
+    // Pobierz order aby mieć ID dla emit
+    const order = await this.prisma.order.findUnique({
+      where: { orderNumber },
+      select: { id: true },
+    });
+
     await this.prisma.order.updateMany({
       where: { orderNumber },
       data: {
         deliveredGlassCount: { increment: quantity },
       },
     });
+
+    // Emit realtime update
+    if (order) {
+      emitOrderUpdated({ id: order.id });
+    }
   }
 
   /**
@@ -773,10 +838,46 @@ export class GlassDeliveryMatchingService {
         newStatus = 'over_delivered';
       }
 
-      await this.prisma.order.update({
+      const updatedOrder = await this.prisma.order.update({
         where: { orderNumber },
         data: { glassOrderStatus: newStatus },
       });
+
+      // Emit realtime update
+      emitOrderUpdated({ id: updatedOrder.id });
     }
+  }
+
+  /**
+   * Rozszerza listę numerów zamówień o wersje bez suffiksów (-a, -b, etc.)
+   * Np. ['53898-a', '53899'] → ['53898-a', '53898', '53899']
+   */
+  private expandOrderNumbersWithFallbacks(orderNumbers: string[]): string[] {
+    const expanded = new Set<string>(orderNumbers);
+
+    for (const orderNumber of orderNumbers) {
+      const base = this.extractBaseOrderNumber(orderNumber);
+      if (base && base !== orderNumber) {
+        expanded.add(base);
+      }
+    }
+
+    return [...expanded];
+  }
+
+  /**
+   * Wyodrębnia bazowy numer zamówienia (bez suffiksu -a, -b, -c, etc.)
+   * Np. '53898-a' → '53898', '53898' → null (brak suffiksu)
+   */
+  private extractBaseOrderNumber(orderNumber: string): string | null {
+    // Wzorzec: numer-litera na końcu (np. 53898-a, 53898-b, 12345-c)
+    const suffixPattern = /^(.+)-([a-zA-Z])$/;
+    const match = orderNumber.match(suffixPattern);
+
+    if (match) {
+      return match[1]; // Zwróć część przed -X
+    }
+
+    return null; // Brak suffiksu
   }
 }

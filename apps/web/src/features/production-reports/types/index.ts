@@ -63,6 +63,7 @@ export interface OrderData {
   id: number;
   orderNumber: string;
   client: string;
+  project: string | null; // Projekt ze zlecenia (np. "Kowalski - remont")
   totalWindows: number;
   totalSashes: number;
   totalGlasses: number | null; // Liczba szkleń

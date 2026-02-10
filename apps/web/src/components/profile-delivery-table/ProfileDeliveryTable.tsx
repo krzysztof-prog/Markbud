@@ -40,6 +40,7 @@ interface DeliveryData {
   day: string;
   date: string;
   quantity: number;
+  inProduction: boolean; // Czy wszystkie zlecenia w tej dostawie są w produkcji
 }
 
 interface ProfileRow {
@@ -144,17 +145,17 @@ function SortableRow({
 }
 
 export function ProfileDeliveryTable() {
-  // Wczytaj domyślną liczbę kolumn z localStorage (tylko po stronie klienta)
+  const [colorGroups, setColorGroups] = useState<ColorGroup[]>([]);
+  const [startDate, setStartDate] = useState<string>(() => getTodayWarsaw());
+
+  // Liczba kolumn do sumowania w SUMA N (wczytaj z localStorage)
   const [sumColumns, setSumColumns] = useState(() => {
     if (typeof window === 'undefined') return 3;
     const saved = localStorage.getItem('profileDeliveryTable.sumColumns');
     return saved ? parseInt(saved) : 3;
   });
 
-  const [colorGroups, setColorGroups] = useState<ColorGroup[]>([]);
-  const [startDate, setStartDate] = useState<string>(() => getTodayWarsaw());
-
-  // Zapisz liczbę kolumn do localStorage przy każdej zmianie (tylko po stronie klienta)
+  // Zapisz liczbę kolumn do localStorage przy każdej zmianie
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('profileDeliveryTable.sumColumns', sumColumns.toString());
@@ -176,7 +177,7 @@ export function ProfileDeliveryTable() {
   });
 
   // Typy dla danych z API
-  type ProfileRequirement = { deliveryId: number; deliveryDate: string; profileId: number; colorCode: string; totalBeams: number };
+  type ProfileRequirement = { deliveryId: number; deliveryDate: string; profileId: number; colorCode: string; totalBeams: number; inProduction: boolean };
   type RequirementTotal = { profileId: number; total: number };
   type ProfileData = { id: number; number?: string; name: string; sortOrder?: number; articleNumber?: string };
   type ColorData = { id: number; code: string; name: string };
@@ -242,16 +243,24 @@ export function ProfileDeliveryTable() {
             day: dayName,
             date: dateStr,
             quantity: 0,
+            inProduction: false, // Będzie nadpisane później z deliveryInProductionMap
           });
         });
       }
 
       // Stwórz mapę delivery requirements: `profileId-colorCode-deliveryId` -> totalBeams
       const deliveryReqMap = new Map<string, number>();
+      // Stwórz mapę inProduction per delivery (czy wszystkie zlecenia w dostawie są w produkcji)
+      const deliveryInProductionMap = new Map<number, boolean>();
       if (deliveryProfileReqs && Array.isArray(deliveryProfileReqs)) {
         deliveryProfileReqs.forEach((req) => {
           const key = `${req.profileId}-${req.colorCode}-${req.deliveryId}`;
           deliveryReqMap.set(key, req.totalBeams);
+          // Zapisz info o produkcji - jeśli którykolwiek req ma inProduction, to cała dostawa jest w produkcji
+          // API zwraca inProduction=true gdy WSZYSTKIE zlecenia w dostawie mają productionDate
+          if (!deliveryInProductionMap.has(req.deliveryId)) {
+            deliveryInProductionMap.set(req.deliveryId, req.inProduction);
+          }
         });
       }
 
@@ -312,6 +321,7 @@ export function ProfileDeliveryTable() {
                 return {
                   ...d,
                   quantity: deliveryReqMap.get(key) || 0,
+                  inProduction: deliveryInProductionMap.get(d.deliveryId) ?? false,
                 };
               }),
             });
@@ -351,6 +361,7 @@ export function ProfileDeliveryTable() {
               return {
                 ...d,
                 quantity: deliveryReqMap.get(key) || 0,
+                inProduction: deliveryInProductionMap.get(d.deliveryId) ?? false,
               };
             }),
           });
@@ -376,6 +387,7 @@ export function ProfileDeliveryTable() {
   }, [allProfiles, allColors, requirementsTotals, startDate, deliveriesData, deliveryProfileReqs]);
 
   const getSumForColumns = (deliveries: DeliveryData[], columns: number) => {
+    // Sumuj pierwsze N kolumn (od wybranej daty)
     return deliveries.slice(0, columns).reduce((sum, d) => sum + d.quantity, 0);
   };
 
@@ -567,7 +579,7 @@ export function ProfileDeliveryTable() {
                           SUM
                         </th>
                         <th className="px-3 py-2 text-center text-xs text-slate-600 uppercase tracking-wide border-r border-slate-200 sticky left-[340px] bg-slate-50/50 z-20" style={{ width: '100px' }}>
-                          <div className="text-xs font-semibold text-slate-700">SUMA {sumColumns}</div>
+                          SUMA {sumColumns}
                         </th>
                         {deliveries.map((delivery) => (
                           <th key={`header-week-${delivery.deliveryId}`} className="px-2 py-2 text-center border-r border-slate-200 whitespace-nowrap relative" style={{ width: '100px', zIndex: 1 }}>

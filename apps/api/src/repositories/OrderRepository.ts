@@ -69,6 +69,7 @@ export class OrderRepository {
           orderedGlassCount: true,
           deliveredGlassCount: true,
           glassOrderStatus: true,
+          glassOrderNote: true,
           okucDemandStatus: true,
           manualStatus: true,
           manualStatusSetAt: true,
@@ -428,6 +429,8 @@ export class OrderRepository {
           updatedAt: true,
         },
       });
+    }, {
+      timeout: 30000, // 30s dla bulk updates z wieloma zleceniami
     });
   }
 

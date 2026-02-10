@@ -313,6 +313,7 @@ export const ProductionReportPage: React.FC<ProductionReportPageProps> = ({
             onUpdateInvoice={handleUpdateInvoice}
             onAutoFillInvoice={handleOpenAutoFillDialog}
             isPending={isPending}
+            eurRate={eurRate}
           />
 
           {/* Nietypówki */}

@@ -119,7 +119,7 @@ export const ordersApi = {
     fetchApi<Order>('/api/orders', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: UpdateOrderData) =>
     fetchApi<Order>(`/api/orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  patch: (id: number, data: { valuePln?: string | null; valueEur?: string | null; deadline?: string | null; status?: string | null; invoiceNumber?: string | null }) =>
+  patch: (id: number, data: { valuePln?: string | null; valueEur?: string | null; deadline?: string | null; status?: string | null; invoiceNumber?: string | null; glassDeliveryDate?: string | null }) =>
     fetchApi<Order>(`/api/orders/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   bulkUpdateStatus: (data: BulkUpdateStatusData) =>
     fetchApi<Order[]>('/api/orders/bulk-update-status', { method: 'POST', body: JSON.stringify(data) }),

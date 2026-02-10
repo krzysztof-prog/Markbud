@@ -112,7 +112,7 @@ async function main() {
     await prisma.color.upsert({
       where: { code: color.code },
       update: {},
-      create: { ...color, type: 'typical' },
+      create: { ...color, type: 'typical', isAkrobud: true },
     });
   }
   console.log(`✅ Kolory typowe utworzone (${typicalColors.length})`);
@@ -340,6 +340,14 @@ async function main() {
   }
   console.log(`✅ Kolory nietypowe utworzone (${atypicalColors.length})`);
 
+  // Oznacz oryginalne kolory nietypowe AKROBUD jako isAkrobud
+  const originalAkrobudAtypicalCodes = ['154', '155', '201', '533', '537', '680'];
+  await prisma.color.updateMany({
+    where: { code: { in: originalAkrobudAtypicalCodes } },
+    data: { isAkrobud: true },
+  });
+  console.log(`✅ Oryginalne kolory nietypowe AKROBUD oznaczone (${originalAkrobudAtypicalCodes.length})`);
+
   // ==================== KOLORY AKROBUD (z importów) ====================
   // Kolory tworzone automatycznie przez import - seedujemy aby baza dev miała je od razu
   const akrobudColors = [
@@ -375,7 +383,7 @@ async function main() {
     await prisma.color.upsert({
       where: { code: color.code },
       update: {},
-      create: { ...color, type: 'akrobud' },
+      create: { ...color, type: 'akrobud', isAkrobud: true },
     });
   }
   console.log(`✅ Kolory akrobud utworzone (${akrobudColors.length})`);

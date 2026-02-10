@@ -8,14 +8,16 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, FileSpreadsheet, Calendar } from 'lucide-react';
+import { ArrowLeft, FileSpreadsheet, Calendar, RefreshCw, Loader2 } from 'lucide-react';
 import {
   useLabelCheck,
   useExportLabelCheck,
+  useCheckLabels,
   LabelCheckSummary,
   LabelCheckResultsTable,
 } from '@/features/label-checks';
@@ -25,8 +27,22 @@ interface Props {
 }
 
 export default function LabelCheckDetailContent({ id }: Props) {
+  const router = useRouter();
   const { data: labelCheck } = useLabelCheck(id);
   const { download } = useExportLabelCheck(id);
+  const checkLabelsMutation = useCheckLabels();
+
+  const handleRecheck = () => {
+    checkLabelsMutation.mutate(
+      { deliveryId: labelCheck.deliveryId },
+      {
+        onSuccess: (data) => {
+          // Nawiguj do nowego sprawdzenia
+          router.push(`/kontrola-etykiet/${data.id}`);
+        },
+      }
+    );
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -49,10 +65,24 @@ export default function LabelCheckDetailContent({ id }: Props) {
             </p>
           </div>
         </div>
-        <Button variant="outline" onClick={download}>
-          <FileSpreadsheet className="w-4 h-4 mr-2" />
-          Pobierz Excel
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleRecheck}
+            disabled={checkLabelsMutation.isPending}
+          >
+            {checkLabelsMutation.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            {checkLabelsMutation.isPending ? 'Sprawdzam...' : 'Sprawdź ponownie'}
+          </Button>
+          <Button variant="outline" onClick={download}>
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Pobierz Excel
+          </Button>
+        </div>
       </div>
 
       {/* Podsumowanie */}

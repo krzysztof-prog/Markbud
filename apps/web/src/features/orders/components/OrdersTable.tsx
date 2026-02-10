@@ -41,6 +41,7 @@ interface OrdersTableProps {
   onOrderClick: (id: number, orderNumber: string) => void;
   onSchucoStatusClick: (orderNumber: string, schucoLinks: SchucoDeliveryLink[]) => void;
   onGlassDiscrepancyClick?: (orderNumber: string) => void;
+  onGlassDeliveryDateSet?: (orderId: number, date: string) => void;
 
   // Manual status callback
   onManualStatusChange?: (orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => void;
@@ -84,6 +85,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   onOrderClick,
   onSchucoStatusClick,
   onGlassDiscrepancyClick,
+  onGlassDeliveryDateSet,
   onManualStatusChange,
   canDeleteOrders,
   onDeleteOrder,
@@ -257,6 +259,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                     onOrderClick={onOrderClick}
                     onSchucoStatusClick={onSchucoStatusClick}
                     onGlassDiscrepancyClick={onGlassDiscrepancyClick}
+                    onGlassDeliveryDateSet={onGlassDeliveryDateSet}
                     onManualStatusChange={onManualStatusChange}
                     canDeleteOrders={canDeleteOrders}
                     onDeleteOrder={onDeleteOrder}

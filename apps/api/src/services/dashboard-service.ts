@@ -198,6 +198,8 @@ export class DashboardService {
       });
 
       const windows = weekData.reduce((sum, s) => sum + Number(s.windowsCount), 0);
+      const sashes = weekData.reduce((sum, s) => sum + Number(s.sashesCount), 0);
+      const glasses = weekData.reduce((sum, s) => sum + Number(s.glassesCount), 0);
       const deliveries = weekData.reduce((sum, s) => sum + Number(s.deliveriesCount), 0);
 
       weeks.push({
@@ -207,8 +209,8 @@ export class DashboardService {
         deliveriesCount: deliveries,
         ordersCount: weekData.reduce((sum, s) => sum + Number(s.ordersCount), 0),
         windows,
-        sashes: windows, // Assumption: 1 window = 1 sash
-        glasses: windows, // Assumption: 1 window = 1 glass
+        sashes,
+        glasses,
       });
     }
 

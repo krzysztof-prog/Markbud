@@ -66,25 +66,25 @@ model DocumentAuthorMapping {
 }
 
 model Profile {
-  id                Int                @id @default(autoincrement())
-  number            String             @unique
-  articleNumber     String?            @unique @map("article_number")
-  name              String
-  description       String?
-  sortOrder         Int                @default(0) @map("sort_order")
-  isAkrobud         Boolean            @default(false) @map("is_akrobud") // Czy pokazywać w magazynie Akrobud
+  id                  Int                  @id @default(autoincrement())
+  number              String               @unique
+  articleNumber       String?              @unique @map("article_number")
+  name                String
+  description         String?
+  sortOrder           Int                  @default(0) @map("sort_order")
+  isAkrobud           Boolean              @default(false) @map("is_akrobud") // Czy pokazywać w magazynie Akrobud
   // Systemy profilowe - do których systemów pasuje profil
-  isLiving          Boolean            @default(false) @map("is_living")
-  isBlok            Boolean            @default(false) @map("is_blok")
-  isVlak            Boolean            @default(false) @map("is_vlak")
-  isCt70            Boolean            @default(false) @map("is_ct70")
-  isFocusing        Boolean            @default(false) @map("is_focusing")
+  isLiving            Boolean              @default(false) @map("is_living")
+  isBlok              Boolean              @default(false) @map("is_blok")
+  isVlak              Boolean              @default(false) @map("is_vlak")
+  isCt70              Boolean              @default(false) @map("is_ct70")
+  isFocusing          Boolean              @default(false) @map("is_focusing")
   // Planowanie produkcji - dodane 2026-01-15
-  profileType       String             @default("typical") @map("profile_type") // 'typical' | 'atypical' - wpływa na lead time
-  isPalletized      Boolean            @default(false) @map("is_palletized") // Czy profil jest w paletach (przygotowanie sobota)
-  efficiencyCoeff   Decimal?           @map("efficiency_coeff") // Współczynnik wydajności (np. 0.9 = wolniejszy o 10%)
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
+  profileType         String               @default("typical") @map("profile_type") // 'typical' | 'atypical' - wpływa na lead time
+  isPalletized        Boolean              @default(false) @map("is_palletized") // Czy profil jest w paletach (przygotowanie sobota)
+  efficiencyCoeff     Decimal?             @map("efficiency_coeff") // Współczynnik wydajności (np. 0.9 = wolniejszy o 10%)
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
   orderRequirements   OrderRequirement[]
   profileColors       ProfileColor[]
   warehouseHistory    WarehouseHistory[]
@@ -101,6 +101,7 @@ model Color {
   name              String
   type              String
   hexColor          String?            @map("hex_color")
+  isAkrobud         Boolean            @default(false) @map("is_akrobud") // Czy pokazywać w magazynie Akrobud
   // Planowanie produkcji - dodane 2026-01-15
   isTypical         Boolean            @default(true) @map("is_typical") // Czy kolor typowy (grupowany w produkcji)
   createdAt         DateTime           @default(now()) @map("created_at")
@@ -119,7 +120,7 @@ model Color {
 model PrivateColor {
   id                Int                @id @default(autoincrement())
   code              String             @unique // Numer koloru z importu (np. "354", "170")
-  name              String?            // Opcjonalna nazwa do uzupełnienia przez użytkownika
+  name              String? // Opcjonalna nazwa do uzupełnienia przez użytkownika
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
   // Relacje
@@ -144,79 +145,81 @@ model ProfileColor {
 }
 
 model Order {
-  id                    Int                       @id @default(autoincrement())
-  orderNumber           String                    @unique @map("order_number")
-  status                String                    @default("new")
-  client                String?
-  project               String?
-  system                String?
-  deadline              DateTime?
-  pvcDeliveryDate       DateTime?                 @map("pvc_delivery_date")
-  valuePln              Int?                      @map("value_pln")
-  valueEur              Int?                      @map("value_eur")
-  invoiceNumber         String?                   @map("invoice_number")
-  deliveryDate          DateTime?                 @map("delivery_date")
-  productionDate        DateTime?                 @map("production_date")
-  glassDeliveryDate     DateTime?                 @map("glass_delivery_date")
-  notes                 String?
-  createdAt             DateTime                  @default(now()) @map("created_at")
-  updatedAt             DateTime                  @updatedAt @map("updated_at")
-  archivedAt            DateTime?                 @map("archived_at")
-  totalGlasses          Int?                      @map("total_glasses")
-  totalSashes           Int?                      @map("total_sashes")
-  totalWindows          Int?                      @map("total_windows")
-  completedAt           DateTime?                 @map("completed_at")
-  orderedGlassCount     Int?                      @default(0) @map("ordered_glass_count")
-  deliveredGlassCount   Int?                      @default(0) @map("delivered_glass_count")
-  glassOrderStatus      String?                   @default("not_ordered") @map("glass_order_status")
+  id                      Int                       @id @default(autoincrement())
+  orderNumber             String                    @unique @map("order_number")
+  status                  String                    @default("new")
+  client                  String?
+  project                 String?
+  system                  String?
+  deadline                DateTime?
+  pvcDeliveryDate         DateTime?                 @map("pvc_delivery_date")
+  valuePln                Int?                      @map("value_pln")
+  valueEur                Int?                      @map("value_eur")
+  // Numer zamówienia bazowego z którego odziedziczono cenę (np. "53477" dla "53477-a")
+  priceInheritedFromOrder String?                   @map("price_inherited_from_order")
+  invoiceNumber           String?                   @map("invoice_number")
+  deliveryDate            DateTime?                 @map("delivery_date")
+  productionDate          DateTime?                 @map("production_date")
+  glassDeliveryDate       DateTime?                 @map("glass_delivery_date")
+  notes                   String?
+  createdAt               DateTime                  @default(now()) @map("created_at")
+  updatedAt               DateTime                  @updatedAt @map("updated_at")
+  archivedAt              DateTime?                 @map("archived_at")
+  totalGlasses            Int?                      @map("total_glasses")
+  totalSashes             Int?                      @map("total_sashes")
+  totalWindows            Int?                      @map("total_windows")
+  completedAt             DateTime?                 @map("completed_at")
+  orderedGlassCount       Int?                      @default(0) @map("ordered_glass_count")
+  deliveredGlassCount     Int?                      @default(0) @map("delivered_glass_count")
+  glassOrderStatus        String?                   @default("not_ordered") @map("glass_order_status")
   // Notatka z zamówienia szyb (np. "Zam. - szprosy")
-  glassOrderNote        String?                   @map("glass_order_note")
+  glassOrderNote          String?                   @map("glass_order_note")
   // Status okuć dla zlecenia: 'none' | 'no_okuc' | 'imported' | 'has_atypical' | 'pending'
   // none - brak zapotrzebowania, no_okuc - zlecenie bez okuć (pusty plik), imported - zaimportowano, has_atypical - są nietypowe, pending - czeka na zlecenie
-  okucDemandStatus      String?                   @default("none") @map("okuc_demand_status")
+  okucDemandStatus        String?                   @default("none") @map("okuc_demand_status")
   // P1-2: Typ wariantu zlecenia
   // 'correction' - korekta oryginału (musi być w tej samej dostawie co oryginał)
   // 'additional_file' - dodatkowy plik do zamówienia (może być w innej dostawie)
   // null - nie określono (domyślnie, wymagane dla wariantów z literką)
-  variantType           String?                   @map("variant_type")
+  variantType             String?                   @map("variant_type")
   // Autor dokumentu z CSV (np. "Wlodek", "Arek", "Krzysztof")
-  documentAuthor        String?                   @map("document_author")
+  documentAuthor          String?                   @map("document_author")
   // Przypisany użytkownik systemu (jeśli znaleziono mapowanie)
-  documentAuthorUserId  Int?                      @map("document_author_user_id")
-  documentAuthorUser    User?                     @relation("OrderDocumentAuthor", fields: [documentAuthorUserId], references: [id], onDelete: SetNull)
+  documentAuthorUserId    Int?                      @map("document_author_user_id")
+  documentAuthorUser      User?                     @relation("OrderDocumentAuthor", fields: [documentAuthorUserId], references: [id], onDelete: SetNull)
   // Sumy z materiałówki - wartości w groszach
-  windowsNetValue       Int?                      @map("windows_net_value") // Suma netto okien (kategoria 'okno')
-  windowsMaterial       Int?                      @map("windows_material") // Suma materiału okien (kategoria 'okno')
-  assemblyValue         Int?                      @map("assembly_value") // Suma montażu (kategoria 'montaz')
-  extrasValue           Int?                      @map("extras_value") // Suma dodatków (kategoria 'dodatki')
-  otherValue            Int?                      @map("other_value") // Suma inne (kategoria 'inne')
+  windowsNetValue         Int?                      @map("windows_net_value") // Suma netto okien (kategoria 'okno')
+  windowsMaterial         Int?                      @map("windows_material") // Suma materiału okien (kategoria 'okno')
+  assemblyValue           Int?                      @map("assembly_value") // Suma montażu (kategoria 'montaz')
+  extrasValue             Int?                      @map("extras_value") // Suma dodatków (kategoria 'dodatki')
+  otherValue              Int?                      @map("other_value") // Suma inne (kategoria 'inne')
   // Ręczny status ustawiony przez użytkownika
   // 'do_not_cut' - NIE CIĄĆ (żółte tło, okucia nie w zapotrzebowaniu)
   // 'cancelled' - Anulowane (czerwone tło, archiwizacja po 30 dniach, cofnij profile/okucia z zapotrzebowania)
   // 'on_hold' - Wstrzymane (pomarańczowe tło)
   // null - brak ręcznego statusu
-  manualStatus          String?                   @map("manual_status")
-  manualStatusSetAt     DateTime?                 @map("manual_status_set_at")
+  manualStatus            String?                   @map("manual_status")
+  manualStatusSetAt       DateTime?                 @map("manual_status_set_at")
   // Soft delete - data usunięcia zlecenia
-  deletedAt             DateTime?                 @map("deleted_at")
-  deletedByUserId       Int?                      @map("deleted_by_user_id")
-  deletedByUser         User?                     @relation("OrderDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
-  deliveryOrders        DeliveryOrder[]
+  deletedAt               DateTime?                 @map("deleted_at")
+  deletedByUserId         Int?                      @map("deleted_by_user_id")
+  deletedByUser           User?                     @relation("OrderDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
+  deliveryOrders          DeliveryOrder[]
   // Removed glassOrderItems relation - no FK constraint (glass orders can exist without production order)
-  monthlyReportItems    MonthlyReportItem[]
-  orderNotes            Note[]
-  requirements          OrderRequirement[]
-  windows               OrderWindow[]
-  glasses               OrderGlass[]
-  materials             OrderMaterial[]
-  schucoLinks           OrderSchucoLink[]
-  okucDemands           OkucDemand[]
-  verificationItems           AkrobudVerificationItem[]
-  verificationItemOrders      VerificationItemOrder[]     // Zlecenia powiązane z projektami weryfikacji
-  productionReportItems ProductionReportItem[]    @relation("ProductionReportItems")
-  conflictsAsBase       PendingImportConflict[]   @relation("ConflictBaseOrder")
-  steelRequirements     OrderSteelRequirement[]
-  logisticsMailItems    LogisticsMailItem[]
+  monthlyReportItems      MonthlyReportItem[]
+  orderNotes              Note[]
+  requirements            OrderRequirement[]
+  windows                 OrderWindow[]
+  glasses                 OrderGlass[]
+  materials               OrderMaterial[]
+  schucoLinks             OrderSchucoLink[]
+  okucDemands             OkucDemand[]
+  verificationItems       AkrobudVerificationItem[]
+  verificationItemOrders  VerificationItemOrder[] // Zlecenia powiązane z projektami weryfikacji
+  productionReportItems   ProductionReportItem[]    @relation("ProductionReportItems")
+  conflictsAsBase         PendingImportConflict[]   @relation("ConflictBaseOrder")
+  steelRequirements       OrderSteelRequirement[]
+  logisticsMailItems      LogisticsMailItem[]
 
   @@index([status])
   @@index([archivedAt])
@@ -238,20 +241,20 @@ model Order {
 }
 
 model OrderRequirement {
-  id             Int      @id @default(autoincrement())
-  orderId        Int      @map("order_id")
-  profileId      Int      @map("profile_id")
-  colorId        Int?     @map("color_id") // Kolor Akrobud (null jeśli użyto privateColor)
-  privateColorId Int?     @map("private_color_id") // Kolor prywatny (dla importów prywatnych)
-  beamsCount     Int      @map("beams_count")
+  id             Int           @id @default(autoincrement())
+  orderId        Int           @map("order_id")
+  profileId      Int           @map("profile_id")
+  colorId        Int?          @map("color_id") // Kolor Akrobud (null jeśli użyto privateColor)
+  privateColorId Int?          @map("private_color_id") // Kolor prywatny (dla importów prywatnych)
+  beamsCount     Int           @map("beams_count")
   meters         Float
-  restMm         Int      @map("rest_mm")
-  status         String   @default("pending") // pending | completed (dla RW)
-  createdAt      DateTime @default(now()) @map("created_at")
-  color          Color?   @relation(fields: [colorId], references: [id], onDelete: Restrict)
+  restMm         Int           @map("rest_mm")
+  status         String        @default("pending") // pending | completed (dla RW)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  color          Color?        @relation(fields: [colorId], references: [id], onDelete: Restrict)
   privateColor   PrivateColor? @relation("PrivateColorRequirements", fields: [privateColorId], references: [id], onDelete: Restrict)
-  profile        Profile  @relation(fields: [profileId], references: [id], onDelete: Restrict)
-  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  profile        Profile       @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@unique([orderId, profileId, colorId])
   @@unique([orderId, profileId, privateColorId])
@@ -304,26 +307,26 @@ model OrderGlass {
 // Kategorie: 'okno' (przypisana do okna), 'montaz' (tylko wartość montażu),
 //            'dodatki' (pozycja > liczba okien), 'inne' (material=0 ale wartość netto > 0)
 model OrderMaterial {
-  id                      Int          @id @default(autoincrement())
-  orderId                 Int          @map("order_id")
-  orderWindowId           Int?         @map("order_window_id") // Powiązanie z oknem (tylko dla kategorii 'okno')
-  position                Int          // Numer pozycji z pliku
-  category                String       // 'okno' | 'montaz' | 'dodatki' | 'inne'
-  glazing                 Int          @default(0) @map("glazing") // Szklenia w groszach
-  fittings                Int          @default(0) @map("fittings") // Okucia w groszach
-  parts                   Int          @default(0) @map("parts") // Części w groszach
-  glassQuantity           Int          @default(0) @map("glass_quantity") // Ilość szkła
-  material                Int          @default(0) @map("material") // Materiał w groszach
-  assemblyValueBeforeDiscount Int      @default(0) @map("assembly_value_before_discount") // Wartość netto montażu przed rabatem w groszach
-  assemblyValueAfterDiscount  Int      @default(0) @map("assembly_value_after_discount") // Wartość netto montażu po rabacie w groszach
-  netValue                Int          @default(0) @map("net_value") // Wartość netto w groszach
-  totalNet                Int          @default(0) @map("total_net") // Suma netto w groszach
-  quantity                Int          @default(1) // Sztuk
-  coefficient             Float?       @map("coefficient") // Współczynnik
-  unit                    Float?       // Jednostka
-  createdAt               DateTime     @default(now()) @map("created_at")
-  order                   Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderWindow             OrderWindow? @relation(fields: [orderWindowId], references: [id], onDelete: SetNull)
+  id                          Int          @id @default(autoincrement())
+  orderId                     Int          @map("order_id")
+  orderWindowId               Int?         @map("order_window_id") // Powiązanie z oknem (tylko dla kategorii 'okno')
+  position                    Int // Numer pozycji z pliku
+  category                    String // 'okno' | 'montaz' | 'dodatki' | 'inne'
+  glazing                     Int          @default(0) @map("glazing") // Szklenia w groszach
+  fittings                    Int          @default(0) @map("fittings") // Okucia w groszach
+  parts                       Int          @default(0) @map("parts") // Części w groszach
+  glassQuantity               Int          @default(0) @map("glass_quantity") // Ilość szkła
+  material                    Int          @default(0) @map("material") // Materiał w groszach
+  assemblyValueBeforeDiscount Int          @default(0) @map("assembly_value_before_discount") // Wartość netto montażu przed rabatem w groszach
+  assemblyValueAfterDiscount  Int          @default(0) @map("assembly_value_after_discount") // Wartość netto montażu po rabacie w groszach
+  netValue                    Int          @default(0) @map("net_value") // Wartość netto w groszach
+  totalNet                    Int          @default(0) @map("total_net") // Suma netto w groszach
+  quantity                    Int          @default(1) // Sztuk
+  coefficient                 Float?       @map("coefficient") // Współczynnik
+  unit                        Float? // Jednostka
+  createdAt                   DateTime     @default(now()) @map("created_at")
+  order                       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderWindow                 OrderWindow? @relation(fields: [orderWindowId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
   @@index([category])
@@ -339,6 +342,7 @@ model WarehouseStock {
   updatedAt         DateTime  @updatedAt @map("updated_at")
   updatedById       Int?      @map("updated_by_id")
   initialStockBeams Int       @default(0) @map("initial_stock_beams")
+  remanentDate      DateTime? @map("remanent_date") // Data ostatniego remanentu - ustawiana ręcznie, NIE automatycznie
   version           Int       @default(0)
   deletedAt         DateTime? @map("deleted_at")
   updatedBy         User?     @relation("UpdatedBy", fields: [updatedById], references: [id])
@@ -432,30 +436,30 @@ model Delivery {
 // Przechowuje wyliczony status z wszystkich modułów sprawdzających
 // Status: ready (🟢) | conditional (🟠) | blocked (🔴) | pending
 model DeliveryReadiness {
-  id               Int      @id @default(autoincrement())
-  deliveryId       Int      @unique @map("delivery_id")
+  id         Int @id @default(autoincrement())
+  deliveryId Int @unique @map("delivery_id")
 
   // Agregowany status: ready | conditional | blocked | pending
-  aggregatedStatus String   @default("pending") @map("aggregated_status")
+  aggregatedStatus String @default("pending") @map("aggregated_status")
 
   // Timestamp ostatniego przeliczenia
   lastCalculatedAt DateTime @default(now()) @map("last_calculated_at")
 
   // Liczniki dla szybkiego dostępu w UI
-  blockingCount    Int      @default(0) @map("blocking_count")
-  warningCount     Int      @default(0) @map("warning_count")
+  blockingCount Int @default(0) @map("blocking_count")
+  warningCount  Int @default(0) @map("warning_count")
 
   // Szczegółowe wyniki z każdego modułu (JSON)
   // Format: [{ module: string, status: 'ok'|'warning'|'blocking', message: string }]
-  moduleResults    String?  @map("module_results")
+  moduleResults String? @map("module_results")
 
   // Powody blokady (JSON array of strings) - skrót dla UI
-  blockingReasons  String?  @map("blocking_reasons")
+  blockingReasons String? @map("blocking_reasons")
 
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  delivery         Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
   @@index([aggregatedStatus])
   @@index([lastCalculatedAt])
@@ -722,34 +726,34 @@ model GmailFetchLog {
 
 // Pozycje zamówienia Schüco - artykuły w zamówieniu
 model SchucoOrderItem {
-  id                 Int            @id @default(autoincrement())
-  schucoDeliveryId   Int            @map("schuco_delivery_id")
-  position           Int            // Pozycja w zamówieniu (1, 2, 3...)
-  articleNumber      String         @map("article_number") // Nr artykułu (np. 19411460)
-  articleDescription String         @map("article_description") // Opis artykułu
-  orderedQty         Int            @map("ordered_qty") // Zamówiona ilość
-  shippedQty         Int            @map("shipped_qty") // Wysłana ilość
-  unit               String         @default("szt.") // Jednostka
+  id                 Int       @id @default(autoincrement())
+  schucoDeliveryId   Int       @map("schuco_delivery_id")
+  position           Int // Pozycja w zamówieniu (1, 2, 3...)
+  articleNumber      String    @map("article_number") // Nr artykułu (np. 19411460)
+  articleDescription String    @map("article_description") // Opis artykułu
+  orderedQty         Int       @map("ordered_qty") // Zamówiona ilość
+  shippedQty         Int       @map("shipped_qty") // Wysłana ilość
+  unit               String    @default("szt.") // Jednostka
   dimensions         String? // Wymiary (np. 6000 mm)
   configuration      String? // Konfiguracja
-  deliveryWeek       String?        @map("delivery_week") // Tydzień dostawy (np. 2026/7)
-  deliveryDate       DateTime?      @map("delivery_date") // Sparsowana data dostawy (poniedziałek tygodnia)
+  deliveryWeek       String?   @map("delivery_week") // Tydzień dostawy (np. 2026/7)
+  deliveryDate       DateTime? @map("delivery_date") // Sparsowana data dostawy (poniedziałek tygodnia)
   tracking           String? // Śledzenie
   comment            String? // Komentarz
 
   // Change tracking
-  changeType         String?        @map("change_type") // "new" | "updated" | null
-  changedAt          DateTime?      @map("changed_at")
-  changedFields      String?        @map("changed_fields") // JSON array pól które się zmieniły
-  previousValues     String?        @map("previous_values") // JSON poprzednie wartości
+  changeType     String?   @map("change_type") // "new" | "updated" | null
+  changedAt      DateTime? @map("changed_at")
+  changedFields  String?   @map("changed_fields") // JSON array pól które się zmieniły
+  previousValues String?   @map("previous_values") // JSON poprzednie wartości
 
   // Timestamps
-  fetchedAt          DateTime       @default(now()) @map("fetched_at")
-  createdAt          DateTime       @default(now()) @map("created_at")
-  updatedAt          DateTime       @updatedAt @map("updated_at")
+  fetchedAt DateTime @default(now()) @map("fetched_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  schucoDelivery     SchucoDelivery @relation(fields: [schucoDeliveryId], references: [id], onDelete: Cascade)
+  schucoDelivery SchucoDelivery @relation(fields: [schucoDeliveryId], references: [id], onDelete: Cascade)
 
   @@unique([schucoDeliveryId, position])
   @@index([schucoDeliveryId])
@@ -1062,8 +1066,8 @@ model OkucArticle {
 
   // Zastępstwa artykułów (wygaszanie)
   isPhaseOut          Boolean   @default(false) @map("is_phase_out") // Artykuł wygaszany - nie zamawiaj
-  replacedByArticleId Int?      @map("replaced_by_article_id")       // FK do artykułu zastępującego
-  demandTransferredAt DateTime? @map("demand_transferred_at")        // Data przeniesienia zapotrzebowania
+  replacedByArticleId Int?      @map("replaced_by_article_id") // FK do artykułu zastępującego
+  demandTransferredAt DateTime? @map("demand_transferred_at") // Data przeniesienia zapotrzebowania
 
   // Audit
   createdAt DateTime  @default(now()) @map("created_at")
@@ -1372,9 +1376,9 @@ model AkrobudVerificationList {
   deletedAt    DateTime? @map("deleted_at")
 
   // Wersjonowanie list
-  version       Int       @default(1)           // Numer wersji listy (v1, v2, v3...)
-  parentId      Int?      @map("parent_id")     // ID poprzedniej wersji
-  rawInput      String?   @map("raw_input")     // Oryginalny tekst maila
+  version       Int       @default(1) // Numer wersji listy (v1, v2, v3...)
+  parentId      Int?      @map("parent_id") // ID poprzedniej wersji
+  rawInput      String?   @map("raw_input") // Oryginalny tekst maila
   suggestedDate DateTime? @map("suggested_date") // Wykryta data z "na DD.MM"
 
   delivery Delivery?                 @relation(fields: [deliveryId], references: [id])
@@ -1393,10 +1397,10 @@ model AkrobudVerificationList {
 model AkrobudVerificationItem {
   id                Int      @id @default(autoincrement())
   listId            Int      @map("list_id")
-  orderNumberInput  String   @map("order_number_input")  // Legacy: numer zlecenia
-  orderNumberBase   String?  @map("order_number_base")   // Legacy
+  orderNumberInput  String   @map("order_number_input") // Legacy: numer zlecenia
+  orderNumberBase   String?  @map("order_number_base") // Legacy
   orderNumberSuffix String?  @map("order_number_suffix") // Legacy
-  matchedOrderId    Int?     @map("matched_order_id")    // Legacy: pojedyncze zlecenie
+  matchedOrderId    Int?     @map("matched_order_id") // Legacy: pojedyncze zlecenie
   matchStatus       String   @default("pending") @map("match_status") // pending | found | not_found | variant_match
   position          Int
   createdAt         DateTime @default(now()) @map("created_at")
@@ -1404,9 +1408,9 @@ model AkrobudVerificationItem {
   // Nowe pola dla projektów
   projectNumber String? @map("project_number") // Numer projektu (np. "D3455")
 
-  list          AkrobudVerificationList    @relation(fields: [listId], references: [id], onDelete: Cascade)
-  matchedOrder  Order?                     @relation(fields: [matchedOrderId], references: [id])
-  matchedOrders VerificationItemOrder[]    // Relacja 1:N - projekt może mieć wiele zleceń
+  list          AkrobudVerificationList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  matchedOrder  Order?                  @relation(fields: [matchedOrderId], references: [id])
+  matchedOrders VerificationItemOrder[] // Relacja 1:N - projekt może mieć wiele zleceń
 
   @@unique([listId, orderNumberInput])
   @@index([listId])
@@ -1779,43 +1783,43 @@ model PendingImportConflict {
 // Konfiguracja wydajności per typ klienta
 // Wydajność bazowa: szkleń/h i skrzydeł/h przy pełnej obsadzie
 model ProductionEfficiencyConfig {
-  id                 Int      @id @default(autoincrement())
-  clientType         String   @unique @map("client_type") // 'akrobud' | 'ct' | 'living' | 'other'
-  name               String // Nazwa wyświetlana (np. "Akrobud", "CT", "Living")
+  id              Int      @id @default(autoincrement())
+  clientType      String   @unique @map("client_type") // 'akrobud' | 'ct' | 'living' | 'other'
+  name            String // Nazwa wyświetlana (np. "Akrobud", "CT", "Living")
   // Wydajność bazowa
-  glazingsPerHour    Decimal  @map("glazings_per_hour") // Szkleń na godzinę produkcyjną
-  wingsPerHour       Decimal  @map("wings_per_hour") // Skrzydeł na godzinę produkcyjną
+  glazingsPerHour Decimal  @map("glazings_per_hour") // Szkleń na godzinę produkcyjną
+  wingsPerHour    Decimal  @map("wings_per_hour") // Skrzydeł na godzinę produkcyjną
   // Współczynnik (1.0 = baza, <1.0 = wolniejsze, >1.0 = szybsze)
-  coefficient        Decimal  @default(1.0) // Współczynnik wydajności
-  isActive           Boolean  @default(true) @map("is_active")
-  sortOrder          Int      @default(0) @map("sort_order")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  coefficient     Decimal  @default(1.0) // Współczynnik wydajności
+  isActive        Boolean  @default(true) @map("is_active")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   @@map("production_efficiency_configs")
 }
 
 // Kalendarz produkcyjny - dni wolne i soboty produkcyjne
 model ProductionCalendar {
-  id           Int      @id @default(autoincrement())
-  date         DateTime @unique // Data (bez czasu)
-  dayType      String   @map("day_type") // 'working' | 'holiday' | 'production_saturday' | 'custom_off'
-  description  String? // Opis (np. "Nowy Rok", "Sobota produkcyjna")
-  maxHours     Decimal? @map("max_hours") // Max godzin w tym dniu (null = domyślne)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id          Int      @id @default(autoincrement())
+  date        DateTime @unique // Data (bez czasu)
+  dayType     String   @map("day_type") // 'working' | 'holiday' | 'production_saturday' | 'custom_off'
+  description String? // Opis (np. "Nowy Rok", "Sobota produkcyjna")
+  maxHours    Decimal? @map("max_hours") // Max godzin w tym dniu (null = domyślne)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("production_calendar")
 }
 
 // Domyślne parametry planowania produkcji
 model ProductionSettings {
-  id                    Int      @id @default(autoincrement())
-  key                   String   @unique // Klucz parametru
-  value                 String // Wartość (jako JSON string dla złożonych)
-  description           String? // Opis parametru
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  id          Int      @id @default(autoincrement())
+  key         String   @unique // Klucz parametru
+  value       String // Wartość (jako JSON string dla złożonych)
+  description String? // Opis parametru
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("production_settings")
 }
@@ -1826,14 +1830,14 @@ model ProductionSettings {
 
 // Stal - wzmocnienie stalowe (bez kolorów, w odróżnieniu od profili PVC)
 model Steel {
-  id            Int       @id @default(autoincrement())
-  number        String    @unique // Numer stali bez końcowego "00" (np. "201202", "202617")
-  articleNumber String?   @unique @map("article_number") // Pełny numer artykułu (np. "20120200")
+  id            Int      @id @default(autoincrement())
+  number        String   @unique // Numer stali bez końcowego "00" (np. "201202", "202617")
+  articleNumber String?  @unique @map("article_number") // Pełny numer artykułu (np. "20120200")
   name          String // Nazwa (np. "Wzmocnienie 1.5 do ramy 8864")
   description   String?
-  sortOrder     Int       @default(0) @map("sort_order")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   // Relacje
   steelStock             SteelStock[]
@@ -1864,14 +1868,14 @@ model SteelStock {
 
 // Zamówienie stali do dostawcy
 model SteelOrder {
-  id                   Int       @id @default(autoincrement())
-  steelId              Int       @map("steel_id")
-  orderedBeams         Int       @map("ordered_beams")
-  expectedDeliveryDate DateTime  @map("expected_delivery_date")
-  status               String    @default("pending") // pending | ordered | delivered | cancelled
+  id                   Int      @id @default(autoincrement())
+  steelId              Int      @map("steel_id")
+  orderedBeams         Int      @map("ordered_beams")
+  expectedDeliveryDate DateTime @map("expected_delivery_date")
+  status               String   @default("pending") // pending | ordered | delivered | cancelled
   notes                String?
-  createdAt            DateTime  @default(now()) @map("created_at")
-  createdById          Int?      @map("created_by_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  createdById          Int?     @map("created_by_id")
 
   steel     Steel @relation(fields: [steelId], references: [id], onDelete: Restrict)
   createdBy User? @relation("SteelOrderCreatedBy", fields: [createdById], references: [id])
@@ -1954,17 +1958,17 @@ model LabelCheck {
 
 // Wynik sprawdzenia etykiety dla pojedynczego zlecenia
 model LabelCheckResult {
-  id             Int       @id @default(autoincrement())
-  labelCheckId   Int       @map("label_check_id")
-  orderId        Int       @map("order_id")
-  orderNumber    String    @map("order_number")
-  status         String    // 'OK' | 'MISMATCH' | 'NO_FOLDER' | 'NO_BMP' | 'OCR_ERROR'
-  expectedDate   DateTime  @map("expected_date")
-  detectedDate   DateTime? @map("detected_date")
-  detectedText   String?   @map("detected_text")
-  imagePath      String?   @map("image_path")
-  errorMessage   String?   @map("error_message")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  id           Int       @id @default(autoincrement())
+  labelCheckId Int       @map("label_check_id")
+  orderId      Int       @map("order_id")
+  orderNumber  String    @map("order_number")
+  status       String // 'OK' | 'MISMATCH' | 'NO_FOLDER' | 'NO_BMP' | 'OCR_ERROR'
+  expectedDate DateTime  @map("expected_date")
+  detectedDate DateTime? @map("detected_date")
+  detectedText String?   @map("detected_text")
+  imagePath    String?   @map("image_path")
+  errorMessage String?   @map("error_message")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
   labelCheck LabelCheck @relation(fields: [labelCheckId], references: [id], onDelete: Cascade)
 
@@ -1993,8 +1997,8 @@ model LogisticsMailList {
   deletedAt     DateTime? @map("deleted_at") // Soft delete
 
   // Powiązanie z dostawą (auto-linking po dacie lub ręczne)
-  deliveryId    Int?      @map("delivery_id")
-  delivery      Delivery? @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+  deliveryId Int?      @map("delivery_id")
+  delivery   Delivery? @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
 
   items LogisticsMailItem[]
 
@@ -2008,13 +2012,13 @@ model LogisticsMailList {
 
 // Pozycja z maila - jeden projekt na liście
 model LogisticsMailItem {
-  id              Int     @id @default(autoincrement())
-  mailListId      Int     @map("mail_list_id")
-  position        Int // Kolejność na liście (Lp.)
-  projectNumber   String  @map("project_number") // Numer projektu (D6086, C8748)
-  quantity        Int     @default(1) // Ilość (x2 = 2)
-  rawNotes        String? @map("raw_notes") // Oryginalne adnotacje z maila
-  requiresMesh    Boolean @default(false) @map("requires_mesh") // Flaga: poproszę o siatkę
+  id            Int     @id @default(autoincrement())
+  mailListId    Int     @map("mail_list_id")
+  position      Int // Kolejność na liście (Lp.)
+  projectNumber String  @map("project_number") // Numer projektu (D6086, C8748)
+  quantity      Int     @default(1) // Ilość (x2 = 2)
+  rawNotes      String? @map("raw_notes") // Oryginalne adnotacje z maila
+  requiresMesh  Boolean @default(false) @map("requires_mesh") // Flaga: poproszę o siatkę
 
   // Flagi blokujące - powodują status 'blocked'
   missingFile           Boolean @default(false) @map("missing_file") // brak pliku
@@ -2040,7 +2044,7 @@ model LogisticsMailItem {
 
   // Metadata dla systemu decyzji diff
   confirmedAt DateTime? @map("confirmed_at") // Kiedy użytkownik potwierdził pozycję
-  deletedAt   DateTime? @map("deleted_at")   // Soft delete - pozycja usunięta przez użytkownika
+  deletedAt   DateTime? @map("deleted_at") // Soft delete - pozycja usunięta przez użytkownika
 
   mailList LogisticsMailList @relation(fields: [mailListId], references: [id], onDelete: Cascade)
 
@@ -2058,36 +2062,36 @@ model LogisticsMailItem {
 // Zapisuje kto, kiedy, co zrobił z pozycją/dostawą
 // Pozwala odtworzyć historię zmian i rozstrzygać spory
 model LogisticsDecisionLog {
-  id          Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   // Typ encji: 'item' (pozycja) lub 'delivery' (cała lista/dostawa)
-  entityType  String   @map("entity_type") // 'item' | 'delivery'
-  entityId    Int      @map("entity_id")   // ID pozycji lub listy
+  entityType String @map("entity_type") // 'item' | 'delivery'
+  entityId   Int    @map("entity_id") // ID pozycji lub listy
 
   // Akcja podjęta przez użytkownika
   // item: confirm | reject | remove | accept_change | restore
   // delivery: save | delete
-  action      String   // confirm | reject | remove | accept_change | restore | save | delete
+  action String // confirm | reject | remove | accept_change | restore | save | delete
 
   // Kontekst wersji (dla diff)
-  fromVersion Int?     @map("from_version") // Z której wersji (null dla nowych)
-  toVersion   Int?     @map("to_version")   // Do której wersji
+  fromVersion Int? @map("from_version") // Z której wersji (null dla nowych)
+  toVersion   Int? @map("to_version") // Do której wersji
 
   // Dodatkowe dane (JSON) - np. co dokładnie się zmieniło
   // Dla restore: { field: "quantity", oldValue: "1", newValue: "2" }
   // Dla confirm: { projectNumber: "D6086" }
-  metadata    String?  // JSON string z dodatkowymi danymi
+  metadata String? // JSON string z dodatkowymi danymi
 
   // Kto podjął decyzję
-  userId      Int      @map("user_id")
-  user        User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  userId Int  @map("user_id")
+  user   User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   // Kiedy
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Opcjonalna relacja do pozycji (tylko dla entityType='item')
-  mailItemId  Int?     @map("mail_item_id")
-  mailItem    LogisticsMailItem? @relation(fields: [mailItemId], references: [id], onDelete: SetNull)
+  mailItemId Int?               @map("mail_item_id")
+  mailItem   LogisticsMailItem? @relation(fields: [mailItemId], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId])
   @@index([userId])

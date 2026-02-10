@@ -10,6 +10,7 @@ export const createColorSchema = z.object({
   name: z.string().min(1).max(255),
   type: z.string().min(1).max(50),
   hexColor: z.string().regex(/^#[0-9A-F]{6}$/i).optional(),
+  isAkrobud: z.boolean().optional(),
 });
 
 export const updateColorSchema = z.object({
@@ -17,6 +18,7 @@ export const updateColorSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   type: z.enum(['powder', 'ral', 'anodized']).optional(),
   hexColor: z.string().regex(/^#[0-9A-F]{6}$/i).optional(),
+  isAkrobud: z.boolean().optional(),
 });
 
 export const colorParamsSchema = idParamsSchema('color');

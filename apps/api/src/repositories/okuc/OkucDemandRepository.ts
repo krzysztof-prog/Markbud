@@ -90,6 +90,7 @@ export class OkucDemandRepository {
             orderNumber: true,
             status: true,
             manualStatus: true,
+            productionDate: true,
           },
         },
       },

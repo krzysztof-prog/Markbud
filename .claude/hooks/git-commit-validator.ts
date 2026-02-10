@@ -34,7 +34,7 @@ function runCommand(cmd: string, cwd: string): { success: boolean; output: strin
         const output = execSync(cmd, {
             cwd,
             encoding: 'utf8',
-            timeout: 60000,
+            timeout: 180000,
             stdio: ['pipe', 'pipe', 'pipe']
         });
         return { success: true, output };

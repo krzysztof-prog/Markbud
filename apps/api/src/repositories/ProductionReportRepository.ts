@@ -195,10 +195,13 @@ export class ProductionReportRepository {
             quantity: true,
           },
         },
-        // Materials do obliczenia sumy glassQuantity
+        // Materials do obliczenia sumy glassQuantity i rozbicia materiałów
         materials: {
           select: {
             glassQuantity: true,
+            glazing: true,
+            fittings: true,
+            parts: true,
           },
         },
         // Dostawy - pobieramy datę dostawy przez relację DeliveryOrder

@@ -10,17 +10,15 @@ import type { CreateColorInput, UpdateColorInput } from '../validators/color.js'
 export class ColorService {
   constructor(private repository: ColorRepository) {}
 
-  async getAllColors(type?: string) {
-    // Cache key depends on type
-    const cacheKey = type
-      ? type === 'typical'
-        ? 'colors:typical'
-        : 'colors:atypical'
-      : 'colors';
+  async getAllColors(type?: string, isAkrobud?: boolean) {
+    // Cache key depends on filters
+    let cacheKey = 'colors';
+    if (type) cacheKey += `:${type}`;
+    if (isAkrobud !== undefined) cacheKey += `:akrobud=${isAkrobud}`;
 
     return cacheService.getOrCompute(
       cacheKey,
-      () => this.repository.findAll(type),
+      () => this.repository.findAll(type, isAkrobud),
       3600 // 1 hour TTL
     );
   }
@@ -49,6 +47,7 @@ export class ColorService {
       name: data.name,
       type: data.type || 'typical',
       hexColor: data.hexColor,
+      isAkrobud: data.isAkrobud,
     });
 
     // Automatically create profile-color links for all profiles

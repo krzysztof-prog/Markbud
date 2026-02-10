@@ -145,7 +145,12 @@ export const CompleteOrdersTab: React.FC = () => {
   }, []);
 
   // Obsługa zaznaczania całej dostawy z useCallback
+  // Zaznaczenie dostawy automatycznie zaznacza/odznacza wszystkie zlecenia z tej dostawy
   const handleDeliveryToggle = useCallback((deliveryId: number, checked: boolean) => {
+    // Znajdź dostawę i jej zlecenia
+    const delivery = deliveriesData.find((d) => d.id === deliveryId);
+    const deliveryOrderIds = delivery?.deliveryOrders?.map((dOrder) => dOrder.order.id) || [];
+
     setSelectedDeliveryIds((prev) => {
       const newSet = new Set(prev);
       if (checked) {
@@ -155,7 +160,18 @@ export const CompleteOrdersTab: React.FC = () => {
       }
       return newSet;
     });
-  }, []);
+
+    // Zaznacz/odznacz wszystkie zlecenia z tej dostawy
+    setSelectedOrderIds((prev) => {
+      const newSet = new Set(prev);
+      if (checked) {
+        deliveryOrderIds.forEach((id) => newSet.add(id));
+      } else {
+        deliveryOrderIds.forEach((id) => newSet.delete(id));
+      }
+      return newSet;
+    });
+  }, [deliveriesData]);
 
   // Obsługa zakończenia zleceń z useCallback + walidacja daty + partial failure handling
   const handleCompleteOrders = useCallback(async () => {
@@ -341,7 +357,7 @@ export const CompleteOrdersTab: React.FC = () => {
               {!deliveriesData?.length ? (
                 <p className="text-gray-500 text-center py-4">Brak dostaw w produkcji</p>
               ) : (
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                   {deliveriesData.map((delivery: Delivery) => (
                     <DeliveryCheckbox
                       key={delivery.id}

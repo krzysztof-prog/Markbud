@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,8 @@ interface SummarySectionProps {
   totalValueEur?: number; // suma wartości EUR z zleceń (w centach)
   year: number;
   month: number;
+  eurRate: number; // kurs EUR/PLN (z rodzica)
+  onEurRateChange: (rate: number) => void; // callback zmiany kursu
 }
 
 // Domyślne wartości dla pustej kategorii
@@ -58,9 +60,9 @@ export const SummarySection: React.FC<SummarySectionProps> = ({
   totalValueEur = 0,
   year,
   month,
+  eurRate,
+  onEurRateChange,
 }) => {
-  // Stan kursu wymiany
-  const [eurRate, setEurRate] = useState<number>(DEFAULT_EUR_RATE);
 
   // Bezpieczne wyciągnięcie danych z summary
   const safeTypowe = summary?.typowe ?? emptyCategorySummary;
@@ -102,7 +104,7 @@ export const SummarySection: React.FC<SummarySectionProps> = ({
                 step="0.01"
                 min="0"
                 value={eurRate}
-                onChange={(e) => setEurRate(parseFloat(e.target.value) || DEFAULT_EUR_RATE)}
+                onChange={(e) => onEurRateChange(parseFloat(e.target.value) || DEFAULT_EUR_RATE)}
                 className="w-24 h-8 text-sm"
               />
             </div>

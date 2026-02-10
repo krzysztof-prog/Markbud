@@ -121,15 +121,34 @@ export const OrdersFilterBar: React.FC<OrdersFilterBarProps> = ({
           <Checkbox
             id="filter-hide-produced"
             checked={filters.hideProduced}
+            disabled={filters.showOnlyProduced}
             onCheckedChange={(checked) => {
               setFilters(prev => ({
                 ...prev,
-                hideProduced: !!checked
+                hideProduced: !!checked,
+                showOnlyProduced: checked ? false : prev.showOnlyProduced,
               }));
             }}
           />
           <Label htmlFor="filter-hide-produced" className="text-sm cursor-pointer">
             Ukryj wyprodukowane
+          </Label>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="filter-only-produced"
+            checked={filters.showOnlyProduced}
+            onCheckedChange={(checked) => {
+              setFilters(prev => ({
+                ...prev,
+                showOnlyProduced: !!checked,
+                hideProduced: checked ? false : prev.hideProduced,
+              }));
+            }}
+          />
+          <Label htmlFor="filter-only-produced" className="text-sm cursor-pointer">
+            Tylko wyprodukowane
           </Label>
         </div>
 
