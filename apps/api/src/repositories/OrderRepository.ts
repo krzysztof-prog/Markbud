@@ -74,6 +74,7 @@ export class OrderRepository {
           okucDemandStatus: true,
           manualStatus: true,
           manualStatusSetAt: true,
+          specialType: true,
           createdAt: true,
           archivedAt: true,
           productionDate: true,
@@ -385,6 +386,18 @@ export class OrderRepository {
     });
   }
 
+  /**
+   * Aktualizuj typ specjalny zlecenia (nietypówka)
+   */
+  async updateSpecialType(id: number, specialType: string | null) {
+    return this.prisma.order.update({
+      where: { id },
+      data: {
+        specialType,
+      },
+    });
+  }
+
   async bulkUpdateStatus(
     orderIds: number[],
     status: string,
@@ -618,6 +631,7 @@ export class OrderRepository {
         valueEur: true,
         invoiceNumber: true,
         completedAt: true,
+        specialType: true,
         // Usunięto pełną tablicę windows - używamy tylko _count.windows
         // Monthly report nie potrzebuje szczegółów okien, tylko liczbę
         _count: {

@@ -19,7 +19,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Check, X, Pencil, MoreVertical, Ban, Clock, XCircle, CircleOff, Trash2, Link2 } from 'lucide-react';
+import { Check, X, Pencil, MoreVertical, Ban, Clock, XCircle, CircleOff, Trash2, Link2, AlertTriangle, Wrench } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,7 +67,10 @@ interface OrderTableRowProps {
   onGlassDeliveryDateSet?: (orderId: number, date: string) => void;
 
   // Manual status callback
-  onManualStatusChange?: (orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => void;
+  onManualStatusChange?: (orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | 'complaint' | 'service' | null) => void;
+
+  // Typ specjalny zlecenia (nietypówka)
+  onSpecialTypeChange?: (orderId: number, specialType: 'drzwi' | 'psk' | 'hs' | 'ksztalt' | null) => void;
 
   // Zmiana autora zlecenia
   onAuthorChange?: (orderId: number, userId: number | null) => void;
@@ -116,6 +119,7 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
   onGlassDiscrepancyClick,
   onGlassDeliveryDateSet,
   onManualStatusChange,
+  onSpecialTypeChange,
   onAuthorChange,
   users,
   canDeleteOrders,
@@ -149,6 +153,14 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
               case 'on_hold':
                 statusLabel = 'Wstrzymane';
                 statusColorClass = 'bg-orange-200 text-orange-800 font-semibold';
+                break;
+              case 'complaint':
+                statusLabel = 'Reklamacja';
+                statusColorClass = 'bg-slate-200 text-slate-800 font-semibold';
+                break;
+              case 'service':
+                statusLabel = 'Serwis';
+                statusColorClass = 'bg-slate-200 text-slate-800 font-semibold';
                 break;
             }
           } else {
@@ -196,6 +208,10 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
                 return <XCircle className="h-4 w-4 text-red-600" />;
               case 'on_hold':
                 return <Clock className="h-4 w-4 text-orange-600" />;
+              case 'complaint':
+                return <AlertTriangle className="h-4 w-4 text-slate-600" />;
+              case 'service':
+                return <Wrench className="h-4 w-4 text-slate-600" />;
               default:
                 return null;
             }
@@ -237,6 +253,20 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
                     >
                       <Clock className="h-4 w-4 mr-2 text-orange-600" />
                       <span>Wstrzymane</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => onManualStatusChange?.(order.id, 'complaint')}
+                      className={order.manualStatus === 'complaint' ? 'bg-slate-100' : ''}
+                    >
+                      <AlertTriangle className="h-4 w-4 mr-2 text-slate-500" />
+                      <span>Reklamacja</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => onManualStatusChange?.(order.id, 'service')}
+                      className={order.manualStatus === 'service' ? 'bg-slate-100' : ''}
+                    >
+                      <Wrench className="h-4 w-4 mr-2 text-slate-500" />
+                      <span>Serwis</span>
                     </DropdownMenuItem>
                     {order.manualStatus && (
                       <>
@@ -860,6 +890,66 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
             </td>
           );
 
+        case 'system': {
+          // Kolumna systemu z menu do ustawienia typu specjalnego (nietypówka)
+          const specialTypeLabels: Record<string, string> = {
+            drzwi: 'Drzwi',
+            psk: 'PSK',
+            hs: 'HS',
+            ksztalt: 'Kształt',
+          };
+          const specialTypeColors: Record<string, string> = {
+            drzwi: 'bg-purple-100 text-purple-700',
+            psk: 'bg-teal-100 text-teal-700',
+            hs: 'bg-indigo-100 text-indigo-700',
+            ksztalt: 'bg-pink-100 text-pink-700',
+          };
+
+          return (
+            <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
+              <div className="flex items-center gap-1">
+                {order.specialType ? (
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${specialTypeColors[order.specialType]}`}>
+                    {specialTypeLabels[order.specialType]}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">{order.system || '-'}</span>
+                )}
+                {onSpecialTypeChange && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="p-1 hover:bg-slate-100 rounded transition-colors">
+                        <MoreVertical className="h-4 w-4 text-slate-400" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-48">
+                      {(['drzwi', 'psk', 'hs', 'ksztalt'] as const).map((type) => (
+                        <DropdownMenuItem
+                          key={type}
+                          onClick={() => onSpecialTypeChange(order.id, type)}
+                          className={order.specialType === type ? 'bg-slate-100' : ''}
+                        >
+                          <span className={`inline-block w-2 h-2 rounded-full mr-2 ${specialTypeColors[type].split(' ')[0]}`} />
+                          {specialTypeLabels[type]}
+                        </DropdownMenuItem>
+                      ))}
+                      {order.specialType && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => onSpecialTypeChange(order.id, null)}>
+                            <CircleOff className="h-4 w-4 mr-2 text-slate-400" />
+                            Usuń typ
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+            </td>
+          );
+        }
+
         default:
           return (
             <td key={column.id} className={`px-4 py-3 text-muted-foreground ${alignClass}`}>
@@ -868,7 +958,7 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           );
       }
     },
-    [order, isEditing, editingCell, editValue, setEditValue, startEdit, cancelEdit, saveEdit, eurRate, onOrderClick, onSchucoStatusClick, onGlassDiscrepancyClick, onGlassDeliveryDateSet, onManualStatusChange, onAuthorChange, users]
+    [order, isEditing, editingCell, editValue, setEditValue, startEdit, cancelEdit, saveEdit, eurRate, onOrderClick, onSchucoStatusClick, onGlassDiscrepancyClick, onGlassDeliveryDateSet, onManualStatusChange, onSpecialTypeChange, onAuthorChange, users]
   );
 
   // Wyróżnienie wiersza w zależności od statusu

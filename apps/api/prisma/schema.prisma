@@ -200,6 +200,9 @@ model Order {
   // null - brak ręcznego statusu
   manualStatus            String?                   @map("manual_status")
   manualStatusSetAt       DateTime?                 @map("manual_status_set_at")
+  // Typ specjalny zlecenia (nietypówka): 'drzwi', 'psk', 'hs', 'ksztalt'
+  // null - brak typu specjalnego (standardowe zlecenie)
+  specialType             String?                   @map("special_type")
   // Soft delete - data usunięcia zlecenia
   deletedAt               DateTime?                 @map("deleted_at")
   deletedByUserId         Int?                      @map("deleted_by_user_id")
@@ -1694,6 +1697,7 @@ model ProductionReportItem {
   overrideSashes   Int? @map("override_sashes")
   overrideValuePln Int? @map("override_value_pln") // w groszach
   overrideValueEur Int? @map("override_value_eur") // w centach
+  overrideMaterialValue Int? @map("override_material_value") // w groszach (nadpisanie wartości materiału)
 
   // Checkboxy RW (Rozchód Wewnętrzny - czy materiały wydane z magazynu)
   rwOkucia  Boolean @default(false) @map("rw_okucia")

@@ -138,11 +138,18 @@ export const ordersApi = {
   // P1-R4: Get production readiness checklist (System Brain)
   getReadiness: (id: number) => fetchApi<ReadinessResult>(`/api/orders/${id}/readiness`),
 
-  // Aktualizuj ręczny status zlecenia (NIE CIĄĆ, Anulowane, Wstrzymane)
-  updateManualStatus: (id: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) =>
+  // Aktualizuj ręczny status zlecenia (NIE CIĄĆ, Anulowane, Wstrzymane, Reklamacja, Serwis)
+  updateManualStatus: (id: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | 'complaint' | 'service' | null) =>
     fetchApi<Order>(`/api/orders/${id}/manual-status`, {
       method: 'PATCH',
       body: JSON.stringify({ manualStatus }),
+    }),
+
+  // Aktualizuj typ specjalny zlecenia (nietypówka)
+  updateSpecialType: (id: number, specialType: 'drzwi' | 'psk' | 'hs' | 'ksztalt' | null) =>
+    fetchApi<Order>(`/api/orders/${id}/special-type`, {
+      method: 'PATCH',
+      body: JSON.stringify({ specialType }),
     }),
 
   // ==========================================

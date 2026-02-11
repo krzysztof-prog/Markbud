@@ -34,6 +34,7 @@ export interface ProductionReportItem {
   overrideSashes: number | null;
   overrideValuePln: number | null;
   overrideValueEur: number | null;
+  overrideMaterialValue: number | null; // w groszach (nadpisanie wartości materiału)
 
   // Checkboxy RW
   rwOkucia: boolean;
@@ -56,6 +57,9 @@ export interface ProductionReportItem {
   coefficient: string; // współczynnik PLN/materiał (formatowany lub '—')
   unitValue: string; // jednostka (PLN - materiał) / szkła (formatowany lub '—')
   totalGlassQuantity: number; // suma ilości szkła z materiałówki
+
+  // Typ specjalny zlecenia (nietypówka)
+  specialType?: string | null;
 }
 
 // Dane zlecenia (uproszczone, z backendu)
@@ -72,6 +76,8 @@ export interface OrderData {
   deliveryId: number | null;
   deliveryName?: string;
   productionDate?: string | null; // Data wyprodukowania
+  specialType?: string | null; // Typ specjalny (nietypówka)
+  hasColor999?: boolean; // Czy zlecenie ma profil z kolorem 999
 }
 
 // Główny raport
@@ -147,6 +153,7 @@ export interface UpdateReportItemInput {
   overrideSashes?: number | null;
   overrideValuePln?: number | null;
   overrideValueEur?: number | null;
+  overrideMaterialValue?: number | null; // w groszach
   rwOkucia?: boolean;
   rwProfile?: boolean;
 }

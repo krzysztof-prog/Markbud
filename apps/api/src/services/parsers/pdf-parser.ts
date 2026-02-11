@@ -56,11 +56,18 @@ export class PdfParser {
       // WAŻNE: Wartości w bazie są przechowywane w groszach/centach
       const valueInSmallestUnit = Math.round(parsed.valueNetto * 100);
 
+      // Dla AKROBUD: windowsNetValue = valueEur (z PDF)
+      const isAkrobud = (order.client ?? '').toUpperCase().includes('AKROBUD');
+      const eurUpdateData = parsed.currency === 'EUR'
+        ? {
+            valueEur: valueInSmallestUnit,
+            ...(isAkrobud ? { windowsNetValue: valueInSmallestUnit } : {}),
+          }
+        : { valuePln: valueInSmallestUnit };
+
       await tx.order.update({
         where: { id: order.id },
-        data: {
-          ...(parsed.currency === 'EUR' ? { valueEur: valueInSmallestUnit } : { valuePln: valueInSmallestUnit }),
-        },
+        data: eurUpdateData,
       });
 
       // Oznacz powiązane pending prices jako applied

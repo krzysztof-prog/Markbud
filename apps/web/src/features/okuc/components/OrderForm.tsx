@@ -165,7 +165,7 @@ export function OrderForm({
     const newItem = {
       articleId: parseInt(data.articleId, 10),
       orderedQty: parseInt(data.quantity, 10),
-      unitPrice: data.price ? parseFloat(data.price) : 0,
+      unitPrice: data.price ? Number(data.price) : 0,
       deliveryWeek: data.week || undefined,
     };
 

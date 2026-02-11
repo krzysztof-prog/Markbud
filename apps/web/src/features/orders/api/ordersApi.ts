@@ -103,9 +103,9 @@ export const ordersApi = {
   /**
    * Aktualizuj ręczny status zlecenia
    * @param id - ID zlecenia
-   * @param manualStatus - 'do_not_cut' | 'cancelled' | 'on_hold' | null
+   * @param manualStatus - 'do_not_cut' | 'cancelled' | 'on_hold' | 'complaint' | 'service' | null
    */
-  updateManualStatus: (id: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) =>
+  updateManualStatus: (id: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | 'complaint' | 'service' | null) =>
     fetchApi<Order>(`/api/orders/${id}/manual-status`, {
       method: 'PATCH',
       body: JSON.stringify({ manualStatus }),

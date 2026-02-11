@@ -167,7 +167,7 @@ export default function ZestawienieZlecenPage() {
 
   // Mutacja do zmiany manualStatus z optimistic update dla natychmiastowej zmiany UI
   const manualStatusMutation = useMutation({
-    mutationFn: ({ orderId, manualStatus }: { orderId: number; manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null }) =>
+    mutationFn: ({ orderId, manualStatus }: { orderId: number; manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | 'complaint' | 'service' | null }) =>
       ordersApi.updateManualStatus(orderId, manualStatus),
     // Optimistic update - natychmiast aktualizuj UI przed odpowiedzią serwera
     onMutate: async ({ orderId, manualStatus }) => {
@@ -202,6 +202,8 @@ export default function ZestawienieZlecenPage() {
         do_not_cut: 'NIE CIĄĆ',
         cancelled: 'Anulowane',
         on_hold: 'Wstrzymane',
+        complaint: 'Reklamacja',
+        service: 'Serwis',
       };
       const statusLabel = variables.manualStatus ? statusLabels[variables.manualStatus] : 'usunięty';
 
@@ -229,6 +231,67 @@ export default function ZestawienieZlecenPage() {
     },
     onSettled: () => {
       // Po zakończeniu (sukces lub błąd) odśwież dane z serwera dla pewności
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+
+  // Mutacja do zmiany specialType (nietypówka) z optimistic update
+  const specialTypeMutation = useMutation({
+    mutationFn: ({ orderId, specialType }: { orderId: number; specialType: 'drzwi' | 'psk' | 'hs' | 'ksztalt' | null }) =>
+      ordersApi.updateSpecialType(orderId, specialType),
+    onMutate: async ({ orderId, specialType }) => {
+      await queryClient.cancelQueries({ queryKey: ['orders'] });
+
+      const previousActive = queryClient.getQueryData(['orders', 'all-active']);
+      const previousArchived = queryClient.getQueryData(['orders', 'all-archived']);
+
+      const updateOrders = (oldData: unknown) => {
+        if (!oldData || typeof oldData !== 'object' || !('data' in oldData)) return oldData;
+        const typedData = oldData as { data: ExtendedOrder[] };
+        return {
+          ...typedData,
+          data: typedData.data.map((order: ExtendedOrder) =>
+            order.id === orderId ? { ...order, specialType } : order
+          ),
+        };
+      };
+
+      queryClient.setQueryData(['orders', 'all-active'], updateOrders);
+      queryClient.setQueryData(['orders', 'all-archived'], updateOrders);
+
+      return { previousActive, previousArchived };
+    },
+    onSuccess: (_data, variables) => {
+      const typeLabels: Record<string, string> = {
+        drzwi: 'Drzwi',
+        psk: 'PSK',
+        hs: 'HS',
+        ksztalt: 'Kształt',
+      };
+      const typeLabel = variables.specialType ? typeLabels[variables.specialType] : 'usunięty';
+
+      toast({
+        title: 'Typ specjalny zaktualizowany',
+        description: variables.specialType
+          ? `Ustawiono typ: ${typeLabel}`
+          : 'Typ specjalny został usunięty',
+      });
+    },
+    onError: (error: Error, _variables, context) => {
+      if (context?.previousActive) {
+        queryClient.setQueryData(['orders', 'all-active'], context.previousActive);
+      }
+      if (context?.previousArchived) {
+        queryClient.setQueryData(['orders', 'all-archived'], context.previousArchived);
+      }
+
+      toast({
+        title: 'Błąd',
+        description: error.message || 'Nie udało się zmienić typu specjalnego',
+        variant: 'destructive',
+      });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
   });
@@ -410,9 +473,13 @@ export default function ZestawienieZlecenPage() {
     glassDeliveryDateMutation.mutate({ orderId, date });
   }, [glassDeliveryDateMutation]);
 
-  const handleManualStatusChange = useCallback((orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => {
+  const handleManualStatusChange = useCallback((orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | 'complaint' | 'service' | null) => {
     manualStatusMutation.mutate({ orderId, manualStatus });
   }, [manualStatusMutation]);
+
+  const handleSpecialTypeChange = useCallback((orderId: number, specialType: 'drzwi' | 'psk' | 'hs' | 'ksztalt' | null) => {
+    specialTypeMutation.mutate({ orderId, specialType });
+  }, [specialTypeMutation]);
 
   const handleAuthorChange = useCallback((orderId: number, userId: number | null) => {
     authorChangeMutation.mutate({ orderId, userId });
@@ -517,6 +584,7 @@ export default function ZestawienieZlecenPage() {
             onGlassDiscrepancyClick={handleGlassDiscrepancyClick}
             onGlassDeliveryDateSet={handleGlassDeliveryDateSet}
             onManualStatusChange={handleManualStatusChange}
+            onSpecialTypeChange={handleSpecialTypeChange}
             onAuthorChange={handleAuthorChange}
             users={users}
             canDeleteOrders={canDeleteOrders}
@@ -550,6 +618,7 @@ export default function ZestawienieZlecenPage() {
               onGlassDiscrepancyClick={handleGlassDiscrepancyClick}
               onGlassDeliveryDateSet={handleGlassDeliveryDateSet}
               onManualStatusChange={handleManualStatusChange}
+              onSpecialTypeChange={handleSpecialTypeChange}
               onAuthorChange={handleAuthorChange}
               users={users}
               canDeleteOrders={canDeleteOrders}

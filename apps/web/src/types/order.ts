@@ -53,9 +53,11 @@ export interface Order {
   updatedAt?: Timestamp;
   documentAuthor?: string | null;
   documentAuthorUserId?: number | null;
-  // Ręczny status zlecenia: 'do_not_cut' (NIE CIĄĆ), 'cancelled' (Anulowane), 'on_hold' (Wstrzymane)
-  manualStatus?: 'do_not_cut' | 'cancelled' | 'on_hold' | null;
+  // Ręczny status zlecenia: 'do_not_cut' (NIE CIĄĆ), 'cancelled' (Anulowane), 'on_hold' (Wstrzymane), 'complaint' (Reklamacja), 'service' (Serwis)
+  manualStatus?: 'do_not_cut' | 'cancelled' | 'on_hold' | 'complaint' | 'service' | null;
   manualStatusSetAt?: Timestamp;
+  // Typ specjalny zlecenia (nietypówka): drzwi, PSK, HS, Kształt
+  specialType?: 'drzwi' | 'psk' | 'hs' | 'ksztalt' | null;
   totalWindows?: number;
   totalSashes?: number;
   totalGlasses?: number;

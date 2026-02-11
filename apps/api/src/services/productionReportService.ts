@@ -65,6 +65,9 @@ export interface ReportItem {
   glazingValue: number; // szyby
   fittingsValue: number; // okucia
   partsValue: number; // części/profile
+
+  // Typ specjalny zlecenia (nietypówka)
+  specialType: string | null;
 }
 
 /** Podsumowanie raportu */
@@ -219,8 +222,8 @@ export class ProductionReportService {
       const deliveryId = deliveryData?.id ?? null;
 
       // === NOWE KOLUMNY ===
-      // Wartość materiału w PLN (z groszy)
-      const materialValueGrosze = order.windowsMaterial ?? 0;
+      // Wartość materiału w PLN (z groszy) — override ma priorytet
+      const materialValueGrosze = override?.overrideMaterialValue ?? order.windowsMaterial ?? 0;
       const materialValue = groszeToPln(materialValueGrosze as Grosze);
 
       // Suma ilości szkła z materiałówki
@@ -283,6 +286,14 @@ export class ProductionReportService {
         glazingValue,
         fittingsValue,
         partsValue,
+        // Typ specjalny zlecenia (nietypówka)
+        specialType: order.specialType ?? null,
+        // Kolor 999 — czy zlecenie ma profil z kolorem 999
+        hasColor999: (order.requirements ?? []).some(
+          (req: { color: { code: string } | null }) => req.color?.code === '999'
+        ),
+        // Override wartości materiału (w groszach, null = nie nadpisano)
+        overrideMaterialValue: override?.overrideMaterialValue ?? null,
       };
     });
 
@@ -651,8 +662,25 @@ export class ProductionReportService {
       valueEur: 0,
     };
 
+    // Sumy per-order nietypówek (zlecenia z specialType)
+    const perOrderAtypical = {
+      windows: 0,
+      units: 0,
+      sashes: 0,
+      valuePln: 0,
+    };
+
     for (const item of items) {
-      // Sumuj do TYPOWE
+      // Zlecenia z specialType → idą do NIETYPÓWKI, NIE do TYPOWE
+      if (item.specialType) {
+        perOrderAtypical.windows += item.windows;
+        perOrderAtypical.units += item.units;
+        perOrderAtypical.sashes += item.sashes;
+        perOrderAtypical.valuePln += item.valuePln;
+        continue;
+      }
+
+      // Sumuj do TYPOWE (tylko zlecenia bez specialType)
       typowe.windows += item.windows;
       typowe.units += item.units;
       typowe.sashes += item.sashes;
@@ -677,12 +705,12 @@ export class ProductionReportService {
       valuePln: typowe.valuePln - akrobud.valuePln,
     };
 
-    // NIETYPÓWKI - konwersja z groszy na PLN
+    // NIETYPÓWKI = globalna korekta + per-order nietypówki
     const atypical = {
-      windows: report.atypicalWindows,
-      units: report.atypicalUnits,
-      sashes: report.atypicalSashes,
-      valuePln: groszeToPln(report.atypicalValuePln as Grosze),
+      windows: report.atypicalWindows + perOrderAtypical.windows,
+      units: report.atypicalUnits + perOrderAtypical.units,
+      sashes: report.atypicalSashes + perOrderAtypical.sashes,
+      valuePln: groszeToPln(report.atypicalValuePln as Grosze) + perOrderAtypical.valuePln,
       notes: report.atypicalNotes,
     };
 

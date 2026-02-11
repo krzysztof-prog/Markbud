@@ -9,7 +9,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import Link from 'next/link';
 import { OrderRow } from './OrderRow';
 import { DeliveryGroup } from './DeliveryGroup';
 import type {
@@ -31,6 +32,7 @@ interface OrderData {
   deliveryId: number | null;
   deliveryName?: string;
   productionDate?: string | null;
+  specialType?: string | null; // Typ specjalny (nietypówka)
 }
 
 interface OrdersTableProps {
@@ -59,12 +61,19 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   // Stan rozwinięcia grup dostaw AKROBUD
   const [expandedDeliveries, setExpandedDeliveries] = useState<Set<number>>(new Set());
 
-  // Podziel zamówienia na grupy: AKROBUD (pogrupowane po dostawie) i RESZTA
-  const { akrobudGroups, restaOrders } = useMemo(() => {
+  // Podziel zamówienia na grupy: AKROBUD, RESZTA i NIETYPÓWKI
+  const { akrobudGroups, restaOrders, nietypowkiOrders } = useMemo(() => {
     const akrobud: Map<number, OrderData[]> = new Map();
     const resta: OrderData[] = [];
+    const nietypowki: OrderData[] = [];
 
     for (const order of orders) {
+      // Zlecenia z specialType → osobna sekcja NIETYPÓWKI
+      if (order.specialType) {
+        nietypowki.push(order);
+        continue;
+      }
+
       // Sprawdź czy to AKROBUD (po nazwie klienta - bezpieczne sprawdzenie)
       const clientName = order.client || '';
       const isAkrobud = clientName.toUpperCase().includes('AKROBUD');
@@ -78,7 +87,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
       }
     }
 
-    return { akrobudGroups: akrobud, restaOrders: resta };
+    return { akrobudGroups: akrobud, restaOrders: resta, nietypowkiOrders: nietypowki };
   }, [orders]);
 
   // Mapuj items do orderId dla szybkiego dostępu
@@ -140,9 +149,6 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
     return { flaggedOrders: flagged, warningsByOrderId: warnMap };
   }, [orders, itemsByOrderId]);
 
-  // Stan zwinięcia sekcji ostrzeżeń
-  const [warningsExpanded, setWarningsExpanded] = useState(true);
-
   // Toggle grupy dostaw
   const toggleDelivery = (deliveryId: number) => {
     setExpandedDeliveries((prev) => {
@@ -193,37 +199,16 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
         </div>
       </CardHeader>
 
-      {/* Sekcja ostrzeżeń - zlecenia do sprawdzenia */}
+      {/* Link do strony "Do sprawdzenia" */}
       {flaggedOrders.length > 0 && (
-        <div className="mx-4 mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-          <button
-            onClick={() => setWarningsExpanded((prev) => !prev)}
-            className="flex items-center gap-2 w-full text-left"
+        <div className="mx-4 mb-3">
+          <Link
+            href="/zestawienia/do-sprawdzenia"
+            className="flex items-center gap-2 text-amber-700 hover:text-amber-900 hover:underline text-sm p-2 rounded-lg bg-amber-50 border border-amber-200"
           >
-            <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
-            <h4 className="font-semibold text-amber-800 text-sm flex-1">
-              Zlecenia do sprawdzenia ({flaggedOrders.length})
-            </h4>
-            {warningsExpanded ? (
-              <ChevronUp className="h-4 w-4 text-amber-600" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-amber-600" />
-            )}
-          </button>
-          {warningsExpanded && (
-            <div className="mt-2 max-h-[250px] overflow-y-auto">
-              <ul className="text-sm text-amber-700 space-y-0.5">
-                {flaggedOrders.map((f) => (
-                  <li key={f.orderId} className="flex items-start gap-1.5">
-                    <span className="text-amber-400 mt-0.5">&#x2022;</span>
-                    <span className="font-mono font-medium whitespace-nowrap">{f.orderNumber}</span>
-                    <span className="text-amber-400">—</span>
-                    <span>{f.warnings.join(', ')}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+            <AlertTriangle className="h-4 w-4" />
+            <span className="font-medium">Zlecenia do sprawdzenia ({flaggedOrders.length})</span>
+          </Link>
         </div>
       )}
 
@@ -300,6 +285,50 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                   warnings={warningsByOrderId.get(order.id)}
                 />
               ))}
+
+              {/* NIETYPÓWKI - zlecenia z specialType */}
+              {nietypowkiOrders.length > 0 && (
+                <>
+                  <TableRow>
+                    <td
+                      colSpan={15}
+                      className="bg-amber-50 border-y border-amber-200 px-4 py-2 font-semibold text-amber-800 text-sm"
+                    >
+                      NIETYPÓWKI ({nietypowkiOrders.length})
+                      <span className="ml-2 font-normal text-amber-600">
+                        {(() => {
+                          const typeLabels: Record<string, string> = { drzwi: 'Drzwi', psk: 'PSK', hs: 'HS', ksztalt: 'Kształt' };
+                          const typeCounts: Record<string, number> = {};
+                          for (const o of nietypowkiOrders) {
+                            if (o.specialType) {
+                              typeCounts[o.specialType] = (typeCounts[o.specialType] || 0) + 1;
+                            }
+                          }
+                          return Object.entries(typeCounts)
+                            .map(([type, count]) => `${typeLabels[type] || type}: ${count}`)
+                            .join(', ');
+                        })()}
+                      </span>
+                    </td>
+                  </TableRow>
+                  {nietypowkiOrders.map((order, index) => (
+                    <OrderRow
+                      key={order.id}
+                      order={order}
+                      item={itemsByOrderId.get(order.id) || null}
+                      canEditQuantities={canEditQuantities}
+                      canEditInvoice={canEditInvoice}
+                      onUpdateItem={onUpdateItem}
+                      onUpdateInvoice={onUpdateInvoice}
+                      onAutoFillInvoice={onAutoFillInvoice}
+                      isPending={isPending}
+                      isEven={index % 2 === 0}
+                      eurRate={eurRate}
+                      warnings={warningsByOrderId.get(order.id)}
+                    />
+                  ))}
+                </>
+              )}
 
               {/* Brak zleceń */}
               {orders.length === 0 && (

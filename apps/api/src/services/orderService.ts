@@ -136,10 +136,21 @@ export class OrderService {
 
       // Przypisz cenę do zlecenia
       await prisma.$transaction(async (tx) => {
+        // Pobierz klienta żeby sprawdzić czy to AKROBUD
+        const orderData = await tx.order.findUnique({
+          where: { id: orderId },
+          select: { client: true },
+        });
+        const isAkrobud = (orderData?.client ?? '').toUpperCase().includes('AKROBUD');
+
         await tx.order.update({
           where: { id: orderId },
           data: pendingPrice.currency === 'EUR'
-            ? { valueEur: pendingPrice.valueNetto }
+            ? {
+                valueEur: pendingPrice.valueNetto,
+                // Dla AKROBUD: windowsNetValue = valueEur (z PDF)
+                ...(isAkrobud ? { windowsNetValue: pendingPrice.valueNetto } : {}),
+              }
             : { valuePln: pendingPrice.valueNetto },
         });
 
@@ -247,12 +258,21 @@ export class OrderService {
       // Jeśli bazowe nie istnieje lub nie ma ceny - nie dziedzicz
       if (!baseOrder?.valueEur) return;
 
+      // Pobierz klienta żeby sprawdzić czy to AKROBUD
+      const orderForClient = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { client: true },
+      });
+      const isAkrobud = (orderForClient?.client ?? '').toUpperCase().includes('AKROBUD');
+
       // Skopiuj cenę z bazowego + oznacz jako odziedziczoną
       await prisma.order.update({
         where: { id: orderId },
         data: {
           valueEur: baseOrder.valueEur,
           priceInheritedFromOrder: baseOrderNumber,
+          // Dla AKROBUD: windowsNetValue = valueEur (z PDF)
+          ...(isAkrobud ? { windowsNetValue: baseOrder.valueEur } : {}),
         },
       });
 
@@ -287,6 +307,14 @@ export class OrderService {
       if (variantOrders.length === 0) return;
 
       // Zaktualizuj cenę EUR we wszystkich wariantach
+      // Dla AKROBUD: windowsNetValue = valueEur (z PDF)
+      // Sprawdź klienta na pierwszym wariancie (wszystkie warianty mają tego samego klienta)
+      const firstVariant = await prisma.order.findFirst({
+        where: { priceInheritedFromOrder: baseNumber, deletedAt: null },
+        select: { client: true },
+      });
+      const isAkrobud = (firstVariant?.client ?? '').toUpperCase().includes('AKROBUD');
+
       await prisma.order.updateMany({
         where: {
           priceInheritedFromOrder: baseNumber,
@@ -294,6 +322,7 @@ export class OrderService {
         },
         data: {
           valueEur: newValueEur,
+          ...(isAkrobud ? { windowsNetValue: newValueEur } : {}),
         },
       });
 
@@ -389,11 +418,11 @@ export class OrderService {
   }
 
   /**
-   * Aktualizuj ręczny status zlecenia (NIE CIĄĆ, Anulowane, Wstrzymane)
+   * Aktualizuj ręczny status zlecenia (NIE CIĄĆ, Anulowane, Wstrzymane, Reklamacja, Serwis)
    * @param id - ID zlecenia
    * @param manualStatus - nowy status lub null (aby usunąć)
    */
-  async updateManualStatus(id: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) {
+  async updateManualStatus(id: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | 'complaint' | 'service' | null) {
     // Verify order exists
     await this.getOrderById(id);
 
@@ -403,6 +432,21 @@ export class OrderService {
     // - to robi scheduler/użytkownik ręcznie przy archiwizacji
 
     logger.info(`Order ${id} manual status updated to: ${manualStatus}`);
+
+    return order;
+  }
+
+  /**
+   * Aktualizuj typ specjalny zlecenia (nietypówka)
+   * @param id - ID zlecenia
+   * @param specialType - nowy typ lub null (aby usunąć)
+   */
+  async updateSpecialType(id: number, specialType: 'drzwi' | 'psk' | 'hs' | 'ksztalt' | null) {
+    await this.getOrderById(id);
+
+    const order = await this.repository.updateSpecialType(id, specialType);
+
+    logger.info(`Order ${id} special type updated to: ${specialType}`);
 
     return order;
   }
@@ -990,7 +1034,15 @@ export class OrderService {
     }
     if (data.valueEur !== undefined) {
       // Convert EUR string (e.g., "123.45") to cents (12345)
-      updateData.valueEur = data.valueEur !== null ? eurToCenty(Number(data.valueEur)) : null;
+      const eurCenty = data.valueEur !== null ? eurToCenty(Number(data.valueEur)) : null;
+      updateData.valueEur = eurCenty;
+
+      // Dla AKROBUD: windowsNetValue = valueEur (z PDF)
+      const currentOrder = await this.getOrderById(id);
+      const isAkrobud = (currentOrder.client ?? '').toUpperCase().includes('AKROBUD');
+      if (isAkrobud) {
+        updateData.windowsNetValue = eurCenty;
+      }
     }
     if (data.deadline !== undefined) {
       // Convert deadline string to Date or null

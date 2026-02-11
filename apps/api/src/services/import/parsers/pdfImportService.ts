@@ -64,11 +64,18 @@ export class PdfImportService implements IPdfImportService {
 
     // Update order with PDF data
     // WAŻNE: Konwertujemy do groszy/centów przed zapisem do bazy
+    // Dla AKROBUD: windowsNetValue = valueEur (z PDF)
+    const isAkrobud = (order.client ?? '').toUpperCase().includes('AKROBUD');
+    const eurValue = eurToCenty(parsed.valueNetto);
+
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
         ...(parsed.currency === 'EUR'
-          ? { valueEur: eurToCenty(parsed.valueNetto) }
+          ? {
+              valueEur: eurValue,
+              ...(isAkrobud ? { windowsNetValue: eurValue } : {}),
+            }
           : { valuePln: plnToGrosze(parsed.valueNetto) }),
       },
     });

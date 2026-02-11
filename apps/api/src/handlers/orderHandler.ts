@@ -17,6 +17,7 @@ import {
   monthlyProductionQuerySchema,
   variantTypeSchema,
   manualStatusSchema,
+  specialTypeSchema,
   type CreateOrderInput,
   type UpdateOrderInput,
   type PatchOrderInput,
@@ -25,6 +26,7 @@ import {
   type ForProductionQuery,
   type MonthlyProductionQuery,
   type ManualStatusInput,
+  type SpecialTypeInput,
 } from '../validators/order.js';
 import { prisma } from '../index.js';
 import { parseIntParam, ForbiddenError } from '../utils/errors.js';
@@ -96,6 +98,22 @@ export class OrderHandler {
     const order = await this.service.updateManualStatus(parseInt(id), validated.manualStatus);
 
     // Wyślij event WebSocket o aktualizacji zlecenia
+    emitOrderUpdated(order);
+
+    return reply.send(order);
+  }
+
+  /**
+   * Aktualizuj typ specjalny zlecenia (nietypówka: drzwi, PSK, HS, Kształt)
+   */
+  async updateSpecialType(
+    request: FastifyRequest<{ Params: { id: string }; Body: SpecialTypeInput }>,
+    reply: FastifyReply
+  ) {
+    const { id } = orderParamsSchema.parse(request.params);
+    const validated = specialTypeSchema.parse(request.body);
+    const order = await this.service.updateSpecialType(parseInt(id), validated.specialType);
+
     emitOrderUpdated(order);
 
     return reply.send(order);

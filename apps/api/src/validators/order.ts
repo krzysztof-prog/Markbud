@@ -54,12 +54,26 @@ export const patchOrderSchema = z.object({
 // 'do_not_cut' - NIE CIĄĆ (żółte tło, okucia nie w zapotrzebowaniu)
 // 'cancelled' - Anulowane (czerwone tło, archiwizacja po 30 dniach, cofnij okucia z zapotrzebowania)
 // 'on_hold' - Wstrzymane (pomarańczowe tło)
+// 'complaint' - Reklamacja
+// 'service' - Serwis
 // null - brak ręcznego statusu (usunięcie statusu)
 export const manualStatusSchema = z.object({
-  manualStatus: z.enum(['do_not_cut', 'cancelled', 'on_hold']).nullable(),
+  manualStatus: z.enum(['do_not_cut', 'cancelled', 'on_hold', 'complaint', 'service']).nullable(),
 });
 
 export type ManualStatusInput = z.infer<typeof manualStatusSchema>;
+
+// Special type schema - typ specjalny zlecenia (nietypówka)
+// 'drzwi' - Drzwi
+// 'psk' - PSK (Przesuwno-Uchylne)
+// 'hs' - HS (Podnośno-Przesuwne)
+// 'ksztalt' - Kształt (niestandardowy kształt okna)
+// null - brak typu specjalnego (standardowe zlecenie)
+export const specialTypeSchema = z.object({
+  specialType: z.enum(['drzwi', 'psk', 'hs', 'ksztalt']).nullable(),
+});
+
+export type SpecialTypeInput = z.infer<typeof specialTypeSchema>;
 
 export const orderParamsSchema = idParamsSchema('order');
 

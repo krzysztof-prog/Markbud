@@ -44,7 +44,10 @@ interface OrdersTableProps {
   onGlassDeliveryDateSet?: (orderId: number, date: string) => void;
 
   // Manual status callback
-  onManualStatusChange?: (orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | null) => void;
+  onManualStatusChange?: (orderId: number, manualStatus: 'do_not_cut' | 'cancelled' | 'on_hold' | 'complaint' | 'service' | null) => void;
+
+  // Typ specjalny zlecenia (nietypówka)
+  onSpecialTypeChange?: (orderId: number, specialType: 'drzwi' | 'psk' | 'hs' | 'ksztalt' | null) => void;
 
   // Zmiana autora zlecenia
   onAuthorChange?: (orderId: number, userId: number | null) => void;
@@ -91,6 +94,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   onGlassDiscrepancyClick,
   onGlassDeliveryDateSet,
   onManualStatusChange,
+  onSpecialTypeChange,
   onAuthorChange,
   users,
   canDeleteOrders,
@@ -267,6 +271,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                     onGlassDiscrepancyClick={onGlassDiscrepancyClick}
                     onGlassDeliveryDateSet={onGlassDeliveryDateSet}
                     onManualStatusChange={onManualStatusChange}
+                    onSpecialTypeChange={onSpecialTypeChange}
                     onAuthorChange={onAuthorChange}
                     users={users}
                     canDeleteOrders={canDeleteOrders}

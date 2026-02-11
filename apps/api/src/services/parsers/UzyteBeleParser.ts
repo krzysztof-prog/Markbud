@@ -748,10 +748,16 @@ export class UzyteBeleParser {
       }
 
       // Zapisz sumy do zlecenia
+      // Dla AKROBUD: windowsNetValue = valueEur (z PDF), NIE z CSV materiałówki
+      const isAkrobud = (order.client ?? '').toUpperCase().includes('AKROBUD');
+      const finalWindowsNetValue = isAkrobud
+        ? (order.valueEur ?? null)
+        : (windowsNetValue > 0 ? windowsNetValue : null);
+
       await tx.order.update({
         where: { id: order.id },
         data: {
-          windowsNetValue: windowsNetValue > 0 ? windowsNetValue : null,
+          windowsNetValue: finalWindowsNetValue,
           windowsMaterial: windowsMaterial > 0 ? windowsMaterial : null,
           assemblyValue: assemblyValue > 0 ? assemblyValue : null,
           extrasValue: extrasValue > 0 ? extrasValue : null,

@@ -34,6 +34,7 @@ interface OrderRowProps {
   isPending?: boolean;
   isEven?: boolean; // zebra striping - co drugi wiersz ciemniejszy
   eurRate?: number; // kurs EUR/PLN do przeliczania Wsp. i Jedn. dla AKROBUD
+  warnings?: string[]; // ostrzeżenia (współczynnik poza zakresem, brak danych)
 }
 
 export const OrderRow: React.FC<OrderRowProps> = ({
@@ -47,6 +48,7 @@ export const OrderRow: React.FC<OrderRowProps> = ({
   isPending = false,
   isEven = false,
   eurRate,
+  warnings,
 }) => {
   // Wartości do wyświetlenia (override jeśli istnieje, inaczej z Order)
   const displayWindows = item?.overrideWindows ?? order.totalWindows;
@@ -80,8 +82,15 @@ export const OrderRow: React.FC<OrderRowProps> = ({
     return item.unitValue;
   })();
 
+  // Ostrzeżenia - podświetlanie wiersza i komórek
+  const hasWarnings = warnings && warnings.length > 0;
+  const coefficientNum = computedCoefficient !== '—' ? parseFloat(computedCoefficient) : null;
+  const isCoefficientWarning = coefficientNum !== null && (coefficientNum < 1.4 || coefficientNum > 2);
+  const isMissingMaterial = !item?.materialValue || item.materialValue <= 0;
+  const isMissingValue = (!displayValuePln || displayValuePln === 0) && (!displayValueEur || displayValueEur === 0);
+
   return (
-    <TableRow className={isEven ? '' : 'bg-muted/50'}>
+    <TableRow className={hasWarnings ? 'bg-amber-50/70' : isEven ? '' : 'bg-muted/50'}>
       {/* Dostawa */}
       <TableCell className="text-muted-foreground text-sm">
         {order.deliveryName || '-'}
@@ -175,14 +184,14 @@ export const OrderRow: React.FC<OrderRowProps> = ({
       </TableCell>
 
       {/* Wartość materiału (read-only) */}
-      <TableCell className="w-[90px] pr-2 text-right text-sm tabular-nums">
+      <TableCell className={`w-[90px] pr-2 text-right text-sm tabular-nums ${isMissingMaterial && hasWarnings ? 'text-red-500' : ''}`}>
         {item?.materialValue !== undefined && item.materialValue > 0
           ? item.materialValue.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
           : '—'}
       </TableCell>
 
       {/* Współczynnik PLN/materiał (read-only, przeliczony z EUR dla AKROBUD) */}
-      <TableCell className="w-[70px] pr-2 text-right text-sm tabular-nums">
+      <TableCell className={`w-[70px] pr-2 text-right text-sm tabular-nums ${isCoefficientWarning ? 'text-red-600 font-bold' : ''}`}>
         {computedCoefficient}
       </TableCell>
 

@@ -50,6 +50,11 @@ interface BackendReportItem {
   coefficient: string;
   unitValue: string;
   totalGlassQuantity: number;
+  // Typ specjalny (nietypówka)
+  specialType: string | null;
+  // Kolor 999 i override materiału
+  hasColor999: boolean;
+  overrideMaterialValue: number | null;
 }
 
 /** Preview auto-fill FV */
@@ -120,14 +125,14 @@ function mapBackendReportToFrontend(backend: BackendFullReport): ProductionRepor
     totalSashes: item.sashes,
     totalGlasses: item.units, // Backend zwraca units jako liczbę szkleń (z totalGlasses)
     valuePln: Math.round(item.valuePln * 100),
-    valueEur: item.originalValueEur !== null && item.originalValueEur !== undefined
-      ? Math.round(item.originalValueEur * 100)
-      : (item.valueEur !== null ? Math.round(item.valueEur * 100) : null),
+    valueEur: item.valueEur !== null ? Math.round(item.valueEur * 100) : null,
     deliveryId: item.deliveryId,
     deliveryName: item.deliveryDate
       ? new Date(item.deliveryDate).toLocaleDateString('pl-PL')
       : undefined,
     productionDate: item.productionDate,
+    specialType: item.specialType,
+    hasColor999: item.hasColor999 ?? false,
   }));
 
   const items: ProductionReportItem[] = backend.items.map((item) => {
@@ -169,6 +174,10 @@ function mapBackendReportToFrontend(backend: BackendFullReport): ProductionRepor
       coefficient: item.coefficient,
       unitValue: item.unitValue,
       totalGlassQuantity: item.totalGlassQuantity,
+      // Typ specjalny (nietypówka)
+      specialType: item.specialType,
+      // Override materiału
+      overrideMaterialValue: item.overrideMaterialValue ?? null,
     };
   });
 

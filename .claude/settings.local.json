@@ -475,7 +475,8 @@
       "Bash(then echo \"Plik istnieje\")",
       "Bash(else echo \"Plik nie istnieje\")",
       "Bash(Select-Object FullName, LastWriteTime)",
-      "Bash(Select-Object -First 5 Name, LastWriteTime, Length)"
+      "Bash(Select-Object -First 5 Name, LastWriteTime, Length)",
+      "Bash(psql:*)"
     ],
     "deny": [],
     "ask": []

@@ -18,6 +18,7 @@ export const updateReportItemSchema = z.object({
   overrideSashes: z.number().int().min(0).optional().nullable(),
   overrideValuePln: z.number().int().min(0).optional().nullable(), // w groszach
   overrideValueEur: z.number().int().min(0).optional().nullable(), // w centach
+  overrideMaterialValue: z.number().int().min(0).optional().nullable(), // w groszach (nadpisanie wartości materiału)
   rwOkucia: z.boolean().optional(),
   rwProfile: z.boolean().optional()
 });

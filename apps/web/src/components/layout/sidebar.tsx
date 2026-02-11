@@ -29,6 +29,7 @@ import {
   Bug,
   ClipboardCheck,
   ScanLine,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -87,6 +88,12 @@ const navigation: NavigationItem[] = [
     href: '/zestawienia/miesieczne',
     icon: FileText,
     // Dla księgowej (jedyna zakładka którą widzi) oraz kierownika/admin/owner
+    requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.KSIEGOWA]
+  },
+  {
+    name: 'Do sprawdzenia',
+    href: '/zestawienia/do-sprawdzenia',
+    icon: AlertTriangle,
     requiredRoles: [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.KSIEGOWA]
   },
   {

@@ -185,6 +185,7 @@ export class ProductionReportRepository {
         completedAt: true,
         invoiceNumber: true,
         createdAt: true,
+        specialType: true,
         // Wartości z materiałówki do obliczeń współczynników
         windowsNetValue: true,
         windowsMaterial: true,
@@ -202,6 +203,17 @@ export class ProductionReportRepository {
             glazing: true,
             fittings: true,
             parts: true,
+          },
+        },
+        // Kolory profili - do oznaczenia zleceń z kolorem 999
+        requirements: {
+          select: {
+            color: {
+              select: { code: true },
+            },
+          },
+          where: {
+            colorId: { not: null },
           },
         },
         // Dostawy - pobieramy datę dostawy przez relację DeliveryOrder
