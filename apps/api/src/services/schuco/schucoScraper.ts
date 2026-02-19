@@ -1,4 +1,4 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
+import puppeteer, { Browser, Page } from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../../utils/logger.js';
@@ -93,16 +93,30 @@ export class SchucoScraper {
       const absoluteDownloadPath = path.resolve(this.config.downloadPath);
       logger.info(`[SchucoScraper] Download path: ${absoluteDownloadPath}`);
 
+      // puppeteer-core wymaga executablePath
+      const executablePath = chromeExecutablePath || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+      logger.info(`[SchucoScraper] Using Chrome: ${executablePath}`);
+
       const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
         headless: this.config.headless,
+        timeout: 120000, // 120s na uruchomienie na serwerze
+        protocolTimeout: 120000,
+        executablePath,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
           '--disable-accelerated-2d-canvas',
           '--disable-gpu',
+          '--disable-software-rasterizer',
           '--start-maximized',
           '--disable-notifications',
+          '--disable-extensions',
+          '--disable-background-networking',
+          '--disable-sync',
+          '--disable-translate',
+          '--disable-default-apps',
+          '--no-first-run',
           // Allow downloads
           '--safebrowsing-disable-download-protection',
           '--disable-features=SafeBrowsingEnhancedProtection',
@@ -110,15 +124,17 @@ export class SchucoScraper {
         ],
       };
 
-      // Add executablePath or channel based on whether Chrome was found
-      if (chromeExecutablePath) {
-        launchOptions.executablePath = chromeExecutablePath;
-      } else {
-        // Use 'chrome' channel to let puppeteer find Chrome automatically
-        launchOptions.channel = 'chrome';
-      }
+      logger.info(`[SchucoScraper] Launch options: headless=${launchOptions.headless}, executablePath=${launchOptions.executablePath || 'default'}`);
 
-      this.browser = await puppeteer.launch(launchOptions);
+      try {
+        this.browser = await puppeteer.launch(launchOptions);
+      } catch (launchError: unknown) {
+        const errMsg = launchError instanceof Error ? launchError.message : String(launchError);
+        const errStack = launchError instanceof Error ? launchError.stack : '';
+        logger.error(`[SchucoScraper] Chrome launch error: ${errMsg}`);
+        logger.error(`[SchucoScraper] Chrome launch stack: ${errStack}`);
+        throw launchError;
+      }
 
       this.page = await this.browser.newPage();
 
@@ -138,16 +154,9 @@ export class SchucoScraper {
       );
 
       // Configure download behavior using CDP
-      const client = await this.page.createCDPSession();
+      const client = await this.page.target().createCDPSession();
 
-      // Use Browser.setDownloadBehavior for newer Chrome versions
-      await client.send('Browser.setDownloadBehavior', {
-        behavior: 'allow',
-        downloadPath: absoluteDownloadPath,
-        eventsEnabled: true,
-      });
-
-      // Also set Page download behavior as fallback
+      // Set Page download behavior
       await client.send('Page.setDownloadBehavior', {
         behavior: 'allow',
         downloadPath: absoluteDownloadPath,

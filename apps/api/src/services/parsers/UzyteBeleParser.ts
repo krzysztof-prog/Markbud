@@ -140,6 +140,21 @@ export class UzyteBeleParser {
   }
 
   /**
+   * Sprawdza czy zlecenie jest oznaczone jako sprawdzone w raporcie produkcji
+   * Zlecenia sprawdzone NIE MOGĄ być aktualizowane przez importy
+   */
+  private async checkIfOrderVerified(orderId: number): Promise<boolean> {
+    const verifiedItem = await prisma.productionReportItem.findFirst({
+      where: {
+        orderId,
+        verified: true,
+      },
+      select: { id: true },
+    });
+    return verifiedItem !== null;
+  }
+
+  /**
    * Podgląd pliku "użyte bele" przed importem
    */
   async previewUzyteBele(filepath: string): Promise<ParsedUzyteBele> {
@@ -282,7 +297,15 @@ export class UzyteBeleParser {
     action: 'overwrite' | 'add_new',
     replaceBase?: boolean,
     options?: { isPrivateImport?: boolean }
-  ): Promise<{ orderId: number; requirementsCount: number; windowsCount: number; glassesCount: number; materialsCount: number }> {
+  ): Promise<{
+    orderId: number;
+    requirementsCount: number;
+    windowsCount: number;
+    glassesCount: number;
+    materialsCount: number;
+    skipped?: boolean;
+    skippedReason?: string;
+  }> {
     const parsed = await this.parseUzyteBeleFile(filepath);
 
     // Parsuj numer zlecenia (przed transakcją)
@@ -307,6 +330,23 @@ export class UzyteBeleParser {
       let order = await tx.order.findUnique({
         where: { orderNumber: targetOrderNumber },
       });
+
+      // SPRAWDZENIE VERIFIED - jeśli zlecenie istnieje i jest sprawdzone, pomiń
+      if (order) {
+        const isVerified = await this.checkIfOrderVerified(order.id);
+        if (isVerified) {
+          logger.info(`⏭️  Pominięto import zlecenia ${targetOrderNumber} - jest sprawdzone w raporcie produkcji`);
+          return {
+            orderId: order.id,
+            requirementsCount: 0,
+            windowsCount: 0,
+            glassesCount: 0,
+            materialsCount: 0,
+            skipped: true,
+            skippedReason: 'verified',
+          };
+        }
+      }
 
       if (order && action === 'overwrite') {
         // Sprawdź czy nowy numer zlecenia (z pliku) już istnieje jako osobne zlecenie
@@ -754,6 +794,9 @@ export class UzyteBeleParser {
         ? (order.valueEur ?? null)
         : (windowsNetValue > 0 ? windowsNetValue : null);
 
+      // Dla prywatnych (nie-AKROBUD): ustaw valuePln z CSV materiałówki (jeśli jeszcze nie ma)
+      const shouldSetValuePln = !isAkrobud && windowsNetValue > 0 && order.valuePln == null;
+
       await tx.order.update({
         where: { id: order.id },
         data: {
@@ -762,6 +805,8 @@ export class UzyteBeleParser {
           assemblyValue: assemblyValue > 0 ? assemblyValue : null,
           extrasValue: extrasValue > 0 ? extrasValue : null,
           otherValue: otherValue > 0 ? otherValue : null,
+          // Dla prywatnych: valuePln = suma netto okien z materiałówki
+          ...(shouldSetValuePln ? { valuePln: windowsNetValue } : {}),
         },
       });
 
@@ -1275,19 +1320,19 @@ export class UzyteBeleParser {
       }
     }
 
-    // Policz szyby wykluczając panele (panel to nie szyba)
+    // Policz szyby wykluczając panele i wypełnienia (to nie są prawdziwe szyby)
     // Używamy wartości z tablicy glasses zamiast wartości z nagłówka CSV,
-    // ponieważ nagłówek może zawierać niepoprawną sumę (z panelami)
+    // ponieważ nagłówek może zawierać niepoprawną sumę (z panelami/wypełnieniami)
     if (glasses.length > 0) {
       let realGlassCount = 0;
       for (const glass of glasses) {
         const packageTypeLower = (glass.packageType || '').toLowerCase();
-        // Jeśli packageType NIE zawiera "panel", to jest to prawdziwa szyba
-        if (!packageTypeLower.includes('panel')) {
+        // Jeśli packageType NIE zawiera "panel" ani "wypełnienie"/"wypelnienie", to jest to prawdziwa szyba
+        if (!packageTypeLower.includes('panel') && !packageTypeLower.includes('wypełnienie') && !packageTypeLower.includes('wypelnienie')) {
           realGlassCount += glass.quantity;
         }
       }
-      // Nadpisz totals.glasses poprawną wartością (tylko prawdziwe szyby, bez paneli)
+      // Nadpisz totals.glasses poprawną wartością (tylko prawdziwe szyby, bez paneli/wypełnień)
       totals.glasses = realGlassCount;
     }
 

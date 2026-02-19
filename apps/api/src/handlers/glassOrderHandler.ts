@@ -79,4 +79,13 @@ export class GlassOrderHandler {
     const order = await this.service.updateStatus(id, status);
     return reply.send(order);
   }
+
+  async rematchAll(request: FastifyRequest, reply: FastifyReply) {
+    const result = await this.service.rematchAllGlassOrders();
+    return reply.send({
+      success: true,
+      message: `Rematch zakończony: ${result.ordersUpdated} zleceń zaktualizowanych, ${result.ordersNotFound.length} nie znaleziono`,
+      data: result,
+    });
+  }
 }

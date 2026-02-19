@@ -78,6 +78,8 @@ export function useCheckLabels() {
       queryClient.invalidateQueries({ queryKey: labelCheckKeys.deliveryLatest(data.deliveryId) });
       // Invalidate deliveries list - aby przycisk "Sprawdź etykiety" zmienił się na "Wyniki etykiet"
       queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
+      // Invalidate readiness cache - status ikony powinien odświeżyć się po nowym sprawdzeniu
+      queryClient.invalidateQueries({ queryKey: ['deliveries-batch-readiness'] });
       showSuccessToast('Sprawdzanie zakończone', 'Etykiety zostały sprawdzone');
     },
     onError: (error: unknown) => {
@@ -98,6 +100,9 @@ export function useDeleteLabelCheck() {
     onSuccess: () => {
       // Invalidate all label-check queries
       queryClient.invalidateQueries({ queryKey: labelCheckKeys.all });
+      // Invalidate deliveries list i readiness - usunięcie sprawdzenia zmienia status
+      queryClient.invalidateQueries({ queryKey: ['deliveries-list'] });
+      queryClient.invalidateQueries({ queryKey: ['deliveries-batch-readiness'] });
       showSuccessToast('Usunięto', 'Sprawdzenie zostało usunięte');
     },
     onError: (error: unknown) => {

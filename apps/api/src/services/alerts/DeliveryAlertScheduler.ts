@@ -1,40 +1,39 @@
 /**
- * DeliveryAlertScheduler - Scheduler alertów o zablokowanych dostawach
+ * DeliveryAlertScheduler - Scheduler alertów gotowości dostaw
  *
- * Codziennie o 8:00 sprawdza czy jutrzejsze dostawy są zablokowane.
- * Jeśli tak - emituje event przez WebSocket.
- *
- * Użycie:
- * - Start: DeliveryAlertScheduler.start()
- * - Stop: DeliveryAlertScheduler.stop()
- * - Manual test: DeliveryAlertScheduler.manualTrigger()
+ * Co 2 godziny (+ po starcie) sprawdza 3 najbliższe dostawy
+ * nie będące jeszcze w produkcji/wysłane.
+ * Sprawdza tylko: etykiety (label_check) i szyby (glass_delivery).
+ * Wysyła przez WebSocket tylko negatywne wyniki.
  */
 
 import cron, { type ScheduledTask } from 'node-cron';
 import { prisma } from '../../utils/prisma.js';
-import { DeliveryReadinessAggregator } from '../readiness/DeliveryReadinessAggregator.js';
+import { LabelCheckModule } from '../readiness/modules/LabelCheckModule.js';
+import { GlassDeliveryCheck } from '../readiness/modules/GlassDeliveryCheck.js';
 import { eventEmitter } from '../event-emitter.js';
 import { logger } from '../../utils/logger.js';
-import { formatDateWarsaw } from '../../utils/date-helpers.js';
 
-// Typ dla payloadu alertu dostawy
-interface DeliveryAlertPayload {
-  type: 'blocked_tomorrow';
+interface DeliveryIssue {
   deliveryId: number;
   deliveryNumber: string | null;
-  deliveryDate: Date;
-  blockingCount: number;
-  blockingReasons: string[];
-  timestamp: Date;
+  deliveryDate: string;
+  issues: string[];
+}
+
+interface ReadinessAlertPayload {
+  type: 'readiness_issues';
+  deliveries: DeliveryIssue[];
+  timestamp: string;
 }
 
 class DeliveryAlertSchedulerClass {
   private task: ScheduledTask | null = null;
-  private aggregator: DeliveryReadinessAggregator | null = null;
   private isRunning = false;
+  private startupTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
-   * Uruchamia scheduler - codziennie o 8:00 (Europe/Warsaw)
+   * Uruchamia scheduler - co 2 godziny + 30s po starcie
    */
   start(): void {
     if (this.task) {
@@ -42,11 +41,11 @@ class DeliveryAlertSchedulerClass {
       return;
     }
 
-    // Codziennie o 8:00 (Europe/Warsaw)
+    // Co 2 godziny (Europe/Warsaw)
     this.task = cron.schedule(
-      '0 8 * * *',
+      '0 */2 * * *',
       () => {
-        this.checkTomorrowDeliveries().catch((error) => {
+        this.checkNearestDeliveries().catch((error) => {
           logger.error('[DeliveryAlertScheduler] Error in scheduled check:', error);
         });
       },
@@ -55,7 +54,14 @@ class DeliveryAlertSchedulerClass {
       }
     );
 
-    logger.info('[DeliveryAlertScheduler] Started - daily at 8:00 Europe/Warsaw');
+    // Uruchom sprawdzenie 30 sekund po starcie (żeby WebSocket był gotowy)
+    this.startupTimer = setTimeout(() => {
+      this.checkNearestDeliveries().catch((error) => {
+        logger.error('[DeliveryAlertScheduler] Error in startup check:', error);
+      });
+    }, 30000);
+
+    logger.info('[DeliveryAlertScheduler] Started - every 2h + startup check in 30s');
   }
 
   /**
@@ -65,14 +71,18 @@ class DeliveryAlertSchedulerClass {
     if (this.task) {
       this.task.stop();
       this.task = null;
-      logger.info('[DeliveryAlertScheduler] Stopped');
     }
+    if (this.startupTimer) {
+      clearTimeout(this.startupTimer);
+      this.startupTimer = null;
+    }
+    logger.info('[DeliveryAlertScheduler] Stopped');
   }
 
   /**
-   * Sprawdza jutrzejsze dostawy pod kątem blokad
+   * Sprawdza 3 najbliższe dostawy pod kątem szyb i etykiet
    */
-  async checkTomorrowDeliveries(): Promise<void> {
+  async checkNearestDeliveries(): Promise<void> {
     if (this.isRunning) {
       logger.warn('[DeliveryAlertScheduler] Check already in progress, skipping');
       return;
@@ -82,30 +92,18 @@ class DeliveryAlertSchedulerClass {
     const startTime = Date.now();
 
     try {
-      // Oblicz zakres dat dla jutra
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-      const tomorrowEnd = new Date(tomorrow);
-      tomorrowEnd.setHours(23, 59, 59, 999);
-
-      logger.info(
-        `[DeliveryAlertScheduler] Checking deliveries for ${formatDateWarsaw(tomorrow)}`
-      );
-
-      // Pobierz jutrzejsze dostawy (nie wysłane, nie usunięte)
+      // Pobierz 3 najbliższe dostawy (nie wysłane/zakończone)
       const deliveries = await prisma.delivery.findMany({
         where: {
-          deliveryDate: {
-            gte: tomorrow,
-            lte: tomorrowEnd,
-          },
-          status: {
-            not: 'shipped',
-          },
+          deliveryDate: { gte: today },
+          status: { notIn: ['shipped', 'delivered', 'completed'] },
           deletedAt: null,
         },
+        orderBy: { deliveryDate: 'asc' },
+        take: 3,
         select: {
           id: true,
           deliveryNumber: true,
@@ -113,48 +111,46 @@ class DeliveryAlertSchedulerClass {
         },
       });
 
-      logger.info(`[DeliveryAlertScheduler] Found ${deliveries.length} deliveries for tomorrow`);
+      logger.info(
+        `[DeliveryAlertScheduler] Checking ${deliveries.length} nearest deliveries`
+      );
 
-      // Lazy initialization agregatora
-      if (!this.aggregator) {
-        this.aggregator = new DeliveryReadinessAggregator(prisma);
+      if (deliveries.length === 0) {
+        logger.info('[DeliveryAlertScheduler] No upcoming deliveries found');
+        return;
       }
 
-      let blockedCount = 0;
+      const labelModule = new LabelCheckModule(prisma);
+      const glassModule = new GlassDeliveryCheck(prisma);
 
-      // Sprawdź każdą dostawę
+      const deliveriesWithIssues: DeliveryIssue[] = [];
+
       for (const delivery of deliveries) {
         try {
-          const readiness = await this.aggregator.calculateReadiness(delivery.id);
+          const [labelResult, glassResult] = await Promise.all([
+            labelModule.check(delivery.id),
+            glassModule.check(delivery.id),
+          ]);
 
-          if (readiness.status === 'blocked') {
-            blockedCount++;
+          const issues: string[] = [];
 
-            const alertPayload: DeliveryAlertPayload = {
-              type: 'blocked_tomorrow',
+          // Tylko negatywne wyniki (blocking lub warning, NIE ok)
+          if (labelResult.status !== 'ok') {
+            issues.push(`Etykiety: ${labelResult.message}`);
+          }
+          if (glassResult.status !== 'ok') {
+            // Usuń techniczny fragment DATES: z wiadomości
+            const cleanMessage = glassResult.message.replace(/\s*\|\s*DATES:.*$/, '');
+            issues.push(`Szyby: ${cleanMessage}`);
+          }
+
+          if (issues.length > 0) {
+            deliveriesWithIssues.push({
               deliveryId: delivery.id,
               deliveryNumber: delivery.deliveryNumber,
-              deliveryDate: delivery.deliveryDate,
-              blockingCount: readiness.blocking.length,
-              blockingReasons: readiness.blocking.map((b) => b.message),
-              timestamp: new Date(),
-            };
-
-            // Emit event dla WebSocket (używa emitDataChange aby dotarło do klientów)
-            eventEmitter.emitDataChange({
-              type: 'deliveryAlert',
-              data: alertPayload as unknown as Record<string, unknown>,
-              timestamp: new Date(),
+              deliveryDate: delivery.deliveryDate.toISOString(),
+              issues,
             });
-
-            logger.warn(
-              `[DeliveryAlertScheduler] Delivery ${delivery.deliveryNumber || delivery.id} is BLOCKED for tomorrow`,
-              {
-                deliveryId: delivery.id,
-                blockingCount: readiness.blocking.length,
-                blocking: readiness.blocking.map((b) => b.message),
-              }
-            );
           }
         } catch (error) {
           logger.error(
@@ -164,11 +160,36 @@ class DeliveryAlertSchedulerClass {
         }
       }
 
+      // Wyślij event przez WebSocket (nawet pusty - żeby wyczyścić stare alerty)
+      const payload: ReadinessAlertPayload = {
+        type: 'readiness_issues',
+        deliveries: deliveriesWithIssues,
+        timestamp: new Date().toISOString(),
+      };
+
+      eventEmitter.emitDataChange({
+        type: 'deliveryAlert',
+        data: payload as unknown as Record<string, unknown>,
+        timestamp: new Date(),
+      });
+
+      if (deliveriesWithIssues.length > 0) {
+        logger.warn(
+          `[DeliveryAlertScheduler] ${deliveriesWithIssues.length} deliveries have readiness issues`,
+          {
+            deliveries: deliveriesWithIssues.map((d) => ({
+              id: d.deliveryId,
+              number: d.deliveryNumber,
+              issues: d.issues,
+            })),
+          }
+        );
+      } else {
+        logger.info('[DeliveryAlertScheduler] All nearest deliveries OK - no issues');
+      }
+
       const duration = Date.now() - startTime;
-      logger.info(
-        `[DeliveryAlertScheduler] Check completed in ${duration}ms. ` +
-          `Total: ${deliveries.length}, Blocked: ${blockedCount}`
-      );
+      logger.info(`[DeliveryAlertScheduler] Check completed in ${duration}ms`);
     } finally {
       this.isRunning = false;
     }
@@ -179,7 +200,7 @@ class DeliveryAlertSchedulerClass {
    */
   async manualTrigger(): Promise<void> {
     logger.info('[DeliveryAlertScheduler] Manual trigger initiated');
-    await this.checkTomorrowDeliveries();
+    await this.checkNearestDeliveries();
   }
 
   /**

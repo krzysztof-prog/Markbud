@@ -44,8 +44,9 @@ export class DeliveryReadinessAggregator {
       new MissingDeliveryDateModule(prisma),
       new GlassDeliveryCheck(prisma),
       new OkucDeliveryCheck(prisma),
-      new PalletValidationCheck(prisma),
-      new OrdersCompletedCheck(prisma),
+      // Usunięte - nie potrzebne w nowej wersji:
+      // new PalletValidationCheck(prisma),
+      // new OrdersCompletedCheck(prisma),
     ];
   }
 

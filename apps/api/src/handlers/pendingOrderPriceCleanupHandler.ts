@@ -4,6 +4,7 @@
 
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { PendingOrderPriceCleanupService } from '../services/pendingOrderPriceCleanupService.js';
+import { PendingOrderPriceRematchService } from '../services/pendingOrderPriceRematchService.js';
 import { getPendingPriceCleanupScheduler } from '../services/pendingOrderPriceCleanupScheduler.js';
 import { prisma } from '../index.js';
 import { logger } from '../utils/logger.js';
@@ -99,5 +100,54 @@ export async function getAllPendingPrices(
     success: true,
     data: prices,
     count: prices.length,
+  });
+}
+
+/**
+ * Trigger re-matching of all pending prices to existing orders
+ */
+export async function triggerRematch(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  logger.info('[RematchHandler] Manual rematch triggered by user');
+
+  const service = new PendingOrderPriceRematchService(prisma);
+  const result = await service.rematchAll();
+
+  return reply.send({
+    success: true,
+    message: `Rematch zakończony: ${result.matched} dopasowanych, ${result.skipped} pominiętych, ${result.noMatch} bez dopasowania`,
+    data: result,
+  });
+}
+
+/**
+ * Force reimport specific PDF files (bypass import system deduplication)
+ */
+export async function triggerReimport(
+  request: FastifyRequest<{
+    Body: { filepaths: string[] };
+  }>,
+  reply: FastifyReply
+) {
+  const { filepaths } = request.body;
+
+  if (!filepaths || !Array.isArray(filepaths) || filepaths.length === 0) {
+    return reply.status(400).send({
+      success: false,
+      message: 'Wymagana tablica "filepaths" z co najmniej jedną ścieżką do PDF',
+    });
+  }
+
+  logger.info(`[ReimportHandler] Force reimport triggered for ${filepaths.length} files`);
+
+  const service = new PendingOrderPriceRematchService(prisma);
+  const result = await service.reimportPdfs(filepaths);
+
+  return reply.send({
+    success: true,
+    message: `Reimport: ${result.parsed.length} sparsowanych, ${result.errors.length} błędów, rematch: ${result.rematch.matched} dopasowanych`,
+    data: result,
   });
 }

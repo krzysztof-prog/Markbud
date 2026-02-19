@@ -125,6 +125,37 @@ export const productionReportHandler = {
   },
 
   /**
+   * PATCH /:year/:month/items/:orderId/verify
+   * Oznacza zlecenie jako sprawdzone/niesprawdzone
+   * Gdy verified = true, blokuje edycję wartości i pomijanie przez import
+   * Wymaga roli: manager lub admin
+   */
+  async verifyItem(
+    request: FastifyRequest<{ Params: { year: string; month: string; orderId: string }; Body: { verified: boolean } }>,
+    reply: FastifyReply
+  ) {
+    // Sprawdź uprawnienia (manager/admin)
+    checkRole(request, MANAGER_ROLES);
+
+    const { year, month, orderId } = request.params;
+    const params = productionReportParamsSchema.parse({ year, month });
+    const orderIdNum = parseOrderId(orderId);
+
+    // Waliduj body
+    if (typeof request.body?.verified !== 'boolean') {
+      throw new ValidationError('Pole verified musi być typu boolean');
+    }
+
+    await productionReportService.setVerified(
+      params.year,
+      params.month,
+      orderIdNum,
+      request.body.verified
+    );
+    return reply.send({ success: true, verified: request.body.verified });
+  },
+
+  /**
    * PUT /:year/:month/items/:orderId/invoice
    * Aktualizuje dane faktury dla pozycji raportu
    * Wymaga roli: manager, admin lub accountant

@@ -16,6 +16,7 @@ import {
   getDay,
   POLISH_DAY_NAMES,
 } from '../../utils/date-helpers.js';
+import { cacheService } from '../cache.js';
 
 export interface ProfileRequirement {
   deliveryId: number;
@@ -99,6 +100,10 @@ export class DeliveryStatisticsService {
    * @returns Array of profile requirements per delivery
    */
   async getProfileRequirements(fromDate?: string): Promise<ProfileRequirement[]> {
+    const cacheKey = `delivery_stats:profile_requirements:${fromDate ?? 'all'}`;
+    const cached = cacheService.get<ProfileRequirement[]>(cacheKey);
+    if (cached) return cached;
+
     const deliveries = await this.repository.getDeliveriesWithRequirements(
       parseDateSafe(fromDate)
     );
@@ -153,6 +158,8 @@ export class DeliveryStatisticsService {
       });
     });
 
+    // Cache na 5 minut (300s)
+    cacheService.set(cacheKey, result, 300);
     return result;
   }
 
@@ -163,6 +170,10 @@ export class DeliveryStatisticsService {
    * @returns Statistics aggregated by weekday
    */
   async getWindowsStatsByWeekday(monthsBack: number): Promise<WeekdayStatsResult> {
+    const cacheKey = `delivery_stats:weekday:${monthsBack}`;
+    const cached = cacheService.get<WeekdayStatsResult>(cacheKey);
+    if (cached) return cached;
+
     const today = new Date();
     const startDate = startOfMonth(subMonths(today, monthsBack));
 
@@ -188,11 +199,15 @@ export class DeliveryStatisticsService {
 
     const stats = this.formatWeekdayStats(weekdayStats);
 
-    return {
+    const result = {
       stats,
       periodStart: startDate,
       periodEnd: today,
     };
+
+    // Cache na 5 minut (300s)
+    cacheService.set(cacheKey, result, 300);
+    return result;
   }
 
   /**
@@ -202,13 +217,21 @@ export class DeliveryStatisticsService {
    * @returns Statistics aggregated by month
    */
   async getMonthlyWindowsStats(monthsBack: number): Promise<MonthlyWindowsStatsResult> {
+    const cacheKey = `delivery_stats:monthly_windows:${monthsBack}`;
+    const cached = cacheService.get<MonthlyWindowsStatsResult>(cacheKey);
+    if (cached) return cached;
+
     const monthRanges = this.generateMonthRanges(monthsBack);
 
     const stats = await Promise.all(
       monthRanges.map((range) => this.calculateWindowsStatsForMonth(range))
     );
 
-    return { stats: stats.reverse() };
+    const result = { stats: stats.reverse() };
+
+    // Cache na 5 minut (300s)
+    cacheService.set(cacheKey, result, 300);
+    return result;
   }
 
   /**
@@ -218,13 +241,21 @@ export class DeliveryStatisticsService {
    * @returns Profile usage statistics aggregated by month
    */
   async getMonthlyProfileStats(monthsBack: number): Promise<MonthlyProfileStatsResult> {
+    const cacheKey = `delivery_stats:monthly_profiles:${monthsBack}`;
+    const cached = cacheService.get<MonthlyProfileStatsResult>(cacheKey);
+    if (cached) return cached;
+
     const monthRanges = this.generateMonthRanges(monthsBack);
 
     const stats = await Promise.all(
       monthRanges.map((range) => this.calculateProfileStatsForMonth(range))
     );
 
-    return { stats: stats.reverse() };
+    const result = { stats: stats.reverse() };
+
+    // Cache na 5 minut (300s)
+    cacheService.set(cacheKey, result, 300);
+    return result;
   }
 
   // ===================

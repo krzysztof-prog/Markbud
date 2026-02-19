@@ -35,6 +35,7 @@ import type { EditingCell } from '../hooks/useOrderEdit';
 import {
   aggregateSchucoStatus,
   getEarliestSchucoDelivery,
+  parseDeliveryWeek,
   formatDeliveryWeek,
   formatDateShort,
   getAkrobudDeliveryDate,
@@ -311,14 +312,30 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           const schucoDeliveryWeek = getEarliestSchucoDelivery(order.schucoLinks);
           const hasSchucoLinks = order.schucoLinks && order.schucoLinks.length > 0;
           const schucoCount = order.schucoLinks?.length || 0;
+          const parsedWeek = hasSchucoLinks ? parseDeliveryWeek(schucoDeliveryWeek) : null;
 
           return (
             <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
               {hasSchucoLinks ? (
                 <div className="flex flex-col items-start gap-1">
-                  <span className="text-sm font-medium text-slate-700">
-                    {formatDeliveryWeek(schucoDeliveryWeek)}
-                  </span>
+                  {parsedWeek ? (
+                    <TooltipProvider delayDuration={0}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-sm font-medium text-slate-700 cursor-default">
+                            {parsedWeek.monday}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <span>Tydzień {parsedWeek.weekLabel}</span>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <span className="text-sm font-medium text-slate-700">
+                      {formatDeliveryWeek(schucoDeliveryWeek)}
+                    </span>
+                  )}
                   {schucoCount > 1 && (
                     <span className="text-xs text-slate-400">
                       ({schucoCount} zamówień)
@@ -367,7 +384,11 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           // 4. Częściowo dostarczone (0 < delivered < needed) → "Częściowo"
           // 5. Zamówione ale nie dostarczone (ordered > 0, delivered = 0) → data/status
 
-          if (needed === 0) {
+          if (needed === 0 && (order._count?.glasses ?? 0) > 0) {
+            // Zlecenie ma pozycje szklane ale tylko wypełnienia/panele (nie prawdziwe szyby)
+            content = 'BEZ SZYB';
+            colorClass = 'text-slate-500 font-medium';
+          } else if (needed === 0) {
             // Brak szyb w zleceniu
             content = '-';
             colorClass = 'text-slate-400';

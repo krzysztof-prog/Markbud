@@ -166,6 +166,8 @@ export interface OrderWithoutPrice {
   documentAuthorUserId: number | null;
   valueEur: number | null;
   totalWindows: number | null;
+  deliveryDate: string | null;
+  deliveryNumber: string | null;
 }
 
 // Dostawa z problemami etykiet

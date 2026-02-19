@@ -2,6 +2,7 @@
 export {
   aggregateSchucoStatus,
   getEarliestSchucoDelivery,
+  parseDeliveryWeek,
   formatDeliveryWeek,
   getSchucoStatusColor,
   formatDateShort,

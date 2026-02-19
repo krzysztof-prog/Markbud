@@ -5,9 +5,8 @@
  * Wystarczy że zamówienie istnieje - nie muszą być dostarczone.
  *
  * Reguły:
- * - glassOrderStatus = 'complete', 'ordered', 'partial' → OK (zamówione)
- * - glassOrderStatus = null lub 'not_ordered' → OK (nie potrzebuje szyb)
- * - Inne statusy → WARNING
+ * - Wszystkie zlecenia mają glassOrderStatus = 'complete', 'ordered', 'partial' → OK
+ * - Nie wszystkie zlecenia mają zamówione szyby → WARNING
  */
 
 import type { PrismaClient } from '@prisma/client';
@@ -33,6 +32,7 @@ export class GlassDeliveryCheck extends BaseReadinessCheckModule {
             orderNumber: true,
             glassOrderStatus: true,
             status: true,
+            totalGlasses: true,
           },
         },
       },
@@ -42,12 +42,12 @@ export class GlassDeliveryCheck extends BaseReadinessCheckModule {
       return this.blocking('Brak zleceń w dostawie - dostawa musi mieć przypisane zlecenia');
     }
 
-    // Filtruj zlecenia które potrzebują szyb (glassOrderStatus != null i != 'not_ordered')
+    // Wyklucz zlecenia które nie potrzebują szyb (totalGlasses = 0, np. tylko wypełnienia/panele)
     const ordersNeedingGlass = deliveryOrders.filter(
-      (do_) =>
-        do_.order.glassOrderStatus !== null &&
-        do_.order.glassOrderStatus !== 'not_ordered'
+      (do_) => (do_.order.totalGlasses ?? 0) > 0
     );
+    const totalOrders = deliveryOrders.length;
+    const ordersWithoutGlass = totalOrders - ordersNeedingGlass.length;
 
     if (ordersNeedingGlass.length === 0) {
       return this.ok('Żadne zlecenie nie wymaga szyb');
@@ -59,7 +59,43 @@ export class GlassDeliveryCheck extends BaseReadinessCheckModule {
       (do_) => validStatuses.includes(do_.order.glassOrderStatus ?? '')
     );
 
-    return this.ok(`Szyby zamówione: ${ordersWithGlassOrdered.length}/${ordersNeedingGlass.length}`);
+    // Pobierz daty dostaw szyb dla zleceń w tej dostawie
+    const orderNumbers = deliveryOrders.map((do_) => do_.order.orderNumber);
+    const glassDeliveries = await this.prisma.glassDelivery.findMany({
+      where: {
+        items: {
+          some: {
+            orderNumber: {
+              in: orderNumbers,
+            },
+          },
+        },
+      },
+      select: {
+        deliveryDate: true,
+      },
+      distinct: ['deliveryDate'],
+      orderBy: {
+        deliveryDate: 'asc',
+      },
+    });
+
+    // Formatuj daty do stringa (YYYY-MM-DD format dla łatwego parsowania w frontend)
+    const dates = glassDeliveries.map((gd) => gd.deliveryDate.toISOString().split('T')[0]);
+
+    let message = `Szyby zamówione: ${ordersWithGlassOrdered.length}/${ordersNeedingGlass.length}`;
+    if (ordersWithoutGlass > 0) {
+      message += ` (${ordersWithoutGlass} bez szyb)`;
+    }
+    if (dates.length > 0) {
+      message += ` | DATES:${dates.join(',')}`;
+    }
+
+    if (ordersWithGlassOrdered.length < ordersNeedingGlass.length) {
+      return this.warning(message);
+    }
+
+    return this.ok(message);
   }
 
 }

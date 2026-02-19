@@ -97,6 +97,7 @@ export function canPerformAction(
  */
 export function mapBackendRole(backendRole: string): UserRole {
   const roleMap: Record<string, UserRole> = {
+    owner: 'admin',
     admin: 'admin',
     kierownik: 'manager',
     manager: 'manager',

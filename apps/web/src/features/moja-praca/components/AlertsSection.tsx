@@ -23,7 +23,7 @@ export function AlertsSection() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* Alerty o zleceniach bez cen */}
       {alerts.ordersWithoutPrice.length > 0 && (
         <OrdersWithoutPriceAlert orders={alerts.ordersWithoutPrice} />
@@ -57,9 +57,10 @@ function OrdersWithoutPriceAlert({ orders }: { orders: OrderWithoutPrice[] }) {
                   ({order.documentAuthor})
                 </span>
               )}
-              {order.productionDate && (
+              {order.deliveryDate && (
                 <span className="text-orange-500 ml-2 text-xs">
-                  prod: {formatDate(order.productionDate)}
+                  dostawa: {formatDate(order.deliveryDate)}
+                  {order.deliveryNumber && ` (${order.deliveryNumber})`}
                 </span>
               )}
             </li>
@@ -95,7 +96,7 @@ function LabelIssuesAlert({ deliveries }: { deliveries: DeliveryWithLabelIssues[
                   {delivery.akrobudOrdersCount} zleceń Akrobud
                 </span>
               </div>
-              <ul className="ml-4 mt-1 text-xs text-red-600 list-disc list-inside">
+              <ul className="ml-4 mt-1 text-sm text-red-600 list-disc list-inside">
                 {delivery.issues.map((issue, idx) => (
                   <li key={idx}>{issue}</li>
                 ))}

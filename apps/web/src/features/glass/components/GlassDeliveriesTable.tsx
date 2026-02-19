@@ -327,7 +327,9 @@ export function GlassDeliveriesTable() {
                     <TableCell className="font-medium">{delivery.rackNumber}</TableCell>
                     <TableCell>{delivery.customerOrderNumber}</TableCell>
                     <TableCell>
-                      {format(new Date(delivery.deliveryDate), 'dd.MM.yyyy', { locale: pl })}
+                      <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-md font-medium">
+                        {format(new Date(delivery.deliveryDate), 'dd.MM.yyyy', { locale: pl })}
+                      </span>
                     </TableCell>
                     <TableCell className="text-center font-medium">{delivery.totalQuantity}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>

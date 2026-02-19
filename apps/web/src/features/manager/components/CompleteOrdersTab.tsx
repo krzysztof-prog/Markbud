@@ -357,7 +357,7 @@ export const CompleteOrdersTab: React.FC = () => {
               {!deliveriesData?.length ? (
                 <p className="text-gray-500 text-center py-4">Brak dostaw w produkcji</p>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {deliveriesData.map((delivery: Delivery) => (
                     <DeliveryCheckbox
                       key={delivery.id}
@@ -384,7 +384,7 @@ export const CompleteOrdersTab: React.FC = () => {
               {!standaloneOrders.length ? (
                 <p className="text-gray-500 text-center py-4">Brak pojedynczych zleceń w produkcji</p>
               ) : (
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {standaloneOrders.map((order: Order) => (
                     <OrderCheckbox
                       key={order.id}
@@ -411,7 +411,7 @@ export const CompleteOrdersTab: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {recentlyCompleted.map((order: Order) => (
                 <div
                   key={order.id}

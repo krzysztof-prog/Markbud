@@ -24,8 +24,11 @@ const PROTECTED_ROUTES: Record<string, UserRole[]> = {
   '/admin': [UserRole.OWNER, UserRole.ADMIN],
   '/kierownik': [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK],
   '/importy': [UserRole.OWNER, UserRole.ADMIN],
-  '/zestawienia/zlecenia': [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK],
+  '/zestawienia/zlecenia': [UserRole.OWNER, UserRole.ADMIN, UserRole.KIEROWNIK, UserRole.USER],
   // Księgowa widzi TYLKO /zestawienia/miesieczne (nie /zestawienia/zlecenia)
+
+  // Dashboard główny i operatora - tylko dla ADMIN/OWNER
+  '/operator': [UserRole.OWNER, UserRole.ADMIN],
 };
 
 /**
@@ -70,13 +73,23 @@ export async function middleware(request: NextRequest) {
 
     const user = await userResponse.json();
 
+    // Specjalna logika dla dashboard głównego ("/")
+    // Nieadmini są przekierowywani na /moja-praca
+    if (pathname === '/') {
+      const isAdmin = [UserRole.OWNER, UserRole.ADMIN].includes(user.role as UserRole);
+      if (!isAdmin) {
+        console.log(`[Middleware] Redirecting ${user.role} from / to /moja-praca`);
+        return NextResponse.redirect(new URL('/moja-praca', request.url));
+      }
+    }
+
     // Sprawdź czy użytkownik ma dostęp do tej ścieżki
     for (const [route, allowedRoles] of Object.entries(PROTECTED_ROUTES)) {
       if (pathname.startsWith(route)) {
         if (!allowedRoles.includes(user.role as UserRole)) {
-          // Brak uprawnień - przekieruj na dashboard
+          // Brak uprawnień - przekieruj na /moja-praca (zamiast "/" aby uniknąć loop)
           console.warn(`[Middleware] User ${user.email} (${user.role}) tried to access ${pathname} but lacks permissions`);
-          return NextResponse.redirect(new URL('/', request.url));
+          return NextResponse.redirect(new URL('/moja-praca', request.url));
         }
       }
     }

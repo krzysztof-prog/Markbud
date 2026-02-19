@@ -53,15 +53,44 @@ export const getEarliestSchucoDelivery = (links: SchucoDeliveryLink[] | undefine
 };
 
 /**
- * Formatuje tydzień dostawy (KW 03/2026 -> Tyg. 3/2026)
+ * Oblicza datę poniedziałku dla danego tygodnia ISO (KW XX/YYYY)
+ * Zwraca { monday: string (DD.MM), weekLabel: string (YYYY/WW) } lub null
+ */
+export const parseDeliveryWeek = (week: string | null): { monday: string; weekLabel: string } | null => {
+  if (!week) return null;
+  const match = week.match(/KW\s*(\d+)\/(\d+)/i);
+  if (!match) return null;
+
+  const weekNum = parseInt(match[1]);
+  const year = parseInt(match[2]);
+
+  // ISO 8601: tydzień 1 to tydzień zawierający pierwszy czwartek roku
+  // Poniedziałek tygodnia 1 = 4 stycznia minus dzień tygodnia + 1
+  const jan4 = new Date(year, 0, 4);
+  const dayOfWeek = jan4.getDay() || 7; // niedziela = 7
+  const mondayWeek1 = new Date(jan4);
+  mondayWeek1.setDate(jan4.getDate() - dayOfWeek + 1);
+
+  const monday = new Date(mondayWeek1);
+  monday.setDate(mondayWeek1.getDate() + (weekNum - 1) * 7);
+
+  const dd = String(monday.getDate()).padStart(2, '0');
+  const mm = String(monday.getMonth() + 1).padStart(2, '0');
+
+  return {
+    monday: `${dd}/${mm}`,
+    weekLabel: `${year}/${String(weekNum).padStart(2, '0')}`,
+  };
+};
+
+/**
+ * Formatuje tydzień dostawy - pokazuje datę poniedziałku (DD.MM)
  */
 export const formatDeliveryWeek = (week: string | null): string => {
-  if (!week) return '-';
-  const match = week.match(/KW\s*(\d+)\/(\d+)/i);
-  if (match) {
-    return `Tyg. ${parseInt(match[1])}/${match[2]}`;
-  }
-  return week;
+  const parsed = parseDeliveryWeek(week);
+  if (parsed) return parsed.monday;
+  if (week) return week;
+  return '-';
 };
 
 /**
@@ -308,10 +337,13 @@ export const findMissingOrderNumbers = (orders: { orderNumber?: string | null }[
     .map(o => parseOrderNumber(o.orderNumber))
     .filter((n): n is number => n !== null);
 
-  if (numbers.length < 2) return [];
+  // Filtruj tylko zlecenia od numeru 54000
+  const filtered = numbers.filter(n => n >= 54000);
+
+  if (filtered.length < 2) return [];
 
   // Posortuj rosnąco
-  const sorted = [...numbers].sort((a, b) => a - b);
+  const sorted = [...filtered].sort((a, b) => a - b);
 
   const missing: string[] = [];
 

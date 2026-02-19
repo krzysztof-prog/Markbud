@@ -188,6 +188,9 @@ export class CsvImportService implements ICsvImportService {
             where: { id: order.id },
             data: this.buildOrderUpdateData(parsed),
           });
+
+          // Sprawdz pending price jesli zlecenie nie ma ceny EUR/PLN
+          await this.applyPendingPriceToExistingOrder(tx, order, targetOrderNumber, parsed.project);
         } else if (!order) {
           // Utworz nowe zlecenie
           const eurValue = await this.getEurValueFromSchuco(tx, targetOrderNumber);
@@ -219,6 +222,9 @@ export class CsvImportService implements ICsvImportService {
             where: { id: order.id },
             data: this.buildOrderUpdateData(parsed),
           });
+
+          // Sprawdz pending price jesli zlecenie nie ma ceny EUR/PLN
+          await this.applyPendingPriceToExistingOrder(tx, order, targetOrderNumber, parsed.project);
         }
 
         // Dodaj requirements - batch fetch profili i kolorow aby uniknac N+1
@@ -366,7 +372,10 @@ export class CsvImportService implements ICsvImportService {
     // Strategia 3: Match po projekcie (reference) gdy PDF miał UNKNOWN orderNumber
     // Np. PDF "D5486.pdf" nie zawierał numeru zlecenia, ale reference = "D5486"
     // Zlecenie z project = "D5486" powinno dostać tę cenę
+    // Obsługuje też multi-projekt: zlecenie project="D1950, D1951" vs pending reference="D1950"
     if (project) {
+      // 3a: Exact match (z normalizacją spacji: "D4168, D5914, D6188" == "D4168,D5914,D6188")
+      const normalizedProject = project.replace(/\s+/g, '');
       const byProject = await tx.pendingOrderPrice.findFirst({
         where: {
           orderNumber: 'UNKNOWN',
@@ -376,8 +385,58 @@ export class CsvImportService implements ICsvImportService {
         orderBy: { createdAt: 'desc' },
       });
       if (byProject) {
-        logger.info(`Pending price dopasowana po projekcie: ${project} -> orderNumber ${orderNumber}`);
+        logger.info(`Pending price dopasowana po projekcie (exact): ${project} -> orderNumber ${orderNumber}`);
         return byProject;
+      }
+
+      // 3a2: Exact match po usunięciu spacji
+      if (normalizedProject !== project) {
+        const byNormalized = await tx.pendingOrderPrice.findFirst({
+          where: {
+            orderNumber: 'UNKNOWN',
+            reference: normalizedProject,
+            status: 'pending',
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (byNormalized) {
+          logger.info(`Pending price dopasowana po projekcie (normalized): ${normalizedProject} -> orderNumber ${orderNumber}`);
+          return byNormalized;
+        }
+      }
+
+      // 3b: Multi-projekt - rozdziel "D1950, D1951" na osobne referencje
+      const projectParts = project.split(/[,\s]+/).filter(p => /^[A-Z]\d+$/i.test(p));
+      if (projectParts.length > 1) {
+        for (const part of projectParts) {
+          const byPart = await tx.pendingOrderPrice.findFirst({
+            where: {
+              orderNumber: 'UNKNOWN',
+              reference: part,
+              status: 'pending',
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (byPart) {
+            logger.info(`Pending price dopasowana po projekcie (partial): ${part} z ${project} -> orderNumber ${orderNumber}`);
+            return byPart;
+          }
+        }
+      }
+
+      // 3c: Odwrotnie - pending reference zawiera wiele projektów (np. "D4168,D5914,D6188")
+      // a zlecenie ma jeden z nich
+      const byContains = await tx.pendingOrderPrice.findFirst({
+        where: {
+          orderNumber: 'UNKNOWN',
+          reference: { contains: projectParts[0] || project },
+          status: 'pending',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (byContains) {
+        logger.info(`Pending price dopasowana po projekcie (contains): ${project} -> reference ${byContains.reference}`);
+        return byContains;
       }
     }
 
@@ -397,6 +456,55 @@ export class CsvImportService implements ICsvImportService {
     }
 
     return null;
+  }
+
+  /**
+   * Przypisuje pending price do istniejącego zlecenia (overwrite/add_new).
+   * Sprawdza czy zlecenie nie ma jeszcze ceny EUR/PLN i czy istnieje pending price.
+   */
+  private async applyPendingPriceToExistingOrder(
+    tx: PrismaTransaction,
+    order: { id: number; valueEur: number | null; valuePln: number | null; client: string | null },
+    orderNumber: string,
+    project?: string | null
+  ): Promise<void> {
+    // Jeśli zlecenie ma już obie ceny, pomiń
+    if (order.valueEur && order.valuePln) return;
+
+    const pendingPrice = await this.getPendingPrice(tx, orderNumber, project);
+    if (!pendingPrice) return;
+
+    // Sprawdz czy brakuje danej waluty
+    const needsEur = !order.valueEur && pendingPrice.currency === 'EUR';
+    const needsPln = !order.valuePln && pendingPrice.currency === 'PLN';
+
+    if (!needsEur && !needsPln) return;
+
+    const isAkrobud = (order.client ?? '').toUpperCase().includes('AKROBUD');
+    const updateData = pendingPrice.currency === 'EUR'
+      ? {
+          valueEur: pendingPrice.valueNetto,
+          ...(isAkrobud ? { windowsNetValue: pendingPrice.valueNetto } : {}),
+        }
+      : { valuePln: pendingPrice.valueNetto };
+
+    await tx.order.update({
+      where: { id: order.id },
+      data: updateData,
+    });
+
+    await tx.pendingOrderPrice.update({
+      where: { id: pendingPrice.id },
+      data: {
+        status: 'applied',
+        appliedAt: new Date(),
+        appliedToOrderId: order.id,
+      },
+    });
+
+    logger.info(
+      `Applied pending price to existing order ${orderNumber} (ID: ${order.id}) - ${pendingPrice.currency} ${pendingPrice.valueNetto / 100}`
+    );
   }
 
   /**

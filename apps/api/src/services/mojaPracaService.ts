@@ -536,10 +536,16 @@ export class MojaPracaService {
       isAdminOrKierownik ?? false
     );
 
-    return orders.map((order) => ({
-      ...order,
-      productionDate: order.productionDate?.toISOString() ?? null,
-    }));
+    return orders.map((order) => {
+      const delivery = order.deliveryOrders[0]?.delivery;
+      return {
+        ...order,
+        deliveryOrders: undefined,
+        productionDate: order.productionDate?.toISOString() ?? null,
+        deliveryDate: delivery?.deliveryDate?.toISOString() ?? null,
+        deliveryNumber: delivery?.deliveryNumber ?? null,
+      };
+    });
   }
 
   /**
@@ -555,9 +561,21 @@ export class MojaPracaService {
 
     const isAdminOrKierownik = user && ADMIN_ROLES.includes(user.role);
 
+    // Pobierz nazwy autorów zmapowane do tego użytkownika
+    // (na wypadek gdyby documentAuthorUserId nie było jeszcze ustawione na zleceniach)
+    let authorNames: string[] = [];
+    if (!isAdminOrKierownik) {
+      const mappings = await this.prisma.documentAuthorMapping.findMany({
+        where: { userId },
+        select: { authorName: true },
+      });
+      authorNames = mappings.map((m) => m.authorName);
+    }
+
     const deliveries = await this.repository.getUpcomingDeliveriesWithLabelIssues(
       userId,
-      isAdminOrKierownik ?? false
+      isAdminOrKierownik ?? false,
+      authorNames
     );
 
     return deliveries.map((delivery) => ({

@@ -63,6 +63,14 @@ export const productionReportRoutes: FastifyPluginAsync = async (fastify) => {
     preHandler: verifyAuth,
   }, productionReportHandler.updateInvoice);
 
+  // Oznacz zlecenie jako sprawdzone/niesprawdzone - manager/admin
+  fastify.patch<{
+    Params: { year: string; month: string; orderId: string };
+    Body: { verified: boolean };
+  }>('/:year/:month/items/:orderId/verify', {
+    preHandler: verifyAuth,
+  }, productionReportHandler.verifyItem);
+
   // Aktualizuj nietypówki - manager/admin
   fastify.put<{
     Params: { year: string; month: string };

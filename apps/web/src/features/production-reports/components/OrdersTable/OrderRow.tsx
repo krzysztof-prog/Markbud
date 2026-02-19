@@ -62,13 +62,16 @@ export const OrderRow: React.FC<OrderRowProps> = ({
     return ord.totalGlasses ?? 0;
   }
 
-  // Przelicz Wsp. i Jedn. dla AKROBUD (EUR → PLN po kursie)
-  // Dla AKROBUD zarówno valueEur jak i materialValue są w EUR
+  // Przelicz Wsp. i Jedn. dla AKROBUD (EUR → PLN po kursie, materiał × 4)
+  const AKROBUD_MATERIAL_MULTIPLIER = 4;
+
   const computedCoefficient = (() => {
     if (!item) return '—';
-    if (item.isAkrobud && item.valueEur && item.materialValue > 0) {
-      // Wsp. = wartość / materiał — obie w EUR, kurs się skraca
-      return (item.valueEur / item.materialValue).toFixed(2);
+    if (item.isAkrobud && item.valueEur && eurRate && item.materialValue > 0) {
+      // Wsp. = (wartość EUR × kurs) / (materiał × 4)
+      const valuePln = item.valueEur * eurRate;
+      const materialPln = item.materialValue * AKROBUD_MATERIAL_MULTIPLIER;
+      return (valuePln / materialPln).toFixed(2);
     }
     return item.coefficient;
   })();
@@ -76,8 +79,10 @@ export const OrderRow: React.FC<OrderRowProps> = ({
   const computedUnitValue = (() => {
     if (!item) return '—';
     if (item.isAkrobud && item.valueEur && eurRate && item.totalGlassQuantity > 0) {
-      // Jedn. zł = (wartość EUR - materiał EUR) * kurs / szkła
-      return Math.round(((item.valueEur - item.materialValue) * eurRate) / item.totalGlassQuantity).toString();
+      // Jedn. zł = (wartość EUR × kurs - materiał × 4) / szkła
+      const valuePln = item.valueEur * eurRate;
+      const materialPln = item.materialValue * AKROBUD_MATERIAL_MULTIPLIER;
+      return Math.round((valuePln - materialPln) / item.totalGlassQuantity).toString();
     }
     return item.unitValue;
   })();

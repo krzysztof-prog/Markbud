@@ -11,6 +11,8 @@ import {
   getSchedulerStatus,
   triggerManualCleanup,
   getAllPendingPrices,
+  triggerRematch,
+  triggerReimport,
 } from '../handlers/pendingOrderPriceCleanupHandler.js';
 
 export async function pendingOrderPriceCleanupRoutes(
@@ -196,5 +198,68 @@ export async function pendingOrderPriceCleanupRoutes(
       },
     },
     handler: getAllPendingPrices,
+  });
+
+  // Rematch pending prices to existing orders
+  fastify.post('/rematch', {
+    schema: {
+      description: 'Re-match all pending prices to existing orders',
+      tags: ['cleanup'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' },
+            data: {
+              type: 'object',
+              properties: {
+                matched: { type: 'number' },
+                skipped: { type: 'number' },
+                noMatch: { type: 'number' },
+                errors: { type: 'array', items: { type: 'string' } },
+                details: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      pendingId: { type: 'number' },
+                      orderNumber: { type: 'string' },
+                      reference: { type: ['string', 'null'] },
+                      result: { type: 'string' },
+                      matchedOrderNumber: { type: 'string' },
+                      matchedOrderId: { type: 'number' },
+                      currency: { type: 'string' },
+                      reason: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    handler: triggerRematch,
+  });
+
+  // Force reimport specific PDF files (bypass import deduplication)
+  fastify.post('/reimport', {
+    schema: {
+      description: 'Force reimport specific PDF files, create pending prices, and run rematch',
+      tags: ['cleanup'],
+      body: {
+        type: 'object',
+        required: ['filepaths'],
+        properties: {
+          filepaths: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of absolute file paths to PDF files',
+          },
+        },
+      },
+    },
+    handler: triggerReimport,
   });
 }

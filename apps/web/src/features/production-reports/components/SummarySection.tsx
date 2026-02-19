@@ -75,15 +75,20 @@ export const SummarySection: React.FC<SummarySectionProps> = ({
   const eurInPln = (totalValueEur / 100) * eurRate;
   const eurInPlnGrosze = Math.round(eurInPln * 100);
 
+  // Efektywna wartość TYPOWE w PLN (PLN zleceń + AKROBUD EUR przeliczone na PLN)
+  const akrobudValueEurForCalc = safeAkrobud.valueEur ?? 0;
+  const akrobudEurInPlnGrosze = Math.round(akrobudValueEurForCalc * eurRate * 100);
+  const typoweEffectiveGrosze = safeTypowe.valuePln + akrobudEurInPlnGrosze;
+
   // Suma końcowa (RAZEM PLN + EUR przeliczone na PLN)
   const totalWithEur = safeRazem.valuePln + eurInPlnGrosze;
 
   const rows = [
-    { label: 'TYPOWE', data: safeTypowe, className: '' },
-    { label: 'AKROBUD', data: safeAkrobud, className: 'bg-blue-50' },
-    { label: 'RESZTA', data: safeReszta, className: '' },
-    { label: 'NIETYPÓWKI', data: safeNietypowki, className: 'bg-amber-50' },
-    { label: 'RAZEM PLN', data: safeRazem, className: 'font-semibold bg-gray-50' },
+    { label: 'TYPOWE', data: safeTypowe, className: 'font-semibold bg-gray-50', indent: false, overrideValueGrosze: typoweEffectiveGrosze },
+    { label: 'AKROBUD', data: safeAkrobud, className: 'bg-blue-50', indent: true, overrideValueGrosze: null as number | null },
+    { label: 'RESZTA', data: safeReszta, className: '', indent: true, overrideValueGrosze: null as number | null },
+    { label: 'NIETYPÓWKI', data: safeNietypowki, className: 'bg-amber-50', indent: false, overrideValueGrosze: null as number | null },
+    { label: 'RAZEM PLN', data: safeRazem, className: 'font-semibold bg-gray-50', indent: false, overrideValueGrosze: typoweEffectiveGrosze + (safeNietypowki.valuePln ?? 0) },
   ];
 
   return (
@@ -147,7 +152,9 @@ export const SummarySection: React.FC<SummarySectionProps> = ({
 
               return (
                 <TableRow key={row.label} className={row.className}>
-                  <TableCell className={row.label.includes('RAZEM') ? 'font-semibold' : ''}>
+                  <TableCell className={row.label.includes('RAZEM') || row.label === 'TYPOWE' ? 'font-semibold' : ''}>
+                    {/* Wcięcie dla AKROBUD i RESZTA (należą do TYPOWE) */}
+                    {row.indent && <span className="inline-block w-4" />}
                     {row.label}
                   </TableCell>
                   <TableCell className="text-right">
@@ -174,6 +181,8 @@ export const SummarySection: React.FC<SummarySectionProps> = ({
                           maximumFractionDigits: 2,
                         })} PLN
                       </>
+                    ) : row.overrideValueGrosze !== null ? (
+                      <>{formatPln(row.overrideValueGrosze)} PLN</>
                     ) : (
                       <>{formatPln(row.data.valuePln)} PLN</>
                     )}

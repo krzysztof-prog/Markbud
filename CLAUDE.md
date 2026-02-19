@@ -1,5 +1,16 @@
 # AKROBUD - Kontekst projektu dla Claude
 
+> ## BAZA PRODUKCYJNA - UWAGA!
+> **Ten projekt działa na BAZIE PRODUKCYJNEJ (prod.db).**
+> Wszelkie zmiany w kodzie i bazie danych mają BEZPOŚREDNI wpływ na produkcję.
+> Ścieżka sieciowa: `\\MARKBUD-HV\MarkBud-Prog`
+>
+> - NIE wykonuj destrukcyjnych operacji na bazie (DROP, DELETE, TRUNCATE) bez wyraźnego potwierdzenia użytkownika
+> - NIE modyfikuj schematów bazy bez backupu
+> - NIGDY `db:push` — tylko `db:migrate`
+> - Zawsze sprawdzaj dwukrotnie zapytania SQL przed wykonaniem
+> - Traktuj KAŻDĄ zmianę jako zmianę produkcyjną
+
 > **PRZECZYTAJ NAJPIERW:** [README.md](README.md) - Podstawowe info o projekcie
 
 ---

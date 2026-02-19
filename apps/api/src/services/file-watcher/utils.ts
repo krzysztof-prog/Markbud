@@ -1,6 +1,6 @@
 import path from 'path';
 import { existsSync } from 'fs';
-import { mkdir, rename, access, constants } from 'fs/promises';
+import { mkdir, rename, access, constants, readdir, copyFile, rm } from 'fs/promises';
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../../utils/logger.js';
 import type { DeliveryNumber } from './types.js';
@@ -20,14 +20,17 @@ export async function getSetting(prisma: PrismaClient, key: string): Promise<str
  * @returns Data lub null jeśli format nieprawidłowy
  */
 export function extractDateFromFolderName(folderName: string): Date | null {
-  const dateMatch = folderName.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+  // Obsługuje DD.MM.YYYY i DD.MM.YY
+  const dateMatch = folderName.match(/(\d{2})\.(\d{2})\.(\d{2,4})/);
 
   if (!dateMatch) {
     return null;
   }
 
-  const [, day, month, year] = dateMatch;
-  const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  const [, day, month, yearStr] = dateMatch;
+  // Dla 2-cyfrowego roku: 26 -> 2026
+  const year = yearStr.length === 2 ? 2000 + parseInt(yearStr) : parseInt(yearStr);
+  const date = new Date(year, parseInt(month) - 1, parseInt(day));
 
   if (isNaN(date.getTime())) {
     return null;
@@ -88,6 +91,8 @@ export async function archiveFile(filePath: string): Promise<string | null> {
 
 /**
  * Archiwizuje pomyślnie zaimportowany folder (przenosi do _archiwum)
+ * Jeśli folder docelowy już istnieje (np. dwie dostawy tego samego dnia),
+ * merguje pliki do istniejącego folderu zamiast próby rename.
  */
 export async function archiveFolder(folderPath: string, basePath: string): Promise<void> {
   try {
@@ -96,16 +101,37 @@ export async function archiveFolder(folderPath: string, basePath: string): Promi
     const archiveDestination = path.join(archivePath, folderName);
 
     // Utwórz folder _archiwum jeśli nie istnieje
-    try {
-      await access(archivePath, constants.F_OK);
-    } catch {
-      await mkdir(archivePath, { recursive: true });
-      logger.info(`   Utworzono folder archiwum: ${archivePath}`);
-    }
+    await mkdir(archivePath, { recursive: true });
 
-    // Przenieś folder do archiwum
-    await rename(folderPath, archiveDestination);
-    logger.info(`   Zarchiwizowano folder: ${folderName} → _archiwum/`);
+    // Sprawdź czy folder docelowy już istnieje
+    const targetExists = existsSync(archiveDestination);
+
+    if (!targetExists) {
+      // Folder docelowy nie istnieje - standardowe przeniesienie
+      await rename(folderPath, archiveDestination);
+      logger.info(`   Zarchiwizowano folder: ${folderName} → _archiwum/`);
+    } else {
+      // Folder docelowy JUŻ ISTNIEJE (kolizja nazw, np. druga dostawa tego samego dnia)
+      // Mergujemy pliki do istniejącego folderu
+      logger.info(`   Folder _archiwum/${folderName} już istnieje - merge plików`);
+
+      const files = await readdir(folderPath);
+      for (const file of files) {
+        const srcFile = path.join(folderPath, file);
+        const destFile = path.join(archiveDestination, file);
+
+        // Jeśli plik o tej nazwie już jest w archiwum, dodaj timestamp
+        const finalDest = existsSync(destFile)
+          ? path.join(archiveDestination, `${Date.now()}_${file}`)
+          : destFile;
+
+        await copyFile(srcFile, finalDest);
+      }
+
+      // Usuń oryginalny folder po pomyślnym skopiowaniu
+      await rm(folderPath, { recursive: true });
+      logger.info(`   Zmergowano ${files.length} plików do _archiwum/${folderName} i usunięto źródło`);
+    }
   } catch (error) {
     logger.warn(
       `   Nie udało się zarchiwizować folderu ${folderPath}: ${error instanceof Error ? error.message : 'Nieznany błąd'}`

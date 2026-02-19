@@ -175,6 +175,8 @@ export class UzyteBeleWatcher implements IFileWatcher {
       persistent: true,
       ignoreInitial: true,
       depth: 0, // Tylko pliki w głównym folderze (nie podfoldery)
+      usePolling: true, // Polling działa lepiej na udziałach sieciowych (UNC paths)
+      interval: 5000,
       awaitWriteFinish: {
         stabilityThreshold: this.config.stabilityThreshold,
         pollInterval: this.config.pollInterval,
@@ -387,10 +389,10 @@ export class UzyteBeleWatcher implements IFileWatcher {
     try {
       const entries = await readdir(basePath, { withFileTypes: true });
 
-      // Filtruj tylko foldery z datą w formacie DD.MM.YYYY
+      // Filtruj tylko foldery z datą w formacie DD.MM.YYYY lub DD.MM.YY
       const dateFolders = entries.filter((entry) => {
         if (!entry.isDirectory()) return false;
-        return /\d{2}\.\d{2}\.\d{4}/.test(entry.name);
+        return /\d{2}\.\d{2}\.(\d{4}|\d{2})/.test(entry.name);
       });
 
       if (dateFolders.length === 0) {
@@ -419,6 +421,8 @@ export class UzyteBeleWatcher implements IFileWatcher {
       persistent: true,
       ignoreInitial: true, // Ignoruj istniejące na start
       depth: 1, // Tylko pierwszy poziom podfolderów
+      usePolling: true, // Polling działa lepiej na udziałach sieciowych (UNC paths)
+      interval: 5000,
       awaitWriteFinish: {
         stabilityThreshold: this.config.stabilityThreshold,
         pollInterval: this.config.pollInterval,

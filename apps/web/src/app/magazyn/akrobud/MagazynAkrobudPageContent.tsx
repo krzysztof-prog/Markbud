@@ -13,7 +13,11 @@ import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Warehouse, ClipboardCheck, History } from 'lucide-react';
 import Link from 'next/link';
-import { OrderDetailModal } from '@/features/orders/components/OrderDetailModal';
+import { createDynamicComponent } from '@/lib/dynamic-import';
+
+const OrderDetailModal = createDynamicComponent(
+  () => import('@/features/orders/components/OrderDetailModal').then((mod) => ({ default: mod.OrderDetailModal }))
+);
 import type { Color } from '@/types';
 import { WarehouseHistory } from '@/features/warehouse/components/WarehouseHistory';
 import { WarehouseOrdersTable } from '@/features/warehouse/components/WarehouseOrdersTable';

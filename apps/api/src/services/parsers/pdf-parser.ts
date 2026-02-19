@@ -1,5 +1,8 @@
 import fs from 'fs';
 import pdf from 'pdf-parse';
+import { createWorker } from 'tesseract.js';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { Canvas, createCanvas } from 'canvas';
 import { prisma } from '../../index.js';
 import { logger } from '../../utils/logger.js';
 
@@ -20,6 +23,21 @@ export interface ParsedPdfCeny {
 
 export class PdfParser {
   /**
+   * Sprawdza czy zlecenie jest oznaczone jako sprawdzone w raporcie produkcji
+   * Zlecenia sprawdzone NIE MOGĄ być aktualizowane przez importy
+   */
+  private async checkIfOrderVerified(orderId: number): Promise<boolean> {
+    const verifiedItem = await prisma.productionReportItem.findFirst({
+      where: {
+        orderId,
+        verified: true,
+      },
+      select: { id: true },
+    });
+    return verifiedItem !== null;
+  }
+
+  /**
    * Podgląd pliku PDF z ceną przed importem
    */
   async previewCenyPdf(filepath: string): Promise<ParsedPdfCeny> {
@@ -30,7 +48,12 @@ export class PdfParser {
    * Przetwarza plik PDF i aktualizuje zlecenie
    * Używa transakcji i oznacza pending prices jako applied
    */
-  async processCenyPdf(filepath: string): Promise<{ orderId: number; updated: boolean }> {
+  async processCenyPdf(filepath: string): Promise<{
+    orderId: number;
+    updated: boolean;
+    skipped?: boolean;
+    skippedReason?: string;
+  }> {
     const parsed = await this.parseCenyPdf(filepath);
 
     // Użyj transakcji aby atomowo zaktualizować zlecenie i oznaczyć pending price
@@ -50,6 +73,18 @@ export class PdfParser {
 
       if (!order) {
         throw new Error(`Zlecenie ${parsed.orderNumber} nie znalezione w bazie danych`);
+      }
+
+      // SPRAWDZENIE VERIFIED - jeśli zlecenie jest sprawdzone, pomiń aktualizację
+      const isVerified = await this.checkIfOrderVerified(order.id);
+      if (isVerified) {
+        logger.info(`⏭️  Pominięto import ceny dla zlecenia ${parsed.orderNumber} - jest sprawdzone w raporcie produkcji`);
+        return {
+          orderId: order.id,
+          updated: false,
+          skipped: true,
+          skippedReason: 'verified',
+        };
       }
 
       // Zaktualizuj zlecenie o dane z PDF
@@ -96,16 +131,23 @@ export class PdfParser {
   private async parseCenyPdf(filepath: string): Promise<ParsedPdfCeny> {
     const dataBuffer = await fs.promises.readFile(filepath);
     const data = await pdf(dataBuffer);
-    const text = data.text;
+    let text = data.text;
+
+    // Jeśli PDF nie ma tekstu (jest skanem), użyj OCR
+    if (!text || text.trim().length < 50) {
+      logger.info(`PDF nie ma tekstu (skan) - używam OCR: ${filepath}`);
+      text = await this.extractTextWithOCR(filepath);
+      logger.debug(`OCR wynik (pierwsze 200 znaków): ${text.substring(0, 200)}`);
+    }
 
     // Wyciągnij numer zlecenia Akrobud (5-cyfrowy) - kilka strategii
     // Przekaż też nazwę pliku jako fallback (np. "ZAM 53810.pdf")
     const filename = filepath.split(/[\\/]/).pop() || '';
     const orderNumber = this.extractAkrobudOrderNumber(text, filename);
 
-    // Wyciągnij referencję (np. D3056)
-    const referenceMatch = text.match(/Nr Referencyjny\s*([A-Z]\d+)/i) ||
-                          text.match(/Referencja\s*([A-Z]\d+)/i) ||
+    // Wyciągnij referencję (np. D3056 lub multi-projekt D4168,D5914,D6188)
+    const referenceMatch = text.match(/Nr Referencyjny\s*([A-Z]\d+(?:\s*,\s*[A-Z]\d+)*)/i) ||
+                          text.match(/Referencja\s*([A-Z]\d+(?:\s*,\s*[A-Z]\d+)*)/i) ||
                           text.match(/\b([A-Z]\d{4})\b/);
     const reference = referenceMatch ? referenceMatch[1] : '';
 
@@ -145,6 +187,52 @@ export class PdfParser {
       glassCount,
       weight,
     };
+  }
+
+  /**
+   * Wyciąga tekst z PDF używając OCR (dla skanowanych dokumentów)
+   */
+  private async extractTextWithOCR(filepath: string): Promise<string> {
+    try {
+      // Wczytaj PDF
+      const dataBuffer = await fs.promises.readFile(filepath);
+
+      // Użyj pdfjs-dist do renderowania PDF na canvas
+      const loadingTask = pdfjsLib.getDocument({
+        data: new Uint8Array(dataBuffer),
+        useSystemFonts: true,
+      });
+
+      const pdfDocument = await loadingTask.promise;
+      const page = await pdfDocument.getPage(1); // Pierwsza strona
+
+      // Przygotuj canvas
+      const viewport = page.getViewport({ scale: 2.0 }); // 2x scale dla lepszej jakości OCR
+      const canvas = createCanvas(viewport.width, viewport.height);
+      const context = canvas.getContext('2d');
+
+      // Renderuj PDF na canvas
+      await page.render({
+        canvasContext: context as any,
+        viewport: viewport,
+        canvas: canvas as any,
+      } as any).promise;
+
+      // Konwertuj canvas do obrazu
+      const imageBuffer = canvas.toBuffer('image/png');
+
+      // Użyj Tesseract.js do OCR
+      const worker = await createWorker('pol'); // Polski język
+      const { data } = await worker.recognize(imageBuffer);
+      await worker.terminate();
+
+      logger.info(`OCR zakończony - wyciągnięto ${data.text.length} znaków`);
+
+      return data.text;
+    } catch (error) {
+      logger.error('Błąd podczas OCR:', error);
+      throw new Error(`OCR failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   /**

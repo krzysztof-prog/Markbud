@@ -23,8 +23,10 @@ export interface ProductionReportItemData {
   overrideSashes?: number | null;
   overrideValuePln?: number | null;
   overrideValueEur?: number | null; // w centach
+  overrideMaterialValue?: number | null; // w groszach
   rwOkucia?: boolean;
   rwProfile?: boolean;
+  verified?: boolean; // Czy sprawdzone (blokuje edycję i import)
   invoiceNumber?: string | null;
   invoiceDate?: Date | null;
 }

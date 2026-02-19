@@ -169,9 +169,10 @@ export class PdfImportService implements IPdfImportService {
    * Extract reference from text
    */
   private extractReference(text: string): string {
+    // Obsługuje multi-projekt np. "Nr Referencyjny D4168,D5914,D6188"
     const referenceMatch =
-      text.match(/Nr Referencyjny\s*([A-Z]\d+)/i) ||
-      text.match(/Referencja\s*([A-Z]\d+)/i) ||
+      text.match(/Nr Referencyjny\s*([A-Z]\d+(?:\s*,\s*[A-Z]\d+)*)/i) ||
+      text.match(/Referencja\s*([A-Z]\d+(?:\s*,\s*[A-Z]\d+)*)/i) ||
       text.match(/\b([A-Z]\d{4})\b/);
 
     return referenceMatch ? referenceMatch[1] : '';

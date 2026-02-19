@@ -229,7 +229,7 @@ export const AddToProductionTab: React.FC = () => {
             emptyMessage="Brak zaplanowanych dostaw"
             isEmpty={!data?.upcomingDeliveries.length}
           >
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {data?.upcomingDeliveries.map((delivery) => (
                 <DeliveryCheckbox
                   key={delivery.id}
@@ -255,7 +255,7 @@ export const AddToProductionTab: React.FC = () => {
             emptyMessage="Brak przeterminowanych zleceń"
             isEmpty={!data?.overdueOrders.length}
           >
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {data?.overdueOrders.map((order) => (
                 <OrderCheckbox
                   key={order.id}
@@ -279,7 +279,7 @@ export const AddToProductionTab: React.FC = () => {
             emptyMessage="Brak zleceń w najbliższym czasie"
             isEmpty={!data?.upcomingOrders.length}
           >
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {data?.upcomingOrders.map((order) => (
                 <OrderCheckbox
                   key={order.id}
@@ -303,7 +303,7 @@ export const AddToProductionTab: React.FC = () => {
             emptyMessage="Brak zleceń prywatnych"
             isEmpty={!data?.privateOrders.length}
           >
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {data?.privateOrders.map((order) => (
                 <OrderCheckbox
                   key={order.id}

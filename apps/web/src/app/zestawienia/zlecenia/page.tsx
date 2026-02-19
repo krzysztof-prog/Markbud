@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { createDynamicComponent } from '@/lib/dynamic-import';
 
 // Feature imports
 import {
@@ -36,7 +37,6 @@ import {
   OrdersEmptyState,
   OrdersLoadingState,
   OrderDetailModal,
-  OrdersStatsModal,
   SchucoDeliveriesModal,
   GlassDiscrepancyModal,
   getCellValueForExport,
@@ -49,6 +49,11 @@ import {
   type ExtendedOrder,
   type GroupBy,
 } from '@/features/orders';
+
+// Lazy load - OrdersStatsModal używa recharts (~400KB)
+const OrdersStatsModal = createDynamicComponent(
+  () => import('@/features/orders/components/OrdersStatsModal').then((mod) => ({ default: mod.OrdersStatsModal }))
+);
 
 // ================================
 // Główny komponent strony
@@ -99,10 +104,13 @@ export default function ZestawienieZlecenPage() {
     queryKey: ['users'],
     queryFn: usersApi.getAll,
   });
+  // Tylko wybrani użytkownicy w dropdown autora dokumentów
+  const ALLOWED_AUTHOR_EMAILS = ['krzysztof@markbud.pl', 'a.iwanski@markbud.pl', 'wlodek@markbud.pl'];
+  const AUTHOR_NAME_MAP: Record<string, string> = { 'A. Iwański': 'Arek' };
   const users = useMemo(() =>
     (usersData || [])
-      .filter((u) => u.isActive)
-      .map((u) => ({ id: u.id, name: u.name })),
+      .filter((u) => ALLOWED_AUTHOR_EMAILS.includes(u.email))
+      .map((u) => ({ id: u.id, name: AUTHOR_NAME_MAP[u.name] || u.name })),
     [usersData]
   );
 

@@ -17,7 +17,7 @@ import { readdir, access } from 'node:fs/promises';
 import { join } from 'node:path';
 
 // Typy dla wynikow sprawdzania
-export type LabelCheckResultStatus = 'OK' | 'MISMATCH' | 'NO_FOLDER' | 'NO_BMP' | 'OCR_ERROR';
+export type LabelCheckResultStatus = 'OK' | 'MISMATCH' | 'NO_FOLDER' | 'NO_BMP' | 'OCR_ERROR' | 'SKIPPED';
 
 export interface CheckOrderResult {
   orderId: number;
@@ -131,6 +131,24 @@ export class LabelCheckService {
     // 4. Sprawdz kazdego zlecenie
     for (const deliveryOrder of delivery.deliveryOrders) {
       const order = deliveryOrder.order;
+
+      // Pomiń zlecenia typu "kształt" - nie mają etykiet
+      if (order.specialType === 'ksztalt') {
+        await this.repository.addResult(labelCheck.id, {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          status: 'SKIPPED',
+          expectedDate: delivery.deliveryDate,
+          detectedDate: null,
+          detectedText: null,
+          imagePath: null,
+          errorMessage: 'Zlecenie typu kształt - bez etykiety',
+        });
+        checkedCount++;
+        okCount++;
+        continue;
+      }
+
       const result = await this.checkOrder(order.id, order.orderNumber, delivery.deliveryDate);
 
       // Zapisz wynik do bazy
@@ -167,8 +185,9 @@ export class LabelCheckService {
       completedAt,
     });
 
-    // 6. Auto-recalculate readiness status po zakończeniu sprawdzania
-    await this.readinessAggregator.recalculateIfNeeded(deliveryId);
+    // 6. Force recalculate readiness status po zakończeniu sprawdzania
+    // Używamy calculateAndPersist zamiast recalculateIfNeeded aby ominąć debounce
+    await this.readinessAggregator.calculateAndPersist(deliveryId);
 
     return {
       ...labelCheck,
@@ -355,7 +374,16 @@ export class LabelCheckService {
    * @throws Error gdy sprawdzenie nie istnieje
    */
   async delete(id: number): Promise<any> {
-    return this.repository.softDelete(id);
+    // Pobierz deliveryId przed usunięciem, aby przeliczyć readiness
+    const check = await this.repository.findById(id);
+    const result = await this.repository.softDelete(id);
+
+    // Przelicz readiness po usunięciu sprawdzenia (zmienia się najnowszy wynik)
+    if (check?.deliveryId) {
+      await this.readinessAggregator.recalculateIfNeeded(check.deliveryId);
+    }
+
+    return result;
   }
 
   /**

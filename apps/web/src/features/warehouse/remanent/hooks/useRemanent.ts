@@ -15,6 +15,8 @@ export function useRemanentSubmit() {
       );
       // Invalidate warehouse data
       queryClient.invalidateQueries({ queryKey: ['warehouse', variables.colorId] });
+      // Invalidate PVC remanent data
+      queryClient.invalidateQueries({ queryKey: ['pvc-remanent', variables.colorId] });
       // Invalidate history
       queryClient.invalidateQueries({ queryKey: ['remanent-history'] });
     },

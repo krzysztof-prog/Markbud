@@ -7,7 +7,7 @@
 export type LabelCheckStatus = 'pending' | 'completed' | 'failed';
 
 // Status pojedynczego wyniku OCR
-export type LabelCheckResultStatus = 'OK' | 'MISMATCH' | 'NO_FOLDER' | 'NO_BMP' | 'OCR_ERROR';
+export type LabelCheckResultStatus = 'OK' | 'MISMATCH' | 'NO_FOLDER' | 'NO_BMP' | 'OCR_ERROR' | 'SKIPPED';
 
 // Wynik sprawdzenia pojedynczej etykiety
 export interface LabelCheckResult {
@@ -93,4 +93,5 @@ export const RESULT_STATUS_CONFIG: Record<LabelCheckResultStatus, {
   NO_FOLDER: { label: 'Brak folderu', color: 'yellow', icon: 'folder-x' },
   NO_BMP: { label: 'Brak zdjęć', color: 'yellow', icon: 'file-x' },
   OCR_ERROR: { label: 'Błąd OCR', color: 'gray', icon: 'alert-triangle' },
+  SKIPPED: { label: 'Kształt', color: 'gray', icon: 'check' },
 } as const;

@@ -110,14 +110,50 @@ const ChecklistRow: React.FC<ChecklistRowProps> = ({ item, entityId, type }) => 
   // Pokaż przycisk akcji tylko dla blocking/warning
   const showAction = item.status !== 'ok' && actionHref;
 
+  // Dla glass_delivery - wyciągnij daty z message i wyświetl je obok label
+  const isGlassDelivery = item.module === 'glass_delivery';
+  let displayMessage = item.message;
+  let glassDeliveryDates: string[] = [];
+
+  if (isGlassDelivery && item.message) {
+    console.log('[ReadinessChecklist] glass_delivery message:', item.message);
+    const dateMatch = item.message.match(/\| DATES:(.+)$/);
+    console.log('[ReadinessChecklist] dateMatch:', dateMatch);
+    if (dateMatch) {
+      const datesString = dateMatch[1];
+      glassDeliveryDates = datesString.split(',').filter(Boolean);
+      console.log('[ReadinessChecklist] glassDeliveryDates:', glassDeliveryDates);
+      // Usuń część z datami z głównego message
+      displayMessage = item.message.replace(/\| DATES:.+$/, '').trim();
+    }
+  }
+
   return (
     <div className={cn('flex items-start gap-2 px-3 py-2 rounded-md text-sm', getRowClass())}>
       {getIcon()}
       <div className="flex-1 min-w-0">
-        <div className="font-medium">{item.label}</div>
-        {item.message && (
+        <div className="font-medium flex items-center gap-2 flex-wrap">
+          <span>{item.label}</span>
+          {isGlassDelivery && glassDeliveryDates.length > 0 && (
+            <div className="flex gap-1">
+              {glassDeliveryDates.map((date, idx) => (
+                <span
+                  key={idx}
+                  className="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-medium"
+                >
+                  {new Date(date).toLocaleDateString('pl-PL', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                  })}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        {displayMessage && (
           <div className="text-xs opacity-80 mt-0.5">
-            {item.message}
+            {displayMessage}
           </div>
         )}
       </div>

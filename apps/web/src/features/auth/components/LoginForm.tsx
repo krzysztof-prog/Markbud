@@ -10,7 +10,7 @@
  * - Błędy pokazywane inline pod polami (onBlur)
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { FormField } from '@/components/ui/form-field';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 // Zod schema dla walidacji
 const loginSchema = z.object({
@@ -37,8 +38,19 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export const LoginForm: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const { login } = useAuth();
   const { toast } = useToast();
+
+  // Sprawdź czy użytkownik został przekierowany z powodu wygaśnięcia sesji
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('expired') === '1') {
+        setSessionExpired(true);
+      }
+    }
+  }, []);
 
   const {
     register,
@@ -76,6 +88,12 @@ export const LoginForm: React.FC = () => {
         <CardDescription>Wprowadź swoje dane aby się zalogować</CardDescription>
       </CardHeader>
       <CardContent>
+        {sessionExpired && (
+          <div className="mb-4 flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            Sesja wygasła. Zaloguj się ponownie.
+          </div>
+        )}
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <FormField
             id="email"

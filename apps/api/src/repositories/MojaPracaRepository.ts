@@ -409,6 +409,23 @@ export class MojaPracaRepository {
         documentAuthorUserId: true,
         valueEur: true,
         totalWindows: true,
+        deliveryOrders: {
+          where: {
+            delivery: {
+              status: 'in_progress',
+              deletedAt: null,
+            },
+          },
+          select: {
+            delivery: {
+              select: {
+                deliveryDate: true,
+                deliveryNumber: true,
+              },
+            },
+          },
+          take: 1,
+        },
       },
     });
   }
@@ -423,7 +440,8 @@ export class MojaPracaRepository {
    */
   async getUpcomingDeliveriesWithLabelIssues(
     userId: number,
-    isAdminOrKierownik: boolean
+    isAdminOrKierownik: boolean,
+    authorNames: string[] = []
   ) {
     // Znajdź ostatnią wyprodukowaną lub w produkcji dostawę
     const lastProductionDelivery = await this.prisma.delivery.findFirst({
@@ -439,6 +457,25 @@ export class MojaPracaRepository {
     // Punkt startowy - ostatnia data produkcji lub dzisiaj
     const startDate = lastProductionDelivery?.deliveryDate || new Date();
 
+    // Buduj filtr użytkownika - szukaj po userId LUB po nazwie autora z mapowań
+    const userFilter = isAdminOrKierownik
+      ? {}
+      : {
+          deliveryOrders: {
+            some: {
+              order: {
+                archivedAt: null,
+                OR: [
+                  { documentAuthorUserId: userId },
+                  ...(authorNames.length > 0
+                    ? [{ documentAuthor: { in: authorNames } }]
+                    : []),
+                ],
+              },
+            },
+          },
+        };
+
     // Znajdź 5 najbliższych dostaw PO tej dacie które NIE są jeszcze w produkcji ani ukończone
     // Używamy gt (greater than) aby nie uwzględniać dostawy która jest już w produkcji
     const upcomingDeliveries = await this.prisma.delivery.findMany({
@@ -448,18 +485,7 @@ export class MojaPracaRepository {
         deletedAt: null,
         deliveryOrders: { some: {} },
         // Dla zwykłego użytkownika - tylko dostawy z jego zleceniami
-        ...(isAdminOrKierownik
-          ? {}
-          : {
-              deliveryOrders: {
-                some: {
-                  order: {
-                    documentAuthorUserId: userId,
-                    archivedAt: null,
-                  },
-                },
-              },
-            }),
+        ...userFilter,
       },
       orderBy: { deliveryDate: 'asc' },
       take: 5,

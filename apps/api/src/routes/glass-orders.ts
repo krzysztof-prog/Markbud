@@ -13,6 +13,9 @@ export const glassOrderRoutes: FastifyPluginAsync = async (fastify) => {
   // Import endpoint (debug logging moved to handler)
   fastify.post('/import', handler.importFromTxt.bind(handler));
 
+  // Re-match all glass orders to production orders (recalculate orderedGlassCount)
+  fastify.post('/rematch', handler.rematchAll.bind(handler));
+
   fastify.delete<{ Params: { id: string } }>('/:id', handler.delete.bind(handler));
   fastify.get<{ Params: { id: string } }>('/:id/summary', handler.getSummary.bind(handler));
   fastify.get<{ Params: { id: string } }>('/:id/validations', handler.getValidations.bind(handler));

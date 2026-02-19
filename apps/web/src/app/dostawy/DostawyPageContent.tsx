@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
@@ -110,6 +111,7 @@ interface DostawyPageContentProps {
 
 export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPageContentProps) {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
 
   // === EXTRACTED HOOKS ===
   const filters = useDeliveryFilters();
@@ -131,6 +133,13 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [selectedOrderNumber, setSelectedOrderNumber] = useState<string | null>(null);
   const [showQuickDeliveryDialog, setShowQuickDeliveryDialog] = useState(false);
+
+  // Auto-open Quick Delivery dialog when ?quick=true
+  useEffect(() => {
+    if (searchParams.get('quick') === 'true') {
+      setShowQuickDeliveryDialog(true);
+    }
+  }, [searchParams]);
 
   // Form validation
   const validation = useFormValidation({

@@ -251,6 +251,43 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     }
   });
 
+  // POST /api/settings/document-author-mappings/backfill - zaktualizuj istniejące zlecenia
+  fastify.post('/document-author-mappings/backfill', { preHandler: [verifyAuth] }, async () => {
+    const mappings = await prisma.documentAuthorMapping.findMany();
+
+    if (mappings.length === 0) {
+      return { success: false, message: 'Brak mapowań autorów' };
+    }
+
+    const results: { authorName: string; userId: number; updated: number }[] = [];
+
+    for (const mapping of mappings) {
+      const result = await prisma.order.updateMany({
+        where: {
+          documentAuthor: mapping.authorName,
+          documentAuthorUserId: null,
+        },
+        data: {
+          documentAuthorUserId: mapping.userId,
+        },
+      });
+
+      results.push({
+        authorName: mapping.authorName,
+        userId: mapping.userId,
+        updated: result.count,
+      });
+    }
+
+    const totalUpdated = results.reduce((sum, r) => sum + r.updated, 0);
+
+    return {
+      success: true,
+      message: `Zaktualizowano ${totalUpdated} zleceń`,
+      details: results,
+    };
+  });
+
   // ============================================================
   // Soft Delete Cleanup - trwale usuwa rekordy z deletedAt > 2 lata
   // ============================================================

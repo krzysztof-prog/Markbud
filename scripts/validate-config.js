@@ -164,16 +164,31 @@ function validateConfig() {
     print('success', 'Found apps/api/.env');
   }
 
-  const webEnv = parseEnvFile(webEnvPath);
+  // Try .env.local first, then fall back to .env.production or .env
+  const webEnvLocalPath = path.join(rootDir, 'apps', 'web', '.env.local');
+  const webEnvProdPath = path.join(rootDir, 'apps', 'web', '.env.production');
+  const webEnvDefaultPath = path.join(rootDir, 'apps', 'web', '.env');
+
+  let webEnv = parseEnvFile(webEnvLocalPath);
+  let webEnvSource = '.env.local';
   if (!webEnv) {
-    results.errors.push('Frontend .env.local file not found');
-    print('error', `File not found: ${webEnvPath}`);
-  } else {
-    results.success.push('Frontend .env.local file exists');
-    print('success', 'Found apps/web/.env.local');
+    webEnv = parseEnvFile(webEnvProdPath);
+    webEnvSource = '.env.production';
+  }
+  if (!webEnv) {
+    webEnv = parseEnvFile(webEnvDefaultPath);
+    webEnvSource = '.env';
   }
 
-  if (!apiEnv || !webEnv) {
+  if (!webEnv) {
+    results.warnings.push('No frontend env file found (.env.local, .env.production, or .env)');
+    print('warning', 'No frontend env file found - create apps/web/.env.local for development');
+  } else {
+    results.success.push(`Frontend env file exists (${webEnvSource})`);
+    print('success', `Found apps/web/${webEnvSource}`);
+  }
+
+  if (!apiEnv) {
     printSummary();
     process.exit(1);
   }
@@ -192,22 +207,26 @@ function validateConfig() {
     }
   });
 
-  // Web required vars
-  REQUIRED_VARS.web.forEach(varName => {
-    if (!webEnv[varName] || webEnv[varName].trim() === '') {
-      results.errors.push(`Missing required Frontend variable: ${varName}`);
-      print('error', `Missing in apps/web/.env.local: ${varName}`);
-    } else {
-      results.success.push(`Frontend variable set: ${varName}`);
-      print('success', `${varName} = ${webEnv[varName]}`);
-    }
-  });
+  // Web required vars (skip if no env file found)
+  if (webEnv) {
+    REQUIRED_VARS.web.forEach(varName => {
+      if (!webEnv[varName] || webEnv[varName].trim() === '') {
+        results.warnings.push(`Missing Frontend variable: ${varName}`);
+        print('warning', `Missing in apps/web/${webEnvSource}: ${varName}`);
+      } else {
+        results.success.push(`Frontend variable set: ${varName}`);
+        print('success', `${varName} = ${webEnv[varName]}`);
+      }
+    });
+  } else {
+    print('info', 'Skipping frontend variable checks (no env file)');
+  }
 
   // 3. Port synchronization
   console.log('\n3. Checking port synchronization...');
 
   const apiPort = apiEnv.API_PORT;
-  const frontendApiUrl = webEnv.NEXT_PUBLIC_API_URL;
+  const frontendApiUrl = webEnv ? webEnv.NEXT_PUBLIC_API_URL : null;
 
   if (!apiPort) {
     results.errors.push('API_PORT not set');

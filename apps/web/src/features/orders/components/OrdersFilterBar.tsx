@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { SearchInput } from '@/components/ui/search-input';
-import { Archive, Download, TrendingUp, Settings } from 'lucide-react';
+import { Archive, Download, TrendingUp, Settings, Calendar, Zap } from 'lucide-react';
 import type { FilterState, GroupBy } from '../types';
 
 // ================================
@@ -54,6 +54,22 @@ export const OrdersFilterBar: React.FC<OrdersFilterBarProps> = ({
 }) => {
   return (
     <div className="flex flex-wrap items-center gap-4">
+      {/* Szybkie linki */}
+      <div className="flex gap-2">
+        <Link href="/dostawy">
+          <Button variant="outline" size="sm">
+            <Calendar className="h-4 w-4 mr-1.5" />
+            Kalendarz dostaw
+          </Button>
+        </Link>
+        <Link href="/dostawy?quick=true">
+          <Button variant="outline" size="sm">
+            <Zap className="h-4 w-4 mr-1.5" />
+            Szybka dostawa
+          </Button>
+        </Link>
+      </div>
+
       {/* Wyszukiwanie */}
       <SearchInput
         value={searchQuery}

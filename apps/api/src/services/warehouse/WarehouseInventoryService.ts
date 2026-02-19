@@ -43,11 +43,11 @@ export class WarehouseInventoryService {
       }
     }
 
-    const results: MonthlyUpdateResult[] = [];
+    // Przetwarzaj wszystkie aktualizacje w JEDNEJ transakcji (zamiast N osobnych)
+    const results = await prisma.$transaction(async (tx) => {
+      const txResults: MonthlyUpdateResult[] = [];
 
-    // Process each update in a transaction
-    for (const update of updates) {
-      const result = await prisma.$transaction(async (tx) => {
+      for (const update of updates) {
         // Get current stock (calculated) in transaction
         const currentStock = await tx.warehouseStock.findUnique({
           where: {
@@ -90,16 +90,16 @@ export class WarehouseInventoryService {
           },
         });
 
-        return {
+        txResults.push({
           profileId: update.profileId,
           calculatedStock,
           actualStock: update.actualStock,
           difference,
-        };
-      });
+        });
+      }
 
-      results.push(result);
-    }
+      return txResults;
+    });
 
     // Automatically archive completed orders for this color
     const archivedOrders = await prisma.order.updateMany({

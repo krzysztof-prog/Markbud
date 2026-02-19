@@ -69,11 +69,16 @@ export function OrderDetailModal({
   open,
   onOpenChange,
 }: OrderDetailModalProps) {
-  const { data: order, isLoading } = useQuery<OrderDetail>({
+  const { data: order, isLoading, error } = useQuery<OrderDetail>({
     queryKey: ['order-detail', orderId],
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- enabled check guarantees orderId is not null
     queryFn: () => ordersApi.getById(orderId!) as Promise<OrderDetail>,
     enabled: !!orderId && open,
+    retry: (failureCount, err) => {
+      // Nie ponawiaj przy 401 (sesja wygasła) - redirect zajmie się interceptor
+      if (err && typeof err === 'object' && 'status' in err && err.status === 401) return false;
+      return failureCount < 2;
+    },
   });
 
   const [hasPdf, setHasPdf] = React.useState(false);
@@ -412,7 +417,13 @@ export function OrderDetailModal({
                 </div>
 
                 {/* Materiałówka - sumy wartości */}
-                {(order.windowsNetValue || order.windowsMaterial || order.assemblyValue || order.extrasValue || order.otherValue) && (
+                {(order.windowsNetValue || order.windowsMaterial || order.assemblyValue || order.extrasValue || order.otherValue) && (() => {
+                  const isAkrobud = isAkrobudOrder(order.client);
+                  const formatMaterial = isAkrobud
+                    ? (v: number) => formatCenty(v as Centy)
+                    : (v: number) => formatGrosze(v as Grosze);
+
+                  return (
                   <div className="border rounded-lg border-emerald-200 bg-emerald-50/30">
                     <div className="px-4 py-3">
                       <h4 className="font-medium flex items-center gap-2 text-emerald-900 mb-3">
@@ -424,7 +435,7 @@ export function OrderDetailModal({
                           <div className="bg-white rounded-lg p-3 border border-emerald-100">
                             <div className="text-xs text-slate-500 mb-1">Wartość netto okien</div>
                             <div className="font-semibold text-emerald-700">
-                              {formatCenty(order.windowsNetValue as Centy)}
+                              {formatMaterial(order.windowsNetValue)}
                             </div>
                           </div>
                         )}
@@ -432,7 +443,7 @@ export function OrderDetailModal({
                           <div className="bg-white rounded-lg p-3 border border-emerald-100">
                             <div className="text-xs text-slate-500 mb-1">Materiał okien</div>
                             <div className="font-semibold text-emerald-700">
-                              {formatCenty(order.windowsMaterial as Centy)}
+                              {formatMaterial(order.windowsMaterial)}
                             </div>
                           </div>
                         )}
@@ -440,7 +451,7 @@ export function OrderDetailModal({
                           <div className="bg-white rounded-lg p-3 border border-emerald-100">
                             <div className="text-xs text-slate-500 mb-1">Wartość montażu</div>
                             <div className="font-semibold text-emerald-700">
-                              {formatCenty(order.assemblyValue as Centy)}
+                              {formatMaterial(order.assemblyValue)}
                             </div>
                           </div>
                         )}
@@ -448,7 +459,7 @@ export function OrderDetailModal({
                           <div className="bg-white rounded-lg p-3 border border-emerald-100">
                             <div className="text-xs text-slate-500 mb-1">Wartość dodatków</div>
                             <div className="font-semibold text-emerald-700">
-                              {formatCenty(order.extrasValue as Centy)}
+                              {formatMaterial(order.extrasValue)}
                             </div>
                           </div>
                         )}
@@ -456,14 +467,15 @@ export function OrderDetailModal({
                           <div className="bg-white rounded-lg p-3 border border-emerald-100">
                             <div className="text-xs text-slate-500 mb-1">Inne</div>
                             <div className="font-semibold text-emerald-700">
-                              {formatCenty(order.otherValue as Centy)}
+                              {formatMaterial(order.otherValue)}
                             </div>
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
               </TabsContent>
 
               {/* Tab: Szczegóły (Okna, Szyby, Profile) */}
@@ -682,6 +694,10 @@ export function OrderDetailModal({
                 )}
               </TabsContent>
             </Tabs>
+          </div>
+        ) : error && typeof error === 'object' && 'status' in error && error.status === 401 ? (
+          <div className="text-center py-8 text-slate-500">
+            Sesja wygasła. Trwa przekierowanie na stronę logowania...
           </div>
         ) : (
           <div className="text-center py-8 text-slate-500">

@@ -974,6 +974,193 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
       });
     }
   );
+
+  /**
+   * GET /api/pvc-warehouse/remanent/:colorId
+   * Dane magazynowe profili PVC dla remanent - format kompatybilny z AKROBUD warehouse
+   */
+  fastify.get(
+    '/remanent/:colorId',
+    async (
+      request: FastifyRequest<{ Params: { colorId: string } }>,
+      reply: FastifyReply
+    ) => {
+      const colorId = parseInt(request.params.colorId);
+      if (isNaN(colorId)) {
+        return reply.status(400).send({ error: 'Invalid colorId' });
+      }
+
+      // Równoległe zapytania
+      const [color, profiles, stocks, demands, pendingOrders, receivedOrders] = await Promise.all([
+        // 1. Kolor
+        prisma.color.findUnique({
+          where: { id: colorId },
+          select: { id: true, code: true, name: true, hexColor: true, type: true },
+        }),
+
+        // 2. Profile PVC (wszystkie systemy)
+        prisma.profile.findMany({
+          where: {
+            OR: [
+              { isLiving: true },
+              { isBlok: true },
+              { isVlak: true },
+              { isCt70: true },
+              { isFocusing: true },
+            ],
+          },
+          select: { id: true, number: true, name: true },
+          orderBy: { number: 'asc' },
+        }),
+
+        // 3. Stany magazynowe dla tego koloru
+        prisma.warehouseStock.findMany({
+          where: { colorId, deletedAt: null },
+          select: {
+            profileId: true,
+            colorId: true,
+            currentStockBeams: true,
+            initialStockBeams: true,
+            updatedAt: true,
+          },
+        }),
+
+        // 4. Zapotrzebowanie z aktywnych zleceń
+        prisma.orderRequirement.groupBy({
+          by: ['profileId'],
+          where: {
+            colorId,
+            order: {
+              archivedAt: null,
+              status: { notIn: ['archived', 'completed'] },
+            },
+          },
+          _sum: { beamsCount: true, meters: true },
+        }),
+
+        // 5. Zamówienia magazynowe (pending)
+        prisma.warehouseOrder.findMany({
+          where: { colorId, status: 'pending' },
+          orderBy: { expectedDeliveryDate: 'asc' },
+        }),
+
+        // 6. Zamówienia magazynowe (received)
+        prisma.warehouseOrder.findMany({
+          where: { colorId, status: 'received' },
+          orderBy: { expectedDeliveryDate: 'asc' },
+        }),
+      ]);
+
+      if (!color) {
+        return reply.status(404).send({ error: 'Color not found' });
+      }
+
+      // Mapy lookup
+      const pvcProfileIds = new Set(profiles.map((p) => p.id));
+      const stockMap = new Map(stocks.filter((s) => pvcProfileIds.has(s.profileId)).map((s) => [s.profileId, s]));
+      const demandMap = new Map(demands.filter((d) => pvcProfileIds.has(d.profileId)).map((d) => [d.profileId, {
+        beams: d._sum.beamsCount || 0,
+        meters: parseFloat(d._sum.meters?.toString() || '0'),
+      }]));
+
+      // Grupuj zamówienia per profil
+      const pendingByProfile = new Map<number, typeof pendingOrders>();
+      for (const o of pendingOrders) {
+        if (!pvcProfileIds.has(o.profileId)) continue;
+        const arr = pendingByProfile.get(o.profileId) || [];
+        arr.push(o);
+        pendingByProfile.set(o.profileId, arr);
+      }
+      const receivedByProfile = new Map<number, typeof receivedOrders>();
+      for (const o of receivedOrders) {
+        if (!pvcProfileIds.has(o.profileId)) continue;
+        const arr = receivedByProfile.get(o.profileId) || [];
+        arr.push(o);
+        receivedByProfile.set(o.profileId, arr);
+      }
+
+      // Schuco in-transit dla PVC profili
+      const profileNumbers = profiles.map((p) => p.number);
+      const schucoArticleNumbers = profileNumbers.map((pn) => `1${pn}${color.code}`);
+      const schucoItems = schucoArticleNumbers.length > 0
+        ? await prisma.schucoOrderItem.findMany({
+            where: {
+              articleNumber: { in: schucoArticleNumbers },
+              schucoDelivery: {
+                shippingStatus: 'Potwierdzona dostawa',
+                archivedAt: null,
+              },
+            },
+            select: {
+              articleNumber: true,
+              orderedQty: true,
+              shippedQty: true,
+              deliveryDate: true,
+              schucoDelivery: { select: { deliveryDate: true } },
+            },
+          })
+        : [];
+
+      const schucoDataMap = new Map<string, { inTransitBeams: number; nearestDate: Date | null }>();
+      for (const item of schucoItems) {
+        const profileNumber = item.articleNumber.substring(1, item.articleNumber.length - color.code.length);
+        const inTransit = item.orderedQty - item.shippedQty;
+        if (inTransit <= 0) continue;
+        const existing = schucoDataMap.get(profileNumber) || { inTransitBeams: 0, nearestDate: null };
+        existing.inTransitBeams += inTransit;
+        const deliveryDate = item.deliveryDate || item.schucoDelivery.deliveryDate;
+        if (deliveryDate && (!existing.nearestDate || deliveryDate < existing.nearestDate)) {
+          existing.nearestDate = deliveryDate;
+        }
+        schucoDataMap.set(profileNumber, existing);
+      }
+
+      // Buduj wiersze tabeli - format kompatybilny z WarehouseDataResponse
+      const data = profiles.map((profile) => {
+        const stock = stockMap.get(profile.id);
+        const demand = demandMap.get(profile.id) || { beams: 0, meters: 0 };
+        const currentStock = stock?.currentStockBeams ?? 0;
+        const initialStock = stock?.initialStockBeams ?? 0;
+        const afterDemand = currentStock - demand.beams;
+        const profilePending = pendingByProfile.get(profile.id) || [];
+        const profileReceived = receivedByProfile.get(profile.id) || [];
+
+        const manualOrderedBeams = profilePending.reduce((sum, o) => sum + o.orderedBeams, 0);
+        const manualNearestDate = profilePending.length > 0 ? profilePending[0].expectedDeliveryDate : null;
+
+        const schucoData = schucoDataMap.get(profile.number);
+        const schucoOrderedBeams = schucoData?.inTransitBeams || 0;
+        const schucoNearestDate = schucoData?.nearestDate || null;
+
+        const totalOrderedBeams = manualOrderedBeams + schucoOrderedBeams;
+        let nearestDeliveryDate: Date | null = null;
+        if (manualNearestDate && schucoNearestDate) {
+          nearestDeliveryDate = manualNearestDate < schucoNearestDate ? manualNearestDate : schucoNearestDate;
+        } else {
+          nearestDeliveryDate = manualNearestDate || schucoNearestDate;
+        }
+
+        return {
+          profileId: profile.id,
+          profileNumber: profile.number,
+          currentStock,
+          initialStock,
+          demand: demand.beams,
+          demandMeters: demand.meters,
+          afterDemand,
+          orderedBeams: totalOrderedBeams,
+          expectedDeliveryDate: nearestDeliveryDate,
+          pendingOrders: profilePending,
+          receivedOrders: profileReceived,
+          isLow: currentStock <= 5,
+          isNegative: afterDemand < 0,
+          updatedAt: stock?.updatedAt ?? null,
+        };
+      });
+
+      return reply.send({ color, data });
+    }
+  );
 }
 
 /**

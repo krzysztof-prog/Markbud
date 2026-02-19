@@ -41,6 +41,8 @@ export interface PdfApprovalResult {
   message?: string;
   currency?: string;
   valueNetto?: number;
+  skipped?: boolean; // Jeśli true - import był pominięty (np. zlecenie sprawdzone)
+  skippedReason?: string; // Powód pominięcia (np. "verified")
 }
 
 /**

@@ -48,6 +48,9 @@ export interface ReportItem {
   rwOkucia: boolean;
   rwProfile: boolean;
 
+  // Weryfikacja (Do sprawdzenia)
+  verified: boolean;
+
   // Dane FV
   invoiceNumber: string | null;
   invoiceDate: Date | null;
@@ -274,6 +277,7 @@ export class ProductionReportService {
         hasOverride,
         rwOkucia: override?.rwOkucia ?? false,
         rwProfile: override?.rwProfile ?? false,
+        verified: override?.verified ?? false,
         invoiceNumber: override?.invoiceNumber ?? order.invoiceNumber,
         invoiceDate: override?.invoiceDate ?? null,
         avgUnitValue,
@@ -367,6 +371,40 @@ export class ProductionReportService {
 
     // Użyj dedykowanej metody updateInvoice (nie sprawdzamy statusu miesiąca!)
     await this.repository.updateInvoice(report.id, orderId, invoiceNumber, invoiceDate);
+  }
+
+  /**
+   * Oznacz zlecenie jako sprawdzone/niesprawdzone
+   *
+   * Gdy verified = true:
+   * - Blokuje edycję wartości (PLN, EUR, Materiał) w UI
+   * - System importu pomija to zlecenie (nie nadpisuje wartości)
+   *
+   * Dostępne tylko gdy miesiąc jest otwarty.
+   */
+  async setVerified(
+    year: number,
+    month: number,
+    orderId: number,
+    verified: boolean
+  ): Promise<void> {
+    this.validateYearMonth(year, month);
+
+    const report = await this.repository.findByYearMonth(year, month);
+    if (!report) {
+      throw new NotFoundError('ProductionReport');
+    }
+
+    // Sprawdź czy miesiąc jest otwarty
+    if (report.status === 'closed') {
+      throw new ConflictError(
+        'Miesiąc jest zamknięty. Nie można zmieniać statusu sprawdzenia.',
+        { code: 'MONTH_CLOSED' }
+      );
+    }
+
+    // Upsert pozycji z nowym statusem verified
+    await this.repository.upsertReportItem(report.id, orderId, { verified });
   }
 
   /**

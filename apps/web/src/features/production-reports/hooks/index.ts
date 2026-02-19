@@ -113,6 +113,38 @@ export function useUpdateInvoice(callbacks?: { onSuccess?: () => void }) {
 }
 
 /**
+ * Hook do oznaczania zlecenia jako sprawdzone/niesprawdzone
+ */
+export function useVerifyItem(callbacks?: { onSuccess?: () => void; onError?: (error: Error) => void }) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      year,
+      month,
+      orderId,
+      verified,
+    }: {
+      year: number;
+      month: number;
+      orderId: number;
+      verified: boolean;
+    }) => productionReportsApi.verifyItem(year, month, orderId, verified),
+
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: productionReportKeys.report(variables.year, variables.month),
+      });
+      callbacks?.onSuccess?.();
+    },
+
+    onError: (error) => {
+      callbacks?.onError?.(error as Error);
+    },
+  });
+}
+
+/**
  * Hook do aktualizacji nietypówek
  */
 export function useUpdateAtypical(callbacks?: { onSuccess?: () => void }) {

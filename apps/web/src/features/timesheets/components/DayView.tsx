@@ -9,7 +9,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useDaySummary } from '../hooks/useTimesheets';
-import type { DayStatus } from '../types';
+import type { DayStatus, AbsenceType } from '../types';
+import { ABSENCE_LABELS } from '../types';
 import {
   formatDateLong,
   formatDateISO,
@@ -266,12 +267,23 @@ export const DayView: React.FC<DayViewProps> = ({ date, onDateChange }) => {
                             </div>
                           </td>
                           <td className="px-4 py-2.5 text-sm text-center">
-                            {hasEntry ? positionName : '-'}
+                            {hasEntry && !entry?.absenceType ? positionName : '-'}
                           </td>
                           <td className="px-4 py-2.5 text-sm text-center">
-                            <span className={cn(productiveHours > 0 && 'text-green-600 font-medium')}>
-                              {formatHours(productiveHours)}
-                            </span>
+                            {entry?.absenceType ? (
+                              <span className={cn(
+                                'font-medium text-xs',
+                                entry.absenceType === 'SICK' && 'text-red-500',
+                                entry.absenceType === 'VACATION' && 'text-blue-500',
+                                entry.absenceType === 'ABSENT' && 'text-orange-500',
+                              )}>
+                                {ABSENCE_LABELS[entry.absenceType as AbsenceType]}
+                              </span>
+                            ) : (
+                              <span className={cn(productiveHours > 0 && 'text-green-600 font-medium')}>
+                                {formatHours(productiveHours)}
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-2.5 text-sm text-center">
                             <span className={cn(nonProductiveHours > 0 && 'text-orange-600 font-medium')}>

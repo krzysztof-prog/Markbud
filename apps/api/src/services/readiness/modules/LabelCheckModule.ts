@@ -22,10 +22,11 @@ export class LabelCheckModule extends BaseReadinessCheckModule {
   }
 
   async check(deliveryId: number): Promise<ReadinessCheckResult> {
-    // Znajdź najnowsze sprawdzenie etykiet dla dostawy
+    // Znajdź najnowsze aktywne sprawdzenie etykiet dla dostawy
     const labelCheck = await this.prisma.labelCheck.findFirst({
       where: {
         deliveryId,
+        deletedAt: null,
       },
       orderBy: {
         createdAt: 'desc',
@@ -34,7 +35,7 @@ export class LabelCheckModule extends BaseReadinessCheckModule {
         results: {
           where: {
             status: {
-              not: 'OK',
+              notIn: ['OK', 'SKIPPED'],
             },
           },
           select: {

@@ -6,6 +6,9 @@
 
 ## 📋 KONTEKST
 
+> **BAZA PRODUKCYJNA!** Pracujesz na bazie produkcyjnej (prod.db). Każda zmiana wpływa na prawdziwych użytkowników. Zachowaj szczególną ostrożność.
+> Ścieżka sieciowa: `\\MARKBUD-HV\MarkBud-Prog`
+
 Jesteś na **serwerze produkcyjnym Windows** w biurze.
 Twoim zadaniem jest **wdrożyć aplikację AKROBUD** zgodnie z przygotowaną konfiguracją.
 

@@ -109,6 +109,8 @@ export interface UzyteBeleProcessResult {
   requirementsCount: number;
   windowsCount: number;
   glassesCount: number;
+  skipped?: boolean; // Jeśli true - import był pominięty (np. zlecenie sprawdzone)
+  skippedReason?: string; // Powód pominięcia (np. "verified")
 }
 
 /**

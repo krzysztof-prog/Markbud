@@ -2,6 +2,7 @@
  * API Client - wspólny helper do komunikacji z backendem
  *
  * Automatycznie dodaje token autoryzacji do wszystkich requestów
+ * Globalny interceptor 401 - automatyczny logout przy wygaśniętym tokenie
  */
 
 import { getErrorMessage, getErrorAction } from './error-messages';
@@ -15,6 +16,27 @@ const TOKEN_KEY = 'auth_token';
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem(TOKEN_KEY);
+}
+
+// Flaga zapobiegająca wielokrotnemu przekierowaniu na /login
+let isRedirectingToLogin = false;
+
+/**
+ * Globalny handler 401 - sesja wygasła
+ * Czyści token i przekierowuje na stronę logowania
+ */
+function handleSessionExpired(): void {
+  if (typeof window === 'undefined' || isRedirectingToLogin) return;
+  // Sprawdź czy nie jesteśmy już na stronie logowania
+  if (window.location.pathname === '/login') return;
+
+  isRedirectingToLogin = true;
+  // Wyczyść token z localStorage i cookies
+  localStorage.removeItem(TOKEN_KEY);
+  document.cookie = `${TOKEN_KEY}=; path=/; max-age=0`;
+  // Przekieruj na login z informacją o redirect
+  const currentPath = window.location.pathname;
+  window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}&expired=1`;
 }
 
 export interface ApiError extends Error {
@@ -63,6 +85,12 @@ export async function fetchApi<T>(endpoint: string, options?: RequestInit): Prom
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
+
+      // Globalny interceptor 401 - sesja wygasła, przekieruj na login
+      if (response.status === 401 && token) {
+        handleSessionExpired();
+      }
+
       // API zwraca `message` jako główny komunikat błędu, `error` to tylko nazwa kategorii
       const error: ApiError = new Error(data.message || data.error || `HTTP Error: ${response.status}`);
       error.status = response.status;
@@ -144,6 +172,12 @@ export async function uploadFile<T>(endpoint: string, file: File): Promise<T> {
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
+
+      // Globalny interceptor 401 - sesja wygasła
+      if (response.status === 401 && token) {
+        handleSessionExpired();
+      }
+
       // API zwraca `message` jako główny komunikat błędu, `error` to tylko nazwa kategorii
       const error: ApiError = new Error(data.message || data.error || `HTTP Error: ${response.status}`);
       error.status = response.status;
@@ -201,6 +235,12 @@ export async function fetchBlob(endpoint: string): Promise<Blob> {
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({ error: 'Nieznany błąd' }));
+
+      // Globalny interceptor 401 - sesja wygasła
+      if (response.status === 401 && token) {
+        handleSessionExpired();
+      }
+
       // API zwraca `message` jako główny komunikat błędu, `error` to tylko nazwa kategorii
       const error: ApiError = new Error(data.message || data.error || `HTTP Error: ${response.status}`);
       error.status = response.status;

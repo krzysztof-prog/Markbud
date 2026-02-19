@@ -1703,6 +1703,9 @@ model ProductionReportItem {
   rwOkucia  Boolean @default(false) @map("rw_okucia")
   rwProfile Boolean @default(false) @map("rw_profile")
 
+  // Weryfikacja - czy zlecenie zostało sprawdzone (blokuje dalszą edycję i import)
+  verified Boolean @default(false) // Czy sprawdzone i zatwierdzone przez kierownika
+
   // Dane FV (edytowalne przez księgową nawet po zamknięciu miesiąca)
   invoiceNumber String?   @map("invoice_number")
   invoiceDate   DateTime? @map("invoice_date")

@@ -42,11 +42,16 @@ function parseOrderReference(reference: string): {
 } {
   const trimmed = reference.trim();
 
+  if (!trimmed) {
+    return { orderNumber: '', orderSuffix: null, fullReference: '' };
+  }
+
   // Pattern: "53479 poz.1" lub "53480-a poz.2"
   const match = trimmed.match(/(\d+)(?:-([a-zA-Z]+))?\s*(?:poz\.(\d+))?/);
 
   if (!match) {
-    throw new Error(`Nie można sparsować referencji zlecenia: ${reference}`);
+    // Non-numeric reference (e.g. "GOMMERS", "JAN DE NIET") - store as-is
+    return { orderNumber: '', orderSuffix: null, fullReference: trimmed };
   }
 
   return {
@@ -124,9 +129,10 @@ export function parseGlassOrderTxt(fileContent: string | Buffer): ParsedGlassOrd
     throw new Error('Nie znaleziono numeru zamówienia w pliku');
   }
 
-  // Find table start
+  // Find table start (handle encoding variants: "Ilość" vs "Ilosc" etc.)
   const tableStartIndex = lines.findIndex((line) =>
-    line.includes('Symbol') && line.includes('Ilość') && line.includes('Zlecenie')
+    line.includes('Symbol') && line.includes('Zlecenie') &&
+    (/Ilo[śs]ć|Ilo[^\s]*|Quantity/i.test(line))
   );
 
   if (tableStartIndex === -1) {
@@ -153,19 +159,29 @@ export function parseGlassOrderTxt(fileContent: string | Buffer): ParsedGlassOrd
 
     // Parse table row - format: Symbol | Ilość | Szer | Wys | Poz | Zlecenie
     // Może być tab-separated lub fixed-width
+    // Symbol może zawierać "U=1.0" oddzielone spacjami, więc szukamy
+    // pierwszej kolumny z czystą liczbą (ilość) zamiast zakładać stałe pozycje
     const parts = line.split(/\s{2,}|\t/).filter(Boolean);
 
-    if (parts.length < 6) continue;
+    if (parts.length < 5) continue;
 
     try {
-      const glassType = parts[0];
-      const quantity = parseInt(parts[1]);
-      const widthMm = parseInt(parts[2]);
-      const heightMm = parseInt(parts[3]);
-      const position = parts[4];
-      const orderRef = parts.slice(5).join(' '); // Może być rozdzielone
+      // Find quantity column: first part that is a pure integer
+      const quantityIndex = parts.findIndex(p => /^\d+$/.test(p));
+      // Need at least: glassType + quantity + width + height + position (5 columns)
+      // Zlecenie is optional (some orders don't have production order references)
+      if (quantityIndex === -1 || parts.length < quantityIndex + 4) continue;
 
-      if (isNaN(quantity) || isNaN(widthMm) || isNaN(heightMm)) {
+      const glassType = parts.slice(0, quantityIndex).join(' ');
+      const quantity = parseInt(parts[quantityIndex]);
+      const widthMm = parseInt(parts[quantityIndex + 1]);
+      const heightMm = parseInt(parts[quantityIndex + 2]);
+      const position = parts[quantityIndex + 3];
+      const orderRef = parts.length > quantityIndex + 4
+        ? parts.slice(quantityIndex + 4).join(' ')
+        : '';
+
+      if (!glassType || isNaN(quantity) || isNaN(widthMm) || isNaN(heightMm)) {
         continue;
       }
 

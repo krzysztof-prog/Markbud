@@ -40,6 +40,9 @@ export interface ProductionReportItem {
   rwOkucia: boolean;
   rwProfile: boolean;
 
+  // Weryfikacja
+  verified: boolean; // Czy sprawdzone (blokuje edycję i import)
+
   // Dane FV
   invoiceNumber: string | null;
   invoiceDate: string | null;

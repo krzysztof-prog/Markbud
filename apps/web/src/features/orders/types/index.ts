@@ -22,6 +22,7 @@ export interface OrderWindow {
  */
 export interface OrderCount {
   windows?: number;
+  glasses?: number;
 }
 
 /**

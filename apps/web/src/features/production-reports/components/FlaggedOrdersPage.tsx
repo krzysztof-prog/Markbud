@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, AlertTriangle, Paintbrush } from 'lucide-react';
+import { Loader2, AlertTriangle, Paintbrush, CheckCircle2, Edit3 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -13,11 +13,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { MonthSelector } from './MonthSelector';
 import { EditableCell } from './OrdersTable/EditableCell';
 import {
   useProductionReport,
   useUpdateReportItem,
+  useVerifyItem,
 } from '../hooks';
 import { getEffectivePermissions, mapBackendRole } from '../helpers/permissions';
 import type {
@@ -54,6 +56,23 @@ export const FlaggedOrdersPage: React.FC<FlaggedOrdersPageProps> = ({
   // Mutacja do aktualizacji pozycji
   const updateItemMutation = useUpdateReportItem();
 
+  // Mutacja do weryfikacji pozycji
+  const verifyItemMutation = useVerifyItem({
+    onSuccess: () => {
+      toast({
+        title: 'Zaktualizowano',
+        description: 'Status sprawdzenia został zmieniony',
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Błąd',
+        description: error.message || 'Nie udało się zmienić statusu sprawdzenia',
+        variant: 'destructive',
+      });
+    },
+  });
+
   // Oblicz uprawnienia
   const role = mapBackendRole(userRole || 'user') as UserRole;
   const monthStatus = report?.status || 'open';
@@ -87,7 +106,15 @@ export const FlaggedOrdersPage: React.FC<FlaggedOrdersPageProps> = ({
     [year, month, updateItemMutation, toast]
   );
 
-  const isPending = updateItemMutation.isPending;
+  // Handler zmiany statusu sprawdzenia
+  const handleVerifyChange = useCallback(
+    (orderId: number, verified: boolean) => {
+      verifyItemMutation.mutate({ year, month, orderId, verified });
+    },
+    [year, month, verifyItemMutation]
+  );
+
+  const isPending = updateItemMutation.isPending || verifyItemMutation.isPending;
 
   // Mapuj items do orderId
   const itemsByOrderId = useMemo(() => {
@@ -115,10 +142,12 @@ export const FlaggedOrdersPage: React.FC<FlaggedOrdersPageProps> = ({
       const warnings: string[] = [];
 
       // Sprawdź współczynnik
+      const AKROBUD_MULT = 4;
       let coeffNum: number | null = null;
       if (item) {
         if (item.isAkrobud && item.valueEur && item.materialValue > 0) {
-          coeffNum = item.valueEur / item.materialValue;
+          // Wsp. = (valueEur × eurRate) / (materialValue × 4)
+          coeffNum = (item.valueEur * DEFAULT_EUR_RATE) / (item.materialValue * AKROBUD_MULT);
         } else if (item.coefficient && item.coefficient !== '—') {
           const parsed = parseFloat(item.coefficient);
           if (!isNaN(parsed)) coeffNum = parsed;
@@ -208,6 +237,7 @@ export const FlaggedOrdersPage: React.FC<FlaggedOrdersPageProps> = ({
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[70px] text-center">✓</TableHead>
                     <TableHead className="w-[100px] text-left">Dostawa</TableHead>
                     <TableHead className="w-[110px] text-left">Nr prod.</TableHead>
                     <TableHead className="text-left">Projekt</TableHead>
@@ -232,6 +262,7 @@ export const FlaggedOrdersPage: React.FC<FlaggedOrdersPageProps> = ({
                       warnings={warnings}
                       canEdit={permissions.canEditQuantities}
                       onUpdateItem={handleUpdateItem}
+                      onVerifyChange={handleVerifyChange}
                       isPending={isPending}
                       isEven={index % 2 === 0}
                       eurRate={DEFAULT_EUR_RATE}
@@ -264,6 +295,7 @@ interface FlaggedOrderRowProps {
   warnings: string[];
   canEdit: boolean;
   onUpdateItem: (orderId: number, data: UpdateReportItemInput) => void;
+  onVerifyChange: (orderId: number, verified: boolean) => void;
   isPending: boolean;
   isEven: boolean;
   eurRate: number;
@@ -275,10 +307,24 @@ const FlaggedOrderRow: React.FC<FlaggedOrderRowProps> = ({
   warnings,
   canEdit,
   onUpdateItem,
+  onVerifyChange,
   isPending,
   isEven,
   eurRate,
 }) => {
+  // Status verified - z item lub domyślnie false, z optymistycznym lokalnym stanem
+  const serverVerified = item?.verified ?? false;
+  const [optimisticVerified, setOptimisticVerified] = useState(serverVerified);
+
+  // Synchronizuj z danymi serwera gdy się zmienią
+  useEffect(() => {
+    setOptimisticVerified(serverVerified);
+  }, [serverVerified]);
+
+  const isVerified = optimisticVerified;
+
+  // Blokada edycji - gdy verified = true, pola są zablokowane
+  const isEditDisabled = !canEdit || isVerified;
   // Wartości do wyświetlenia
   const displayValuePln = item?.overrideValuePln ?? order.valuePln;
   const displayValueEur = item?.overrideValueEur ?? order.valueEur;
@@ -293,20 +339,26 @@ const FlaggedOrderRow: React.FC<FlaggedOrderRowProps> = ({
       : null
   );
 
-  // Współczynnik (przeliczony z EUR dla AKROBUD)
+  // Współczynnik (przeliczony z EUR dla AKROBUD, materiał × 4)
+  const AKROBUD_MATERIAL_MULTIPLIER = 4;
+
   const computedCoefficient = (() => {
     if (!item) return '—';
-    if (item.isAkrobud && item.valueEur && item.materialValue > 0) {
-      return (item.valueEur / item.materialValue).toFixed(2);
+    if (item.isAkrobud && item.valueEur && eurRate && item.materialValue > 0) {
+      const valuePln = item.valueEur * eurRate;
+      const materialPln = item.materialValue * AKROBUD_MATERIAL_MULTIPLIER;
+      return (valuePln / materialPln).toFixed(2);
     }
     return item.coefficient;
   })();
 
-  // Jednostka (przeliczona z EUR dla AKROBUD)
+  // Jednostka (przeliczona z EUR dla AKROBUD, materiał × 4)
   const computedUnitValue = (() => {
     if (!item) return '—';
     if (item.isAkrobud && item.valueEur && eurRate && item.totalGlassQuantity > 0) {
-      return Math.round(((item.valueEur - item.materialValue) * eurRate) / item.totalGlassQuantity).toString();
+      const valuePln = item.valueEur * eurRate;
+      const materialPln = item.materialValue * AKROBUD_MATERIAL_MULTIPLIER;
+      return Math.round((valuePln - materialPln) / item.totalGlassQuantity).toString();
     }
     return item.unitValue;
   })();
@@ -318,6 +370,25 @@ const FlaggedOrderRow: React.FC<FlaggedOrderRowProps> = ({
 
   return (
     <TableRow className={isEven ? 'bg-amber-50/50' : 'bg-amber-50/30'}>
+      {/* Checkbox sprawdzone */}
+      <TableCell className="text-center">
+        <div className="flex items-center justify-center gap-1">
+          <Checkbox
+            checked={isVerified}
+            onCheckedChange={(checked) => {
+              const newValue = checked === true;
+              setOptimisticVerified(newValue);
+              onVerifyChange(order.id, newValue);
+            }}
+            disabled={isPending || !canEdit}
+            title={isVerified ? 'Zlecenie sprawdzone - edycja zablokowana' : 'Oznacz jako sprawdzone'}
+          />
+          {isVerified && (
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+          )}
+        </div>
+      </TableCell>
+
       {/* Dostawa */}
       <TableCell className="text-muted-foreground text-sm">
         {order.deliveryName || '-'}
@@ -356,49 +427,70 @@ const FlaggedOrderRow: React.FC<FlaggedOrderRowProps> = ({
       {/* Skrzydła */}
       <TableCell className="text-sm text-center tabular-nums">{displaySashes}</TableCell>
 
-      {/* Wartość PLN (edytowalna) */}
+      {/* Wartość PLN (edytowalna) + badge */}
       <TableCell className="w-[110px] pr-2">
-        <EditableCell
-          value={displayValuePln}
-          type="number"
-          isMoneyGrosze={true}
-          onChange={(val) =>
-            onUpdateItem(order.id, { overrideValuePln: val as number | null })
-          }
-          disabled={!canEdit}
-          isPending={isPending}
-          align="right"
-        />
+        <div className="flex items-center justify-end gap-1">
+          <EditableCell
+            value={displayValuePln}
+            type="number"
+            isMoneyGrosze={true}
+            onChange={(val) =>
+              onUpdateItem(order.id, { overrideValuePln: val as number | null })
+            }
+            disabled={isEditDisabled}
+            isPending={isPending}
+            align="right"
+          />
+          {item?.overrideValuePln !== null && item?.overrideValuePln !== undefined && (
+            <span title="Wartość ręcznie edytowana">
+              <Edit3 className="h-3 w-3 text-blue-600 flex-shrink-0" />
+            </span>
+          )}
+        </div>
       </TableCell>
 
-      {/* Wartość EUR (edytowalna) */}
+      {/* Wartość EUR (edytowalna) + badge */}
       <TableCell className="w-[110px] pr-2">
-        <EditableCell
-          value={displayValueEur}
-          type="number"
-          isMoneyGrosze={true}
-          onChange={(val) =>
-            onUpdateItem(order.id, { overrideValueEur: val as number | null })
-          }
-          disabled={!canEdit}
-          isPending={isPending}
-          align="right"
-        />
+        <div className="flex items-center justify-end gap-1">
+          <EditableCell
+            value={displayValueEur}
+            type="number"
+            isMoneyGrosze={true}
+            onChange={(val) =>
+              onUpdateItem(order.id, { overrideValueEur: val as number | null })
+            }
+            disabled={isEditDisabled}
+            isPending={isPending}
+            align="right"
+          />
+          {item?.overrideValueEur !== null && item?.overrideValueEur !== undefined && (
+            <span title="Wartość ręcznie edytowana">
+              <Edit3 className="h-3 w-3 text-blue-600 flex-shrink-0" />
+            </span>
+          )}
+        </div>
       </TableCell>
 
-      {/* Materiał (edytowalny) */}
+      {/* Materiał (edytowalny) + badge */}
       <TableCell className={`w-[110px] pr-2 ${isMissingMaterial ? 'text-red-500' : ''}`}>
-        <EditableCell
-          value={displayMaterialGrosze}
-          type="number"
-          isMoneyGrosze={true}
-          onChange={(val) =>
-            onUpdateItem(order.id, { overrideMaterialValue: val as number | null })
-          }
-          disabled={!canEdit}
-          isPending={isPending}
-          align="right"
-        />
+        <div className="flex items-center justify-end gap-1">
+          <EditableCell
+            value={displayMaterialGrosze}
+            type="number"
+            isMoneyGrosze={true}
+            onChange={(val) =>
+              onUpdateItem(order.id, { overrideMaterialValue: val as number | null })
+            }
+            disabled={isEditDisabled}
+            isPending={isPending}
+            align="right"
+          />
+          {item?.overrideMaterialValue !== null && item?.overrideMaterialValue !== undefined && (
+            <span title="Materiał ręcznie edytowany">
+              <Edit3 className="h-3 w-3 text-blue-600 flex-shrink-0" />
+            </span>
+          )}
+        </div>
       </TableCell>
 
       {/* Współczynnik */}

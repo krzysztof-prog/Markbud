@@ -42,6 +42,7 @@ interface BackendReportItem {
   hasOverride: boolean;
   rwOkucia: boolean;
   rwProfile: boolean;
+  verified: boolean;
   invoiceNumber: string | null;
   invoiceDate: string | null;
   avgUnitValue: string;
@@ -163,6 +164,7 @@ function mapBackendReportToFrontend(backend: BackendFullReport): ProductionRepor
         : null,
       rwOkucia: item.rwOkucia,
       rwProfile: item.rwProfile,
+      verified: item.verified ?? false,
       invoiceNumber: item.invoiceNumber,
       invoiceDate: item.invoiceDate,
       deliveryId: item.deliveryId,
@@ -259,6 +261,15 @@ export const productionReportsApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+
+  verifyItem: (year: number, month: number, orderId: number, verified: boolean) =>
+    fetchApi<{ success: boolean; verified: boolean }>(
+      `${BASE_URL}/${year}/${month}/items/${orderId}/verify`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ verified }),
+      }
+    ),
 
   updateAtypical: (year: number, month: number, data: UpdateAtypicalInput) =>
     fetchApi<void>(`${BASE_URL}/${year}/${month}/atypical`, {

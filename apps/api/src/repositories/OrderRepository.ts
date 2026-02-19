@@ -114,7 +114,7 @@ export class OrderRepository {
             },
           },
           _count: {
-            select: { windows: true, requirements: true },
+            select: { windows: true, requirements: true, glasses: true },
           },
         },
         orderBy: { createdAt: 'desc' },

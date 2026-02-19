@@ -49,9 +49,12 @@ export class GlassOrderService {
     // Use transaction for atomicity (delete + create in same transaction)
     // Zwiększony timeout (60s) - przy wielu pozycjach transakcja może trwać dłużej
     const result = await this.prisma.$transaction(async (tx) => {
-      // If replacing, delete the old one first (WITHIN transaction for atomicity)
+      // If replacing, HARD delete the old one (soft delete leaves glassOrderNumber in DB → unique constraint)
       if (existing && replaceExisting) {
         await this.deleteTx(tx, existing.id, existing.items);
+        // Hard delete items and order (deleteTx only soft-deletes)
+        await tx.glassOrderItem.deleteMany({ where: { glassOrderId: existing.id } });
+        await tx.glassOrder.delete({ where: { id: existing.id } });
       }
 
       // Create GlassOrder with items
@@ -163,24 +166,39 @@ export class GlassOrderService {
       where: { glassOrderId },
     });
 
-    // Group by orderNumber
+    // Group by full orderNumber (with suffix, e.g. "53818-a")
     const byOrder = new Map<string, number>();
     for (const item of items) {
-      const current = byOrder.get(item.orderNumber) || 0;
-      byOrder.set(item.orderNumber, current + item.quantity);
+      const fullOrderNumber = item.orderSuffix
+        ? `${item.orderNumber}-${item.orderSuffix}`
+        : item.orderNumber;
+      const current = byOrder.get(fullOrderNumber) || 0;
+      byOrder.set(fullOrderNumber, current + item.quantity);
     }
 
     // Batch fetch all orders at once (avoid N+1)
+    // Also try base numbers (without suffix) as fallback
     const orderNumbers = [...byOrder.keys()];
+    const baseNumbers = orderNumbers
+      .filter(n => n.includes('-'))
+      .map(n => n.split('-')[0]);
+    const allLookups = [...new Set([...orderNumbers, ...baseNumbers])];
+
     const existingOrders = await tx.order.findMany({
-      where: { orderNumber: { in: orderNumbers } },
+      where: { orderNumber: { in: allLookups } },
       select: { orderNumber: true },
     });
     const existingSet = new Set(existingOrders.map((o) => o.orderNumber));
 
     // Update existing orders
     for (const [orderNumber, quantity] of byOrder) {
-      if (existingSet.has(orderNumber)) {
+      // Try full order number first, then base number as fallback
+      const baseNumber = orderNumber.includes('-') ? orderNumber.split('-')[0] : null;
+      const matchedOrderNumber = existingSet.has(orderNumber)
+        ? orderNumber
+        : (baseNumber && existingSet.has(baseNumber) ? baseNumber : null);
+
+      if (matchedOrderNumber) {
         // Przygotuj dane do aktualizacji
         const updateData: Record<string, unknown> = {
           orderedGlassCount: { increment: quantity },
@@ -194,7 +212,7 @@ export class GlassOrderService {
         }
 
         await tx.order.update({
-          where: { orderNumber },
+          where: { orderNumber: matchedOrderNumber },
           data: updateData,
         });
       } else {
@@ -231,19 +249,32 @@ export class GlassOrderService {
 
     const byOrder = new Map<string, number>();
     for (const item of items) {
-      const current = byOrder.get(item.orderNumber) || 0;
-      byOrder.set(item.orderNumber, current + item.quantity);
+      const fullOrderNumber = item.orderSuffix
+        ? `${item.orderNumber}-${item.orderSuffix}`
+        : item.orderNumber;
+      const current = byOrder.get(fullOrderNumber) || 0;
+      byOrder.set(fullOrderNumber, current + item.quantity);
     }
 
     const orderNumbers = [...byOrder.keys()];
+    const baseNumbers = orderNumbers
+      .filter(n => n.includes('-'))
+      .map(n => n.split('-')[0]);
+    const allLookups = [...new Set([...orderNumbers, ...baseNumbers])];
+
     const existingOrders = await this.prisma.order.findMany({
-      where: { orderNumber: { in: orderNumbers } },
+      where: { orderNumber: { in: allLookups } },
       select: { orderNumber: true },
     });
     const existingSet = new Set(existingOrders.map((o) => o.orderNumber));
 
     for (const [orderNumber, quantity] of byOrder) {
-      if (existingSet.has(orderNumber)) {
+      const baseNumber = orderNumber.includes('-') ? orderNumber.split('-')[0] : null;
+      const matchedOrderNumber = existingSet.has(orderNumber)
+        ? orderNumber
+        : (baseNumber && existingSet.has(baseNumber) ? baseNumber : null);
+
+      if (matchedOrderNumber) {
         // Przygotuj dane do aktualizacji
         const updateData: Record<string, unknown> = {
           orderedGlassCount: { increment: quantity },
@@ -257,7 +288,7 @@ export class GlassOrderService {
         }
 
         const updatedOrder = await this.prisma.order.update({
-          where: { orderNumber },
+          where: { orderNumber: matchedOrderNumber },
           data: updateData,
         });
 
@@ -340,19 +371,28 @@ export class GlassOrderService {
   private async deleteTx(
     tx: Prisma.TransactionClient,
     id: number,
-    items: Array<{ orderNumber: string; quantity: number }>
+    items: Array<{ orderNumber: string; orderSuffix?: string | null; quantity: number }>
   ) {
     // Decrement Order.orderedGlassCount and update status
     const byOrder = new Map<string, number>();
     for (const item of items) {
-      const current = byOrder.get(item.orderNumber) || 0;
-      byOrder.set(item.orderNumber, current + item.quantity);
+      const fullOrderNumber = item.orderSuffix
+        ? `${item.orderNumber}-${item.orderSuffix}`
+        : item.orderNumber;
+      const current = byOrder.get(fullOrderNumber) || 0;
+      byOrder.set(fullOrderNumber, current + item.quantity);
     }
 
     for (const [orderNumber, quantity] of byOrder) {
-      const order = await tx.order.findUnique({
+      // Try full number first, then base number as fallback
+      let order = await tx.order.findUnique({
         where: { orderNumber },
       });
+      if (!order && orderNumber.includes('-')) {
+        order = await tx.order.findUnique({
+          where: { orderNumber: orderNumber.split('-')[0] },
+        });
+      }
 
       if (order) {
         const newOrderedCount = Math.max(0, (order.orderedGlassCount || 0) - quantity);
@@ -471,5 +511,116 @@ export class GlassOrderService {
       where: { id },
       data: { status },
     });
+  }
+
+  /**
+   * Re-match all glass orders to production orders.
+   * Recalculates orderedGlassCount from scratch for all affected orders.
+   */
+  async rematchAllGlassOrders(): Promise<{
+    glassOrdersProcessed: number;
+    ordersUpdated: number;
+    ordersNotFound: string[];
+    details: Array<{ orderNumber: string; quantity: number; matched: boolean; matchedAs?: string }>;
+  }> {
+    // 1. Get all non-deleted glass orders with items
+    const glassOrders = await this.prisma.glassOrder.findMany({
+      where: { deletedAt: null },
+      include: { items: true },
+    });
+
+    // 2. Build map: fullOrderNumber → total quantity across all glass orders
+    const totalByOrder = new Map<string, number>();
+    for (const go of glassOrders) {
+      for (const item of go.items) {
+        const fullOrderNumber = item.orderSuffix
+          ? `${item.orderNumber}-${item.orderSuffix}`
+          : item.orderNumber;
+        const current = totalByOrder.get(fullOrderNumber) || 0;
+        totalByOrder.set(fullOrderNumber, current + item.quantity);
+      }
+    }
+
+    // 3. Batch fetch all potentially matching orders
+    const orderNumbers = [...totalByOrder.keys()];
+    const baseNumbers = orderNumbers
+      .filter(n => n.includes('-'))
+      .map(n => n.split('-')[0]);
+    const allLookups = [...new Set([...orderNumbers, ...baseNumbers])];
+
+    const existingOrders = await this.prisma.order.findMany({
+      where: { orderNumber: { in: allLookups } },
+      select: { id: true, orderNumber: true, orderedGlassCount: true, deliveredGlassCount: true },
+    });
+    const existingMap = new Map(existingOrders.map(o => [o.orderNumber, o]));
+
+    // 4. Reset orderedGlassCount for all previously matched orders
+    await this.prisma.order.updateMany({
+      where: { orderNumber: { in: allLookups }, glassOrderStatus: { not: 'not_ordered' } },
+      data: { orderedGlassCount: 0, glassOrderStatus: 'not_ordered' },
+    });
+
+    // 5. Apply new counts
+    const ordersNotFound: string[] = [];
+    const details: Array<{ orderNumber: string; quantity: number; matched: boolean; matchedAs?: string }> = [];
+    const updatedOrderIds = new Set<number>();
+
+    for (const [orderNumber, quantity] of totalByOrder) {
+      const baseNumber = orderNumber.includes('-') ? orderNumber.split('-')[0] : null;
+      const order = existingMap.get(orderNumber)
+        || (baseNumber ? existingMap.get(baseNumber) : undefined);
+
+      if (order) {
+        await this.prisma.order.update({
+          where: { id: order.id },
+          data: {
+            orderedGlassCount: { increment: quantity },
+            glassOrderStatus: 'ordered',
+          },
+        });
+        updatedOrderIds.add(order.id);
+        details.push({
+          orderNumber,
+          quantity,
+          matched: true,
+          matchedAs: order.orderNumber,
+        });
+      } else {
+        ordersNotFound.push(orderNumber);
+        details.push({ orderNumber, quantity, matched: false });
+      }
+    }
+
+    // 6. Recalculate glassOrderStatus for updated orders based on delivered counts
+    for (const orderId of updatedOrderIds) {
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: { orderedGlassCount: true, deliveredGlassCount: true },
+      });
+      if (order) {
+        const ordered = order.orderedGlassCount || 0;
+        const delivered = order.deliveredGlassCount || 0;
+        let status = 'ordered';
+        if (delivered > 0 && delivered < ordered) status = 'partially_delivered';
+        else if (delivered > 0 && delivered >= ordered) status = 'delivered';
+        if (delivered > ordered) status = 'over_delivered';
+
+        await this.prisma.order.update({
+          where: { id: orderId },
+          data: { glassOrderStatus: status },
+        });
+
+        emitOrderUpdated({ id: orderId });
+      }
+    }
+
+    logger.info(`[GlassOrderService] Rematch completed: ${glassOrders.length} glass orders, ${updatedOrderIds.size} orders updated, ${ordersNotFound.length} not found`);
+
+    return {
+      glassOrdersProcessed: glassOrders.length,
+      ordersUpdated: updatedOrderIds.size,
+      ordersNotFound,
+      details,
+    };
   }
 }

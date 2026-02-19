@@ -3,8 +3,9 @@
  *
  * Codziennie o 7:00 sprawdza etykiety dla dostaw.
  * Zakres: od najbliższej niezrealizowanej dostawy + 21 dni do przodu.
- * Dla każdej dostawy która jeszcze nie ma sprawdzenia etykiet
- * (lub ma sprawdzenie starsze niż 24h), uruchamia LabelCheckService.
+ * Pomija dostawy które:
+ * - mają ostatnie sprawdzenie ze wszystkimi etykietami OK (nie nadpisuje dobrych wyników)
+ * - mają sprawdzenie w ciągu ostatnich 24h (nawet z błędami - nie spamuj)
  *
  * Użycie:
  * - Start: LabelCheckScheduler.start()
@@ -175,25 +176,44 @@ class LabelCheckSchedulerClass {
       // Sprawdź każdą dostawę
       for (const delivery of deliveries) {
         try {
-          // Sprawdź czy jest ostatnie sprawdzenie w ciągu 24h
-          const recentCheck = await prisma.labelCheck.findFirst({
+          // Sprawdź najnowsze sprawdzenie (niezależnie od czasu)
+          const latestCheck = await prisma.labelCheck.findFirst({
             where: {
               deliveryId: delivery.id,
-              createdAt: {
-                gte: skipThreshold,
-              },
               deletedAt: null,
+            },
+            orderBy: {
+              createdAt: 'desc',
             },
             select: {
               id: true,
               createdAt: true,
               status: true,
+              okCount: true,
+              mismatchCount: true,
+              errorCount: true,
             },
           });
 
-          if (recentCheck && recentCheck.status === 'completed') {
+          // Pomiń jeśli ostatnie sprawdzenie ma wszystkie etykiety OK
+          if (
+            latestCheck &&
+            latestCheck.status === 'completed' &&
+            latestCheck.okCount > 0 &&
+            latestCheck.mismatchCount === 0 &&
+            latestCheck.errorCount === 0
+          ) {
             logger.debug(
-              `[LabelCheckScheduler] Skipping delivery ${delivery.deliveryNumber || delivery.id} - checked ${recentCheck.createdAt.toISOString()}`
+              `[LabelCheckScheduler] Skipping delivery ${delivery.deliveryNumber || delivery.id} - all labels OK (check #${latestCheck.id}, ${latestCheck.okCount} OK)`
+            );
+            skippedCount++;
+            continue;
+          }
+
+          // Pomiń jeśli sprawdzono w ciągu 24h (nawet z błędami - nie spamuj)
+          if (latestCheck && latestCheck.status === 'completed' && latestCheck.createdAt >= skipThreshold) {
+            logger.debug(
+              `[LabelCheckScheduler] Skipping delivery ${delivery.deliveryNumber || delivery.id} - checked ${latestCheck.createdAt.toISOString()}`
             );
             skippedCount++;
             continue;

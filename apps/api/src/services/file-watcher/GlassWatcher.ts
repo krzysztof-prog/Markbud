@@ -119,7 +119,7 @@ export class GlassWatcher implements IFileWatcher {
       ignoreInitial: false,
       depth: 0, // Tylko pliki w głównym folderze
       usePolling: true, // Polling działa lepiej na udziałach sieciowych
-      interval: 1000, // Sprawdzaj co 1s
+      interval: 5000, // Sprawdzaj co 5s (mniejsze obciążenie sieci/CPU)
       awaitWriteFinish: {
         stabilityThreshold: this.config.stabilityThreshold,
         pollInterval: this.config.pollInterval,
@@ -168,7 +168,7 @@ export class GlassWatcher implements IFileWatcher {
       ignoreInitial: false,
       depth: 0, // Tylko pliki w głównym folderze
       usePolling: true, // Polling działa lepiej na udziałach sieciowych
-      interval: 1000, // Sprawdzaj co 1s
+      interval: 5000, // Sprawdzaj co 5s (mniejsze obciążenie sieci/CPU)
       awaitWriteFinish: {
         stabilityThreshold: this.config.stabilityThreshold,
         pollInterval: this.config.pollInterval,

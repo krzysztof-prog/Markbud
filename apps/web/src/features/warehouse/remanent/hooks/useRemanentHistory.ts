@@ -85,6 +85,7 @@ export function useRollback() {
       showSuccessToast('Remanent cofnięty', response.message);
       // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ['warehouse'] });
+      queryClient.invalidateQueries({ queryKey: ['pvc-remanent'] });
       queryClient.invalidateQueries({ queryKey: ['remanent-history'] });
     },
     onError: (error) => {

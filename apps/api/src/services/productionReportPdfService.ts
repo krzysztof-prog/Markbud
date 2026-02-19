@@ -29,6 +29,9 @@ const MONTH_NAMES = [
 // Domyślny kurs EUR/PLN
 const DEFAULT_EUR_RATE = 4.30;
 
+// Stały mnożnik materiału AKROBUD (materiał w EUR × ten mnożnik = wartość w PLN)
+const AKROBUD_MATERIAL_MULTIPLIER = 4;
+
 export class ProductionReportPdfService {
   // Ścieżki do fontów wspierających polskie znaki
   private readonly FONT_DIR = path.join(__dirname, '..', 'assets', 'fonts');
@@ -356,22 +359,57 @@ export class ProductionReportPdfService {
     }
     x += this.COL_WIDTHS.materialValue;
 
-    // Efektywna wartość PLN (uwzględniając EUR * kurs)
-    const effectivePln = this.getEffectivePln(item, eurRate);
+    // Wykryj czy to AKROBUD (po nazwie klienta)
+    const isAkrobud = (item.client ?? '').toUpperCase().includes('AKROBUD');
 
-    // Współczynnik = efektywne PLN / materiał
-    if (item.materialValue > 0 && effectivePln > 0) {
-      const coeff = (effectivePln / item.materialValue).toFixed(2);
+    // Współczynnik - różne obliczenia dla AKROBUD (EUR) i innych (PLN)
+    if (item.materialValue > 0) {
+      let coeff: string;
+
+      if (isAkrobud && item.valueEur !== null && item.valueEur > 0) {
+        // AKROBUD: Wsp. = (valueEur × kurs) / (materialValue × mnożnik)
+        // wartość przeliczona na PLN / materiał przeliczony na PLN
+        const valuePln = item.valueEur * eurRate;
+        const materialPln = item.materialValue * AKROBUD_MATERIAL_MULTIPLIER;
+        coeff = (valuePln / materialPln).toFixed(2);
+      } else {
+        // Pozostałe: Wsp. = valuePln / materialValue
+        const effectivePln = this.getEffectivePln(item, eurRate);
+        if (effectivePln > 0) {
+          coeff = (effectivePln / item.materialValue).toFixed(2);
+        } else {
+          coeff = '—';
+        }
+      }
+
       doc.text(coeff, x, y, { width: this.COL_WIDTHS.coefficient, align: 'right' });
     } else {
       doc.text('—', x, y, { width: this.COL_WIDTHS.coefficient, align: 'right' });
     }
     x += this.COL_WIDTHS.coefficient;
 
-    // Jednostka = (efektywne PLN - materiał) / ilość szyb
-    if (item.totalGlassQuantity > 0 && effectivePln > 0) {
-      const unitVal = Math.round((effectivePln - item.materialValue) / item.totalGlassQuantity);
-      doc.text(unitVal.toString(), x, y, { width: this.COL_WIDTHS.unitValue, align: 'right' });
+    // Jednostka - różne obliczenia dla AKROBUD (EUR) i innych (PLN)
+    if (item.totalGlassQuantity > 0) {
+      let unitVal: string;
+
+      if (isAkrobud && item.valueEur !== null && item.valueEur > 0) {
+        // AKROBUD: Jedn. zł = (valueEur × kurs - materialValue × mnożnik) / szkła
+        const valuePln = item.valueEur * eurRate;
+        const materialPln = item.materialValue * AKROBUD_MATERIAL_MULTIPLIER;
+        const unitValue = Math.round((valuePln - materialPln) / item.totalGlassQuantity);
+        unitVal = unitValue.toString();
+      } else {
+        // Pozostałe: Jedn. zł = (valuePln - materialValue) / szkła
+        const effectivePln = this.getEffectivePln(item, eurRate);
+        if (effectivePln > 0) {
+          const unitValue = Math.round((effectivePln - item.materialValue) / item.totalGlassQuantity);
+          unitVal = unitValue.toString();
+        } else {
+          unitVal = '—';
+        }
+      }
+
+      doc.text(unitVal, x, y, { width: this.COL_WIDTHS.unitValue, align: 'right' });
     } else {
       doc.text('—', x, y, { width: this.COL_WIDTHS.unitValue, align: 'right' });
     }
@@ -471,13 +509,16 @@ export class ProductionReportPdfService {
       .reduce((sum, item) => sum + (item.valueEur ?? 0), 0);
     const akrobudEurInPln = akrobudEurTotal * eurRate;
 
-    // Wiersze podsumowania
+    // Efektywna wartość TYPOWE w PLN (PLN zleceń + AKROBUD EUR przeliczone na PLN)
+    const typoweEffectivePln = summary.typowe.valuePln + akrobudEurInPln;
+
+    // Wiersze podsumowania - AKROBUD i RESZTA wcięte (należą do TYPOWE)
     const rows = [
-      { label: 'TYPOWE', data: summary.typowe, bg: null as string | null, isAkrobud: false, bold: false },
-      { label: 'AKROBUD', data: summary.akrobud, bg: '#DBEAFE', isAkrobud: true, bold: false },
-      { label: 'RESZTA', data: summary.reszta, bg: null as string | null, isAkrobud: false, bold: false },
-      { label: 'NIETYPÓWKI', data: summary.atypical, bg: '#FEF3C7', isAkrobud: false, bold: false },
-      { label: 'RAZEM PLN', data: summary.razem, bg: '#F3F4F6', bold: true, isAkrobud: false },
+      { label: 'TYPOWE', data: summary.typowe, bg: '#F9FAFB' as string | null, isAkrobud: false, bold: true, indent: false, overrideValue: typoweEffectivePln },
+      { label: 'AKROBUD', data: summary.akrobud, bg: '#DBEAFE', isAkrobud: true, bold: false, indent: true, overrideValue: null as number | null },
+      { label: 'RESZTA', data: summary.reszta, bg: null as string | null, isAkrobud: false, bold: false, indent: true, overrideValue: null as number | null },
+      { label: 'NIETYPÓWKI', data: summary.atypical, bg: '#FEF3C7', isAkrobud: false, bold: false, indent: false, overrideValue: null as number | null },
+      { label: 'RAZEM PLN', data: summary.razem, bg: '#F3F4F6', bold: true, isAkrobud: false, indent: false, overrideValue: typoweEffectivePln + (summary.atypical?.valuePln ?? 0) },
     ];
 
     for (const row of rows) {
@@ -490,7 +531,9 @@ export class ProductionReportPdfService {
       doc.fontSize(9).font(row.bold ? 'Roboto-Bold' : 'Roboto').fillColor('#000000');
       x = startX;
 
-      doc.text(row.label, x, y, { width: colWidths.label });
+      // Wcięcie dla AKROBUD i RESZTA (należą do TYPOWE)
+      const labelIndent = row.indent ? 15 : 0;
+      doc.text(row.label, x + labelIndent, y, { width: colWidths.label - labelIndent });
       x += colWidths.label;
 
       // Wyświetl "—" dla wartości 0
@@ -506,11 +549,15 @@ export class ProductionReportPdfService {
       doc.text(sashesText, x, y, { width: colWidths.sashes, align: 'right' });
       x += colWidths.sashes;
 
-      // Dla AKROBUD pokaż wartość PLN (przeliczoną z EUR), a EUR w nawiasie
+      // Wartość PLN - różne wyświetlanie zależnie od wiersza
       if (row.isAkrobud && akrobudEurTotal > 0) {
+        // AKROBUD: pokaż PLN (przeliczone z EUR) + EUR w nawiasie
         const plnFormatted = this.formatNumber(akrobudEurInPln);
         const eurFormatted = this.formatNumber(akrobudEurTotal);
         doc.text(`${plnFormatted} (${eurFormatted} EUR)`, x, y, { width: colWidths.value + 60, align: 'right' });
+      } else if (row.overrideValue !== null) {
+        // TYPOWE: pokaż efektywną wartość PLN (suma AKROBUD+RESZTA w PLN)
+        doc.text(this.formatNumber(row.overrideValue), x, y, { width: colWidths.value, align: 'right' });
       } else {
         // Dla pozostałych wierszy - wyświetl "—" dla 0
         if (row.data.valuePln > 0) {
@@ -523,67 +570,26 @@ export class ProductionReportPdfService {
       y += 14;
     }
 
-    // Oblicz sumę EUR z pozycji
-    const totalEur = items.reduce((sum, item) => sum + (item.valueEur ?? 0), 0);
-
-    // Dodaj wiersz EUR jeśli są zlecenia w EUR
-    if (totalEur > 0) {
-      const eurInPln = totalEur * eurRate;
-      const totalWithEur = summary.razem.valuePln + eurInPln;
-
-      y += 5;
-
-      // ZLECENIA EUR
-      const totalRowWidth = Object.values(colWidths).reduce((a, b) => a + b, 0);
-      doc.rect(startX - 2, y - 2, totalRowWidth + 4, 14).fill('#D1FAE5');
-      doc.fontSize(9).font('Roboto').fillColor('#000000');
-      x = startX;
-      doc.text('ZLECENIA EUR', x, y, { width: colWidths.label });
-      x += colWidths.label;
-      doc.text('—', x, y, { width: colWidths.windows, align: 'right' });
-      x += colWidths.windows;
-      doc.text('—', x, y, { width: colWidths.units, align: 'right' });
-      x += colWidths.units;
-      doc.text('—', x, y, { width: colWidths.sashes, align: 'right' });
-      x += colWidths.sashes;
-
-      const eurFormatted = this.formatNumber(totalEur);
-      const eurInPlnFormatted = this.formatNumber(eurInPln);
-      doc.text(`${eurFormatted} EUR (${eurInPlnFormatted} PLN)`, x, y, { width: colWidths.value + 60, align: 'right' });
-
-      y += 14;
-
-      // RAZEM (PLN + EUR)
-      doc.rect(startX - 2, y - 2, totalRowWidth + 4, 14).fill('#E5E7EB');
-      doc.fontSize(9).font('Roboto-Bold').fillColor('#000000');
-      x = startX;
-      doc.text('RAZEM (PLN + EUR)', x, y, { width: colWidths.label });
-      x += colWidths.label;
-      doc.text('—', x, y, { width: colWidths.windows, align: 'right' });
-      x += colWidths.windows;
-      doc.text('—', x, y, { width: colWidths.units, align: 'right' });
-      x += colWidths.units;
-      doc.text('—', x, y, { width: colWidths.sashes, align: 'right' });
-      x += colWidths.sashes;
-
-      doc.text(`${this.formatNumber(totalWithEur)} PLN`, x, y, { width: colWidths.value, align: 'right' });
-
-      y += 20;
-
-      // Info o kursie
-      doc.fontSize(8).font('Roboto').fillColor('#6B7280');
-      doc.text(`Kurs EUR/PLN: ${eurRate.toFixed(2)}`, startX, y);
-    }
-
     y += 20;
+
+    // Oblicz łączny materiał dla typowych zleceń (AKROBUD × mnożnik, RESZTA w PLN)
+    const typicalItems = items.filter(i => !i.specialType);
+    const totalTypicalMaterial = typicalItems.reduce((sum, item) => {
+      const isAkrobud = (item.client ?? '').toUpperCase().includes('AKROBUD');
+      return sum + (isAkrobud ? item.materialValue * AKROBUD_MATERIAL_MULTIPLIER : item.materialValue);
+    }, 0);
 
     // Statystyki dodatkowe
     doc.fontSize(9).font('Roboto').fillColor('#374151');
-    const avgPerUnit = summary.razem.units > 0 ? this.formatNumber(summary.razem.valuePln / summary.razem.units) : '—';
-    doc.text(`Średnia wartość na jednostkę: ${avgPerUnit} PLN`, startX, y);
+
+    // Średnia wartość jednostki typowych okien (wartość / jednostki)
+    const avgTypoweUnit = summary.typowe.units > 0 ? this.formatNumber(typoweEffectivePln / summary.typowe.units) : '—';
+    doc.text(`Średnia wartość jednostki typowych: ${avgTypoweUnit} PLN`, startX, y);
     y += 12;
-    const avgPerDay = summary.workingDays > 0 ? this.formatNumber(summary.razem.valuePln / summary.workingDays) : '—';
-    doc.text(`Średnia wartość na dzień roboczy (${summary.workingDays} dni): ${avgPerDay} PLN`, startX, y);
+
+    // Średni zysk na jednostkę typowych okien ((wartość - materiał) / jednostki)
+    const avgTypoweProfit = summary.typowe.units > 0 ? this.formatNumber((typoweEffectivePln - totalTypicalMaterial) / summary.typowe.units) : '—';
+    doc.text(`Średni zysk na jednostkę: ${avgTypoweProfit} PLN`, startX, y);
 
     doc.y = y + 15;
   }
@@ -641,11 +647,25 @@ export class ProductionReportPdfService {
     const resztaItems = items.filter(i => !(i.client ?? '').toUpperCase().includes('AKROBUD'));
 
     // Funkcja pomocnicza do obliczenia sum
+    // AKROBUD: materiał w EUR × stały mnożnik (4) → PLN
+    // RESZTA: materiał już w PLN
     const sumMaterials = (list: ReportItem[]) => ({
-      glazing: list.reduce((s, i) => s + i.glazingValue, 0),
-      fittings: list.reduce((s, i) => s + i.fittingsValue, 0),
-      parts: list.reduce((s, i) => s + i.partsValue, 0),
-      material: list.reduce((s, i) => s + i.materialValue, 0),
+      glazing: list.reduce((s, i) => {
+        const isAkrobud = (i.client ?? '').toUpperCase().includes('AKROBUD');
+        return s + (isAkrobud ? i.glazingValue * AKROBUD_MATERIAL_MULTIPLIER : i.glazingValue);
+      }, 0),
+      fittings: list.reduce((s, i) => {
+        const isAkrobud = (i.client ?? '').toUpperCase().includes('AKROBUD');
+        return s + (isAkrobud ? i.fittingsValue * AKROBUD_MATERIAL_MULTIPLIER : i.fittingsValue);
+      }, 0),
+      parts: list.reduce((s, i) => {
+        const isAkrobud = (i.client ?? '').toUpperCase().includes('AKROBUD');
+        return s + (isAkrobud ? i.partsValue * AKROBUD_MATERIAL_MULTIPLIER : i.partsValue);
+      }, 0),
+      material: list.reduce((s, i) => {
+        const isAkrobud = (i.client ?? '').toUpperCase().includes('AKROBUD');
+        return s + (isAkrobud ? i.materialValue * AKROBUD_MATERIAL_MULTIPLIER : i.materialValue);
+      }, 0),
       effectivePln: list.reduce((s, i) => s + this.getEffectivePln(i, eurRate), 0),
     });
 
@@ -706,24 +726,37 @@ export class ProductionReportPdfService {
    */
   private addPageFooters(doc: PDFKit.PDFDocument, totalPages: number): void {
     const range = doc.bufferedPageRange();
+    const pageCount = range.count;
 
-    for (let i = 0; i < range.count; i++) {
+    // Tymczasowo zablokuj addPage — PDFKit wywołuje go automatycznie
+    // gdy doc.text() pisze blisko dołu strony, co tworzy puste strony.
+    const originalAddPage = doc.addPage.bind(doc);
+    doc.addPage = (() => doc) as typeof doc.addPage;
+
+    for (let i = 0; i < pageCount; i++) {
       doc.switchToPage(range.start + i);
+      doc.y = this.PAGE_MARGIN;
 
       doc
         .fontSize(8)
         .font('Roboto')
         .fillColor('#9CA3AF')
         .text(
-          `Strona ${i + 1} z ${range.count}`,
+          `Strona ${i + 1} z ${pageCount}`,
           this.PAGE_MARGIN,
           doc.page.height - 30,
           {
             align: 'center',
             width: doc.page.width - 2 * this.PAGE_MARGIN,
+            lineBreak: false,
           }
         );
     }
+
+    // Przywróć oryginalne addPage
+    doc.addPage = originalAddPage;
+    doc.switchToPage(range.start + pageCount - 1);
+    doc.y = this.PAGE_MARGIN;
   }
 
   /**
