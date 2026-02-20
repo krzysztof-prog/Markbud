@@ -53,9 +53,10 @@ export class WarehouseService {
   performMonthlyUpdate(
     colorId: number,
     updates: import('./types.js').MonthlyUpdateInput[],
-    userId?: number
+    userId?: number,
+    remanentDate?: Date
   ) {
-    return this.inventoryService.performMonthlyUpdate(colorId, updates, userId);
+    return this.inventoryService.performMonthlyUpdate(colorId, updates, userId, remanentDate);
   }
 
   rollbackInventory(colorId: number, userId?: number) {

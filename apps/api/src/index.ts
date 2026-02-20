@@ -57,6 +57,7 @@ import { startSoftDeleteCleanupScheduler, stopSoftDeleteCleanupScheduler } from 
 import { DeliveryAlertScheduler } from './services/alerts/DeliveryAlertScheduler.js';
 import { LabelCheckScheduler } from './services/alerts/LabelCheckScheduler.js';
 import { startGmailScheduler, stopGmailScheduler } from './services/gmail/GmailScheduler.js';
+import { startOkucOrderStatusScheduler, stopOkucOrderStatusScheduler } from './services/okuc/OkucOrderStatusScheduler.js';
 import { setupWebSocket } from './plugins/websocket.js';
 import { seedDefaultWorkers } from './services/seedDefaultWorkers.js';
 import { initializeImportWebSocketBridge } from './services/import/ImportWebSocketBridge.js';
@@ -321,6 +322,7 @@ const closeGracefully = async (signal: string) => {
   DeliveryAlertScheduler.stop();
   LabelCheckScheduler.stop();
   stopGmailScheduler();
+  stopOkucOrderStatusScheduler();
   await fastify.close();
   await prisma.$disconnect();
   process.exit(0);
@@ -375,6 +377,9 @@ const start = async () => {
 
     // Uruchom Gmail IMAP Scheduler (pobieranie CSV z Gmail co godzinę)
     startGmailScheduler(prisma);
+
+    // Uruchom Okuc Order Status Scheduler (auto-receive zamówień z przeszłą datą dostawy codziennie o 6:00)
+    startOkucOrderStatusScheduler(prisma);
 
     // Auto-fetch pozycji zamówień jest teraz częścią SchucoScheduler
     // (uruchamia się automatycznie po każdym pobraniu zamówień)

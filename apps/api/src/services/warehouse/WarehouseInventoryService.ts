@@ -26,7 +26,8 @@ export class WarehouseInventoryService {
   async performMonthlyUpdate(
     colorId: number,
     updates: MonthlyUpdateInput[],
-    userId?: number
+    userId?: number,
+    remanentDate?: Date
   ): Promise<{ updates: MonthlyUpdateResult[]; archivedOrdersCount: number }> {
     // Validate all updates
     for (const update of updates) {
@@ -74,7 +75,7 @@ export class WarehouseInventoryService {
           },
         });
 
-        // Update stock + ustaw datę remanentu na TERAZ
+        // Update stock + ustaw datę remanentu (wybraną przez użytkownika lub teraz)
         await tx.warehouseStock.update({
           where: {
             profileId_colorId: {
@@ -85,7 +86,7 @@ export class WarehouseInventoryService {
           data: {
             currentStockBeams: update.actualStock,
             initialStockBeams: calculatedStock,
-            remanentDate: new Date(), // Data nowego remanentu
+            remanentDate: remanentDate ?? new Date(),
             version: { increment: 1 },
           },
         });

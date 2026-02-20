@@ -17,7 +17,9 @@ import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PeriodSelector } from '@/components/ui/period-selector';
 import { BackButton } from '@/components/ui/back-button';
-import { Box, Package, FileText, History, ShoppingCart, Info } from 'lucide-react';
+import { Box, Package, FileText, History, ShoppingCart, Info, ClipboardCheck } from 'lucide-react';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 
@@ -155,7 +157,15 @@ export default function PvcWarehousePageContent() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <Header title="Magazyn PVC">
-        <BackButton href="/" label="Powrót do dashboardu" />
+        <div className="flex gap-2">
+          <Link href="/magazyn/pvc/remanent">
+            <Button variant="outline" size="sm">
+              <ClipboardCheck className="h-4 w-4 mr-2" />
+              Wykonaj remanent
+            </Button>
+          </Link>
+          <BackButton href="/" label="Powrót do dashboardu" />
+        </div>
       </Header>
 
       {/* Breadcrumb */}

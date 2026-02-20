@@ -18,6 +18,7 @@
 import ExcelJS from 'exceljs';
 import { PrismaClient } from '@prisma/client';
 import { logger } from '../../utils/logger.js';
+import { emitOkucStockUpdated } from '../event-emitter.js';
 import type { ImportOrderItem, ParsedOrderImport, ConfirmOrderImportInput } from '../../validators/okuc.js';
 
 export class OkucOrderImportService {
@@ -305,10 +306,17 @@ export class OkucOrderImportService {
         },
       });
 
+      // 7. Auto-receive: jeśli status = 'received', dodaj okucia na magazyn
+      if (status === 'received') {
+        await this.autoReceiveOrder(tx, order, data.expectedDeliveryDate, userId);
+      }
+
       logger.info('Created OKUC order from import', {
         orderId: order.id,
         orderNumber: order.orderNumber,
         itemsCount: order.items.length,
+        status,
+        autoReceived: status === 'received',
         articlesCreated,
         pricesUpdated,
       });
@@ -327,6 +335,77 @@ export class OkucOrderImportService {
   }
 
   /**
+   * Auto-receive zamówienia: ustawia actualDeliveryDate, receivedQty i dodaje na magazyn
+   * Wywoływane gdy expectedDeliveryDate jest w przeszłości (status = 'received')
+   */
+  private async autoReceiveOrder(
+    tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0],
+    order: { id: number; orderNumber: string; items: Array<{ articleId: number; orderedQty: number }> },
+    expectedDeliveryDate: Date,
+    userId: number
+  ): Promise<void> {
+    // Ustaw actualDeliveryDate = expectedDeliveryDate
+    await tx.okucOrder.update({
+      where: { id: order.id },
+      data: { actualDeliveryDate: expectedDeliveryDate },
+    });
+
+    for (const item of order.items) {
+      // Ustaw receivedQty = orderedQty
+      await tx.okucOrderItem.updateMany({
+        where: { okucOrderId: order.id, articleId: item.articleId },
+        data: { receivedQty: item.orderedQty },
+      });
+
+      // Zaktualizuj stock - dodaj orderedQty
+      const updateResult = await tx.okucStock.updateMany({
+        where: { articleId: item.articleId },
+        data: {
+          currentQuantity: { increment: item.orderedQty },
+          updatedAt: new Date(),
+          updatedById: userId,
+        },
+      });
+
+      // Stwórz wpis historii
+      const stock = await tx.okucStock.findFirst({
+        where: { articleId: item.articleId },
+      });
+
+      if (stock) {
+        await tx.okucHistory.create({
+          data: {
+            articleId: item.articleId,
+            warehouseType: stock.warehouseType,
+            subWarehouse: stock.subWarehouse,
+            eventType: 'order_received',
+            previousQty: stock.currentQuantity - item.orderedQty,
+            changeQty: item.orderedQty,
+            newQty: stock.currentQuantity,
+            reference: order.orderNumber,
+            recordedById: userId,
+          },
+        });
+      } else if (updateResult.count === 0) {
+        // Artykuł nie ma rekordu w OkucStock - loguj warning
+        logger.warn('Auto-receive: brak rekordu OkucStock dla artykułu', {
+          articleId: item.articleId,
+          orderNumber: order.orderNumber,
+        });
+      }
+    }
+
+    // Emituj event o aktualizacji stocku
+    emitOkucStockUpdated({ orderNumber: order.orderNumber, autoReceived: true });
+
+    logger.info('Auto-received OKUC order (expectedDeliveryDate w przeszłości)', {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      itemsCount: order.items.length,
+    });
+  }
+
+  /**
    * Oblicza status zamówienia na podstawie daty dostawy
    */
   private calculateOrderStatus(expectedDeliveryDate: Date): string {
@@ -338,8 +417,13 @@ export class OkucOrderImportService {
       expectedDeliveryDate.getDate()
     );
 
-    // Jeśli dostawa już była lub jest dzisiaj - status 'in_transit'
-    if (deliveryDate <= today) {
+    // Jeśli dostawa już była (data w przeszłości) - automatycznie 'received'
+    if (deliveryDate < today) {
+      return 'received';
+    }
+
+    // Jeśli dostawa jest dzisiaj - 'in_transit'
+    if (deliveryDate.getTime() === today.getTime()) {
       return 'in_transit';
     }
 

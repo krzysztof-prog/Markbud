@@ -87,7 +87,10 @@ export const monthlyUpdateBodySchema = z.object({
     .min(1, { message: 'At least one update is required' }),
   userId: z.number().int().positive({
     message: 'userId must be a positive integer'
-  })
+  }),
+  remanentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'remanentDate must be in YYYY-MM-DD format'
+  }).optional()
 });
 
 /**

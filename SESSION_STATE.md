@@ -325,7 +325,8 @@ Copy-Item apps/api/prisma/prod.db "C:\Backups\prod_$date.db"
 ---
 
 **Utworzono:** 2026-02-13
-**Ostatnia aktualizacja:** 2026-02-13 10:10
-**Aktualna sesja:** Production Deployment - ZAKOŃCZONY ✅
+**Ostatnia aktualizacja:** 2026-02-20
+**Aktualna sesja:** Bieżące zmiany na produkcji
 **Serwer:** 192.168.1.5 (MARKBUD-HV)
+**Środowisko:** ⚠️ PRODUKCJA - wszelkie zmiany wymagają `pnpm build && pm2 restart all`
 **Dokumentacja:** QUICK_START_PRODUCTION.md, DEPLOYMENT_CHECKLIST.md

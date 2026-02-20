@@ -18,7 +18,8 @@ import {
   Archive,
   History,
   RotateCcw,
-  AlertTriangle
+  AlertTriangle,
+  CalendarDays,
 } from 'lucide-react';
 import Link from 'next/link';
 import type { Color } from '@/types';
@@ -38,8 +39,11 @@ import {
 } from '@/features/warehouse/remanent/hooks/useRemanentHistory';
 
 export default function PvcRemanentPage() {
-  // Stan wyboru koloru i UI
+  // Stan wyboru koloru, daty i UI
   const [selectedColorId, setSelectedColorId] = useState<number | null>(null);
+  const [remanentDate, setRemanentDate] = useState<string>(
+    new Date().toISOString().split('T')[0] // domyślnie dzisiaj (YYYY-MM-DD)
+  );
   const [entries, setEntries] = useState<RemanentFormEntry[]>([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showFinalizeModal, setShowFinalizeModal] = useState(false);
@@ -89,7 +93,7 @@ export default function PvcRemanentPage() {
     }));
 
     submitMutation.mutate(
-      { colorId: selectedColorId, updates },
+      { colorId: selectedColorId, updates, remanentDate },
       {
         onSuccess: () => {
           setShowConfirmModal(false);
@@ -250,6 +254,31 @@ export default function PvcRemanentPage() {
                 </div>
               </div>
 
+              {/* Data remanentu */}
+              <Card>
+                <CardContent className="py-4">
+                  <div className="flex items-center gap-4">
+                    <CalendarDays className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                    <div className="flex items-center gap-3">
+                      <label htmlFor="remanent-date" className="text-sm font-medium whitespace-nowrap">
+                        Data remanentu:
+                      </label>
+                      <input
+                        id="remanent-date"
+                        type="date"
+                        value={remanentDate}
+                        max={new Date().toISOString().split('T')[0]}
+                        onChange={(e) => setRemanentDate(e.target.value)}
+                        className="px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <span className="text-xs text-slate-500">
+                      Stan obliczony i nowy stan początkowy będą liczone od tej daty
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Formularz remanentu */}
               <Card>
                 <CardHeader className="pb-3">
@@ -257,6 +286,9 @@ export default function PvcRemanentPage() {
                     <CardTitle className="flex items-center gap-2 text-lg">
                       <ClipboardCheck className="h-5 w-5" />
                       Wprowadź stan rzeczywisty
+                      <span className="text-sm font-normal text-slate-500 ml-2">
+                        (na dzień {new Date(remanentDate + 'T00:00:00').toLocaleDateString('pl-PL')})
+                      </span>
                     </CardTitle>
                     {hasEntries && (
                       <div className="text-sm text-slate-600">

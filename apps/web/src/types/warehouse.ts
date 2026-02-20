@@ -160,6 +160,7 @@ export interface RemanentSubmitData {
     profileId: number;
     actualStock: number;
   }>;
+  remanentDate?: string; // Data remanentu w formacie YYYY-MM-DD (opcjonalna, domyślnie dzisiaj)
 }
 
 /**

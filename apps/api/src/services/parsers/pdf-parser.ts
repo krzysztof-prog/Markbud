@@ -57,6 +57,7 @@ export class PdfParser {
     const parsed = await this.parseCenyPdf(filepath);
 
     // Użyj transakcji aby atomowo zaktualizować zlecenie i oznaczyć pending price
+    // Timeout 30s - SQLite może być zajęty innymi operacjami importu
     return prisma.$transaction(async (tx) => {
       // Znajdź zlecenie po numerze (z fallbackiem na prefix match np. 53614 -> 53614-a)
       let order = await tx.order.findUnique({
@@ -122,7 +123,7 @@ export class PdfParser {
         orderId: order.id,
         updated: true,
       };
-    });
+    }, { timeout: 30000 });
   }
 
   /**

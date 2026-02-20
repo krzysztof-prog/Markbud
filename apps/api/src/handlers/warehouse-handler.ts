@@ -70,10 +70,13 @@ export async function monthlyUpdate(
 ): Promise<void> {
   const body = monthlyUpdateBodySchema.parse(request.body);
 
+  const remanentDate = body.remanentDate ? new Date(body.remanentDate + 'T00:00:00') : undefined;
+
   const result = await getService().performMonthlyUpdate(
     body.colorId,
     body.updates,
-    body.userId
+    body.userId,
+    remanentDate
   );
 
   reply.send(result);

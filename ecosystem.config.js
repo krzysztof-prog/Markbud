@@ -21,7 +21,7 @@ module.exports = {
 
       // Ścieżka do aplikacji
       cwd: './apps/api',
-      script: 'dist/index.js',
+      script: 'start.js',
 
       // Tryb uruchomienia
       instances: 1,
