@@ -200,6 +200,18 @@ export class LabelCheckRepository {
     });
   }
 
+  /**
+   * Soft delete all active LabelChecks for a delivery
+   * Używane do invalidacji wyników kontroli etykiet gdy zmieni się skład dostawy lub data
+   */
+  async softDeleteByDeliveryId(deliveryId: number): Promise<number> {
+    const result = await this.prisma.labelCheck.updateMany({
+      where: { deliveryId, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+    return result.count;
+  }
+
   // ===================
   // Result Operations
   // ===================

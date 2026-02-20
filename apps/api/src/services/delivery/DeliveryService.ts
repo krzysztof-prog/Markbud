@@ -19,6 +19,7 @@
 import { DeliveryRepository } from '../../repositories/DeliveryRepository.js';
 import { OrderRepository } from '../../repositories/OrderRepository.js';
 import { PalletOptimizerRepository } from '../../repositories/PalletOptimizerRepository.js';
+import { LabelCheckRepository } from '../../repositories/LabelCheckRepository.js';
 import { NotFoundError, ValidationError } from '../../utils/errors.js';
 import { parseDate, parseDateSafe } from '../../utils/date-helpers.js';
 import { OrderService } from '../orderService.js';
@@ -52,6 +53,7 @@ export class DeliveryService {
   private optimizationService: DeliveryOptimizationService;
   private deliveryOrderService: DeliveryOrderService;
   private palletValidationService: PalletValidationService;
+  private labelCheckRepository: LabelCheckRepository;
 
   constructor(private repository: DeliveryRepository, orderService?: OrderService) {
     // Allow injection for testing, otherwise create internally
@@ -69,6 +71,7 @@ export class DeliveryService {
     );
     this.deliveryOrderService = new DeliveryOrderService(repository, prisma);
     this.palletValidationService = new PalletValidationService(prisma);
+    this.labelCheckRepository = new LabelCheckRepository(prisma);
   }
 
   // ===================
@@ -160,6 +163,17 @@ export class DeliveryService {
       status: data.status,
       notes: data.notes,
     });
+
+    // Invalidate label checks when delivery date changes - etykiety mają starą datę
+    if (data.deliveryDate) {
+      const count = await this.labelCheckRepository.softDeleteByDeliveryId(id);
+      if (count > 0) {
+        logger.info('Label checks invalidated due to delivery date change', {
+          deliveryId: id,
+          invalidatedCount: count,
+        });
+      }
+    }
 
     // Notify about update
     this.notificationService.notifyDeliveryUpdated(delivery.id, {
@@ -376,6 +390,19 @@ export class DeliveryService {
           newDate: updated.deliveryDate,
           deliveryNumber: updated.deliveryNumber,
         };
+      })
+    );
+
+    // Invalidate label checks for all updated deliveries - daty się zmieniły
+    await Promise.all(
+      updates.map(async (u) => {
+        const count = await this.labelCheckRepository.softDeleteByDeliveryId(u.id);
+        if (count > 0) {
+          logger.info('Label checks invalidated due to bulk date change', {
+            deliveryId: u.id,
+            invalidatedCount: count,
+          });
+        }
       })
     );
 

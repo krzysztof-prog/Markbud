@@ -13,6 +13,7 @@
 
 import { DeliveryRepository } from '../../repositories/DeliveryRepository.js';
 import { PalletOptimizerRepository } from '../../repositories/PalletOptimizerRepository.js';
+import { LabelCheckRepository } from '../../repositories/LabelCheckRepository.js';
 import { NotFoundError, ValidationError } from '../../utils/errors.js';
 import { OrderVariantService, type VariantType } from '../orderVariantService.js';
 import { CsvParser } from '../parsers/csv-parser.js';
@@ -56,6 +57,7 @@ export class DeliveryOrderService {
   private csvParser: CsvParser;
   private notificationService: DeliveryNotificationService;
   private palletOptimizerRepository: PalletOptimizerRepository;
+  private labelCheckRepository: LabelCheckRepository;
   private readinessAggregator: DeliveryReadinessAggregator;
 
   constructor(
@@ -66,6 +68,7 @@ export class DeliveryOrderService {
     this.csvParser = new CsvParser();
     this.notificationService = deliveryNotificationService;
     this.palletOptimizerRepository = new PalletOptimizerRepository(prisma);
+    this.labelCheckRepository = new LabelCheckRepository(prisma);
     this.readinessAggregator = new DeliveryReadinessAggregator(prisma);
   }
 
@@ -123,6 +126,9 @@ export class DeliveryOrderService {
 
     // P1-4: Invalidate pallet optimization when orders change
     await this.invalidatePalletOptimization(deliveryId);
+
+    // Invalidate label checks - nowe zlecenie = etykiety mogą nie pasować
+    await this.invalidateLabelChecks(deliveryId);
 
     // Notify about order addition
     this.notificationService.notifyOrderAdded(deliveryId, orderId, order.orderNumber);
@@ -182,6 +188,9 @@ export class DeliveryOrderService {
 
     // P1-4: Invalidate pallet optimization when orders change
     await this.invalidatePalletOptimization(deliveryId);
+
+    // Invalidate label checks - usunięte zlecenie = kontrola nieaktualna
+    await this.invalidateLabelChecks(deliveryId);
 
     // Notify about order removal
     this.notificationService.notifyOrderRemoved(deliveryId, orderId);
@@ -285,6 +294,12 @@ export class DeliveryOrderService {
     await Promise.all([
       this.invalidatePalletOptimization(sourceDeliveryId),
       this.invalidatePalletOptimization(targetDeliveryId),
+    ]);
+
+    // Invalidate label checks for BOTH deliveries - przeniesione zlecenie ma etykietę ze starą datą
+    await Promise.all([
+      this.invalidateLabelChecks(sourceDeliveryId),
+      this.invalidateLabelChecks(targetDeliveryId),
     ]);
 
     // Notify about order move after successful transaction
@@ -445,6 +460,22 @@ export class DeliveryOrderService {
     if (deleted) {
       logger.info('Pallet optimization invalidated due to delivery order change', {
         deliveryId,
+      });
+    }
+  }
+
+  /**
+   * Invalidate label checks when delivery orders change
+   * Wyniki kontroli etykiet są nieaktualne gdy zmieni się skład dostawy,
+   * bo fizyczne etykiety mogą mieć starą datę dostawy.
+   * Soft-delete powoduje że scheduler sprawdzi dostawę ponownie.
+   */
+  private async invalidateLabelChecks(deliveryId: number): Promise<void> {
+    const count = await this.labelCheckRepository.softDeleteByDeliveryId(deliveryId);
+    if (count > 0) {
+      logger.info('Label checks invalidated due to delivery order change', {
+        deliveryId,
+        invalidatedCount: count,
       });
     }
   }
