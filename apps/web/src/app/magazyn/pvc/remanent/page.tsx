@@ -56,10 +56,10 @@ export default function PvcRemanentPage() {
   });
   const colors = colorsResponse?.colors;
 
-  // Pobierz dane magazynowe PVC dla wybranego koloru
+  // Pobierz dane magazynowe PVC dla wybranego koloru (z datą remanentu dla dynamicznego stanu obliczonego)
   const { data: warehouseData, isLoading: warehouseLoading } = useQuery({
-    queryKey: ['pvc-remanent', selectedColorId],
-    queryFn: () => fetchApi<WarehouseDataResponse>(`/api/pvc-warehouse/remanent/${selectedColorId}`),
+    queryKey: ['pvc-remanent', selectedColorId, remanentDate],
+    queryFn: () => fetchApi<WarehouseDataResponse>(`/api/pvc-warehouse/remanent/${selectedColorId}?date=${remanentDate}`),
     enabled: !!selectedColorId,
   });
 
@@ -268,7 +268,7 @@ export default function PvcRemanentPage() {
                         type="date"
                         value={remanentDate}
                         max={new Date().toISOString().split('T')[0]}
-                        onChange={(e) => setRemanentDate(e.target.value)}
+                        onChange={(e) => { setRemanentDate(e.target.value); setEntries([]); }}
                         className="px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>

@@ -53,15 +53,13 @@ export async function middleware(request: NextRequest) {
   }
 
   // Sprawdź rolę użytkownika (fetch do API)
-  // UWAGA: W produkcji rozważ użycie JWT decode zamiast fetch (szybsze)
   try {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
     const userResponse = await fetch(`${apiUrl}/api/auth/me`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
-      // Cache request (Next.js automatycznie cache'uje na czas request lifecycle)
-      next: { revalidate: 60 } // Cache na 60s
+      cache: 'no-store',
     });
 
     if (!userResponse.ok) {

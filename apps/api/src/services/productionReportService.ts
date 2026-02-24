@@ -120,6 +120,12 @@ export interface ReportSummary {
   // Statystyki
   workingDays: number;
   avgUnitsPerDay: string; // sformatowane lub '—'
+
+  // Szyby < 1m²
+  smallGlass: {
+    count: number;   // liczba sztuk szyb < 1m²
+    totalArea: number; // suma m² szyb < 1m²
+  };
 }
 
 /** Dane do aktualizacji pozycji */
@@ -767,6 +773,9 @@ export class ProductionReportService {
     const avgUnitsPerDay =
       workingDays > 0 ? (razem.units / workingDays).toFixed(2) : '—';
 
+    // Szyby < 1m²
+    const smallGlass = await this.repository.getSmallGlassStats(year, month);
+
     // DEBUG: sprawdź valueEur dla AKROBUD
     console.log('[DEBUG] AKROBUD summary:', {
       valueEur: akrobud.valueEur,
@@ -782,6 +791,7 @@ export class ProductionReportService {
       razem,
       workingDays,
       avgUnitsPerDay,
+      smallGlass,
     };
   }
 }

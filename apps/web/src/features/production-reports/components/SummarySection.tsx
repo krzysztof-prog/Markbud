@@ -249,6 +249,36 @@ export const SummarySection: React.FC<SummarySectionProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Szyby < 1m² */}
+        {summary?.smallGlass && summary.smallGlass.count > 0 && (
+          <div className="mt-4 pt-4 border-t">
+            <h4 className="text-sm font-semibold text-muted-foreground mb-2">
+              Szyby &lt; 1 m²
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex justify-between items-center p-3 bg-orange-50 rounded-md">
+                <span className="text-sm text-muted-foreground">
+                  Liczba szyb &lt; 1 m²:
+                </span>
+                <span className="font-semibold">
+                  {summary.smallGlass.count.toLocaleString('pl-PL')} szt.
+                </span>
+              </div>
+              <div className="flex justify-between items-center p-3 bg-orange-50 rounded-md">
+                <span className="text-sm text-muted-foreground">
+                  Suma powierzchni szyb &lt; 1 m²:
+                </span>
+                <span className="font-semibold">
+                  {summary.smallGlass.totalArea.toLocaleString('pl-PL', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })} m²
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

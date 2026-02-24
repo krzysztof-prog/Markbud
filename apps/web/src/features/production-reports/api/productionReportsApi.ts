@@ -110,6 +110,10 @@ interface BackendReportSummary {
   razem: BackendCategorySummary;
   workingDays: number;
   avgUnitsPerDay: string;
+  smallGlass: {
+    count: number;
+    totalArea: number;
+  };
 }
 
 // ============================================
@@ -232,6 +236,7 @@ function mapBackendSummaryToFrontend(backend: BackendReportSummary): ProductionR
     workingDays: backend.workingDays,
     avgPerUnit: razem.units > 0 ? backend.razem.valuePln / razem.units : 0,
     avgPerDay: backend.workingDays > 0 ? backend.razem.valuePln / backend.workingDays : 0,
+    smallGlass: backend.smallGlass ?? { count: 0, totalArea: 0 },
   };
 }
 

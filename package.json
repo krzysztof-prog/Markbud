@@ -30,7 +30,8 @@
     "bd": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe",
     "bd:list": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe list",
     "bd:ready": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe ready",
-    "bd:info": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe info"
+    "bd:info": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe info",
+    "reindex": "node scripts/reindex.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

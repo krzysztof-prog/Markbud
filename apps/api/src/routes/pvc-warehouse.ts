@@ -976,13 +976,18 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
   );
 
   /**
-   * GET /api/pvc-warehouse/remanent/:colorId
+   * GET /api/pvc-warehouse/remanent/:colorId?date=YYYY-MM-DD
    * Dane magazynowe profili PVC dla remanent - format kompatybilny z AKROBUD warehouse
+   *
+   * Opcjonalny parametr ?date=YYYY-MM-DD:
+   * Gdy podany, "stan obliczony" jest liczony dynamicznie na dzień tej daty:
+   *   currentStock = initialStockBeams + dostawy(od remanentDate do date) - RW(od remanentDate do date)
+   * Gdy brak - używa aktualnego stanu (currentStockBeams z bazy, czyli stan na dziś)
    */
   fastify.get(
     '/remanent/:colorId',
     async (
-      request: FastifyRequest<{ Params: { colorId: string } }>,
+      request: FastifyRequest<{ Params: { colorId: string }; Querystring: { date?: string } }>,
       reply: FastifyReply
     ) => {
       const colorId = parseInt(request.params.colorId);
@@ -990,8 +995,18 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'Invalid colorId' });
       }
 
+      // Parsuj opcjonalną datę remanentu z query
+      const dateParam = (request.query as { date?: string }).date;
+      let calculationDate: Date | null = null;
+      if (dateParam) {
+        calculationDate = new Date(dateParam + 'T23:59:59');
+        if (isNaN(calculationDate.getTime())) {
+          return reply.status(400).send({ error: 'Invalid date format. Use YYYY-MM-DD' });
+        }
+      }
+
       // Równoległe zapytania
-      const [color, profiles, stocks, demands, pendingOrders, receivedOrders] = await Promise.all([
+      const [color, profiles, stocks, demands, pendingOrders, receivedOrders, palletConfigs] = await Promise.all([
         // 1. Kolor
         prisma.color.findUnique({
           where: { id: colorId },
@@ -1013,7 +1028,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
           orderBy: { number: 'asc' },
         }),
 
-        // 3. Stany magazynowe dla tego koloru
+        // 3. Stany magazynowe dla tego koloru (z remanentDate do filtrowania)
         prisma.warehouseStock.findMany({
           where: { colorId, deletedAt: null },
           select: {
@@ -1021,6 +1036,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
             colorId: true,
             currentStockBeams: true,
             initialStockBeams: true,
+            remanentDate: true,
             updatedAt: true,
           },
         }),
@@ -1049,6 +1065,11 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
           where: { colorId, status: 'received' },
           orderBy: { expectedDeliveryDate: 'asc' },
         }),
+
+        // 7. Przeliczniki palet na bele (potrzebne do dynamicznego obliczania)
+        prisma.profilePalletConfig.findMany({
+          select: { profileId: true, beamsPerPallet: true },
+        }),
       ]);
 
       if (!color) {
@@ -1062,6 +1083,97 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         beams: d._sum.beamsCount || 0,
         meters: parseFloat(d._sum.meters?.toString() || '0'),
       }]));
+      const palletConfigMap = new Map(palletConfigs.map((pc) => [pc.profileId, pc.beamsPerPallet]));
+
+      // Gdy podano datę - oblicz stan dynamicznie (dostawy + RW filtrowane po dacie)
+      const deliveriesMap = new Map<string, number>(); // profileNumber -> bele dostarczone
+      const rwMap = new Map<number, { beams: number; meters: number }>(); // profileId -> zużycie RW
+
+      if (calculationDate) {
+        const profileNumbers = profiles.map((p) => p.number);
+        const schucoArticleNumbers = profileNumbers.map((pn) => `1${pn}${color.code}`);
+
+        const [schucoDeliveries, rwRequirements] = await Promise.all([
+          // Schuco dostawy - "Całkowicie dostarczone"
+          schucoArticleNumbers.length > 0
+            ? prisma.schucoOrderItem.findMany({
+                where: {
+                  articleNumber: { in: schucoArticleNumbers },
+                  schucoDelivery: {
+                    shippingStatus: 'Całkowicie dostarczone',
+                    archivedAt: null,
+                  },
+                },
+                select: {
+                  articleNumber: true,
+                  shippedQty: true,
+                  unit: true,
+                  schucoDelivery: { select: { deliveryDate: true } },
+                },
+              })
+            : [],
+
+          // RW - ukończone zlecenia
+          prisma.orderRequirement.findMany({
+            where: {
+              colorId,
+              order: { status: 'completed' },
+            },
+            select: {
+              profileId: true,
+              beamsCount: true,
+              meters: true,
+              order: { select: { productionDate: true, completedAt: true, updatedAt: true } },
+            },
+          }),
+        ]);
+
+        // Przelicz Schuco dostawy na bele per profil, filtrowane po dacie
+        for (const item of schucoDeliveries) {
+          const profileNumber = item.articleNumber.substring(1, item.articleNumber.length - color.code.length);
+          const profile = profiles.find((p) => p.number === profileNumber);
+          if (!profile) continue;
+
+          const deliveryDate = item.schucoDelivery?.deliveryDate;
+          const stock = stockMap.get(profile.id);
+          const remanentDate = stock?.remanentDate;
+
+          // Filtruj: po dacie ostatniego remanentu i przed wybraną datą
+          if (remanentDate && deliveryDate && deliveryDate < remanentDate) continue;
+          if (deliveryDate && deliveryDate > calculationDate) continue;
+          if (item.shippedQty <= 0) continue;
+
+          const isPallet = item.unit?.toLowerCase().includes('palet') ?? false;
+          const beamsPerPallet = palletConfigMap.get(profile.id);
+
+          let beams = 0;
+          if (isPallet && beamsPerPallet) {
+            beams = item.shippedQty * beamsPerPallet;
+          } else if (!isPallet) {
+            beams = item.shippedQty;
+          }
+
+          deliveriesMap.set(profileNumber, (deliveriesMap.get(profileNumber) ?? 0) + beams);
+        }
+
+        // Przelicz RW per profil, filtrowane po dacie
+        for (const req of rwRequirements) {
+          if (!pvcProfileIds.has(req.profileId)) continue;
+
+          const orderDate = req.order.productionDate ?? req.order.completedAt ?? req.order.updatedAt;
+          const stock = stockMap.get(req.profileId);
+          const remanentDate = stock?.remanentDate;
+
+          // Filtruj: po dacie ostatniego remanentu i przed wybraną datą
+          if (remanentDate && orderDate < remanentDate) continue;
+          if (orderDate > calculationDate) continue;
+
+          const existing = rwMap.get(req.profileId) || { beams: 0, meters: 0 };
+          existing.beams += req.beamsCount;
+          existing.meters += req.meters;
+          rwMap.set(req.profileId, existing);
+        }
+      }
 
       // Grupuj zamówienia per profil
       const pendingByProfile = new Map<number, typeof pendingOrders>();
@@ -1119,7 +1231,21 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
       const data = profiles.map((profile) => {
         const stock = stockMap.get(profile.id);
         const demand = demandMap.get(profile.id) || { beams: 0, meters: 0 };
-        const currentStock = stock?.currentStockBeams ?? 0;
+
+        let currentStock: number;
+        if (calculationDate) {
+          // Stan obliczony dynamicznie na wybraną datę:
+          // initialStockBeams + dostawy(od remanentu do daty) - RW(od remanentu do daty)
+          const base = stock?.initialStockBeams ?? 0;
+          const deliveries = deliveriesMap.get(profile.number) ?? 0;
+          const rw = rwMap.get(profile.id) || { beams: 0, meters: 0 };
+          const rwBeamsFromMeters = Math.ceil(rw.meters / 6);
+          const rwBeamsTotal = rw.beams + rwBeamsFromMeters;
+          currentStock = base + deliveries - rwBeamsTotal;
+        } else {
+          currentStock = stock?.currentStockBeams ?? 0;
+        }
+
         const initialStock = stock?.initialStockBeams ?? 0;
         const afterDemand = currentStock - demand.beams;
         const profilePending = pendingByProfile.get(profile.id) || [];
@@ -1158,7 +1284,7 @@ export async function pvcWarehouseRoutes(fastify: FastifyInstance) {
         };
       });
 
-      return reply.send({ color, data });
+      return reply.send({ color, data, calculationDate: calculationDate?.toISOString() ?? null });
     }
   );
 }

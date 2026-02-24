@@ -133,6 +133,12 @@ export interface ProductionReportSummary {
   workingDays: number;
   avgPerUnit: number;  // Średnia wartość na jednostkę (PLN)
   avgPerDay: number;   // Średnia wartość na dzień roboczy (PLN)
+
+  // Szyby < 1m²
+  smallGlass: {
+    count: number;   // liczba sztuk szyb < 1m²
+    totalArea: number; // suma m² szyb < 1m²
+  };
 }
 
 // Grupowanie po dostawie (dla AKROBUD)

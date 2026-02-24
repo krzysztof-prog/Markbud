@@ -15,10 +15,8 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   const service = new SettingsService(repository);
   const handler = new SettingsHandler(service);
 
-  // Core settings routes - delegate to handler - all require authentication
+  // Core settings routes - delegate to handler
   fastify.get('/', handler.getAll.bind(handler));
-  fastify.get<{ Params: { key: string } }>('/:key', handler.getByKey.bind(handler));
-  fastify.put<{ Params: { key: string }; Body: { value: string } }>('/:key', handler.upsertOne.bind(handler));
   fastify.put<{ Body: Record<string, string> }>('/', handler.upsertMany.bind(handler));
 
   // Pallet types - delegate to handler
@@ -33,14 +31,11 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.put<{ Params: { id: string }; Body: { name?: string; description?: string; isActive?: boolean; ruleConfig?: Record<string, unknown> } }>('/packing-rules/:id', handler.updatePackingRule.bind(handler));
   fastify.delete<{ Params: { id: string } }>('/packing-rules/:id', handler.deletePackingRule.bind(handler));
 
-
-  // User Folder Settings routes
-  // GET /api/settings/user-folder-path - get user's folder path (with fallback to global)
-  fastify.get('/user-folder-path', handler.getUserFolderPath.bind(handler));
-
-  // PUT /api/settings/user-folder-path - update user's folder path
+  // User Folder Settings routes (wymaga auth - handler potrzebuje userId)
+  fastify.get('/user-folder-path', { preHandler: [verifyAuth] }, handler.getUserFolderPath.bind(handler));
   fastify.put<{ Body: { importsBasePath: string } }>(
     '/user-folder-path',
+    { preHandler: [verifyAuth] },
     handler.updateUserFolderPath.bind(handler)
   );
 
@@ -351,4 +346,12 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       ...result,
     };
   });
+
+  // ============================================================
+  // Parametryczne trasy /:key MUSZĄ być NA SAMYM KOŃCU!
+  // Inaczej przechwytują statyczne trasy jak /user-folder-path,
+  // /document-author-mappings, /browse-folders itd.
+  // ============================================================
+  fastify.get<{ Params: { key: string } }>('/:key', handler.getByKey.bind(handler));
+  fastify.put<{ Params: { key: string }; Body: { value: string } }>('/:key', handler.upsertOne.bind(handler));
 };

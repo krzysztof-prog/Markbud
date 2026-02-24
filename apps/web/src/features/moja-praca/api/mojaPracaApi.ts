@@ -105,6 +105,7 @@ export function useConflicts(status: 'pending' | 'resolved' | 'all' = 'pending')
   return useQuery({
     queryKey: mojaPracaKeys.conflictsList(status),
     queryFn: () => mojaPracaApi.getConflicts(status),
+    refetchInterval: 30000, // Odśwież co 30s - synchronicznie z useConflictsCount
   });
 }
 

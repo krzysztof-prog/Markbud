@@ -1,6 +1,9 @@
 /**
  * Skrypt do przeliczenia totalGlasses dla wszystkich zleceń
- * na podstawie sumy quantity z tabeli OrderGlass.
+ * na podstawie liczby POZYCJI (rekordów) szyb z tabeli OrderGlass,
+ * wykluczając panele i wypełnienia.
+ *
+ * totalGlasses = liczba unikalnych pozycji szyb (nie suma quantity/sztuk fizycznych)
  *
  * Użycie: npx tsx scripts/recalculate-total-glasses.ts
  */
@@ -12,7 +15,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Rozpoczynam przeliczenie totalGlasses...\n');
 
-  // Pobierz wszystkie zlecenia z ich szyba
+  // Pobierz wszystkie zlecenia z ich szybami
   const orders = await prisma.order.findMany({
     where: {
       deletedAt: null,
@@ -24,6 +27,7 @@ async function main() {
       glasses: {
         select: {
           quantity: true,
+          packageType: true,
         },
       },
     },
@@ -35,8 +39,12 @@ async function main() {
   const changes: Array<{ orderNumber: string; old: number; new: number }> = [];
 
   for (const order of orders) {
-    // Oblicz sumę quantity z OrderGlass
-    const calculatedTotal = order.glasses.reduce((sum, g) => sum + g.quantity, 0);
+    // Policz liczbę POZYCJI szyb (rekordów), wykluczając panele i wypełnienia
+    const calculatedTotal = order.glasses.filter((g) => {
+      const pkg = (g.packageType || '').toLowerCase();
+      return !pkg.includes('panel') && !pkg.includes('wypełnienie') && !pkg.includes('wypelnienie');
+    }).length;
+
     const currentTotal = order.totalGlasses ?? 0;
 
     // Aktualizuj tylko jeśli się różni

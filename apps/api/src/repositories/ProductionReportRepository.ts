@@ -447,6 +447,58 @@ export class ProductionReportRepository {
   }
 
   /**
+   * Pobierz statystyki szyb < 1m² dla zleceń w danym miesiącu
+   * Zlicza liczbę sztuk i sumę m² szyb o powierzchni < 1m²
+   * @param year Rok (np. 2026)
+   * @param month Miesiąc (1-12)
+   */
+  async getSmallGlassStats(year: number, month: number): Promise<{ count: number; totalArea: number }> {
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const result = await this.prisma.orderGlass.aggregate({
+      where: {
+        areaSqm: { lt: 1 },
+        order: {
+          productionDate: {
+            gte: startDate,
+            lte: endDate,
+          },
+          status: 'completed',
+          archivedAt: null,
+        },
+      },
+      _sum: {
+        quantity: true,
+      },
+    });
+
+    // Aggregate nie wspiera sum(areaSqm * quantity), więc pobieramy szczegóły
+    const glasses = await this.prisma.orderGlass.findMany({
+      where: {
+        areaSqm: { lt: 1 },
+        order: {
+          productionDate: {
+            gte: startDate,
+            lte: endDate,
+          },
+          status: 'completed',
+          archivedAt: null,
+        },
+      },
+      select: {
+        areaSqm: true,
+        quantity: true,
+      },
+    });
+
+    const totalArea = glasses.reduce((sum, g) => sum + g.areaSqm * g.quantity, 0);
+    const count = result._sum.quantity ?? 0;
+
+    return { count, totalArea: Math.round(totalArea * 100) / 100 };
+  }
+
+  /**
    * Policz dni robocze w danym miesiącu
    * Zlicza dni z tabeli WorkingDay gdzie isWorking=true
    * @param year Rok (np. 2026)

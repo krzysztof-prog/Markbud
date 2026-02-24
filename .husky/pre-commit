@@ -11,3 +11,17 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Configuration validation passed."
+
+# Reindex functions before commit
+echo "Running reindex..."
+node scripts/reindex.js
+
+if [ $? -ne 0 ]; then
+  echo "Reindex failed. Please check scripts/reindex.js for errors."
+  exit 1
+fi
+
+# Stage the regenerated FUNCTION_INDEX.md so it's included in the commit
+git add FUNCTION_INDEX.md
+
+echo "Reindex completed and FUNCTION_INDEX.md staged."

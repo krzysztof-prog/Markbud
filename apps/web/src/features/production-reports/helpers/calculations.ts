@@ -155,6 +155,7 @@ export function calculateFullSummary(
     workingDays,
     avgPerUnit,
     avgPerDay,
+    smallGlass: { count: 0, totalArea: 0 },
   };
 }
 

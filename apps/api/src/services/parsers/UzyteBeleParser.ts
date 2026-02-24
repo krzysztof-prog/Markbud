@@ -1320,19 +1320,18 @@ export class UzyteBeleParser {
       }
     }
 
-    // Policz szyby wykluczając panele i wypełnienia (to nie są prawdziwe szyby)
-    // Używamy wartości z tablicy glasses zamiast wartości z nagłówka CSV,
-    // ponieważ nagłówek może zawierać niepoprawną sumę (z panelami/wypełnieniami)
+    // Policz pozycje szyb wykluczając panele i wypełnienia (to nie są prawdziwe szyby)
+    // Liczymy liczbę POZYCJI (rekordów), nie sumę quantity (fizycznych sztuk)
     if (glasses.length > 0) {
       let realGlassCount = 0;
       for (const glass of glasses) {
         const packageTypeLower = (glass.packageType || '').toLowerCase();
         // Jeśli packageType NIE zawiera "panel" ani "wypełnienie"/"wypelnienie", to jest to prawdziwa szyba
         if (!packageTypeLower.includes('panel') && !packageTypeLower.includes('wypełnienie') && !packageTypeLower.includes('wypelnienie')) {
-          realGlassCount += glass.quantity;
+          realGlassCount += 1;
         }
       }
-      // Nadpisz totals.glasses poprawną wartością (tylko prawdziwe szyby, bez paneli/wypełnień)
+      // Nadpisz totals.glasses liczbą pozycji szyb (bez paneli/wypełnień)
       totals.glasses = realGlassCount;
     }
 

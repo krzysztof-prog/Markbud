@@ -237,19 +237,23 @@ export class PdfParser {
   }
 
   /**
-   * Wyciąga numer zlecenia Akrobud (5-cyfrowy) z tekstu PDF
+   * Wyciąga numer zlecenia Akrobud (5-cyfrowy, opcjonalnie z suffixem -a, -b itp.) z tekstu PDF
    * Używa wielu strategii w kolejności od najdokładniejszej do fallbacku
    */
   private extractAkrobudOrderNumber(text: string, filename?: string): string {
+    // Suffix pattern: opcjonalnie "-a", "-b", "-c" itp. po 5-cyfrowym numerze
+    // np. "53916-a", "53629-a"
+    const SUFFIX = '(?:-[a-z])?';
+
     // Strategia 1: Po "SUMA:" (format Schuco/POLY)
-    const sumaMatch = text.match(/SUMA:.*?(\d{5})/s);
+    const sumaMatch = text.match(new RegExp(`SUMA:.*?(\\d{5}${SUFFIX})`, 's'));
     if (sumaMatch) {
       logger.debug(`PDF parser: numer zlecenia z wzorca SUMA: ${sumaMatch[1]}`);
       return sumaMatch[1];
     }
 
-    // Strategia 2: 5 cyfr + ZAMÓWIENIE (format Schuco)
-    const beforeZamMatch = text.match(/(\d{5})\s*ZAMÓWIENIE/);
+    // Strategia 2: 5 cyfr + opcjonalny suffix + ZAMÓWIENIE (format Schuco)
+    const beforeZamMatch = text.match(new RegExp(`(\\d{5}${SUFFIX})\\s*ZAMÓWIENIE`));
     if (beforeZamMatch) {
       logger.debug(`PDF parser: numer zlecenia z wzorca przed-ZAMÓWIENIE: ${beforeZamMatch[1]}`);
       return beforeZamMatch[1];
@@ -259,42 +263,39 @@ export class PdfParser {
     // Format BEENEN: "ZAMÓWIENIE   2512150419" a dalej "53672" jako standalone
     const lines = text.split('\n');
 
-    // Strategia 4: 5-cyfrowy numer na osobnej linii (w pierwszych 40 liniach)
+    // Strategia 4: 5-cyfrowy numer (z opcjonalnym suffixem) na osobnej linii (w pierwszych 40 liniach)
     for (const line of lines.slice(0, 40)) {
-      const match = line.match(/^\s*(\d{5})\s*$/);
+      const match = line.match(new RegExp(`^\\s*(\\d{5}${SUFFIX})\\s*$`));
       if (match) {
         logger.debug(`PDF parser: numer zlecenia ze standalone linii: ${match[1]}`);
         return match[1];
       }
     }
 
-    // Strategia 5: Dokładnie 5-cyfrowy numer nie będący częścią dłuższego numeru
-    // Używamy lookahead/lookbehind aby uniknąć wyciągania "41017" z "241017"
-    const allFiveDigit = text.match(/(?<!\d)(\d{5})(?!\d)/g);
-    if (allFiveDigit) {
-      for (const num of allFiveDigit) {
-        const n = parseInt(num);
-        // Numery zleceń Akrobud są w zakresie 40000-99999
-        if (n >= 40000 && n <= 99999) {
-          logger.debug(`PDF parser: numer zlecenia z generic 5-digit match: ${num}`);
-          return num;
-        }
+    // Strategia 5: Dokładnie 5-cyfrowy numer (z opcjonalnym suffixem) nie będący częścią dłuższego numeru
+    const allMatches = text.matchAll(new RegExp(`(?<!\\d)(\\d{5}${SUFFIX})(?!\\d)`, 'g'));
+    for (const m of allMatches) {
+      const baseNum = parseInt(m[1]);
+      // Numery zleceń Akrobud są w zakresie 40000-99999
+      if (baseNum >= 40000 && baseNum <= 99999) {
+        logger.debug(`PDF parser: numer zlecenia z generic match: ${m[1]}`);
+        return m[1];
       }
     }
 
     // Strategia 6: Numer zlecenia z nazwy pliku (np. "ZAM 53810.pdf", "ZAM 53839.pdf")
     if (filename) {
-      const zamMatch = filename.match(/ZAM\s+(\d{5})/i);
+      const zamMatch = filename.match(new RegExp(`ZAM\\s+(\\d{5}${SUFFIX})`, 'i'));
       if (zamMatch) {
         logger.debug(`PDF parser: numer zlecenia z nazwy pliku ZAM: ${zamMatch[1]}`);
         return zamMatch[1];
       }
-      // Fallback: dowolny 5-cyfrowy numer w nazwie pliku
-      const fiveDigitMatch = filename.match(/(?<!\d)(\d{5})(?!\d)/);
+      // Fallback: dowolny 5-cyfrowy numer (z opcjonalnym suffixem) w nazwie pliku
+      const fiveDigitMatch = filename.match(new RegExp(`(?<!\\d)(\\d{5}${SUFFIX})(?!\\d)`));
       if (fiveDigitMatch) {
         const n = parseInt(fiveDigitMatch[1]);
         if (n >= 40000 && n <= 99999) {
-          logger.debug(`PDF parser: numer zlecenia z nazwy pliku (5-digit): ${fiveDigitMatch[1]}`);
+          logger.debug(`PDF parser: numer zlecenia z nazwy pliku: ${fiveDigitMatch[1]}`);
           return fiveDigitMatch[1];
         }
       }
