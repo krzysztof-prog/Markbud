@@ -7,13 +7,15 @@
  * - mają ostatnie sprawdzenie ze wszystkimi etykietami OK (nie nadpisuje dobrych wyników)
  * - mają sprawdzenie w ciągu ostatnich 24h (nawet z błędami - nie spamuj)
  *
+ * Implementacja: setInterval co 15 min sprawdza godzinę (bardziej odporne niż node-cron
+ * który gubi taski raz-dziennie po dłuższym uptime).
+ *
  * Użycie:
  * - Start: LabelCheckScheduler.start()
  * - Stop: LabelCheckScheduler.stop()
  * - Manual test: LabelCheckScheduler.manualTrigger()
  */
 
-import cron, { type ScheduledTask } from 'node-cron';
 import { prisma } from '../../utils/prisma.js';
 import { LabelCheckService } from '../label-check/LabelCheckService.js';
 import { logger } from '../../utils/logger.js';
@@ -21,44 +23,53 @@ import { formatDateWarsaw } from '../../utils/date-helpers.js';
 
 // Konfiguracja schedulera
 const SCHEDULER_CONFIG = {
-  // Godzina uruchomienia (7:00 rano)
-  cronExpression: '0 7 * * *',
-  // Strefa czasowa
-  timezone: 'Europe/Warsaw',
+  // Godzina uruchomienia (7:00 rano Warsaw)
+  targetHour: 7,
   // Ile dni do przodu sprawdzać (od najbliższej niezrealizowanej dostawy)
   daysAhead: 21,
   // Ile godzin od ostatniego sprawdzenia żeby pominąć (24h)
   skipIfCheckedWithinHours: 24,
+  // Co ile minut sprawdzać czy pora uruchomić (15 min)
+  checkIntervalMinutes: 15,
+  // Opóźnienie po starcie serwera (60s - żeby DB/WebSocket były gotowe)
+  startupDelayMs: 60_000,
 };
 
 class LabelCheckSchedulerClass {
-  private task: ScheduledTask | null = null;
+  private intervalId: ReturnType<typeof setInterval> | null = null;
+  private startupTimer: ReturnType<typeof setTimeout> | null = null;
   private labelCheckService: LabelCheckService | null = null;
   private isRunning = false;
+  // Dzień ostatniego uruchomienia (YYYY-MM-DD Warsaw) - żeby nie powtarzać w tym samym dniu
+  private lastRunDate: string | null = null;
 
   /**
-   * Uruchamia scheduler - codziennie o 7:00 (Europe/Warsaw)
+   * Uruchamia scheduler
    */
   start(): void {
-    if (this.task) {
+    if (this.intervalId) {
       logger.warn('[LabelCheckScheduler] Already started, ignoring');
       return;
     }
 
-    this.task = cron.schedule(
-      SCHEDULER_CONFIG.cronExpression,
-      () => {
-        this.checkUpcomingDeliveries().catch((error) => {
-          logger.error('[LabelCheckScheduler] Error in scheduled check:', error);
-        });
-      },
-      {
-        timezone: SCHEDULER_CONFIG.timezone,
-      }
+    // Sprawdzaj co 15 minut czy pora uruchomić
+    this.intervalId = setInterval(
+      () => this.tick(),
+      SCHEDULER_CONFIG.checkIntervalMinutes * 60 * 1000
     );
 
+    // Uruchom sprawdzenie 60s po starcie serwera (nadrabianie zaległości)
+    this.startupTimer = setTimeout(() => {
+      this.checkUpcomingDeliveries().catch((error) => {
+        logger.error('[LabelCheckScheduler] Error in startup check:', error);
+      });
+    }, SCHEDULER_CONFIG.startupDelayMs);
+
     logger.info(
-      `[LabelCheckScheduler] Started - daily at 7:00 ${SCHEDULER_CONFIG.timezone}, checking ${SCHEDULER_CONFIG.daysAhead} days ahead`
+      `[LabelCheckScheduler] Started - daily at ${SCHEDULER_CONFIG.targetHour}:00 Europe/Warsaw, ` +
+        `checking ${SCHEDULER_CONFIG.daysAhead} days ahead, ` +
+        `interval every ${SCHEDULER_CONFIG.checkIntervalMinutes} min, ` +
+        `startup check in ${SCHEDULER_CONFIG.startupDelayMs / 1000}s`
     );
   }
 
@@ -66,10 +77,33 @@ class LabelCheckSchedulerClass {
    * Zatrzymuje scheduler
    */
   stop(): void {
-    if (this.task) {
-      this.task.stop();
-      this.task = null;
-      logger.info('[LabelCheckScheduler] Stopped');
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    if (this.startupTimer) {
+      clearTimeout(this.startupTimer);
+      this.startupTimer = null;
+    }
+    logger.info('[LabelCheckScheduler] Stopped');
+  }
+
+  /**
+   * Tick co 15 min - sprawdza czy pora uruchomić sprawdzanie (7:00 Warsaw)
+   */
+  private tick(): void {
+    const now = new Date();
+    // Oblicz godzinę Warsaw (UTC+1 zimą, UTC+2 latem)
+    const warsawTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
+    const hour = warsawTime.getHours();
+    const dateStr = warsawTime.toISOString().slice(0, 10);
+
+    // Uruchom jeśli: jest po targetHour (7:00) I nie uruchamiano dzisiaj
+    if (hour >= SCHEDULER_CONFIG.targetHour && this.lastRunDate !== dateStr) {
+      logger.info(`[LabelCheckScheduler] Tick: ${hour}:00 Warsaw, date=${dateStr}, triggering daily check`);
+      this.checkUpcomingDeliveries().catch((error) => {
+        logger.error('[LabelCheckScheduler] Error in scheduled check:', error);
+      });
     }
   }
 
@@ -84,6 +118,11 @@ class LabelCheckSchedulerClass {
 
     this.isRunning = true;
     const startTime = Date.now();
+
+    // Oznacz dzień jako obsłużony (Warsaw timezone)
+    const now = new Date();
+    const warsawTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
+    this.lastRunDate = warsawTime.toISOString().slice(0, 10);
 
     try {
       // Znajdź najbliższą dostawę która NIE jest completed (zrealizowana)
@@ -261,7 +300,7 @@ class LabelCheckSchedulerClass {
    * Sprawdza czy scheduler jest uruchomiony
    */
   isStarted(): boolean {
-    return this.task !== null;
+    return this.intervalId !== null;
   }
 }
 

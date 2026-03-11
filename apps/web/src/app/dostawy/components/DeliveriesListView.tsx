@@ -234,6 +234,13 @@ export function DeliveriesListView({
     removeOrderFromDeliveryMutation.mutate({ deliveryId, orderId });
   }, [removeOrderFromDeliveryMutation]);
 
+  // Sortowanie: archiwum ASC (najstarsze na górze), normalny widok DESC (najnowsze na górze)
+  const sortedDeliveries = useMemo(() => {
+    if (!deliveries || !Array.isArray(deliveries)) return [];
+    if (dateFilter === 'archive') return deliveries; // ASC z backendu
+    return [...deliveries].reverse(); // DESC dla normalnego widoku
+  }, [deliveries, dateFilter]);
+
   // Calculate summary stats
   const summaryStats = useMemo(() => {
     if (!deliveries || !Array.isArray(deliveries) || deliveries.length === 0) {
@@ -311,14 +318,6 @@ export function DeliveriesListView({
                 <span className="text-slate-500">Szyby:</span>
                 <span className="font-semibold">{summaryStats.glasses}</span>
               </div>
-              {summaryStats.valuePln > 0 && (
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-slate-500">Wartość:</span>
-                  <span className="font-semibold">
-                    {summaryStats.valuePln.toLocaleString('pl-PL')} PLN
-                  </span>
-                </div>
-              )}
             </div>
           )}
         </CardHeader>
@@ -331,9 +330,9 @@ export function DeliveriesListView({
               <p className="text-red-600 mb-2">Błąd wczytywania dostaw</p>
               <p className="text-sm text-slate-500">{getErrorMessage(error)}</p>
             </div>
-          ) : Array.isArray(deliveries) && deliveries.length > 0 ? (
+          ) : sortedDeliveries.length > 0 ? (
             <DeliveriesTable
-              deliveries={deliveries}
+              deliveries={sortedDeliveries}
               expandedRows={expandedRows}
               onToggleRow={toggleRow}
               onComplete={handleComplete}
