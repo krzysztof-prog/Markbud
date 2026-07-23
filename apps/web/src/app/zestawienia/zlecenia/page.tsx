@@ -45,6 +45,7 @@ import {
   useOrderGrouping,
   useOrdersStats,
   useOrderEdit,
+  useDeliveryAssignment,
   // Types
   type ExtendedOrder,
   type GroupBy,
@@ -168,6 +169,48 @@ export default function ZestawienieZlecenPage() {
     cancelEdit,
     saveEdit,
   } = useOrderEdit();
+
+  // Hook do przypisywania zleceń do dostaw (klik na termin realizacji)
+  const {
+    assignmentState,
+    openAssignment,
+    closeAssignment,
+    selectedDate: deliverySelectedDate,
+    setSelectedDate: setDeliverySelectedDate,
+    deliveriesForDate,
+    isLoadingDeliveries,
+    assignToDelivery,
+    createAndAssign,
+    setDeadlineOnly,
+    isPending: isDeliveryAssignmentPending,
+  } = useDeliveryAssignment();
+
+  // Obiekt delivery assignment do przekazania do tabeli
+  const deliveryAssignmentProps = useMemo(() => ({
+    activeOrderId: assignmentState?.orderId ?? null,
+    selectedDate: deliverySelectedDate,
+    deliveriesForDate,
+    isLoadingDeliveries,
+    isPending: isDeliveryAssignmentPending,
+    onOpen: openAssignment,
+    onClose: closeAssignment,
+    onDateSelect: setDeliverySelectedDate,
+    onAssignToDelivery: assignToDelivery,
+    onCreateAndAssign: createAndAssign,
+    onSetDeadlineOnly: setDeadlineOnly,
+  }), [
+    assignmentState?.orderId,
+    deliverySelectedDate,
+    deliveriesForDate,
+    isLoadingDeliveries,
+    isDeliveryAssignmentPending,
+    openAssignment,
+    closeAssignment,
+    setDeliverySelectedDate,
+    assignToDelivery,
+    createAndAssign,
+    setDeadlineOnly,
+  ]);
 
   // Query client i toast
   const queryClient = useQueryClient();
@@ -601,6 +644,7 @@ export default function ZestawienieZlecenPage() {
             missingOrderNumbers={missingOrderNumbers}
             showOnlyMissing={true}
             hideMissing={false}
+            deliveryAssignment={deliveryAssignmentProps}
           />
         ) : filteredOrders.length > 0 ? (
           Object.entries(groupedOrders).map(([groupKey, orders]) => (
@@ -636,6 +680,7 @@ export default function ZestawienieZlecenPage() {
               showOnlyMissing={false}
               hideMissing={filters.hideMissing}
               preserveOrder={filters.privateUpcoming2Weeks}
+              deliveryAssignment={deliveryAssignmentProps}
             />
           ))
         ) : (

@@ -19,6 +19,10 @@ export const glassOrderStatusUpdateSchema = z.object({
   status: z.enum(['ordered', 'partially_delivered', 'delivered', 'cancelled']),
 });
 
+export const glassOrderDeliveryDateUpdateSchema = z.object({
+  expectedDeliveryDate: z.string().transform((val) => new Date(val)),
+});
+
 // ==================== GLASS DELIVERY SCHEMAS ====================
 
 export const glassDeliveryFiltersSchema = z.object({

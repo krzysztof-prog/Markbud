@@ -7,20 +7,23 @@ dist/
 build/
 .next/
 out/
-.turbo/cache/
+.turbo/
+*.tsbuildinfo
 
 # Cache
 .cache/
 .tmp/
 
-# Environment files
-.env.production.local
-
+# Environment files (sekrety - NIGDY nie commitowac)
+.env
+.env.*
+!.env.example
 
 # IDE
 .idea/
 *.swp
 *.swo
+*.code-workspace
 
 # OS
 .DS_Store
@@ -34,6 +37,14 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+apps/web/playwright-report/
+apps/web/test-results/
+
+# Databases (SQLite - nigdy w repo)
+apps/api/prisma/*.db
+apps/api/prisma/*.db-shm
+apps/api/prisma/*.db-wal
+apps/api/prisma/*.backup
 
 # Database backups
 *.backup-*
@@ -46,9 +57,10 @@ temp/
 *.tmp
 nul
 
-# Uploads
+# Uploads / debug artifacts
 apps/api/uploads/
 apps/api/downloads/schuco/*.csv
+apps/api/downloads/schuco/*.png
 
 # Claude Code session state
 .claude/.session-state/

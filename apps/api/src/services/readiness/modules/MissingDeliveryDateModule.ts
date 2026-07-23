@@ -46,6 +46,17 @@ export class MissingDeliveryDateModule extends BaseReadinessCheckModule {
                 id: true,
                 orderNumber: true,
                 deliveryDate: true,
+                deliveryOrders: {
+                  select: {
+                    delivery: {
+                      select: {
+                        deliveryDate: true,
+                        deletedAt: true,
+                      },
+                    },
+                  },
+                  take: 1,
+                },
               },
             },
           },
@@ -73,14 +84,20 @@ export class MissingDeliveryDateModule extends BaseReadinessCheckModule {
         continue;
       }
 
-      // Sprawdź czy zlecenie ma datę dostawy
-      if (!item.order.deliveryDate) {
-        missingDateItems.push({
-          projectNumber: item.projectNumber,
-          orderId: item.order.id,
-          orderNumber: item.order.orderNumber,
-        });
-      }
+      // Sprawdź czy zlecenie ma datę dostawy (bezpośrednio lub przez przypisanie do dostawy)
+      if (item.order.deliveryDate) continue;
+
+      // Fallback: sprawdź czy zlecenie jest przypisane do aktywnej dostawy
+      const hasDeliveryAssignment = item.order.deliveryOrders?.some(
+        (dOrder: { delivery: { deletedAt: Date | null } }) => dOrder.delivery && !dOrder.delivery.deletedAt
+      );
+      if (hasDeliveryAssignment) continue;
+
+      missingDateItems.push({
+        projectNumber: item.projectNumber,
+        orderId: item.order.id,
+        orderNumber: item.order.orderNumber,
+      });
     }
 
     // Jeśli są zlecenia bez daty - BLOKUJ

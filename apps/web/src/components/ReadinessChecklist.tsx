@@ -280,8 +280,8 @@ export const ReadinessChecklist: React.FC<ReadinessChecklistProps> = ({
         </span>
       </div>
 
-      {/* Checklist */}
-      <div className="p-2 space-y-1 bg-white">
+      {/* Checklist - trzy kolumny */}
+      <div className="p-2 bg-white grid grid-cols-3 gap-2">
         {checklist.map((item, index) => (
           <ChecklistRow key={`${item.module}-${index}`} item={item} entityId={entityId} type={type} />
         ))}

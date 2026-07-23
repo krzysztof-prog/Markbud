@@ -44,20 +44,13 @@ export const DeliveryValue = ({ delivery }: DeliveryValueProps) => {
     };
   }, [delivery.deliveryOrders]);
 
-  if (totalPln === 0 && totalEur === 0) {
+  if (totalEur === 0) {
     return <span className="text-xs text-slate-400">—</span>;
   }
 
   return (
     <div className="text-sm">
       <div className="font-medium">
-        {totalPln.toLocaleString('pl-PL', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}{' '}
-        PLN
-      </div>
-      <div className="text-slate-500">
         {totalEur.toLocaleString('pl-PL', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,

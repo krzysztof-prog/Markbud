@@ -237,4 +237,14 @@ export const mojaPracaHandler = {
 
     return reply.send(deliveries);
   },
+
+  /**
+   * GET /api/moja-praca/alerts/glass-suffix-conflicts
+   * Zlecenia z sufiksem gdzie szyby zamówione ale niedostarczone (potencjalny konflikt)
+   */
+  async getGlassSuffixConflicts(request: AuthenticatedRequest, reply: FastifyReply) {
+    const service = new MojaPracaService(prisma);
+    const conflicts = await service.getGlassSuffixConflicts();
+    return reply.send(conflicts);
+  },
 };

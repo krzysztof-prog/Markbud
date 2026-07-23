@@ -114,9 +114,10 @@ export class ImportRepository {
     if (exact) return exact;
 
     // Fallback: prefix match (np. 53614 -> 53614-a)
+    // Używamy orderNumber + '-' żeby nie matchować "53792" → "537920" lub innych fałszywych trafień
     return this.prisma.order.findFirst({
       where: {
-        orderNumber: { startsWith: orderNumber },
+        orderNumber: { startsWith: orderNumber + '-' },
       },
       orderBy: { orderNumber: 'asc' },
     });

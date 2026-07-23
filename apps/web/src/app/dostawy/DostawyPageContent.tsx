@@ -10,7 +10,7 @@ import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { showErrorToast } from '@/lib/toast-helpers';
 import { deliveriesApi, ordersApi } from '@/lib/api';
 import { useFormValidation } from '@/hooks/useFormValidation';
-import { CalendarDays, List } from 'lucide-react';
+import { CalendarDays, List, Table2 } from 'lucide-react';
 import { DndContext, DragOverlay, closestCenter } from '@dnd-kit/core';
 import { OrderDragOverlay } from './DragDropComponents';
 import type { Delivery } from '@/types/delivery';
@@ -34,6 +34,11 @@ const DeliveriesListView = dynamic(
 const DeliveryCalendar = dynamic(
   () => import('./components/DeliveryCalendar'),
   { ssr: false, loading: () => <CalendarSkeleton /> }
+);
+
+const WeeklyGlassPlan = dynamic(
+  () => import('./components/weekly-plan/WeeklyGlassPlan'),
+  { ssr: false, loading: () => <ListViewSkeleton /> }
 );
 
 const UnassignedOrdersPanel = dynamic(
@@ -275,11 +280,18 @@ export default function DostawyPageContent({ initialSelectedOrderId }: DostawyPa
               <Button variant={filters.pageViewMode === 'list' ? 'default' : 'outline'} size="sm" onClick={() => filters.setPageViewMode('list')}>
                 <List className="h-4 w-4 mr-2" />Lista
               </Button>
+              <Button variant={filters.pageViewMode === 'weekly-plan' ? 'default' : 'outline'} size="sm" onClick={() => filters.setPageViewMode('weekly-plan')}>
+                <Table2 className="h-4 w-4 mr-2" />Tygodniówka
+              </Button>
             </div>
           </div>
         </div>
 
-        {filters.pageViewMode === 'list' ? (
+        {filters.pageViewMode === 'weekly-plan' ? (
+          <div className="flex-1 p-6 overflow-auto">
+            <WeeklyGlassPlan onViewOrder={(id, num) => { setSelectedOrderId(id); setSelectedOrderNumber(num); }} />
+          </div>
+        ) : filters.pageViewMode === 'list' ? (
           <div className="flex-1 p-6 overflow-auto">
             <DeliveriesListView
               onShowNewDeliveryDialog={() => setShowNewDeliveryDialog(true)}

@@ -96,4 +96,9 @@ export const mojaPracaRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/alerts/label-issues', {
     preHandler: verifyAuth,
   }, mojaPracaHandler.getLabelIssues);
+
+  // GET /moja-praca/alerts/glass-suffix-conflicts - Zlecenia z sufiksem i niedostarczonymi szybami
+  fastify.get('/alerts/glass-suffix-conflicts', {
+    preHandler: verifyAuth,
+  }, mojaPracaHandler.getGlassSuffixConflicts);
 };

@@ -59,7 +59,7 @@ export interface GlassDeliveryItem {
   glassComposition: string | null;
   serialNumber: string | null;
   clientCode: string | null;
-  matchStatus: 'pending' | 'matched' | 'conflict' | 'unmatched';
+  matchStatus: 'pending' | 'matched' | 'suffix_matched' | 'conflict' | 'unmatched';
   matchedItemId: number | null;
   // Nowe pola - per item (mogą różnić się od parent GlassDelivery)
   customerOrderNumber: string | null;
@@ -149,6 +149,7 @@ export interface LatestImportSummary {
   stats: {
     total: number;
     matched: number;
+    suffix_matched: number;
     conflict: number;
     unmatched: number;
     pending: number;
@@ -159,6 +160,7 @@ export interface LatestImportSummary {
     quantity: number;
     matchStatus: {
       matched: number;
+      suffix_matched: number;
       conflict: number;
       unmatched: number;
       pending: number;

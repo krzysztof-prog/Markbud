@@ -20,6 +20,8 @@ import {
 } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Check, X, Pencil, MoreVertical, Ban, Clock, XCircle, CircleOff, Trash2, Link2, AlertTriangle, Wrench } from 'lucide-react';
+import { DeliveryDatePicker } from './DeliveryDatePicker';
+import type { DeliveryForDate } from '@/features/deliveries/api/deliveriesApi';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,6 +82,21 @@ interface OrderTableRowProps {
   // Delete order (tylko dla admin/kierownik)
   canDeleteOrders?: boolean;
   onDeleteOrder?: (orderId: number, orderNumber: string) => void;
+
+  // Delivery assignment (zmiana daty dostawy z poziomu tabeli)
+  deliveryAssignment?: {
+    activeOrderId: number | null;
+    selectedDate: Date | undefined;
+    deliveriesForDate: DeliveryForDate[];
+    isLoadingDeliveries: boolean;
+    isPending: boolean;
+    onOpen: (orderId: number, orderNumber: string, currentDeliveryId: number | null, currentDate?: string | null) => void;
+    onClose: () => void;
+    onDateSelect: (date: Date | undefined) => void;
+    onAssignToDelivery: (deliveryId: number) => void;
+    onCreateAndAssign: () => void;
+    onSetDeadlineOnly: () => void;
+  };
 }
 
 // ================================
@@ -125,6 +142,7 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
   users,
   canDeleteOrders,
   onDeleteOrder,
+  deliveryAssignment,
 }) => {
   const isEditing = editingCell?.orderId === order.id;
 
@@ -374,8 +392,8 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           let colorClass: string;
           let tooltipContent: string | null = null;
           let isClickable = false;
-          // Czy ten badge to "Zamówione" bez daty - do obsługi Popover z kalendarzem
-          let isZamowioneWithoutDate = false;
+          // Czy pozwolić na ręczną zmianę daty dostawy szyb (kalendarz)
+          let allowGlassDateEdit = false;
 
           // Priorytet statusów:
           // 1. Brak szyb w zleceniu (needed = 0) → "-"
@@ -433,13 +451,13 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
             const expectedDeliveryFull = order.glassDeliveryDate ? formatDate(order.glassDeliveryDate) : null;
             content = expectedDeliveryShort || 'Zamówione';
             colorClass = 'bg-blue-100 text-blue-700';
-            // Jeśli nie ma daty - oznacz jako klikalny do ręcznego ustawienia
+            // Zawsze pozwalaj na ręczną zmianę daty dostawy szyb
+            allowGlassDateEdit = true;
+            colorClass = 'bg-blue-100 text-blue-700 cursor-pointer hover:bg-blue-200';
             if (!order.glassDeliveryDate) {
-              isZamowioneWithoutDate = true;
-              colorClass = 'bg-blue-100 text-blue-700 cursor-pointer hover:bg-blue-200';
               tooltipContent = `Szyby zamówione\nPotrzebne: ${needed} szt.\nKliknij aby ustawić datę dostawy`;
             } else {
-              tooltipContent = `Szyby zamówione\nPotrzebne: ${needed} szt.\nOczekiwana dostawa: ${expectedDeliveryFull}`;
+              tooltipContent = `Szyby zamówione\nPotrzebne: ${needed} szt.\nOczekiwana dostawa: ${expectedDeliveryFull}\nKliknij aby zmienić datę`;
             }
           } else {
             content = '-';
@@ -470,8 +488,9 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
             </span>
           );
 
-          // Jeśli "Zamówione" bez daty - opakowujemy w Popover z Calendar
-          if (isZamowioneWithoutDate && onGlassDeliveryDateSet) {
+          // Jeśli dozwolona edycja daty szyb - opakowujemy w Popover z Calendar
+          if (allowGlassDateEdit && onGlassDeliveryDateSet) {
+            const currentGlassDate = order.glassDeliveryDate ? new Date(order.glassDeliveryDate) : undefined;
             return (
               <td key={column.id} className="px-4 py-3 text-center">
                 <div className="inline-flex items-center gap-0.5">
@@ -480,7 +499,7 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
                       <button
                         type="button"
                         className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${colorClass}`}
-                        title="Kliknij aby ustawić datę dostawy"
+                        title="Kliknij aby ustawić/zmienić datę dostawy szyb"
                       >
                         {content}
                       </button>
@@ -488,7 +507,8 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
                     <PopoverContent className="w-auto p-0" align="center">
                       <Calendar
                         mode="single"
-                        selected={undefined}
+                        selected={currentGlassDate}
+                        defaultMonth={currentGlassDate}
                         onSelect={(date) => {
                           if (date) {
                             onGlassDeliveryDateSet(order.id as number, date.toISOString());
@@ -542,8 +562,52 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           const akrobudDeliveryDate = getAkrobudDeliveryDate(order.deliveryOrders);
           const hasAkrobudDelivery = akrobudDeliveryDate !== null;
           const deliveryCount = order.deliveryOrders?.length || 0;
+          const currentDeliveryId = order.deliveryOrders?.[0]?.deliveryId ?? null;
 
-          // Jeśli zlecenie jest przypisane do dostawy - pokaż datę dostawy (bez możliwości edycji)
+          // Nowy tryb: Popover z Calendar + lista dostaw
+          if (deliveryAssignment) {
+            const isThisOrderOpen = deliveryAssignment.activeOrderId === order.id;
+
+            // Data do wyświetlenia: data dostawy (jeśli przypisane) lub deadline
+            const displayDate = hasAkrobudDelivery
+              ? formatDateShort(akrobudDeliveryDate)
+              : order.deadline ? formatDate(order.deadline) : null;
+
+            // Data do ustawienia w kalendarzu
+            const currentDateForCalendar = hasAkrobudDelivery
+              ? akrobudDeliveryDate
+              : order.deadline || null;
+
+            return (
+              <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
+                <DeliveryDatePicker
+                  displayDate={displayDate}
+                  currentDate={currentDateForCalendar}
+                  isAssignedToDelivery={hasAkrobudDelivery}
+                  deliveryCount={deliveryCount}
+                  isOpen={isThisOrderOpen}
+                  onOpen={() => deliveryAssignment.onOpen(
+                    order.id,
+                    order.orderNumber,
+                    currentDeliveryId,
+                    currentDateForCalendar,
+                  )}
+                  onClose={deliveryAssignment.onClose}
+                  selectedDate={isThisOrderOpen ? deliveryAssignment.selectedDate : undefined}
+                  onDateSelect={deliveryAssignment.onDateSelect}
+                  deliveriesForDate={isThisOrderOpen ? deliveryAssignment.deliveriesForDate : []}
+                  isLoadingDeliveries={isThisOrderOpen ? deliveryAssignment.isLoadingDeliveries : false}
+                  onAssignToDelivery={deliveryAssignment.onAssignToDelivery}
+                  onCreateAndAssign={deliveryAssignment.onCreateAndAssign}
+                  onSetDeadlineOnly={deliveryAssignment.onSetDeadlineOnly}
+                  isPending={deliveryAssignment.isPending}
+                  currentDeliveryId={currentDeliveryId}
+                />
+              </td>
+            );
+          }
+
+          // Fallback: stary tryb (inline editing) - zachowany dla kompatybilności
           if (hasAkrobudDelivery) {
             return (
               <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
@@ -561,7 +625,6 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
             );
           }
 
-          // Edytowalne pole - Termin realizacji
           if (isEditing && editingCell?.field === 'deadline') {
             return (
               <td key={column.id} className={`px-4 py-3 ${alignClass}`}>
@@ -979,7 +1042,7 @@ export const OrderTableRow = React.memo<OrderTableRowProps>(({
           );
       }
     },
-    [order, isEditing, editingCell, editValue, setEditValue, startEdit, cancelEdit, saveEdit, eurRate, onOrderClick, onSchucoStatusClick, onGlassDiscrepancyClick, onGlassDeliveryDateSet, onManualStatusChange, onSpecialTypeChange, onAuthorChange, users]
+    [order, isEditing, editingCell, editValue, setEditValue, startEdit, cancelEdit, saveEdit, eurRate, onOrderClick, onSchucoStatusClick, onGlassDiscrepancyClick, onGlassDeliveryDateSet, onManualStatusChange, onSpecialTypeChange, onAuthorChange, users, deliveryAssignment]
   );
 
   // Wyróżnienie wiersza w zależności od statusu

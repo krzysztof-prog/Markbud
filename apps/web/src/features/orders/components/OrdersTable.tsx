@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { SchucoDeliveryLink } from '@/types';
 import type { ExtendedOrder, Column, GroupBy, ColumnId } from '../types';
 import type { EditingCell } from '../hooks/useOrderEdit';
+import type { DeliveryForDate } from '@/features/deliveries/api/deliveriesApi';
 import { OrderTableHeader } from './OrderTableHeader';
 import { OrderTableFilters } from './OrderTableFilters';
 import { OrderTableRow } from './OrderTableRow';
@@ -67,6 +68,21 @@ interface OrdersTableProps {
 
   // Zachowaj oryginalną kolejność (nie sortuj po numerze zlecenia)
   preserveOrder?: boolean;
+
+  // Delivery assignment (zmiana daty dostawy z poziomu tabeli)
+  deliveryAssignment?: {
+    activeOrderId: number | null;
+    selectedDate: Date | undefined;
+    deliveriesForDate: DeliveryForDate[];
+    isLoadingDeliveries: boolean;
+    isPending: boolean;
+    onOpen: (orderId: number, orderNumber: string, currentDeliveryId: number | null, currentDate?: string | null) => void;
+    onClose: () => void;
+    onDateSelect: (date: Date | undefined) => void;
+    onAssignToDelivery: (deliveryId: number) => void;
+    onCreateAndAssign: () => void;
+    onSetDeadlineOnly: () => void;
+  };
 }
 
 // ================================
@@ -104,6 +120,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   showOnlyMissing = false,
   hideMissing = false,
   preserveOrder = false,
+  deliveryAssignment,
 }) => {
   // Jeśli tryb "tylko brakujące" - renderuj tylko brakujące numery
   if (showOnlyMissing) {
@@ -276,6 +293,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                     users={users}
                     canDeleteOrders={canDeleteOrders}
                     onDeleteOrder={onDeleteOrder}
+                    deliveryAssignment={deliveryAssignment}
                   />
                 );
               })}

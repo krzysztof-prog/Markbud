@@ -29,10 +29,11 @@ function formatDate(date: Date | null | undefined): string {
 function translateStatus(status: string): string {
   const statusMap: Record<string, string> = {
     OK: 'OK',
-    MISMATCH: 'Niezgodna',
+    MISMATCH: 'Błędna data',
     NO_FOLDER: 'Brak folderu',
-    NO_BMP: 'Brak BMP',
+    NO_BMP: 'Brak zdjęć',
     OCR_ERROR: 'Błąd OCR',
+    SKIPPED: 'Kształt',
   };
   return statusMap[status] || status;
 }
@@ -48,7 +49,7 @@ export class LabelCheckExportService {
     const workbook = new ExcelJS.Workbook();
 
     // Metadane dokumentu
-    workbook.creator = 'AKROBUD System';
+    workbook.creator = 'MARKBUD System';
     workbook.created = new Date();
 
     const worksheet = workbook.addWorksheet('Kontrola etykiet');

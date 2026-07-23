@@ -15,6 +15,7 @@ import type {
   AlertsResponse,
   OrderWithoutPrice,
   DeliveryWithLabelIssues,
+  GlassSuffixConflict,
 } from '../types';
 
 // Query keys
@@ -31,6 +32,7 @@ export const mojaPracaKeys = {
   alerts: () => [...mojaPracaKeys.all, 'alerts'] as const,
   ordersWithoutPrice: () => [...mojaPracaKeys.alerts(), 'orders-without-price'] as const,
   labelIssues: () => [...mojaPracaKeys.alerts(), 'label-issues'] as const,
+  glassSuffixConflicts: () => [...mojaPracaKeys.alerts(), 'glass-suffix-conflicts'] as const,
 };
 
 // API functions
@@ -95,6 +97,17 @@ const mojaPracaApi = {
 
   getLabelIssues: async (): Promise<DeliveryWithLabelIssues[]> => {
     return fetchApi<DeliveryWithLabelIssues[]>('/api/moja-praca/alerts/label-issues');
+  },
+
+  getGlassSuffixConflicts: async (): Promise<GlassSuffixConflict[]> => {
+    return fetchApi<GlassSuffixConflict[]>('/api/moja-praca/alerts/glass-suffix-conflicts');
+  },
+
+  markOrderGlassDelivered: async (orderId: number): Promise<void> => {
+    await fetchApi<{ success: boolean }>(`/api/glass-orders/orders/${orderId}/mark-glass-delivered`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
   },
 };
 
@@ -217,5 +230,26 @@ export function useLabelIssues() {
   return useQuery({
     queryKey: mojaPracaKeys.labelIssues(),
     queryFn: mojaPracaApi.getLabelIssues,
+  });
+}
+
+// Pobierz konflikty szyb z sufiksem (zamówione ale niedostarczone)
+export function useGlassSuffixConflicts() {
+  return useQuery({
+    queryKey: mojaPracaKeys.glassSuffixConflicts(),
+    queryFn: mojaPracaApi.getGlassSuffixConflicts,
+    refetchInterval: 60000,
+  });
+}
+
+// Oznacz szyby zlecenia jako dostarczone (ręczny override)
+export function useMarkOrderGlassDelivered() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (orderId: number) => mojaPracaApi.markOrderGlassDelivered(orderId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: mojaPracaKeys.glassSuffixConflicts() });
+      queryClient.invalidateQueries({ queryKey: ['weekly-plan'] });
+    },
   });
 }

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { showUndoToast } from '@/lib/toast-undo';
 import { DeliveryCheckbox } from './DeliveryCheckbox';
@@ -22,11 +23,12 @@ import { Loader2, CheckCircle2, Package, FileCheck, Undo2, Clock } from 'lucide-
  * Zakładka "Zakończ zlecenia" - Panel Kierownika
  *
  * Wyświetla 2 sekcje:
- * 1. Dostawy AKROBUD w produkcji (można zakończyć całą dostawę naraz)
+ * 1. Dostawy AKROBUD w produkcji (rozwijalna lista zleceń - można zakończyć wybrane)
  * 2. Pojedyncze zlecenia w produkcji
  *
  * Kierownik może:
- * - Zaznaczyć wiele zleceń/dostaw
+ * - Rozwinąć dostawę i zaznaczyć poszczególne zlecenia
+ * - Zaznaczyć checkbox dostawy aby wybrać wszystkie jej zlecenia
  * - Zmienić status na "completed" (wyświetlany jako "Wyprodukowane")
  * - Data produkcji automatycznie ustawiana na "dzisiaj" z opcją zmiany
  */
@@ -34,12 +36,14 @@ export const CompleteOrdersTab: React.FC = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // State dla zaznaczonych zleceń i dostaw
+  // State dla zaznaczonych zleceń (delivery checkbox state obliczany wewnątrz DeliveryCheckbox)
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
-  const [selectedDeliveryIds, setSelectedDeliveryIds] = useState<Set<number>>(new Set());
 
   // Data produkcji (domyślnie dzisiaj)
   const [productionDate, setProductionDate] = useState<string>(getTodayISOString());
+
+  // Zlecenie do cofnięcia do produkcji (otwiera dialog potwierdzenia)
+  const [orderToRevert, setOrderToRevert] = useState<Order | null>(null);
 
   // Fetch zleceń w produkcji
   const { data: ordersResponse, isLoading: ordersLoading } = useQuery({
@@ -60,6 +64,7 @@ export const CompleteOrdersTab: React.FC = () => {
   const deliveriesData: Delivery[] = (deliveriesResponse as { data?: Delivery[] })?.data ?? [];
 
   // Mutation do bulk update statusu zleceń
+  // Toasty obsługiwane w handleCompleteOrders (showUndoToast)
   const bulkUpdateMutation = useMutation({
     mutationFn: (orderIds: number[]) =>
       managerApi.bulkUpdateStatus({
@@ -67,43 +72,10 @@ export const CompleteOrdersTab: React.FC = () => {
         status: 'completed',
         productionDate,
       }),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-      queryClient.invalidateQueries({ queryKey: ['deliveries'] });
-      setSelectedOrderIds(new Set());
-      toast({
-        title: 'Sukces',
-        description: `Oznaczono ${data.length} zleceń jako wyprodukowane`,
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: 'Błąd',
-        description: error instanceof Error ? error.message : 'Nie udało się zakończyć zleceń',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  // Mutation do zakończenia wszystkich zleceń w dostawie
-  const completeDeliveryMutation = useMutation({
-    mutationFn: ({ deliveryId, date }: { deliveryId: number; date: string }) =>
-      managerApi.completeDeliveryOrders(deliveryId, { productionDate: date }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['deliveries'] });
-      setSelectedDeliveryIds(new Set());
-      toast({
-        title: 'Sukces',
-        description: 'Oznaczono zlecenia jako wyprodukowane',
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: 'Błąd',
-        description: error instanceof Error ? error.message : 'Nie udało się zakończyć dostawy',
-        variant: 'destructive',
-      });
+      setSelectedOrderIds(new Set());
     },
   });
 
@@ -147,21 +119,9 @@ export const CompleteOrdersTab: React.FC = () => {
   // Obsługa zaznaczania całej dostawy z useCallback
   // Zaznaczenie dostawy automatycznie zaznacza/odznacza wszystkie zlecenia z tej dostawy
   const handleDeliveryToggle = useCallback((deliveryId: number, checked: boolean) => {
-    // Znajdź dostawę i jej zlecenia
     const delivery = deliveriesData.find((d) => d.id === deliveryId);
     const deliveryOrderIds = delivery?.deliveryOrders?.map((dOrder) => dOrder.order.id) || [];
 
-    setSelectedDeliveryIds((prev) => {
-      const newSet = new Set(prev);
-      if (checked) {
-        newSet.add(deliveryId);
-      } else {
-        newSet.delete(deliveryId);
-      }
-      return newSet;
-    });
-
-    // Zaznacz/odznacz wszystkie zlecenia z tej dostawy
     setSelectedOrderIds((prev) => {
       const newSet = new Set(prev);
       if (checked) {
@@ -173,8 +133,10 @@ export const CompleteOrdersTab: React.FC = () => {
     });
   }, [deliveriesData]);
 
-  // Obsługa zakończenia zleceń z useCallback + walidacja daty + partial failure handling
+  // Obsługa zakończenia zleceń z useCallback + walidacja daty
   const handleCompleteOrders = useCallback(async () => {
+    if (selectedOrderIds.size === 0) return;
+
     // Walidacja daty produkcji
     const productionDateObj = new Date(productionDate);
     const today = new Date();
@@ -201,75 +163,28 @@ export const CompleteOrdersTab: React.FC = () => {
       return;
     }
 
-    const results = {
-      succeeded: 0,
-      failed: 0,
-      errors: [] as string[],
-    };
+    const orderIdsToComplete = Array.from(selectedOrderIds);
 
-    // Zakończ pojedyncze zlecenia
-    if (selectedOrderIds.size > 0) {
-      try {
-        const updated = await bulkUpdateMutation.mutateAsync(Array.from(selectedOrderIds));
-        results.succeeded += updated.length;
-      } catch (error) {
-        results.failed += selectedOrderIds.size;
-        results.errors.push(
-          error instanceof Error ? error.message : 'Błąd podczas kończenia zleceń'
-        );
-      }
-    }
+    try {
+      const updated = await bulkUpdateMutation.mutateAsync(orderIdsToComplete);
 
-    // Zakończ dostawy (każdą osobno z error handling)
-    if (selectedDeliveryIds.size > 0) {
-      for (const deliveryId of Array.from(selectedDeliveryIds)) {
-        try {
-          await completeDeliveryMutation.mutateAsync({ deliveryId, date: productionDate });
-          results.succeeded += 1;
-        } catch (error) {
-          results.failed += 1;
-          results.errors.push(
-            `Dostawa ${deliveryId}: ${error instanceof Error ? error.message : 'nieznany błąd'}`
-          );
-        }
-      }
-    }
-
-    // Zbierz IDs wszystkich zleceń które zostały oznaczone jako wyprodukowane
-    // (zarówno pojedyncze jak i z dostaw - do toast undo)
-    const allCompletedOrderIds = [...Array.from(selectedOrderIds)];
-
-    // Wyświetl wyniki
-    if (results.failed > 0 && results.succeeded > 0) {
-      toast({
-        title: 'Częściowy sukces',
-        description: `Zakończono: ${results.succeeded}, Błędy: ${results.failed}. Sprawdź szczegóły.`,
-        variant: 'default',
-      });
-      console.error('Partial failure details:', results.errors);
-    } else if (results.failed > 0) {
-      toast({
-        title: 'Błąd',
-        description: results.errors[0] || 'Nie udało się zakończyć żadnej pozycji',
-        variant: 'destructive',
-      });
-    } else if (results.succeeded > 0 && allCompletedOrderIds.length > 0) {
-      // Toast z możliwością cofnięcia (Opcja B)
+      // Toast z możliwością cofnięcia
       showUndoToast({
-        title: `Wyprodukowano ${results.succeeded} pozycji`,
+        title: `Wyprodukowano ${updated.length} zleceń`,
         description: 'Kliknij "Cofnij" aby przywrócić do produkcji',
         onUndo: async () => {
-          await revertMutation.mutateAsync(allCompletedOrderIds);
+          await revertMutation.mutateAsync(orderIdsToComplete);
         },
         duration: 8000,
       });
-    } else if (results.succeeded > 0) {
+    } catch (error) {
       toast({
-        title: 'Sukces',
-        description: `Oznaczono ${results.succeeded} pozycji jako wyprodukowane`,
+        title: 'Błąd',
+        description: error instanceof Error ? error.message : 'Nie udało się zakończyć zleceń',
+        variant: 'destructive',
       });
     }
-  }, [selectedOrderIds, selectedDeliveryIds, productionDate, bulkUpdateMutation, completeDeliveryMutation, revertMutation, toast]);
+  }, [selectedOrderIds, productionDate, bulkUpdateMutation, revertMutation, toast]);
 
   // Filtrowanie zleceń - tylko te, które NIE są przypisane do żadnej dostawy w produkcji
   const standaloneOrders = useMemo(() => {
@@ -286,9 +201,9 @@ export const CompleteOrdersTab: React.FC = () => {
   }, [ordersData, deliveriesData]);
 
   const isLoading = ordersLoading || deliveriesLoading;
-  const totalSelected = selectedOrderIds.size + selectedDeliveryIds.size;
+  const totalSelected = selectedOrderIds.size;
   const hasSelection = totalSelected > 0;
-  const isPending = bulkUpdateMutation.isPending || completeDeliveryMutation.isPending;
+  const isPending = bulkUpdateMutation.isPending;
 
   return (
     <div className="p-6 space-y-6">
@@ -362,8 +277,10 @@ export const CompleteOrdersTab: React.FC = () => {
                     <DeliveryCheckbox
                       key={delivery.id}
                       delivery={delivery}
-                      checked={selectedDeliveryIds.has(delivery.id)}
+                      checked={false}
                       onChange={handleDeliveryToggle}
+                      onOrderToggle={handleOrderToggle}
+                      selectedOrderIds={selectedOrderIds}
                     />
                   ))}
                 </div>
@@ -432,11 +349,7 @@ export const CompleteOrdersTab: React.FC = () => {
                     variant="ghost"
                     size="sm"
                     disabled={revertMutation.isPending}
-                    onClick={() => {
-                      if (window.confirm(`Cofnąć zlecenie ${order.orderNumber} do produkcji?`)) {
-                        revertMutation.mutate([order.id]);
-                      }
-                    }}
+                    onClick={() => setOrderToRevert(order)}
                   >
                     {revertMutation.isPending ? (
                       <Loader2 className="mr-1 h-3 w-3 animate-spin" />
@@ -451,6 +364,23 @@ export const CompleteOrdersTab: React.FC = () => {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={orderToRevert !== null}
+        onOpenChange={(open) => {
+          if (!open) setOrderToRevert(null);
+        }}
+        title="Cofnąć do produkcji?"
+        description={`Zlecenie ${orderToRevert?.orderNumber ?? ''} wróci do statusu „w produkcji".`}
+        onConfirm={() => {
+          if (orderToRevert) {
+            revertMutation.mutate([orderToRevert.id]);
+          }
+        }}
+        confirmText="Cofnij do produkcji"
+        variant="default"
+        isLoading={revertMutation.isPending}
+      />
     </div>
   );
 };

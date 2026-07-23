@@ -108,59 +108,88 @@ export interface ErrorDetails {
  * }
  * ```
  */
+interface ErrorResponseData {
+  message?: string;
+  error?: string;
+  code?: string;
+}
+
+/**
+ * Mapuje status HTTP + body odpowiedzi na komunikat (wspólne dla axios i fetchApi)
+ */
+function messageFromResponse(status?: number, data?: ErrorResponseData): string | null {
+  if (data) {
+    // Priorytet 1: Backend message (jeśli jest po polsku)
+    if (data.message && typeof data.message === 'string') {
+      // Jeśli message zawiera known error code, użyj naszego mappingu
+      const upperMessage = data.message.toUpperCase();
+      for (const [code, message] of Object.entries(ERROR_MESSAGES)) {
+        if (upperMessage.includes(code)) {
+          return message;
+        }
+      }
+      // Jeśli message nie jest techniczny, użyj go
+      if (!data.message.match(/error|exception|stack/i)) {
+        return data.message;
+      }
+    }
+
+    // Priorytet 2: Error code
+    if (data.code && data.code in ERROR_MESSAGES) {
+      return ERROR_MESSAGES[data.code as ErrorCode];
+    }
+
+    // Priorytet 3: Error field
+    if (data.error && typeof data.error === 'string') {
+      const upperError = data.error.toUpperCase();
+      for (const [code, message] of Object.entries(ERROR_MESSAGES)) {
+        if (upperError.includes(code)) {
+          return message;
+        }
+      }
+    }
+  }
+
+  // Mapuj status code
+  if (status && status in ERROR_MESSAGES) {
+    return ERROR_MESSAGES[status as keyof typeof ERROR_MESSAGES];
+  }
+
+  return null;
+}
+
 export function getErrorMessage(error: unknown): string {
   // Sprawdź czy to axios error
   if (error && typeof error === 'object' && 'response' in error) {
     const axiosError = error as {
       response?: {
         status?: number;
-        data?: {
-          message?: string;
-          error?: string;
-          code?: string;
-        };
+        data?: ErrorResponseData;
       };
     };
 
-    const response = axiosError.response;
+    const message = messageFromResponse(axiosError.response?.status, axiosError.response?.data);
+    if (message) {
+      return message;
+    }
+  }
 
-    // Sprawdź czy backend zwrócił custom message
-    if (response?.data) {
-      // Priorytet 1: Backend message (jeśli jest po polsku)
-      if (response.data.message && typeof response.data.message === 'string') {
-        // Jeśli message zawiera known error code, użyj naszego mappingu
-        const upperMessage = response.data.message.toUpperCase();
-        for (const [code, message] of Object.entries(ERROR_MESSAGES)) {
-          if (upperMessage.includes(code)) {
-            return message;
-          }
-        }
-        // Jeśli message nie jest techniczny, użyj go
-        if (!response.data.message.match(/error|exception|stack/i)) {
-          return response.data.message;
-        }
-      }
+  // ApiError z fetchApi (lib/api-client.ts) — status/data/userMessage leżą
+  // bezpośrednio na obiekcie Error, nie ma pola `response`
+  if (error && typeof error === 'object' && ('status' in error || 'data' in error)) {
+    const apiError = error as {
+      status?: number;
+      data?: ErrorResponseData;
+      userMessage?: string;
+    };
 
-      // Priorytet 2: Error code
-      if (response.data.code && response.data.code in ERROR_MESSAGES) {
-        return ERROR_MESSAGES[response.data.code as ErrorCode];
-      }
-
-      // Priorytet 3: Error field
-      if (response.data.error && typeof response.data.error === 'string') {
-        const upperError = response.data.error.toUpperCase();
-        for (const [code, message] of Object.entries(ERROR_MESSAGES)) {
-          if (upperError.includes(code)) {
-            return message;
-          }
-        }
-      }
+    if (apiError.userMessage && typeof apiError.userMessage === 'string') {
+      return apiError.userMessage;
     }
 
-    // Mapuj status code
-    const status = response?.status;
-    if (status && status in ERROR_MESSAGES) {
-      return ERROR_MESSAGES[status as keyof typeof ERROR_MESSAGES];
+    const message = messageFromResponse(apiError.status, apiError.data);
+    if (message) {
+      return message;
     }
   }
 
@@ -194,6 +223,11 @@ export function getErrorMessage(error: unknown): string {
     if (error.message.includes('network') || error.message.includes('fetch')) {
       return ERROR_MESSAGES.NETWORK_ERROR;
     }
+
+    // Komunikat nietechniczny (np. polski komunikat z fetchApi lub backendu) — pokaż go
+    if (error.message && !error.message.match(/error|exception|stack|http/i)) {
+      return error.message;
+    }
   }
 
   // Fallback
@@ -218,21 +252,32 @@ export function getErrorMessage(error: unknown): string {
  * ```
  */
 export function getErrorAction(error: unknown): string | null {
+  let status: number | undefined;
+  let code: string | undefined;
+
   // Sprawdź axios error status
   if (error && typeof error === 'object' && 'response' in error) {
     const axiosError = error as { response?: { status?: number; data?: { code?: string } } };
-    const status = axiosError.response?.status;
-    const code = axiosError.response?.data?.code;
-
-    // Sprawdź custom error code
-    if (code && code in ERROR_ACTIONS) {
-      return ERROR_ACTIONS[code as ErrorCode] || null;
+    status = axiosError.response?.status;
+    code = axiosError.response?.data?.code;
+  } else if (error && typeof error === 'object' && ('status' in error || 'data' in error)) {
+    // ApiError z fetchApi — status/data bezpośrednio na obiekcie błędu
+    const apiError = error as { status?: number; data?: { code?: string }; userAction?: string };
+    if (apiError.userAction && typeof apiError.userAction === 'string') {
+      return apiError.userAction;
     }
+    status = apiError.status;
+    code = apiError.data?.code;
+  }
 
-    // Sprawdź status code
-    if (status && status in ERROR_ACTIONS) {
-      return ERROR_ACTIONS[status] || null;
-    }
+  // Sprawdź custom error code
+  if (code && code in ERROR_ACTIONS) {
+    return ERROR_ACTIONS[code as ErrorCode] || null;
+  }
+
+  // Sprawdź status code
+  if (status && status in ERROR_ACTIONS) {
+    return ERROR_ACTIONS[status] || null;
   }
 
   // Sprawdź network error

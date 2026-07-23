@@ -238,14 +238,14 @@ export class LabelCheckService {
         return {
           ...baseResult,
           status: 'NO_FOLDER',
-          errorMessage: `Brak dostepu do folderu (permission denied): ${folderPath}`,
+          errorMessage: `Brak dostępu do folderu: ${folderPath}`,
         };
       }
 
       return {
         ...baseResult,
         status: 'NO_FOLDER',
-        errorMessage: `Nie znaleziono folderu zlecenia: ${folderPath}`,
+        errorMessage: `Brak folderu zlecenia: ${folderPath}`,
       };
     }
 
@@ -257,7 +257,7 @@ export class LabelCheckService {
       return {
         ...baseResult,
         status: 'NO_FOLDER',
-        errorMessage: `Nie mozna odczytac folderu: ${folderPath}`,
+        errorMessage: `Nie można odczytać folderu: ${folderPath}`,
       };
     }
 
@@ -268,7 +268,7 @@ export class LabelCheckService {
       return {
         ...baseResult,
         status: 'NO_BMP',
-        errorMessage: `Brak plikow BMP w folderze: ${folderPath}`,
+        errorMessage: `Brak plików BMP w folderze: ${folderPath}`,
       };
     }
 
@@ -286,7 +286,7 @@ export class LabelCheckService {
         ...baseResult,
         status: 'OCR_ERROR',
         imagePath,
-        errorMessage: `Blad OCR: ${errorMessage}`,
+        errorMessage: `Błąd OCR: ${errorMessage}`,
       };
     }
 
@@ -296,7 +296,7 @@ export class LabelCheckService {
         ...baseResult,
         status: 'OCR_ERROR',
         imagePath,
-        errorMessage: 'OCR: nie rozpoznano daty na obrazie',
+        errorMessage: 'Nie rozpoznano daty na etykiecie',
       };
     }
 
@@ -311,7 +311,7 @@ export class LabelCheckService {
         status: 'OCR_ERROR',
         imagePath,
         detectedText,
-        errorMessage: `OCR: nie mozna sparsowac daty: ${detectedText}`,
+        errorMessage: `Nie udało się odczytać daty: ${detectedText}`,
       };
     }
 

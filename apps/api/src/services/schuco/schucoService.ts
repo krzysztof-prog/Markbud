@@ -10,6 +10,36 @@ import {
   emitSchucoFetchCompleted,
   emitSchucoFetchFailed,
 } from '../event-emitter.js';
+import { EmailService } from '../email/EmailService.js';
+import { notifyCriticalError } from '../notifications/criticalErrorNotifier.js';
+
+const DELIVERY_WEEK_CHANGE_RECIPIENTS = ['pawel@markbud.pl', 'krzysztof@markbud.pl'];
+
+// Statusy Schüco oznaczające, że zamówienie zostało już dostarczone
+// (spójne z DELIVERED_STATUSES w schucoItemService + warianty z portalu)
+const DELIVERED_STATUS_PATTERNS = ['dostarczon', 'potwierdzona dostawa', 'zakończon', 'zrealizowan'];
+
+function isDeliveredShippingStatus(status: string | null | undefined): boolean {
+  if (!status) return false;
+  const normalized = status.toLowerCase();
+  return DELIVERED_STATUS_PATTERNS.some((p) => normalized.includes(p));
+}
+
+/**
+ * Czy tydzień dostawy (YYYY/WW) już minął — poniedziałek tego tygodnia
+ * jest wcześniejszy niż poniedziałek bieżącego tygodnia.
+ * Nieparsowalny/pusty tydzień traktujemy jako NIE-przeszły (bezpieczny domyślny: wyślij mail).
+ */
+function isWeekInPast(week: string | null): boolean {
+  const weekMonday = parseDeliveryWeek(week);
+  if (!weekMonday) return false;
+
+  const now = new Date();
+  const dayOfWeek = now.getDay() || 7; // niedziela → 7
+  const currentMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 1);
+
+  return weekMonday < currentMonday;
+}
 
 // Fields to compare for change detection (excluding metadata fields)
 const COMPARABLE_FIELDS = [
@@ -21,6 +51,14 @@ const COMPARABLE_FIELDS = [
   'orderType',
   'totalAmount',
 ] as const;
+
+interface WeekChangeEntry {
+  deliveryId: number;
+  orderNumber: string;
+  orderName: string;
+  oldWeek: string | null;
+  newWeek: string | null;
+}
 
 interface ChangeStats {
   newRecords: number;
@@ -42,6 +80,7 @@ export class SchucoService {
   private prisma: PrismaClient;
   private parser: SchucoParser;
   private orderMatcher: SchucoOrderMatcher;
+  private emailService: EmailService;
 
   // Aktywny scraper do możliwości anulowania
   private activeScraper: SchucoScraper | null = null;
@@ -52,6 +91,7 @@ export class SchucoService {
     this.prisma = prisma;
     this.parser = new SchucoParser();
     this.orderMatcher = new SchucoOrderMatcher(prisma);
+    this.emailService = new EmailService(prisma);
   }
 
   /**
@@ -289,6 +329,20 @@ export class SchucoService {
 
       await this.updateFetchLog(logId, 'error', 0, errorMessage, durationMs);
 
+      // Powiadom email TYLKO dla automatycznych pobrań (8:00, 12:00, 15:00).
+      // Ręczne błędy użytkownik widzi w UI — nie ma sensu dublować.
+      if (triggerType === 'scheduled') {
+        notifyCriticalError(this.prisma, {
+          source: 'Schuco - automatyczne pobieranie zamówień',
+          errorMessage,
+          context: {
+            logId,
+            durationMs,
+            triggerType,
+          },
+        });
+      }
+
       // Reset state po błędzie
       this.activeScraper = null;
       this.activeLogId = null;
@@ -362,8 +416,34 @@ export class SchucoService {
    * Store deliveries with change tracking - OPTIMIZED with batches
    * Używa transakcji i batch operations dla znacznego przyspieszenia
    */
+  private deduplicateDeliveries(deliveries: SchucoDeliveryRow[]): SchucoDeliveryRow[] {
+    const map = new Map<string, SchucoDeliveryRow>();
+    for (const delivery of deliveries) {
+      const existing = map.get(delivery.orderNumber);
+      if (!existing) {
+        map.set(delivery.orderNumber, delivery);
+        continue;
+      }
+      // Keep the row with the later deliveryWeek (format YYYY/WW)
+      const parseWeek = (w: string): number => {
+        if (!w) return -1;
+        const [year, week] = w.split('/').map(Number);
+        return isNaN(year) || isNaN(week) ? -1 : year * 100 + week;
+      };
+      if (parseWeek(delivery.deliveryWeek) > parseWeek(existing.deliveryWeek)) {
+        map.set(delivery.orderNumber, delivery);
+      }
+    }
+    const deduped = Array.from(map.values());
+    if (deduped.length < deliveries.length) {
+      logger.info(`[SchucoService] Deduplicated ${deliveries.length} → ${deduped.length} rows (${deliveries.length - deduped.length} duplicates removed)`);
+    }
+    return deduped;
+  }
+
   private async storeDeliveriesWithChangeTracking(deliveries: SchucoDeliveryRow[]): Promise<ChangeStats> {
-    const totalCount = deliveries.length;
+    const uniqueDeliveries = this.deduplicateDeliveries(deliveries);
+    const totalCount = uniqueDeliveries.length;
     logger.info(`[SchucoService] Storing ${totalCount} deliveries with change tracking (batch mode)...`);
 
     const stats: ChangeStats = {
@@ -372,8 +452,11 @@ export class SchucoService {
       unchangedRecords: 0,
     };
 
+    // Kolekcja zmian tygodnia dostawy do powiadomień emailowych
+    const weekChanges: WeekChangeEntry[] = [];
+
     // Step 1: Get all existing deliveries by order number for comparison
-    const orderNumbers = deliveries.map((d) => d.orderNumber);
+    const orderNumbers = uniqueDeliveries.map((d) => d.orderNumber);
     const existingDeliveries = await this.prisma.schucoDelivery.findMany({
       where: {
         orderNumber: { in: orderNumbers },
@@ -399,7 +482,7 @@ export class SchucoService {
     const updatedDeliveries: ProcessedDelivery[] = [];
     const unchangedDeliveries: ProcessedDelivery[] = [];
 
-    for (const delivery of deliveries) {
+    for (const delivery of uniqueDeliveries) {
       const existing = existingMap.get(delivery.orderNumber);
       const orderDateParsed = this.parser.parseDate(delivery.orderDate);
       const extractedNums = extractOrderNumbers(delivery.orderNumber);
@@ -547,6 +630,28 @@ export class SchucoService {
               stats.newRecords++;
             } else {
               stats.updatedRecords++;
+              // Zbierz zmiany tygodnia dostawy (tylko dla nie-warehouse)
+              if (!isWarehouse && changes!.changedFields.includes('deliveryWeek')) {
+                const oldWeek = changes!.previousValues['deliveryWeek'] ?? null;
+                const newWeek = delivery.deliveryWeek || null;
+                // Nie powiadamiaj o starych zamówieniach:
+                // - nowy termin (lub stary, gdy nowy usunięto) już minął
+                // - zamówienie ma status "dostarczone"
+                const effectiveWeek = newWeek || oldWeek;
+                if (isWeekInPast(effectiveWeek) || isDeliveredShippingStatus(delivery.shippingStatus)) {
+                  logger.info(
+                    `[SchucoService] Skipping week change notification for old order ${delivery.orderNumber} (week: ${oldWeek} → ${newWeek}, status: ${delivery.shippingStatus})`
+                  );
+                } else {
+                  weekChanges.push({
+                    deliveryId: existing!.id,
+                    orderNumber: delivery.orderNumber,
+                    orderName: delivery.orderName,
+                    oldWeek,
+                    newWeek,
+                  });
+                }
+              }
             }
           }
         }, { timeout: 120000 }); // 120s timeout dla batch operacji (SQLite może być wolny)
@@ -603,8 +708,93 @@ export class SchucoService {
       { maxRetries: 3, delayMs: 3000, operationName: 'createOrderLinksBatch' }
     );
 
+    // Step 5: Send email notifications for delivery week changes
+    if (weekChanges.length > 0) {
+      this.sendWeekChangeNotifications(weekChanges).catch((err) => {
+        logger.error('[SchucoService] Failed to send week change notifications:', err);
+      });
+    }
+
     logger.info(`[SchucoService] Deliveries stored: new=${stats.newRecords}, updated=${stats.updatedRecords}, unchanged=${stats.unchangedRecords}`);
     return stats;
+  }
+
+  /**
+   * Wysyła email z powiadomieniem o zmianach tygodnia dostawy Schüco
+   */
+  private async sendWeekChangeNotifications(changes: WeekChangeEntry[]): Promise<void> {
+    if (changes.length === 0) return;
+
+    // Pobierz nazwy klientów przez OrderSchucoLink → Order.client
+    const deliveryIds = changes.map((c) => c.deliveryId);
+    const links = await this.prisma.orderSchucoLink.findMany({
+      where: { schucoDeliveryId: { in: deliveryIds } },
+      select: {
+        schucoDeliveryId: true,
+        order: { select: { client: true } },
+      },
+    });
+
+    // Mapuj deliveryId → klient (pierwszy znaleziony)
+    const clientByDeliveryId = new Map<number, string>();
+    for (const link of links) {
+      if (!clientByDeliveryId.has(link.schucoDeliveryId) && link.order?.client) {
+        clientByDeliveryId.set(link.schucoDeliveryId, link.order.client);
+      }
+    }
+
+    const now = new Date().toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw' });
+
+    const rows = changes
+      .map((c) => {
+        const client = clientByDeliveryId.get(c.deliveryId) || '—';
+        const oldWeek = c.oldWeek || '—';
+        const newWeek = c.newWeek || '—';
+        return `
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-weight:600">${c.orderNumber}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${c.orderName}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${client}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;text-decoration:line-through">${oldWeek}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#dc2626;font-weight:700">${newWeek}</td>
+          </tr>`;
+      })
+      .join('');
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto">
+        <div style="background:#1e40af;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">
+          <h2 style="margin:0;font-size:20px">Zmiana terminu dostawy Schüco</h2>
+          <p style="margin:6px 0 0;opacity:0.85;font-size:14px">${now} | ${changes.length} zmian</p>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:24px">
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <thead>
+              <tr style="background:#f3f4f6">
+                <th style="padding:8px 12px;text-align:left;color:#374151">Nr zamówienia</th>
+                <th style="padding:8px 12px;text-align:left;color:#374151">Nazwa</th>
+                <th style="padding:8px 12px;text-align:left;color:#374151">Klient</th>
+                <th style="padding:8px 12px;text-align:left;color:#374151">Stary termin</th>
+                <th style="padding:8px 12px;text-align:left;color:#374151">Nowy termin</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <p style="margin:16px 0 0;font-size:12px;color:#9ca3af">Wygenerowano automatycznie przez system MARKBUD.</p>
+        </div>
+      </div>`;
+
+    const result = await this.emailService.send({
+      to: DELIVERY_WEEK_CHANGE_RECIPIENTS,
+      subject: `Schüco – zmiana terminu dostawy (${changes.length} zamówień) – ${now}`,
+      html,
+    });
+
+    if (result.success) {
+      logger.info(`[SchucoService] Week change notification sent for ${changes.length} orders`);
+    } else {
+      logger.error('[SchucoService] Failed to send week change notification:', result.error);
+    }
   }
 
   /**
@@ -615,7 +805,7 @@ export class SchucoService {
     existing?: { id: number };
     extractedNums: string[];
     isWarehouse: boolean;
-  }>): Promise<void> {
+  }>): Promise<number> {
     // Collect all order numbers that need links
     const allOrderNumbers = new Set<string>();
     const deliveryOrderMap = new Map<number, string[]>(); // deliveryId -> orderNumbers
@@ -627,7 +817,7 @@ export class SchucoService {
       item.extractedNums.forEach(num => allOrderNumbers.add(num));
     }
 
-    if (allOrderNumbers.size === 0) return;
+    if (allOrderNumbers.size === 0) return 0;
 
     // Batch lookup: find all matching orders at once
     const orders = await this.prisma.order.findMany({
@@ -637,7 +827,7 @@ export class SchucoService {
       select: { id: true, orderNumber: true },
     });
 
-    if (orders.length === 0) return;
+    if (orders.length === 0) return 0;
 
     const orderIdByNumber = new Map(orders.map(o => [o.orderNumber, o.id]));
 
@@ -684,6 +874,8 @@ export class SchucoService {
       }
       logger.info(`[SchucoService] Created ${newLinks.length} new order links`);
     }
+
+    return newLinks.length;
   }
 
   /**

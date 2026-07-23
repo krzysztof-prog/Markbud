@@ -7,9 +7,10 @@ import { CsvParser, type ParsedUzyteBele } from '../parsers/csv-parser.js';
 import { logger } from '../../utils/logger.js';
 import { emitOrderUpdated } from '../event-emitter.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
-import { ensureDirectoryExists, generateSafeFilename, shouldSkipImport } from './utils.js';
+import { ensureDirectoryExists, generateSafeFilename, shouldSkipImport, isUncParentStatError } from './utils.js';
 import { importQueue, type ImportJobResult } from '../import/ImportQueueService.js';
 import { MojaPracaRepository } from '../../repositories/MojaPracaRepository.js';
+import { notifyCriticalError } from '../notifications/criticalErrorNotifier.js';
 
 /**
  * Domyślna konfiguracja watchera
@@ -181,7 +182,13 @@ export class UzyteBelePrywatneWatcher implements IFileWatcher {
         });
       })
       .on('error', (error) => {
+        if (isUncParentStatError(error)) return;
         logger.error(`❌ Błąd File Watcher dla plików prywatnych ${basePath}: ${error}`);
+        notifyCriticalError(this.prisma, {
+          source: 'File Watcher - Użyte bele prywatne (CSV)',
+          errorMessage: error instanceof Error ? error.message : String(error),
+          context: { folder: basePath },
+        });
       });
 
     this.watchers.push(watcher);

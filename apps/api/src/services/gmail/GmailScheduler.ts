@@ -2,6 +2,7 @@ import cron, { ScheduledTask } from 'node-cron';
 import { PrismaClient } from '@prisma/client';
 import { GmailFetcherService } from './GmailFetcherService.js';
 import { logger } from '../../utils/logger.js';
+import { notifyCriticalError } from '../notifications/criticalErrorNotifier.js';
 
 /**
  * Gmail Scheduler - automatyczne pobieranie CSV z Gmail co godzinę
@@ -85,9 +86,21 @@ export class GmailScheduler {
           `[GmailScheduler] Fetch completed with errors. Downloaded: ${result.downloaded}, ` +
           `Failed: ${result.failed}. Errors: ${result.errors.join('; ')}`
         );
+        notifyCriticalError(this.prisma, {
+          source: 'Gmail - automatyczne pobieranie CSV',
+          errorMessage: result.errors.join('; ') || 'Pobieranie zakończone z błędami',
+          context: {
+            downloaded: result.downloaded,
+            failed: result.failed,
+          },
+        });
       }
     } catch (error) {
       logger.error('[GmailScheduler] Scheduled fetch error:', error);
+      notifyCriticalError(this.prisma, {
+        source: 'Gmail - automatyczne pobieranie CSV',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 

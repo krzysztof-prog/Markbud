@@ -10,7 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Save, DollarSign, Package, Archive, Home, Trash2 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Save, DollarSign, Package, Archive, Home, Trash2, Mail } from 'lucide-react';
 
 // Dostępne strony startowe
 const availableHomePages = [
@@ -177,6 +178,36 @@ export function GeneralSettingsTab({
             <p className="text-xs text-muted-foreground mt-1">
               Dane oznaczone jako usunięte (soft delete) będą trwale usunięte z bazy po upływie tej liczby dni.
               Zalecana wartość: 90 dni. Minimum: 7 dni.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            Alerty emailowe - dostawy
+          </CardTitle>
+          <CardDescription>
+            Raport o brakujących szybach i problemach z etykietami wysyłany 2x dziennie (8:00 i 14:00)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <label className="text-sm font-medium block mb-1">
+              Odbiorcy (adresy email oddzielone przecinkami)
+            </label>
+            <Textarea
+              value={settings.email_alert_recipients || ''}
+              onChange={(e) => onSettingChange('email_alert_recipients', e.target.value)}
+              placeholder="jan@firma.pl, anna@firma.pl"
+              className="w-full max-w-lg"
+              rows={3}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Email zostanie wysłany tylko gdy wykryte zostaną problemy (brakujące zamówienia szyb lub błędy etykiet).
+              Zakres: dostawy na najbliższe 14 dni.
             </p>
           </div>
         </CardContent>

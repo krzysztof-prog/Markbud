@@ -167,6 +167,17 @@ export class LogisticsRepository {
                 project: true,
                 status: true,
                 deliveryDate: true, // Potrzebne do walidacji zgodności dat
+                deliveryOrders: {
+                  select: {
+                    delivery: {
+                      select: {
+                        deliveryDate: true,
+                        deletedAt: true,
+                      },
+                    },
+                  },
+                  take: 1,
+                },
               },
             },
           },
@@ -368,14 +379,23 @@ export class LogisticsRepository {
     const likeConditions = upperProjectNumbers.map(() => `UPPER(project) LIKE ?`).join(' OR ');
     const likeParams = upperProjectNumbers.map((pn) => `%${pn}%`);
 
+    // Używamy COALESCE aby delivery_date z Order miało priorytet,
+    // ale fallback do daty z przypisanej Delivery (przez DeliveryOrder)
     const orders = await prisma.$queryRawUnsafe<
       { id: number; orderNumber: string; client: string | null; project: string | null; status: string | null; deliveryDate: string | null }[]
     >(
       `
-      SELECT id, order_number as orderNumber, client, project, status, delivery_date as deliveryDate
-      FROM orders
-      WHERE (${likeConditions})
-        AND archived_at IS NULL
+      SELECT o.id, o.order_number as orderNumber, o.client, o.project, o.status,
+        COALESCE(o.delivery_date, (
+          SELECT d.delivery_date FROM delivery_orders do2
+          JOIN deliveries d ON d.id = do2.delivery_id AND d.deleted_at IS NULL
+          WHERE do2.order_id = o.id
+          ORDER BY d.delivery_date ASC
+          LIMIT 1
+        )) as deliveryDate
+      FROM orders o
+      WHERE (${likeConditions.replace(/UPPER\(project\)/g, 'UPPER(o.project)')})
+        AND o.archived_at IS NULL
     `,
       ...likeParams
     );

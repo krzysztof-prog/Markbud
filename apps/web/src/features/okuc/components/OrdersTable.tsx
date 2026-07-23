@@ -5,7 +5,7 @@
  * Sortowanie domyślnie po createdAt (DESC).
  * Klikalne kolumny dla sortowania.
  *
- * KRYTYCZNE: Używa groszeToPln() dla wyświetlania wartości!
+ * KRYTYCZNE: Wartości w eurocentach - dzielimy przez 100 dla wyświetlania w EUR!
  */
 
 'use client';
@@ -31,8 +31,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Eye, Edit, Send, Trash2, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import type { OkucOrder } from '@/types/okuc';
-import { groszeToPln } from '@/lib/money';
-import type { Grosze } from '@/lib/money';
 
 interface OrdersTableProps {
   orders: OkucOrder[];
@@ -139,9 +137,9 @@ export function OrdersTable({
           bValue = b.items?.length || 0;
           break;
         case 'estimatedValue':
-          // Suma cen pozycji (estimatedPrice w groszach)
-          aValue = a.items?.reduce((sum, item) => sum + (item.unitPrice || 0), 0) || 0;
-          bValue = b.items?.reduce((sum, item) => sum + (item.unitPrice || 0), 0) || 0;
+          // Suma iloczynów (ilość × cena) w eurocentach
+          aValue = a.items?.reduce((sum, item) => sum + (item.orderedQty || 0) * (item.unitPrice || 0), 0) || 0;
+          bValue = b.items?.reduce((sum, item) => sum + (item.orderedQty || 0) * (item.unitPrice || 0), 0) || 0;
           break;
         default:
           aValue = a.orderNumber;
@@ -156,10 +154,10 @@ export function OrdersTable({
     return sorted;
   }, [orders, sortField, sortDirection]);
 
-  // Wylicz wartość szacowaną zamówienia (suma cen pozycji)
+  // Wylicz wartość szacowaną zamówienia (suma iloczynów ilość × cena w eurocentach)
   const getEstimatedValue = (order: OkucOrder): number => {
     if (!order.items || order.items.length === 0) return 0;
-    return order.items.reduce((sum, item) => sum + (item.unitPrice || 0), 0);
+    return order.items.reduce((sum, item) => sum + (item.orderedQty || 0) * (item.unitPrice || 0), 0);
   };
 
   // Czy można edytować zamówienie
@@ -269,7 +267,7 @@ export function OrdersTable({
             {sortedOrders.map((order) => {
               const statusConfig = STATUS_CONFIG[order.status] || { label: order.status, variant: 'default' as const };
               const basketConfig = BASKET_TYPE_CONFIG[order.basketType] || { label: order.basketType, variant: 'default' as const };
-              const estimatedValueGrosze = getEstimatedValue(order);
+              const estimatedValueCents = getEstimatedValue(order);
               const isSending = isSendingId === order.id;
               const isDeleting = isDeletingId === order.id;
 
@@ -303,8 +301,8 @@ export function OrdersTable({
                     {order.items?.length || 0}
                   </TableCell>
                   <TableCell className="text-right">
-                    {estimatedValueGrosze > 0
-                      ? `${groszeToPln(estimatedValueGrosze as Grosze).toFixed(2)} zł`
+                    {estimatedValueCents > 0
+                      ? `${(estimatedValueCents / 100).toFixed(2)} €`
                       : '-'}
                   </TableCell>
                   <TableCell className="text-right">

@@ -89,7 +89,7 @@ export const RESULT_STATUS_CONFIG: Record<LabelCheckResultStatus, {
   icon: 'check' | 'x' | 'alert-triangle' | 'folder-x' | 'file-x';
 }> = {
   OK: { label: 'OK', color: 'green', icon: 'check' },
-  MISMATCH: { label: 'Niezgodna data', color: 'red', icon: 'x' },
+  MISMATCH: { label: 'Błędna data', color: 'red', icon: 'x' },
   NO_FOLDER: { label: 'Brak folderu', color: 'yellow', icon: 'folder-x' },
   NO_BMP: { label: 'Brak zdjęć', color: 'yellow', icon: 'file-x' },
   OCR_ERROR: { label: 'Błąd OCR', color: 'gray', icon: 'alert-triangle' },

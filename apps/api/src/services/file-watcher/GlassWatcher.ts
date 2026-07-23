@@ -4,10 +4,11 @@ import { readFile } from 'fs/promises';
 import type { PrismaClient } from '@prisma/client';
 import type { FSWatcher } from 'chokidar';
 import { logger } from '../../utils/logger.js';
-import { archiveFile, moveToSkipped, shouldSkipImport } from './utils.js';
+import { archiveFile, moveToSkipped, shouldSkipImport, isUncParentStatError } from './utils.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
 import { DEFAULT_WATCHER_CONFIG } from './types.js';
 import { importQueue } from '../import/ImportQueueService.js';
+import { notifyCriticalError } from '../notifications/criticalErrorNotifier.js';
 
 /**
  * Watcher odpowiedzialny za monitorowanie folderów szyb:
@@ -147,7 +148,13 @@ export class GlassWatcher implements IFileWatcher {
         // Inne rozszerzenia są ignorowane
       })
       .on('error', (error) => {
+        if (isUncParentStatError(error)) return;
         logger.error(`Blad File Watcher dla zamowien szyb ${basePath}: ${error}`);
+        notifyCriticalError(this.prisma, {
+          source: 'File Watcher - Zamówienia szyb (TXT)',
+          errorMessage: error instanceof Error ? error.message : String(error),
+          context: { folder: basePath },
+        });
       });
 
     this.watchers.push(watcher);
@@ -186,7 +193,13 @@ export class GlassWatcher implements IFileWatcher {
         this.enqueueToGlobalQueue('glass_delivery', filePath);
       })
       .on('error', (error) => {
+        if (isUncParentStatError(error)) return;
         logger.error(`Blad File Watcher dla dostaw szyb ${basePath}: ${error}`);
+        notifyCriticalError(this.prisma, {
+          source: 'File Watcher - Dostawy szyb (CSV)',
+          errorMessage: error instanceof Error ? error.message : String(error),
+          context: { folder: basePath },
+        });
       });
 
     this.watchers.push(watcher);

@@ -43,6 +43,8 @@ export class LabelCheckModule extends BaseReadinessCheckModule {
             orderId: true,
             orderNumber: true,
             status: true,
+            expectedDate: true,
+            detectedDate: true,
           },
         },
       },
@@ -71,11 +73,28 @@ export class LabelCheckModule extends BaseReadinessCheckModule {
 
     // Są błędy krytyczne (mismatch, brak pliku)
     if (mismatchResults.length > 0) {
-      const details: ReadinessCheckDetail[] = mismatchResults.map((r) => ({
-        itemId: r.orderNumber || `Order #${r.orderId}`,
-        orderId: r.orderId,
-        reason: this.getLabelErrorReason(r.status),
-      }));
+      const details: ReadinessCheckDetail[] = mismatchResults.map((r) => {
+        let reason = this.getLabelErrorReason(r.status);
+        // Dla MISMATCH dodaj żądaną datę i wykrytą datę
+        if (r.status === 'MISMATCH' && r.expectedDate) {
+          const d = new Date(r.expectedDate);
+          const dd = d.getDate().toString().padStart(2, '0');
+          const mm = (d.getMonth() + 1).toString().padStart(2, '0');
+          const yyyy = d.getFullYear();
+          reason += ` (powinna: ${dd}.${mm}.${yyyy})`;
+          if (r.detectedDate) {
+            const dd2 = new Date(r.detectedDate).getDate().toString().padStart(2, '0');
+            const mm2 = (new Date(r.detectedDate).getMonth() + 1).toString().padStart(2, '0');
+            const yyyy2 = new Date(r.detectedDate).getFullYear();
+            reason += `|||DETECTED:${dd2}.${mm2}.${yyyy2}`;
+          }
+        }
+        return {
+          itemId: r.orderNumber || `Order #${r.orderId}`,
+          orderId: r.orderId,
+          reason,
+        };
+      });
 
       return this.blocking(
         `${mismatchResults.length} etykiet ma błędy`,
@@ -106,7 +125,7 @@ export class LabelCheckModule extends BaseReadinessCheckModule {
   private getLabelErrorReason(status: string): string {
     switch (status) {
       case 'MISMATCH':
-        return 'Niezgodność daty na etykiecie';
+        return 'Błędna data na etykiecie';
       case 'NO_FOLDER':
         return 'Brak folderu z etykietą';
       case 'NO_BMP':

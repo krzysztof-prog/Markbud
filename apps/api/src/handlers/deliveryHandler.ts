@@ -19,11 +19,14 @@ import {
   completeAllOrdersSchema,
   validateOrderNumbersSchema,
   bulkAssignOrdersSchema,
+  weeklyPlanQuerySchema,
 } from '../validators/delivery.js';
 import { QuickDeliveryService } from '../services/delivery/QuickDeliveryService.js';
 import { prisma } from '../index.js';
 import { DeliveryRepository } from '../repositories/DeliveryRepository.js';
 import { ValidationError } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
+import { formatDateWarsaw, getStartOfDayWarsaw, dayjsWarsaw } from '../utils/date-helpers.js';
 
 export class DeliveryHandler {
   private protocolService: DeliveryProtocolService;
@@ -42,6 +45,10 @@ export class DeliveryHandler {
   ) {
     const validated = deliveryQuerySchema.parse(request.query);
     const deliveries = await this.service.getAllDeliveries(validated);
+
+    // Auto-reconciliation: napraw dostawy z niespójnym statusem (wszystkie zlecenia completed ale dostawa nie)
+    await this.reconcileDeliveryStatuses(deliveries);
+
     return reply.send(deliveries);
   }
 
@@ -396,5 +403,209 @@ export class DeliveryHandler {
     const deliveryNumber = await this.quickDeliveryService.previewNextDeliveryNumber(date);
 
     return reply.send({ deliveryNumber });
+  }
+
+  /**
+   * GET /api/deliveries/weekly-plan?weekStart=YYYY-MM-DD
+   * Tygodniówka — widok tygodniowego planu szkleń (Pon-Pt)
+   */
+  async getWeeklyPlan(
+    request: FastifyRequest<{ Querystring: { weekStart: string } }>,
+    reply: FastifyReply
+  ) {
+    const { weekStart } = weeklyPlanQuerySchema.parse(request.query);
+
+    // Użyj Warsaw timezone aby poprawnie obsłużyć granice dni (CET = UTC+1, CEST = UTC+2)
+    const queryStart = getStartOfDayWarsaw(weekStart);
+    const queryEnd = dayjsWarsaw(weekStart).add(4, 'day').endOf('day').toDate();
+
+    const deliveryRepository = new DeliveryRepository(prisma);
+    const deliveries = await deliveryRepository.findWeeklyPlan(queryStart, queryEnd);
+
+    // Polskie nazwy dni
+    const dayNames = ['Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek'];
+
+    // Grupuj dostawy po dniu (Pon-Pt)
+    const days = [];
+    let weekTotalGlass = 0;
+    let weekTotalWindows = 0;
+    let weekTotalSashes = 0;
+
+    for (let i = 0; i < 5; i++) {
+      const dateStr = dayjsWarsaw(weekStart).add(i, 'day').format('YYYY-MM-DD');
+
+      // Dostawy na ten dzień (porównanie w strefie Warsaw)
+      const dayDeliveries = deliveries
+        .filter((d) => formatDateWarsaw(d.deliveryDate) === dateStr)
+        .map((d) => {
+          const orders = d.deliveryOrders.map((dOrder) => {
+            const o = dOrder.order;
+            return {
+              orderId: o.id,
+              orderNumber: o.orderNumber,
+              totalGlasses: o.totalGlasses ?? 0,
+              totalWindows: o.totalWindows ?? 0,
+              totalSashes: o.totalSashes ?? 0,
+              orderedGlassCount: o.orderedGlassCount ?? 0,
+              deliveredGlassCount: o.deliveredGlassCount ?? 0,
+              glassDeliveryDate: o.glassDeliveryDate?.toISOString() ?? null,
+              glassOrderStatus: o.glassOrderStatus ?? null,
+              glassOrderNote: o.glassOrderNote ?? null,
+              client: o.client ?? null,
+              project: o.project ?? null,
+              orderStatus: o.status ?? null,
+            };
+          });
+
+          // Sortuj zlecenia od najniższego do najwyższego numeru
+          orders.sort((a, b) => {
+            const numA = parseInt(a.orderNumber.replace(/[^0-9]/g, ''), 10) || 0;
+            const numB = parseInt(b.orderNumber.replace(/[^0-9]/g, ''), 10) || 0;
+            if (numA !== numB) return numA - numB;
+            return a.orderNumber.localeCompare(b.orderNumber);
+          });
+
+          const nietypowki = d.deliveryItems
+            .filter((item) => item.itemType === 'nietypowka')
+            .map((item) => ({ id: item.id, description: item.description, quantity: item.quantity }));
+
+          const prywatne = d.deliveryItems
+            .filter((item) => item.itemType === 'prywatne')
+            .map((item) => ({ id: item.id, description: item.description, quantity: item.quantity }));
+
+          const notes = d.deliveryItems
+            .filter((item) => item.itemType === 'note')
+            .map((item) => ({ id: item.id, description: item.description }));
+
+          const orderGlassSum = orders.reduce((sum, o) => sum + o.totalGlasses, 0);
+          const nietypowkiGlassSum = nietypowki.reduce((sum, n) => sum + n.quantity, 0);
+          const prywatneGlassSum = prywatne.reduce((sum, p) => sum + p.quantity, 0);
+          const totalGlassCount = orderGlassSum + nietypowkiGlassSum + prywatneGlassSum;
+          const totalWindows = orders.reduce((sum, o) => sum + o.totalWindows, 0);
+          const totalSashes = orders.reduce((sum, o) => sum + o.totalSashes, 0);
+
+          // Auto-reconciliation: jeśli wszystkie zlecenia completed ale dostawa nie — napraw status
+          let deliveryStatus = d.status;
+          if (
+            d.status !== 'completed' &&
+            orders.length > 0 &&
+            orders.every((o) => o.orderStatus === 'completed')
+          ) {
+            deliveryStatus = 'completed';
+            // Fire-and-forget: napraw niespójny status w bazie
+            prisma.delivery.update({
+              where: { id: d.id },
+              data: { status: 'completed' },
+            }).catch((err: unknown) => {
+              logger.error('Failed to auto-reconcile delivery status', { deliveryId: d.id, error: err });
+            });
+          }
+
+          return {
+            id: d.id,
+            deliveryNumber: d.deliveryNumber,
+            status: deliveryStatus,
+            orders,
+            notes,
+            nietypowki,
+            prywatne,
+            totalGlassCount,
+            totalWindows,
+            totalSashes,
+          };
+        });
+
+      const dayTotalGlass = dayDeliveries.reduce((sum, d) => sum + d.totalGlassCount, 0);
+      const dayTotalWindows = dayDeliveries.reduce((sum, d) => sum + d.totalWindows, 0);
+      const dayTotalSashes = dayDeliveries.reduce((sum, d) => sum + d.totalSashes, 0);
+      weekTotalGlass += dayTotalGlass;
+      weekTotalWindows += dayTotalWindows;
+      weekTotalSashes += dayTotalSashes;
+
+      days.push({
+        date: dateStr,
+        dayName: dayNames[i],
+        deliveries: dayDeliveries,
+        dayTotalGlass,
+        dayTotalWindows,
+        dayTotalSashes,
+      });
+    }
+
+    return reply.send({
+      weekStart,
+      days,
+      weekTotalGlass,
+      weekTotalWindows,
+      weekTotalSashes,
+    });
+  }
+
+  /**
+   * GET /api/deliveries/first-in-progress-week
+   * Zwraca weekStart (poniedziałek) tygodnia z pierwszą planowaną dostawą.
+   * Jeśli brak — zwraca bieżący tydzień.
+   */
+  async getFirstInProgressWeek(
+    _request: FastifyRequest,
+    reply: FastifyReply
+  ) {
+    const delivery = await prisma.delivery.findFirst({
+      where: { status: { in: ['planned', 'in_progress'] }, deletedAt: null },
+      orderBy: { deliveryDate: 'asc' },
+      select: { deliveryDate: true },
+    });
+
+    if (!delivery) {
+      // Brak dostaw — zwróć poniedziałek bieżącego tygodnia (Warsaw)
+      const mondayStr = dayjsWarsaw().startOf('isoWeek').format('YYYY-MM-DD');
+      return reply.send({ weekStart: mondayStr });
+    }
+
+    // Oblicz poniedziałek tygodnia tej dostawy (Warsaw timezone)
+    const mondayStr = dayjsWarsaw(delivery.deliveryDate).startOf('isoWeek').format('YYYY-MM-DD');
+    return reply.send({ weekStart: mondayStr });
+  }
+
+  /**
+   * Auto-reconciliation: jeśli dostawa ma wszystkie zlecenia completed ale sama nie jest completed,
+   * napraw status w bazie i w odpowiedzi API.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async reconcileDeliveryStatuses(response: { data: any[] }): Promise<void> {
+    if (!response?.data) return;
+
+    const deliveryIdsToFix: number[] = [];
+
+    for (const delivery of response.data) {
+      if (delivery.status === 'completed') continue;
+      if (!delivery.deliveryOrders || delivery.deliveryOrders.length === 0) continue;
+
+      // Sprawdź w bazie czy wszystkie zlecenia tej dostawy są completed
+      const orderIds = delivery.deliveryOrders.map((d: any) => d.order.id);
+      const incompleteCount = await prisma.order.count({
+        where: {
+          id: { in: orderIds },
+          status: { not: 'completed' },
+        },
+      });
+
+      if (incompleteCount === 0) {
+        delivery.status = 'completed';
+        deliveryIdsToFix.push(delivery.id);
+      }
+    }
+
+    // Napraw statusy w bazie (fire-and-forget)
+    if (deliveryIdsToFix.length > 0) {
+      prisma.delivery.updateMany({
+        where: { id: { in: deliveryIdsToFix } },
+        data: { status: 'completed' },
+      }).then(() => {
+        logger.info('Auto-reconciled delivery statuses', { deliveryIds: deliveryIdsToFix });
+      }).catch((err: unknown) => {
+        logger.error('Failed to auto-reconcile delivery statuses', { deliveryIds: deliveryIdsToFix, error: err });
+      });
+    }
   }
 }

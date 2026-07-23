@@ -52,6 +52,7 @@ export class GlassDeliveryMatchingService {
 
     // Prepare batch data structures
     const matchedUpdates: { id: number; matchedItemId: number; glassOrderId: number }[] = [];
+    const suffixMatchedUpdates: { id: number; matchedItemId: number; glassOrderId: number }[] = [];
     const conflictUpdates: { id: number; matchedItemId: number; glassOrderId: number }[] = [];
     const unmatchedIds: number[] = [];
     const validationsToCreate: ValidationCreateInput[] = [];
@@ -64,7 +65,7 @@ export class GlassDeliveryMatchingService {
       // STEP 1: Try exact match
       const exactMatch = candidates.find(
         (c) =>
-          c.orderSuffix === deliveryItem.orderSuffix &&
+          c.orderSuffix?.toLowerCase() === deliveryItem.orderSuffix?.toLowerCase() &&
           c.widthMm === deliveryItem.widthMm &&
           c.heightMm === deliveryItem.heightMm
       );
@@ -78,6 +79,54 @@ export class GlassDeliveryMatchingService {
         const current = deliveredCountByOrder.get(deliveryItem.orderNumber) || 0;
         deliveredCountByOrder.set(deliveryItem.orderNumber, current + deliveryItem.quantity);
         continue;
+      }
+
+      // STEP 1.5: REVERSE SUFFIX FALLBACK - dostawa BEZ suffiksu, zamówienie Z suffixem
+      // Np. dostawa na "53987", zamówienie na "53987-a" → dopasuj gdy wymiary i ilość pasują
+      if (!deliveryItem.orderSuffix) {
+        const reverseCandidates = candidates.filter(
+          (c) =>
+            c.orderSuffix &&
+            c.widthMm === deliveryItem.widthMm &&
+            c.heightMm === deliveryItem.heightMm
+        );
+
+        if (reverseCandidates.length > 0) {
+          // Preferuj kandydata z pasującą ilością szyb
+          const bestMatch =
+            reverseCandidates.find((c) => c.quantity === deliveryItem.quantity) ||
+            reverseCandidates[0];
+
+          suffixMatchedUpdates.push({
+            id: deliveryItem.id,
+            matchedItemId: bestMatch.id,
+            glassOrderId: bestMatch.glassOrderId,
+          });
+
+          // Licznik na ZLECENIE Z SUFFIXEM (np. "53987-a"), bo Order.orderNumber = "53987-a"
+          const suffixedOrderNumber = `${bestMatch.orderNumber}-${bestMatch.orderSuffix}`;
+          const current = deliveredCountByOrder.get(suffixedOrderNumber) || 0;
+          deliveredCountByOrder.set(suffixedOrderNumber, current + deliveryItem.quantity);
+
+          validationsToCreate.push({
+            glassOrderId: bestMatch.glassOrderId,
+            orderNumber: suffixedOrderNumber,
+            validationType: 'reverse_suffix_match',
+            severity: 'info',
+            message: `Dopasowanie po suffixie: dostawa '${deliveryItem.orderNumber}' → zamówienie '${suffixedOrderNumber}'`,
+            details: JSON.stringify({
+              dimensions: `${deliveryItem.widthMm}x${deliveryItem.heightMm}`,
+              deliveryItemId: deliveryItem.id,
+              orderItemId: bestMatch.id,
+              matchedSuffix: bestMatch.orderSuffix,
+            }),
+            orderedQuantity: null,
+            deliveredQuantity: null,
+            expectedQuantity: null,
+            resolvedBy: null,
+          });
+          continue;
+        }
       }
 
       // STEP 2: Check for SUFFIX CONFLICT (same orderNumber, different suffix)
@@ -178,6 +227,21 @@ export class GlassDeliveryMatchingService {
       }
     }
 
+    // 1.5. Update suffix_matched items sequentially
+    for (let i = 0; i < suffixMatchedUpdates.length; i += BATCH_SIZE) {
+      const batch = suffixMatchedUpdates.slice(i, i + BATCH_SIZE);
+      for (const update of batch) {
+        await tx.glassDeliveryItem.update({
+          where: { id: update.id },
+          data: {
+            matchStatus: 'suffix_matched',
+            matchedItemId: update.matchedItemId,
+            glassOrderId: update.glassOrderId,
+          },
+        });
+      }
+    }
+
     // 2. Update conflict items sequentially
     for (let i = 0; i < conflictUpdates.length; i += BATCH_SIZE) {
       const batch = conflictUpdates.slice(i, i + BATCH_SIZE);
@@ -218,7 +282,21 @@ export class GlassDeliveryMatchingService {
     }
 
     // Update Order statuses (optimized)
-    await this.updateOrderStatusesTx(tx, deliveryItems);
+    // Dodaj numery zleceń z suffixem (z suffix_matched) do listy do aktualizacji statusów
+    const suffixedOrderNumbers = suffixMatchedUpdates.map((u) => {
+      const item = deliveryItems.find((di) => di.id === u.id);
+      const orderItem = allOrderItems.find((oi) => oi.id === u.matchedItemId);
+      if (item && orderItem?.orderSuffix) {
+        return `${item.orderNumber}-${orderItem.orderSuffix}`;
+      }
+      return null;
+    }).filter((n): n is string => n !== null);
+
+    const allDeliveryItems = [
+      ...deliveryItems,
+      ...suffixedOrderNumbers.map((on) => ({ orderNumber: on })),
+    ];
+    await this.updateOrderStatusesTx(tx, allDeliveryItems);
   }
 
   /**
@@ -249,7 +327,7 @@ export class GlassDeliveryMatchingService {
 
       const exactMatch = candidates.find(
         (c) =>
-          c.orderSuffix === deliveryItem.orderSuffix &&
+          c.orderSuffix?.toLowerCase() === deliveryItem.orderSuffix?.toLowerCase() &&
           c.widthMm === deliveryItem.widthMm &&
           c.heightMm === deliveryItem.heightMm
       );
@@ -265,6 +343,51 @@ export class GlassDeliveryMatchingService {
         });
         await this.updateOrderDeliveredCount(deliveryItem.orderNumber, deliveryItem.quantity);
         continue;
+      }
+
+      // STEP 1.5: REVERSE SUFFIX FALLBACK - dostawa BEZ suffiksu, zamówienie Z suffixem
+      if (!deliveryItem.orderSuffix) {
+        const reverseCandidates = candidates.filter(
+          (c) =>
+            c.orderSuffix &&
+            c.widthMm === deliveryItem.widthMm &&
+            c.heightMm === deliveryItem.heightMm
+        );
+
+        if (reverseCandidates.length > 0) {
+          const bestMatch =
+            reverseCandidates.find((c) => c.quantity === deliveryItem.quantity) ||
+            reverseCandidates[0];
+
+          await this.prisma.glassDeliveryItem.update({
+            where: { id: deliveryItem.id },
+            data: {
+              matchStatus: 'suffix_matched',
+              matchedItemId: bestMatch.id,
+              glassOrderId: bestMatch.glassOrderId,
+            },
+          });
+
+          const suffixedOrderNumber = `${bestMatch.orderNumber}-${bestMatch.orderSuffix}`;
+          await this.updateOrderDeliveredCount(suffixedOrderNumber, deliveryItem.quantity);
+
+          await this.prisma.glassOrderValidation.create({
+            data: {
+              glassOrderId: bestMatch.glassOrderId,
+              orderNumber: suffixedOrderNumber,
+              validationType: 'reverse_suffix_match',
+              severity: 'info',
+              message: `Dopasowanie po suffixie: dostawa '${deliveryItem.orderNumber}' → zamówienie '${suffixedOrderNumber}'`,
+              details: JSON.stringify({
+                dimensions: `${deliveryItem.widthMm}x${deliveryItem.heightMm}`,
+                deliveryItemId: deliveryItem.id,
+                orderItemId: bestMatch.id,
+                matchedSuffix: bestMatch.orderSuffix,
+              }),
+            },
+          });
+          continue;
+        }
       }
 
       const conflictMatch = candidates.find(
@@ -444,6 +567,7 @@ export class GlassDeliveryMatchingService {
 
     let rematched = 0;
     let stillUnmatched = 0;
+    const suffixMatchedOrderNumbers = new Set<string>();
 
     // Process matching logic (already inside transaction via tx)
     for (const deliveryItem of unmatchedItems) {
@@ -452,7 +576,7 @@ export class GlassDeliveryMatchingService {
       // STEP 1: Try exact match
       const exactMatch = candidates.find(
         (c) =>
-          c.orderSuffix === deliveryItem.orderSuffix &&
+          c.orderSuffix?.toLowerCase() === deliveryItem.orderSuffix?.toLowerCase() &&
           c.widthMm === deliveryItem.widthMm &&
           c.heightMm === deliveryItem.heightMm
       );
@@ -486,6 +610,69 @@ export class GlassDeliveryMatchingService {
 
         rematched++;
         continue;
+      }
+
+      // STEP 1.5: REVERSE SUFFIX FALLBACK (re-match) - dostawa BEZ suffiksu, zamówienie Z suffixem
+      if (!deliveryItem.orderSuffix) {
+        const reverseCandidates = candidates.filter(
+          (c) =>
+            c.orderSuffix &&
+            c.widthMm === deliveryItem.widthMm &&
+            c.heightMm === deliveryItem.heightMm
+        );
+
+        if (reverseCandidates.length > 0) {
+          const bestMatch =
+            reverseCandidates.find((c) => c.quantity === deliveryItem.quantity) ||
+            reverseCandidates[0];
+
+          await tx.glassDeliveryItem.update({
+            where: { id: deliveryItem.id },
+            data: {
+              matchStatus: 'suffix_matched',
+              matchedItemId: bestMatch.id,
+              glassOrderId: bestMatch.glassOrderId,
+            },
+          });
+
+          const suffixedOrderNumber = `${bestMatch.orderNumber}-${bestMatch.orderSuffix}`;
+          suffixMatchedOrderNumbers.add(suffixedOrderNumber);
+
+          await tx.order.updateMany({
+            where: { orderNumber: suffixedOrderNumber },
+            data: { deliveredGlassCount: { increment: deliveryItem.quantity } },
+          });
+
+          await tx.glassOrderValidation.create({
+            data: {
+              glassOrderId: bestMatch.glassOrderId,
+              orderNumber: deliveryItem.orderNumber,
+              validationType: 'reverse_suffix_match',
+              severity: 'info',
+              message: `Dopasowanie po suffixie (re-match): dostawa '${deliveryItem.orderNumber}' → zamówienie '${suffixedOrderNumber}'`,
+              details: JSON.stringify({
+                dimensions: `${deliveryItem.widthMm}x${deliveryItem.heightMm}`,
+                deliveryItemId: deliveryItem.id,
+                orderItemId: bestMatch.id,
+                matchedSuffix: bestMatch.orderSuffix,
+              }),
+            },
+          });
+
+          // Oznacz starą walidację unmatched jako rozwiązaną
+          await tx.glassOrderValidation.updateMany({
+            where: {
+              orderNumber: deliveryItem.orderNumber,
+              validationType: 'unmatched_delivery',
+              resolved: false,
+              message: { contains: `${deliveryItem.widthMm}x${deliveryItem.heightMm}` },
+            },
+            data: { resolved: true, resolvedAt: new Date() },
+          });
+
+          rematched++;
+          continue;
+        }
       }
 
       // STEP 2: Check for suffix conflict match
@@ -547,7 +734,12 @@ export class GlassDeliveryMatchingService {
     }
 
     // 5. Update Order statuses + twórz walidacje nadwyżek/braków
-    const uniqueOrders = [...new Set(unmatchedItems.map((i) => i.orderNumber))];
+    const uniqueOrders = [
+      ...new Set([
+        ...unmatchedItems.map((i) => i.orderNumber),
+        ...suffixMatchedOrderNumbers,
+      ]),
+    ];
     const surplusValidations: ValidationCreateInput[] = [];
     const shortageValidations: ValidationCreateInput[] = [];
 

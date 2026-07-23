@@ -432,6 +432,7 @@ export class OrderService {
     // - to robi scheduler/użytkownik ręcznie przy archiwizacji
 
     logger.info(`Order ${id} manual status updated to: ${manualStatus}`);
+    emitOrderUpdated(order);
 
     return order;
   }
@@ -447,6 +448,7 @@ export class OrderService {
     const order = await this.repository.updateSpecialType(id, specialType);
 
     logger.info(`Order ${id} special type updated to: ${specialType}`);
+    emitOrderUpdated(order);
 
     return order;
   }
@@ -481,6 +483,8 @@ export class OrderService {
     }
 
     // Validate status transitions for all orders BEFORE updating any
+    // Jeśli docelowy status to 'completed', automatycznie przenieś zlecenia 'new' przez 'in_progress'
+    const needsIntermediateStep: number[] = [];
     const invalidTransitions: Array<{ id: number; orderNumber: string; currentStatus: string }> = [];
 
     orders.forEach((order) => {
@@ -488,11 +492,16 @@ export class OrderService {
         try {
           validateStatusTransition(order.status, status);
         } catch {
-          invalidTransitions.push({
-            id: order.id,
-            orderNumber: order.orderNumber,
-            currentStatus: order.status,
-          });
+          // Jeśli new → completed, to przejdź przez in_progress
+          if (order.status === ORDER_STATUSES.NEW && status === ORDER_STATUSES.COMPLETED) {
+            needsIntermediateStep.push(order.id);
+          } else {
+            invalidTransitions.push({
+              id: order.id,
+              orderNumber: order.orderNumber,
+              currentStatus: order.status,
+            });
+          }
         }
       }
     });
@@ -509,6 +518,11 @@ export class OrderService {
         `Niedozwolone zmiany statusu dla ${invalidTransitions.length} zlecenia/zleceń: ${errorDetails}. ` +
         `Wszystkie zlecenia muszą mieć dozwoloną zmianę statusu.`
       );
+    }
+
+    // Najpierw przenieś zlecenia new → in_progress (krok pośredni)
+    if (needsIntermediateStep.length > 0) {
+      await this.repository.bulkUpdateStatus(needsIntermediateStep, ORDER_STATUSES.IN_PROGRESS);
     }
 
     // CRITICAL: Validate warehouse stock for ALL orders if starting production
@@ -584,7 +598,7 @@ export class OrderService {
           select: { id: true, status: true },
         });
 
-        if (!delivery || delivery.status !== 'in_progress') continue;
+        if (!delivery || !['planned', 'in_progress'].includes(delivery.status)) continue;
 
         // Sprawdź czy wszystkie zlecenia w tej dostawie mają status 'completed'
         const incompleteOrders = await prisma.deliveryOrder.findFirst({

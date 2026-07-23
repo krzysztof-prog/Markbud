@@ -93,6 +93,8 @@ export class DeliveryRepository {
                 select: {
                   id: true,
                   orderNumber: true,
+                  client: true,
+                  system: true,
                   valuePln: true,
                   valueEur: true,
                   totalWindows: true,
@@ -126,7 +128,7 @@ export class DeliveryRepository {
                 },
               },
             },
-            orderBy: { position: 'asc' },
+            orderBy: { order: { orderNumber: 'asc' } },
           },
           _count: {
             select: { deliveryOrders: true },
@@ -153,7 +155,7 @@ export class DeliveryRepository {
         },
         orderBy: { deliveryDate: 'asc' },
         skip: pagination?.skip ?? 0,
-        take: pagination?.take ?? 50,
+        take: pagination?.take ?? 10000,
       }),
     ]);
 
@@ -176,7 +178,7 @@ export class DeliveryRepository {
       data,
       total,
       skip: pagination?.skip ?? 0,
-      take: pagination?.take ?? 50,
+      take: pagination?.take ?? 10000,
     };
   }
 
@@ -229,7 +231,7 @@ export class DeliveryRepository {
               },
             },
           },
-          orderBy: { position: 'asc' },
+          orderBy: { order: { orderNumber: 'asc' } },
         },
         deliveryItems: {
           select: {
@@ -502,7 +504,7 @@ export class DeliveryRepository {
               },
             },
           },
-          orderBy: { position: 'asc' },
+          orderBy: { order: { orderNumber: 'asc' } },
         },
         deliveryItems: {
           select: {
@@ -737,9 +739,63 @@ export class DeliveryRepository {
               },
             },
           },
-          orderBy: { position: 'asc' },
+          orderBy: { order: { orderNumber: 'asc' } },
         },
       },
+    });
+  }
+
+  /**
+   * Dane do widoku tygodniowego planu szkleń (Tygodniówka)
+   * Zwraca dostawy z Pon-Pt z danymi o szybach i klientach
+   */
+  async findWeeklyPlan(startDate: Date, endDate: Date) {
+    return this.prisma.delivery.findMany({
+      where: {
+        deletedAt: null,
+        deliveryDate: { gte: startDate, lte: endDate },
+      },
+      select: {
+        id: true,
+        deliveryDate: true,
+        deliveryNumber: true,
+        status: true,
+        deliveryOrders: {
+          select: {
+            orderId: true,
+            position: true,
+            order: {
+              select: {
+                id: true,
+                orderNumber: true,
+                status: true,
+                totalGlasses: true,
+                totalWindows: true,
+                totalSashes: true,
+                orderedGlassCount: true,
+                deliveredGlassCount: true,
+                glassDeliveryDate: true,
+                glassOrderStatus: true,
+                glassOrderNote: true,
+                client: true,
+                project: true,
+              },
+            },
+          },
+          orderBy: { position: 'asc' },
+        },
+        deliveryItems: {
+          where: { itemType: { in: ['nietypowka', 'prywatne'] } },
+          select: {
+            id: true,
+            itemType: true,
+            description: true,
+            quantity: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+      orderBy: { deliveryDate: 'asc' },
     });
   }
 

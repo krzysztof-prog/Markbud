@@ -32,6 +32,7 @@ vi.mock('../../../index.js', () => ({
 vi.mock('../../event-emitter.js', () => ({
   emitDeliveryCreated: vi.fn(),
   emitOrderUpdated: vi.fn(),
+  emitOrderCreated: vi.fn(),
   emitWarehouseStockUpdated: vi.fn()
 }));
 

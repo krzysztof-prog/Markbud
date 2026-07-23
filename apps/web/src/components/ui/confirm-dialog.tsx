@@ -39,7 +39,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   confirmText = 'Potwierdź',
   cancelText = 'Anuluj',
   variant = 'destructive',
-  isLoading = false
+  isLoading = false,
+  loadingText
 }) => {
   const handleConfirm = async () => {
     await onConfirm();
@@ -82,12 +83,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             disabled={isLoading}
             variant={variant}
           >
-            {isLoading ? 'Usuwanie...' : confirmText}
+            {isLoading ? (loadingText ?? (variant === 'destructive' ? 'Usuwanie...' : 'Przetwarzanie...')) : confirmText}
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-};
-
-export default ConfirmDialog;
+      </Dialog

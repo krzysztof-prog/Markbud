@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { TableSkeleton } from '@/components/loaders/TableSkeleton';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { showSuccessToast, showErrorToast, getErrorMessage } from '@/lib/toast-helpers';
 import {
   usePalletOptimization,
@@ -78,6 +79,7 @@ function OptimizationContent({ deliveryId }: { deliveryId: number }) {
   );
   const [showOptions, setShowOptions] = useState(false);
   const [showVisualization, setShowVisualization] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleOptimize = async () => {
     try {
@@ -96,10 +98,6 @@ function OptimizationContent({ deliveryId }: { deliveryId: number }) {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Czy na pewno chcesz usunąć optymalizację?')) {
-      return;
-    }
-
     try {
       await deleteMutation.mutateAsync(deliveryId);
       showSuccessToast('Optymalizacja została usunięta');
@@ -366,12 +364,21 @@ function OptimizationContent({ deliveryId }: { deliveryId: number }) {
               </Button>
               <Button
                 variant="destructive"
-                onClick={handleDelete}
+                onClick={() => setShowDeleteConfirm(true)}
                 disabled={deleteMutation.isPending}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Usuń optymalizację
               </Button>
+              <ConfirmDialog
+                open={showDeleteConfirm}
+                onOpenChange={setShowDeleteConfirm}
+                title="Usunąć optymalizację?"
+                description="Czy na pewno chcesz usunąć optymalizację palet dla tej dostawy?"
+                onConfirm={handleDelete}
+                confirmText="Usuń"
+                isLoading={deleteMutation.isPending}
+              />
             </div>
           </div>
         </CardContent>

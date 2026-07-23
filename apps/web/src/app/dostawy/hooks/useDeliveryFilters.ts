@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from 'react';
 
 export type CalendarViewMode = 'week' | 'month' | '8weeks';
-export type PageViewMode = 'calendar' | 'list';
+export type PageViewMode = 'calendar' | 'list' | 'weekly-plan';
 
 export interface DateRange {
   startOfWeek: Date;
@@ -59,7 +59,7 @@ export interface UseDeliveryFiltersReturn {
  * - Computing months to fetch for API queries
  */
 export function useDeliveryFilters(): UseDeliveryFiltersReturn {
-  const [pageViewMode, setPageViewMode] = useState<PageViewMode>('list');
+  const [pageViewMode, setPageViewMode] = useState<PageViewMode>('weekly-plan');
   const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
   const [weekOffset, setWeekOffset] = useState(0);
 

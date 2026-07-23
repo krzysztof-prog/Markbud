@@ -65,9 +65,10 @@ export class PdfParser {
       });
 
       if (!order) {
-        // Fallback: prefix match
+        // Fallback: prefix match (np. PDF z "53614" gdy w bazie jest "53614-a")
+        // Używamy parsed.orderNumber + '-' żeby nie matchować fałszywych trafień
         order = await tx.order.findFirst({
-          where: { orderNumber: { startsWith: parsed.orderNumber } },
+          where: { orderNumber: { startsWith: parsed.orderNumber + '-' } },
           orderBy: { orderNumber: 'asc' },
         });
       }

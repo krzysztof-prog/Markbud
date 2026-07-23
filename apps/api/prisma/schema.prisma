@@ -187,12 +187,12 @@ model Order {
   // Przypisany użytkownik systemu (jeśli znaleziono mapowanie)
   documentAuthorUserId    Int?                      @map("document_author_user_id")
   documentAuthorUser      User?                     @relation("OrderDocumentAuthor", fields: [documentAuthorUserId], references: [id], onDelete: SetNull)
-  // Sumy z materiałówki - wartości w groszach
-  windowsNetValue         Int?                      @map("windows_net_value") // Suma netto okien (kategoria 'okno')
-  windowsMaterial         Int?                      @map("windows_material") // Suma materiału okien (kategoria 'okno')
-  assemblyValue           Int?                      @map("assembly_value") // Suma montażu (kategoria 'montaz')
-  extrasValue             Int?                      @map("extras_value") // Suma dodatków (kategoria 'dodatki')
-  otherValue              Int?                      @map("other_value") // Suma inne (kategoria 'inne')
+  // Sumy z materiałówki - wartości w groszach (BigInt bo sumy mogą przekroczyć INT max 2.1 mld)
+  windowsNetValue         BigInt?                   @map("windows_net_value") // Suma netto okien (kategoria 'okno')
+  windowsMaterial         BigInt?                   @map("windows_material") // Suma materiału okien (kategoria 'okno')
+  assemblyValue           BigInt?                   @map("assembly_value") // Suma montażu (kategoria 'montaz')
+  extrasValue             BigInt?                   @map("extras_value") // Suma dodatków (kategoria 'dodatki')
+  otherValue              BigInt?                   @map("other_value") // Suma inne (kategoria 'inne')
   // Ręczny status ustawiony przez użytkownika
   // 'do_not_cut' - NIE CIĄĆ (żółte tło, okucia nie w zapotrzebowaniu)
   // 'cancelled' - Anulowane (czerwone tło, archiwizacja po 30 dniach, cofnij profile/okucia z zapotrzebowania)
@@ -315,15 +315,15 @@ model OrderMaterial {
   orderWindowId               Int?         @map("order_window_id") // Powiązanie z oknem (tylko dla kategorii 'okno')
   position                    Int // Numer pozycji z pliku
   category                    String // 'okno' | 'montaz' | 'dodatki' | 'inne'
-  glazing                     Int          @default(0) @map("glazing") // Szklenia w groszach
-  fittings                    Int          @default(0) @map("fittings") // Okucia w groszach
-  parts                       Int          @default(0) @map("parts") // Części w groszach
+  glazing                     BigInt       @default(0) @map("glazing") // Szklenia w groszach
+  fittings                    BigInt       @default(0) @map("fittings") // Okucia w groszach
+  parts                       BigInt       @default(0) @map("parts") // Części w groszach
   glassQuantity               Int          @default(0) @map("glass_quantity") // Ilość szkła
-  material                    Int          @default(0) @map("material") // Materiał w groszach
-  assemblyValueBeforeDiscount Int          @default(0) @map("assembly_value_before_discount") // Wartość netto montażu przed rabatem w groszach
-  assemblyValueAfterDiscount  Int          @default(0) @map("assembly_value_after_discount") // Wartość netto montażu po rabacie w groszach
-  netValue                    Int          @default(0) @map("net_value") // Wartość netto w groszach
-  totalNet                    Int          @default(0) @map("total_net") // Suma netto w groszach
+  material                    BigInt       @default(0) @map("material") // Materiał w groszach
+  assemblyValueBeforeDiscount BigInt       @default(0) @map("assembly_value_before_discount") // Wartość netto montażu przed rabatem w groszach
+  assemblyValueAfterDiscount  BigInt       @default(0) @map("assembly_value_after_discount") // Wartość netto montażu po rabacie w groszach
+  netValue                    BigInt       @default(0) @map("net_value") // Wartość netto w groszach
+  totalNet                    BigInt       @default(0) @map("total_net") // Suma netto w groszach
   quantity                    Int          @default(1) // Sztuk
   coefficient                 Float?       @map("coefficient") // Współczynnik
   unit                        Float? // Jednostka

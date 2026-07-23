@@ -975,17 +975,54 @@ export class SchucoScraper {
 
     logger.info('[SchucoScraper] Data loaded');
 
-    // Step 2: Find download icon - EXACTLY like Python script
-    // Python: wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "cx-icon.fa-arrow-down, cx-icon.fas.fa-arrow-down")))
+    // Step 2: Find download icon
+    // Schuco occasionally changes icon CSS classes, so we try the original selector
+    // first (legacy fa-arrow-down) and fall back to broader patterns before giving up.
     logger.info('[SchucoScraper] Searching for download icon...');
 
-    const downloadButton = await this.page.waitForSelector(
-      'cx-icon.fa-arrow-down, cx-icon.fas.fa-arrow-down',
-      {
-        timeout: 15000,
-        visible: true
-      }
-    );
+    const downloadSelectors = [
+      'cx-icon.fa-arrow-down',
+      'cx-icon.fas.fa-arrow-down',
+      'cx-icon[class*="arrow-down"]',
+      'cx-icon[class*="download"]',
+      'button[aria-label*="pobierz" i]',
+      'button[aria-label*="download" i]',
+      'button[title*="pobierz" i]',
+      'button[title*="download" i]',
+      'button[title*="csv" i]',
+      'a[download]',
+    ];
+    const combinedSelector = downloadSelectors.join(', ');
+
+    let downloadButton = null;
+    try {
+      downloadButton = await this.page.waitForSelector(combinedSelector, {
+        timeout: 30000,
+        visible: true,
+      });
+    } catch (err) {
+      // Selector didn't match anything visible — dump page state so we can update
+      // the selectors next time Schuco rotates their icon classes.
+      const toolbarHtml = await this.page.evaluate(() => {
+        const candidates = Array.from(
+          document.querySelectorAll(
+            'cx-icon, button, [class*="toolbar"], [class*="action"]'
+          )
+        ).slice(0, 40);
+        return candidates
+          .map((el) => (el as HTMLElement).outerHTML)
+          .join('\n---\n');
+      });
+      await this.page.screenshot({
+        path: path.join(this.config.downloadPath, 'download-icon-not-found.png'),
+      });
+      logger.error(
+        `[SchucoScraper] Download icon not found. Top toolbar/icon candidates:\n${toolbarHtml.slice(0, 4000)}`
+      );
+      throw new Error(
+        `Download button not found (selectors: ${combinedSelector}). See download-icon-not-found.png and logs for current DOM.`
+      );
+    }
 
     if (!downloadButton) {
       throw new Error('Download button not found');

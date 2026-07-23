@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
+import { AlertCircle, CheckCircle, AlertTriangle, Link2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CardSkeleton } from '@/components/loaders/CardSkeleton';
 import { useLatestImportSummary } from '../hooks/useGlassDeliveries';
@@ -47,7 +47,7 @@ export function LatestImportSummary() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
           <div className="flex flex-col items-center p-2 bg-gray-50 rounded-lg">
             <p className="text-lg font-bold text-gray-700">{stats.total}</p>
             <p className="text-xs text-gray-500 text-center">Pozycji</p>
@@ -58,6 +58,14 @@ export function LatestImportSummary() {
             <p className="text-lg font-bold text-green-600">{stats.matched}</p>
             <p className="text-xs text-gray-500">Dopasowane</p>
           </div>
+
+          {(stats.suffix_matched || 0) > 0 && (
+            <div className="flex flex-col items-center p-2 bg-cyan-50 rounded-lg" title="Dopasowane po suffixie (np. 53987 → 53987-a)">
+              <Link2 className="h-5 w-5 text-cyan-600 mb-1" />
+              <p className="text-lg font-bold text-cyan-600">{stats.suffix_matched}</p>
+              <p className="text-xs text-gray-500">Suffix dop.</p>
+            </div>
+          )}
 
           <div className="flex flex-col items-center p-2 bg-yellow-50 rounded-lg">
             <AlertTriangle className="h-5 w-5 text-yellow-600 mb-1" />
@@ -95,6 +103,11 @@ export function LatestImportSummary() {
                       {order.matchStatus.matched > 0 && (
                         <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
                           ✓{order.matchStatus.matched}
+                        </span>
+                      )}
+                      {(order.matchStatus.suffix_matched || 0) > 0 && (
+                        <span className="px-1.5 py-0.5 bg-cyan-100 text-cyan-700 rounded" title="Dopasowane po suffixie">
+                          ~{order.matchStatus.suffix_matched}
                         </span>
                       )}
                       {order.matchStatus.conflict > 0 && (

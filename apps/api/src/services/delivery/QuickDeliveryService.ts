@@ -195,9 +195,11 @@ export class QuickDeliveryService {
 
       for (const orderNumber of notFoundExact) {
         let baseNumber: string;
+        let inputSuffix: string | null;
         try {
           const parsed = parser.parse(orderNumber);
           baseNumber = parsed.base;
+          inputSuffix = parsed.suffix;
         } catch {
           // Nieprawidłowy format - nie szukaj elastycznie
           notFound.push(orderNumber);
@@ -230,9 +232,27 @@ export class QuickDeliveryService {
           },
         });
 
-        if (fuzzyMatches.length === 1) {
+        // Jeśli użytkownik wpisał JAWNY sufiks (np. "54945-a"), NIE zwijaj wpisu
+        // do zlecenia bazowego "54945". Akceptuj tylko warianty z tym samym
+        // sufiksem; w przeciwnym razie zgłoś "nie znaleziono" (wariant trzeba
+        // najpierw zaimportować) — zamiast mylącego "już w tej dostawie".
+        const inputSuffixLower = inputSuffix === null ? null : inputSuffix.toLowerCase();
+        const candidates =
+          inputSuffixLower === null
+            ? fuzzyMatches
+            : fuzzyMatches.filter((candidate) => {
+                try {
+                  return (
+                    parser.parse(candidate.orderNumber).suffix?.toLowerCase() === inputSuffixLower
+                  );
+                } catch {
+                  return false;
+                }
+              });
+
+        if (candidates.length === 1) {
           // Jednoznaczne dopasowanie - użyj go
-          const match = fuzzyMatches[0];
+          const match = candidates[0];
           logger.info(`Quick Delivery: elastyczne dopasowanie "${orderNumber}" → "${match.orderNumber}"`);
 
           const activeDeliveryOrder = match.deliveryOrders.find(
@@ -261,12 +281,12 @@ export class QuickDeliveryService {
           } else {
             found.push(validatedOrder);
           }
-        } else if (fuzzyMatches.length > 1) {
+        } else if (candidates.length > 1) {
           // Wiele dopasowań - weź najnowsze (ostatnio zmodyfikowane)
           // Przy replaceBase nowe zlecenie (z sufiksem) jest najnowsze
-          const sorted = fuzzyMatches.sort((a, b) => b.id - a.id);
+          const sorted = candidates.sort((a, b) => b.id - a.id);
           const match = sorted[0];
-          logger.info(`Quick Delivery: elastyczne dopasowanie "${orderNumber}" → "${match.orderNumber}" (z ${fuzzyMatches.length} kandydatów: ${fuzzyMatches.map(m => m.orderNumber).join(', ')})`);
+          logger.info(`Quick Delivery: elastyczne dopasowanie "${orderNumber}" → "${match.orderNumber}" (z ${candidates.length} kandydatów: ${candidates.map(m => m.orderNumber).join(', ')})`);
 
           const activeDeliveryOrder = match.deliveryOrders.find(
             (dOrder) => dOrder.delivery.deletedAt === null

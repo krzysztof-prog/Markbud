@@ -85,10 +85,10 @@ export class DeliveryOrderService {
     orderId: number,
     deliveryNumber?: string
   ): Promise<{ deliveryId: number; orderId: number; position: number }> {
-    // Get order details to extract order number and variant type
+    // Get order details to extract order number, variant type and delivery date
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, orderNumber: true, variantType: true },
+      select: { id: true, orderNumber: true, variantType: true, deliveryDate: true },
     });
 
     if (!order) {
@@ -123,6 +123,20 @@ export class DeliveryOrderService {
 
     // Add order with atomic position calculation to prevent race conditions
     const deliveryOrder = await this.repository.addOrderToDeliveryAtomic(deliveryId, orderId);
+
+    // Ustaw order.deliveryDate jeśli jeszcze nie ma (zapobiega rozbieżności z Delivery.deliveryDate)
+    if (!order.deliveryDate) {
+      const delivery = await this.prisma.delivery.findUnique({
+        where: { id: deliveryId },
+        select: { deliveryDate: true },
+      });
+      if (delivery) {
+        await this.prisma.order.update({
+          where: { id: orderId },
+          data: { deliveryDate: delivery.deliveryDate },
+        });
+      }
+    }
 
     // P1-4: Invalidate pallet optimization when orders change
     await this.invalidatePalletOptimization(deliveryId);

@@ -181,9 +181,33 @@ export interface DeliveryWithLabelIssues {
   lastCheckDate: string | null;
 }
 
+// Zamówienie szyb bez daty dostawy
+export interface GlassOrderWithoutDeliveryDate {
+  id: number;
+  glassOrderNumber: string;
+  orderDate: string;
+  supplier: string;
+  status: string;
+  itemsCount: number;
+}
+
+// Zlecenie z sufiksem gdzie szyby nie zostały dostarczone (potencjalny konflikt)
+export interface GlassSuffixConflict {
+  orderId: number;
+  orderNumber: string;
+  baseOrderNumber: string;
+  project: string | null;
+  client: string | null;
+  orderedGlassCount: number;
+  deliveredGlassCount: number;
+  totalGlasses: number;
+  glassDeliveryDate: string | null;
+}
+
 // Odpowiedź alertów
 export interface AlertsResponse {
   ordersWithoutPrice: OrderWithoutPrice[];
   deliveriesWithLabelIssues: DeliveryWithLabelIssues[];
+  glassOrdersWithoutDeliveryDate: GlassOrderWithoutDeliveryDate[];
   hasAlerts: boolean;
 }

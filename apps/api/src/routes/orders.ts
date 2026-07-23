@@ -37,6 +37,56 @@ export const orderRoutes: FastifyPluginAsync = async (fastify) => {
     },
   }, handler.search.bind(handler));
 
+  // POST /api/orders/fix-total-glasses - Jednorazowy fix: przelicz totalGlasses z OrderGlass
+  // Tymczasowy endpoint - do usunięcia po wykonaniu
+  fastify.post('/fix-total-glasses', {
+    preHandler: verifyAuth,
+  }, async (_request, reply) => {
+    const orders = await prisma.order.findMany({
+      where: {
+        glasses: { some: {} },
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        totalGlasses: true,
+        glasses: {
+          select: { quantity: true, packageType: true },
+        },
+      },
+    });
+
+    let fixedCount = 0;
+    const changes: { orderNumber: string; old: number | null; corrected: number }[] = [];
+
+    for (const order of orders) {
+      let realGlassCount = 0;
+      for (const glass of order.glasses) {
+        const pkg = (glass.packageType || '').toLowerCase();
+        if (!pkg.includes('panel') && !pkg.includes('wypełnienie') && !pkg.includes('wypelnienie')) {
+          realGlassCount += glass.quantity;
+        }
+      }
+
+      if (order.totalGlasses !== realGlassCount) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { totalGlasses: realGlassCount },
+        });
+        changes.push({ orderNumber: order.orderNumber, old: order.totalGlasses, corrected: realGlassCount });
+        fixedCount++;
+      }
+    }
+
+    return reply.send({
+      message: `Naprawiono ${fixedCount} z ${orders.length} zleceń`,
+      fixed: fixedCount,
+      total: orders.length,
+      changes,
+    });
+  });
+
   // GET /api/orders/completeness-stats - Statistics for operator dashboard
   // WAŻNE: Musi być PRZED /:id żeby nie było traktowane jako ID
   fastify.get<{ Querystring: { userId: string } }>('/completeness-stats', {

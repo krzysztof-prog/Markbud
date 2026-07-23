@@ -4,12 +4,13 @@ import { readFile } from 'fs/promises';
 import type { PrismaClient } from '@prisma/client';
 import type { FSWatcher } from 'chokidar';
 import { logger } from '../../utils/logger.js';
-import { archiveFile, moveToSkipped, shouldSkipImport } from './utils.js';
+import { archiveFile, moveToSkipped, shouldSkipImport, isUncParentStatError } from './utils.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
 import { DEFAULT_WATCHER_CONFIG } from './types.js';
 import { parse } from 'csv-parse/sync';
 import { stripBOM } from '../../utils/string-utils.js';
 import { importQueue } from '../import/ImportQueueService.js';
+import { notifyCriticalError } from '../notifications/criticalErrorNotifier.js';
 
 /**
  * Format pliku CSV:
@@ -149,7 +150,13 @@ export class OkucZapotrzebowaWatcher implements IFileWatcher {
         this.enqueueToGlobalQueue(filePath);
       })
       .on('error', (error) => {
+        if (isUncParentStatError(error)) return;
         logger.error(`Blad File Watcher dla okuc zapotrzebowania ${basePath}: ${error}`);
+        notifyCriticalError(this.prisma, {
+          source: 'File Watcher - Okuc zapotrzebowanie (CSV)',
+          errorMessage: error instanceof Error ? error.message : String(error),
+          context: { folder: basePath },
+        });
       });
 
     this.watchers.push(watcher);

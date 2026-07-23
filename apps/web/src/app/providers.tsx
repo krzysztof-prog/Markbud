@@ -29,10 +29,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 5 * 60 * 1000, // 5 minut - dane pozostają świeże dłużej
+            staleTime: 30 * 1000, // 30 sekund - krótki cache, real-time UX
             gcTime: 30 * 60 * 1000, // 30 minut - cache przechowywany dłużej
-            refetchOnWindowFocus: false, // Nie pobieraj ponownie przy focus
-            refetchOnMount: false, // Nie pobieraj ponownie przy mount
+            refetchOnWindowFocus: true, // Odśwież przy powrocie do zakładki
+            refetchOnMount: true, // Odśwież przy nawigacji między stronami
             refetchOnReconnect: true, // Pobieraj ponownie przy reconnect
             retry: (failureCount, error: unknown) => {
               // Nie retry na 404 lub 403
@@ -77,7 +77,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         client={queryClient}
         persistOptions={{
           persister,
-          maxAge: 10 * 60 * 1000, // 10 minut - krócej niż poprzednio (24h)
+          maxAge: 5 * 60 * 1000, // 5 minut - krótki cache dla real-time UX
           dehydrateOptions: {
             shouldDehydrateQuery: (query) => {
               // Only persist successful queries without errors

@@ -87,7 +87,37 @@ export class DeliveryService {
       hasOrdersInStatus: filters.hasOrdersInStatus,
     };
 
-    return this.repository.findAll(deliveryFilters);
+    const result = await this.repository.findAll(deliveryFilters);
+
+    // Wzbogać o flagę hasSuffixMatchedGlass (dopasowanie szyb po suffixie)
+    const data = result.data as Array<{
+      deliveryOrders: Array<{ order: { orderNumber: string; hasSuffixMatchedGlass?: boolean } }>;
+    }>;
+    const allOrderNumbers = data.flatMap((d) =>
+      d.deliveryOrders.map((dor) => dor.order.orderNumber)
+    );
+
+    if (allOrderNumbers.length > 0) {
+      const suffixMatchedValidations = await prisma.glassOrderValidation.findMany({
+        where: {
+          orderNumber: { in: allOrderNumbers },
+          validationType: 'reverse_suffix_match',
+          resolved: false,
+        },
+        select: { orderNumber: true },
+      });
+      const suffixMatchedSet = new Set(suffixMatchedValidations.map((v) => v.orderNumber));
+
+      if (suffixMatchedSet.size > 0) {
+        for (const delivery of data) {
+          for (const dor of delivery.deliveryOrders) {
+            dor.order.hasSuffixMatchedGlass = suffixMatchedSet.has(dor.order.orderNumber);
+          }
+        }
+      }
+    }
+
+    return result;
   }
 
   async getDeliveryById(id: number) {
@@ -301,13 +331,31 @@ export class DeliveryService {
     }
 
     // Extract order IDs
-    const orderIds = delivery.deliveryOrders.map((d: { orderId: number }) => d.orderId);
+    const allOrderIds = delivery.deliveryOrders.map((d: { orderId: number }) => d.orderId);
 
-    if (orderIds.length === 0) {
+    if (allOrderIds.length === 0) {
       return { success: true, updatedOrders: 0 };
     }
 
-    // Use orderService to update all orders
+    // Only complete orders that are in_progress (new orders cannot go directly to completed)
+    const ordersWithStatus = await prisma.order.findMany({
+      where: { id: { in: allOrderIds } },
+      select: { id: true, status: true },
+    });
+    const orderIds = ordersWithStatus
+      .filter((o) => o.status === 'in_progress')
+      .map((o) => o.id);
+
+    if (orderIds.length === 0) {
+      // No in_progress orders — just mark delivery as completed
+      await prisma.delivery.update({
+        where: { id: deliveryId },
+        data: { status: 'completed' },
+      });
+      return { success: true, updatedOrders: 0 };
+    }
+
+    // Use orderService to update in_progress orders
     await this.orderService.bulkUpdateStatus(orderIds, 'completed', productionDate);
 
     // Ustaw status dostawy na 'completed'

@@ -134,10 +134,32 @@ export class GlassDeliveryQueryService {
 
       // Collect order updates - grupuj ilości po numerze zlecenia
       const orderUpdates = new Map<string, number>();
+
+      // Dla suffix_matched items potrzebujemy lookup suffix z matchedItem
+      const suffixMatchedItemIds = delivery.items
+        .filter((i) => i.matchStatus === 'suffix_matched' && i.matchedItemId)
+        .map((i) => i.matchedItemId!);
+
+      const matchedOrderItems = suffixMatchedItemIds.length > 0
+        ? await tx.glassOrderItem.findMany({
+            where: { id: { in: suffixMatchedItemIds } },
+            select: { id: true, orderNumber: true, orderSuffix: true },
+          })
+        : [];
+      const matchedOrderItemMap = new Map(matchedOrderItems.map((oi) => [oi.id, oi]));
+
       for (const item of delivery.items) {
         if (item.matchStatus === 'matched' || item.matchStatus === 'conflict') {
           const current = orderUpdates.get(item.orderNumber) || 0;
           orderUpdates.set(item.orderNumber, current + item.quantity);
+        } else if (item.matchStatus === 'suffix_matched' && item.matchedItemId) {
+          // Dla suffix_matched: odejmij z zlecenia z suffixem (np. "53987-a")
+          const orderItem = matchedOrderItemMap.get(item.matchedItemId);
+          if (orderItem?.orderSuffix) {
+            const suffixedOrderNumber = `${orderItem.orderNumber}-${orderItem.orderSuffix}`;
+            const current = orderUpdates.get(suffixedOrderNumber) || 0;
+            orderUpdates.set(suffixedOrderNumber, current + item.quantity);
+          }
         }
       }
 
@@ -187,6 +209,7 @@ export class GlassDeliveryQueryService {
     const stats = {
       total: delivery.items.length,
       matched: delivery.items.filter((i) => i.matchStatus === 'matched').length,
+      suffix_matched: delivery.items.filter((i) => i.matchStatus === 'suffix_matched').length,
       conflict: delivery.items.filter((i) => i.matchStatus === 'conflict').length,
       unmatched: delivery.items.filter((i) => i.matchStatus === 'unmatched').length,
       pending: delivery.items.filter((i) => i.matchStatus === 'pending').length,
@@ -207,6 +230,7 @@ export class GlassDeliveryQueryService {
       quantity: items.reduce((sum, i) => sum + i.quantity, 0),
       matchStatus: {
         matched: items.filter((i) => i.matchStatus === 'matched').length,
+        suffix_matched: items.filter((i) => i.matchStatus === 'suffix_matched').length,
         conflict: items.filter((i) => i.matchStatus === 'conflict').length,
         unmatched: items.filter((i) => i.matchStatus === 'unmatched').length,
         pending: items.filter((i) => i.matchStatus === 'pending').length,

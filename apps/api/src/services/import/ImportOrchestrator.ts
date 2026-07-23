@@ -19,7 +19,7 @@
 import { ImportRepository } from '../../repositories/ImportRepository.js';
 import { NotFoundError, ValidationError, ConflictError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
-import { emitOrderUpdated, emitDeliveryCreated } from '../event-emitter.js';
+import { emitOrderUpdated, emitOrderCreated, emitDeliveryCreated } from '../event-emitter.js';
 import type { VariantResolutionAction } from '../orderVariantService.js';
 import { ImportLockService } from '../importLockService.js';
 import { prisma } from '../../index.js';
@@ -550,13 +550,21 @@ export class ImportOrchestrator {
         if (!existingDeliveryOrder) {
           const maxPosition = await this.repository.getMaxDeliveryOrderPosition(delivery.id);
           await this.repository.addOrderToDelivery(delivery.id, result.orderId, maxPosition + 1);
-          emitOrderUpdated({ id: result.orderId });
+          if (result.isNewOrder) {
+            emitOrderCreated({ id: result.orderId });
+          } else {
+            emitOrderUpdated({ id: result.orderId });
+          }
         }
       }
 
       // Emit event
       if (result.orderId) {
-        emitOrderUpdated({ id: result.orderId });
+        if (result.isNewOrder) {
+          emitOrderCreated({ id: result.orderId });
+        } else {
+          emitOrderUpdated({ id: result.orderId });
+        }
       }
 
       return {

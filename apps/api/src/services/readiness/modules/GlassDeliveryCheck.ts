@@ -1,12 +1,12 @@
 /**
  * Moduł sprawdzający: Dostawa szyb
  *
- * Sprawdza czy szyby są zamówione dla zleceń w dostawie.
- * Wystarczy że zamówienie istnieje - nie muszą być dostarczone.
+ * Sprawdza czy szyby są zamówione/dostarczone dla zleceń w dostawie.
  *
  * Reguły:
- * - Wszystkie zlecenia mają glassOrderStatus = 'complete', 'ordered', 'partial' → OK
- * - Nie wszystkie zlecenia mają zamówione szyby → WARNING
+ * - Zlecenie ma deliveredGlassCount >= totalGlasses → szyby dostarczone (OK)
+ * - Zlecenie ma glassOrderStatus = 'complete', 'ordered', 'partial' → szyby zamówione (OK)
+ * - Nie wszystkie zlecenia mają zamówione/dostarczone szyby → WARNING
  */
 
 import type { PrismaClient } from '@prisma/client';
@@ -31,8 +31,10 @@ export class GlassDeliveryCheck extends BaseReadinessCheckModule {
             id: true,
             orderNumber: true,
             glassOrderStatus: true,
+            glassDeliveryDate: true,
             status: true,
             totalGlasses: true,
+            deliveredGlassCount: true,
           },
         },
       },
@@ -53,42 +55,47 @@ export class GlassDeliveryCheck extends BaseReadinessCheckModule {
       return this.ok('Żadne zlecenie nie wymaga szyb');
     }
 
-    // Szyby zamówione (ordered/partial/complete) = OK
+    // Szyby dostarczone lub zamówione = OK
     const validStatuses = ['ordered', 'partial', 'complete'];
     const ordersWithGlassOrdered = ordersNeedingGlass.filter(
-      (do_) => validStatuses.includes(do_.order.glassOrderStatus ?? '')
+      (do_) => {
+        // Szyby już dostarczone — zawsze OK
+        const delivered = do_.order.deliveredGlassCount ?? 0;
+        const total = do_.order.totalGlasses ?? 0;
+        if (delivered >= total && total > 0) return true;
+        // Szyby zamówione (status)
+        return validStatuses.includes(do_.order.glassOrderStatus ?? '');
+      }
     );
 
-    // Pobierz daty dostaw szyb dla zleceń w tej dostawie
-    const orderNumbers = deliveryOrders.map((do_) => do_.order.orderNumber);
-    const glassDeliveries = await this.prisma.glassDelivery.findMany({
-      where: {
-        items: {
-          some: {
-            orderNumber: {
-              in: orderNumbers,
-            },
-          },
-        },
-      },
-      select: {
-        deliveryDate: true,
-      },
-      distinct: ['deliveryDate'],
-      orderBy: {
-        deliveryDate: 'asc',
-      },
+    // Sprawdź czy WSZYSTKIE szyby już dostarczone
+    const allDelivered = ordersNeedingGlass.every((do_) => {
+      const delivered = do_.order.deliveredGlassCount ?? 0;
+      const total = do_.order.totalGlasses ?? 0;
+      return delivered >= total && total > 0;
     });
 
-    // Formatuj daty do stringa (YYYY-MM-DD format dla łatwego parsowania w frontend)
-    const dates = glassDeliveries.map((gd) => gd.deliveryDate.toISOString().split('T')[0]);
+    // Zbierz oczekiwane daty dostaw tylko z zleceń które jeszcze czekają na szyby
+    const pendingDates = ordersNeedingGlass
+      .filter((do_) => {
+        const delivered = do_.order.deliveredGlassCount ?? 0;
+        const total = do_.order.totalGlasses ?? 0;
+        return !(delivered >= total && total > 0);
+      })
+      .map((do_) => do_.order.glassDeliveryDate)
+      .filter((d): d is Date => d != null);
+
+    // Unikalne daty posortowane rosnąco
+    const uniqueDates = [...new Set(pendingDates.map((d) => d.toISOString().split('T')[0]))]
+      .sort();
 
     let message = `Szyby zamówione: ${ordersWithGlassOrdered.length}/${ordersNeedingGlass.length}`;
     if (ordersWithoutGlass > 0) {
       message += ` (${ordersWithoutGlass} bez szyb)`;
     }
-    if (dates.length > 0) {
-      message += ` | DATES:${dates.join(',')}`;
+    // Daty tylko gdy są zlecenia czekające na dostawę szyb
+    if (!allDelivered && uniqueDates.length > 0) {
+      message += ` | DATES:${uniqueDates.join(',')}`;
     }
 
     if (ordersWithGlassOrdered.length < ordersNeedingGlass.length) {

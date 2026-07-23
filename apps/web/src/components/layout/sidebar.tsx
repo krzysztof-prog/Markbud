@@ -32,13 +32,15 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { UserMenu } from '@/features/auth/components/UserMenu';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { UserRole, hasPermission, type Permission } from '@markbud/shared';
-import { useConflictsCount } from '@/features/moja-praca';
+import { useConflictsCount, useAlerts } from '@/features/moja-praca';
 import { WeatherWidget } from '@/features/weather';
+import { settingsApi } from '@/lib/api';
 
 type NavigationItem = {
   name: string;
@@ -191,13 +193,37 @@ export function Sidebar() {
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const navRef = useRef<HTMLElement>(null);
 
+  const { data: appSettings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: settingsApi.getAll,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const navVisibility = useMemo<Record<string, boolean>>(() => {
+    try {
+      return appSettings?.nav_visibility ? JSON.parse(appSettings.nav_visibility) : {};
+    } catch {
+      return {};
+    }
+  }, [appSettings]);
+
   // Pobierz liczbę konfliktów dla badge
   const { data: conflictsCount } = useConflictsCount();
+
+  // Pobierz alerty (problemy z etykietami i szybami)
+  const { data: alerts } = useAlerts();
+  const labelIssuesCount = alerts?.deliveriesWithLabelIssues?.length ?? 0;
+  const glassIssuesCount = alerts?.glassOrdersWithoutDeliveryDate?.length ?? 0;
 
   /**
    * Filtruj navigation według roli użytkownika
    */
   const filteredNavigation = navigation.filter((item) => {
+    // Ukryj pozycje wyłączone w ustawieniach nawigacji
+    if (navVisibility[item.name] === false) {
+      return false;
+    }
+
     // Brak wymagań - dostępne dla wszystkich
     if (!item.requiredRoles && !item.requiredPermission) {
       return true;
@@ -382,6 +408,12 @@ export function Sidebar() {
 
           const isExpanded = expandedItems.includes(item.href);
           const hasSubItems = 'subItems' in item && item.subItems;
+          // Wskaźnik alertów na ikonce menu
+          const alertCount =
+            (item.href === '/magazyn/akrobud') ? labelIssuesCount :
+            (item.href === '/szyby') ? glassIssuesCount :
+            (item.href === '/moja-praca') ? labelIssuesCount + glassIssuesCount :
+            0;
 
           return (
             <div key={item.name}>
@@ -400,11 +432,21 @@ export function Sidebar() {
                   aria-label={isExpanded ? `Zwiń ${item.name}` : `Rozwiń ${item.name}`}
                   aria-expanded={isExpanded}
                 >
-                  <item.icon className="h-5 w-5 flex-shrink-0" />
+                  <div className="relative flex-shrink-0">
+                    <item.icon className="h-5 w-5" />
+                    {alertCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full border-2 border-slate-900" />
+                    )}
+                  </div>
                   <span className={cn(
                     'flex-1 text-left transition-all duration-300 whitespace-nowrap overflow-hidden',
                     desktopCollapsed ? 'md:w-0 md:opacity-0' : ''
                   )}>{item.name}</span>
+                  {alertCount > 0 && !desktopCollapsed && (
+                    <span className="px-1.5 py-0.5 text-xs bg-amber-500 text-white rounded-full font-medium min-w-[20px] text-center">
+                      {alertCount}
+                    </span>
+                  )}
                   {isExpanded && !desktopCollapsed ? (
                     <ChevronDown className="h-4 w-4 flex-shrink-0" />
                   ) : !desktopCollapsed ? (
@@ -424,7 +466,12 @@ export function Sidebar() {
                   )}
                   title={desktopCollapsed ? item.name : undefined}
                 >
-                  <item.icon className="h-5 w-5 flex-shrink-0" />
+                  <div className="relative flex-shrink-0">
+                    <item.icon className="h-5 w-5" />
+                    {alertCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full border-2 border-slate-900" />
+                    )}
+                  </div>
                   <span className={cn(
                     'flex-1 transition-all duration-300 whitespace-nowrap overflow-hidden',
                     desktopCollapsed ? 'md:w-0 md:opacity-0' : ''

@@ -1,3 +1,10 @@
+// BigInt JSON serializacja - Prisma zwraca bigint dla kolumn BigInt
+// bez tego JSON.stringify rzuca "Do not know how to serialize a BigInt"
+// Wartości w groszach (max ~10 mld) mieszczą się w Number.MAX_SAFE_INTEGER (9 biliardów)
+(BigInt.prototype as unknown as { toJSON: () => number }).toJSON = function () {
+  return Number(this);
+};
+
 import Fastify from 'fastify';
 import './types/fastify.js';
 import cors from '@fastify/cors';
@@ -46,6 +53,7 @@ import { logisticsRoutes } from './routes/logistics.js';
 import { pvcWarehouseRoutes } from './routes/pvc-warehouse.js';
 import { helpRoutes } from './routes/help.js';
 import { gmailRoutes } from './routes/gmail.js';
+import { deliveryEmailAlertRoutes } from './routes/delivery-email-alerts.js';
 
 // Services
 import { FileWatcherService } from './services/file-watcher/index.js';
@@ -56,6 +64,7 @@ import { startOrderArchiveScheduler, stopOrderArchiveScheduler } from './service
 import { startSoftDeleteCleanupScheduler, stopSoftDeleteCleanupScheduler } from './services/softDeleteCleanupScheduler.js';
 import { DeliveryAlertScheduler } from './services/alerts/DeliveryAlertScheduler.js';
 import { LabelCheckScheduler } from './services/alerts/LabelCheckScheduler.js';
+import { DeliveryEmailAlertScheduler } from './services/email/DeliveryEmailAlertScheduler.js';
 import { startGmailScheduler, stopGmailScheduler } from './services/gmail/GmailScheduler.js';
 import { startOkucOrderStatusScheduler, stopOkucOrderStatusScheduler } from './services/okuc/OkucOrderStatusScheduler.js';
 import { setupWebSocket } from './plugins/websocket.js';
@@ -239,6 +248,9 @@ await fastify.register(helpRoutes, { prefix: '/api/help' });
 // Gmail IMAP Routes (automatyczne pobieranie CSV z Gmail)
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
 
+// Delivery Email Alert Routes (raporty emailowe o problemach w dostawach)
+await fastify.register(deliveryEmailAlertRoutes, { prefix: '/api/delivery-email-alerts' });
+
 // Health checks (basic - must be before extended health routes)
 fastify.get('/api/health', {
   schema: {
@@ -321,6 +333,7 @@ const closeGracefully = async (signal: string) => {
   stopSoftDeleteCleanupScheduler();
   DeliveryAlertScheduler.stop();
   LabelCheckScheduler.stop();
+  DeliveryEmailAlertScheduler.stop();
   stopGmailScheduler();
   stopOkucOrderStatusScheduler();
   await fastify.close();
@@ -380,6 +393,9 @@ const start = async () => {
 
     // Uruchom Okuc Order Status Scheduler (auto-receive zamówień z przeszłą datą dostawy codziennie o 6:00)
     startOkucOrderStatusScheduler(prisma);
+
+    // Uruchom Delivery Email Alert Scheduler (raport emailowy 2x dziennie: 8:00, 14:00)
+    DeliveryEmailAlertScheduler.start();
 
     // Auto-fetch pozycji zamówień jest teraz częścią SchucoScheduler
     // (uruchamia się automatycznie po każdym pobraniu zamówień)

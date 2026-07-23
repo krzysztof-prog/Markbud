@@ -170,10 +170,11 @@ export function ProfileDeliveryTable() {
     })
   );
 
-  // Pobierz wszystkie dostawy do danych o datach
+  // Pobierz wszystkie dostawy do danych o datach (od wybranej daty)
   const { data: deliveriesData } = useQuery({
-    queryKey: ['all-deliveries', 'v3'],
-    queryFn: () => deliveriesApi.getAll(),
+    queryKey: ['all-deliveries', 'v3', startDate],
+    queryFn: () => deliveriesApi.getAll({ from: startDate }),
+    enabled: !!startDate,
   });
 
   // Typy dla danych z API

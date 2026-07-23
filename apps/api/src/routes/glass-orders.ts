@@ -20,4 +20,8 @@ export const glassOrderRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Params: { id: string } }>('/:id/summary', handler.getSummary.bind(handler));
   fastify.get<{ Params: { id: string } }>('/:id/validations', handler.getValidations.bind(handler));
   fastify.patch<{ Params: { id: string }; Body: { status: string } }>('/:id/status', handler.updateStatus.bind(handler));
+  fastify.patch<{ Params: { id: string }; Body: { expectedDeliveryDate: string } }>('/:id/delivery-date', handler.updateDeliveryDate.bind(handler));
+
+  // Ręczne oznaczenie szyb zlecenia jako dostarczone (override gdy szyby przyszły bez sufiksu)
+  fastify.post<{ Params: { orderId: string } }>('/orders/:orderId/mark-glass-delivered', handler.markOrderGlassDelivered.bind(handler));
 };

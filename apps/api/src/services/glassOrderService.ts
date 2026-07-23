@@ -186,23 +186,35 @@ export class GlassOrderService {
 
     const existingOrders = await tx.order.findMany({
       where: { orderNumber: { in: allLookups } },
-      select: { orderNumber: true },
+      select: { orderNumber: true, deliveredGlassCount: true, orderedGlassCount: true },
     });
-    const existingSet = new Set(existingOrders.map((o) => o.orderNumber));
+    const existingMap = new Map(existingOrders.map((o) => [o.orderNumber, o]));
 
     // Update existing orders
     for (const [orderNumber, quantity] of byOrder) {
       // Try full order number first, then base number as fallback
       const baseNumber = orderNumber.includes('-') ? orderNumber.split('-')[0] : null;
-      const matchedOrderNumber = existingSet.has(orderNumber)
+      const matchedOrderNumber = existingMap.has(orderNumber)
         ? orderNumber
-        : (baseNumber && existingSet.has(baseNumber) ? baseNumber : null);
+        : (baseNumber && existingMap.has(baseNumber) ? baseNumber : null);
 
       if (matchedOrderNumber) {
+        const existingOrder = existingMap.get(matchedOrderNumber)!;
+        const newOrderedCount = (existingOrder.orderedGlassCount || 0) + quantity;
+        const delivered = existingOrder.deliveredGlassCount || 0;
+
+        // Oblicz status uwzględniając istniejące dostawy
+        let newStatus = 'ordered';
+        if (delivered > 0 && delivered < newOrderedCount) {
+          newStatus = 'partially_delivered';
+        } else if (delivered > 0 && delivered >= newOrderedCount) {
+          newStatus = delivered > newOrderedCount ? 'over_delivered' : 'delivered';
+        }
+
         // Przygotuj dane do aktualizacji
         const updateData: Record<string, unknown> = {
           orderedGlassCount: { increment: quantity },
-          glassOrderStatus: 'ordered',
+          glassOrderStatus: newStatus,
         };
 
         // Ustaw glassDeliveryDate TYLKO jeśli nowa wartość nie jest null
@@ -215,6 +227,9 @@ export class GlassOrderService {
           where: { orderNumber: matchedOrderNumber },
           data: updateData,
         });
+
+        // Zaktualizuj cache mapy (orderedGlassCount zmieniony)
+        existingOrder.orderedGlassCount = newOrderedCount;
       } else {
         // Create validation warning for missing order
         await tx.glassOrderValidation.create({
@@ -264,21 +279,33 @@ export class GlassOrderService {
 
     const existingOrders = await this.prisma.order.findMany({
       where: { orderNumber: { in: allLookups } },
-      select: { orderNumber: true },
+      select: { orderNumber: true, deliveredGlassCount: true, orderedGlassCount: true, id: true },
     });
-    const existingSet = new Set(existingOrders.map((o) => o.orderNumber));
+    const existingMap = new Map(existingOrders.map((o) => [o.orderNumber, o]));
 
     for (const [orderNumber, quantity] of byOrder) {
       const baseNumber = orderNumber.includes('-') ? orderNumber.split('-')[0] : null;
-      const matchedOrderNumber = existingSet.has(orderNumber)
+      const matchedOrderNumber = existingMap.has(orderNumber)
         ? orderNumber
-        : (baseNumber && existingSet.has(baseNumber) ? baseNumber : null);
+        : (baseNumber && existingMap.has(baseNumber) ? baseNumber : null);
 
       if (matchedOrderNumber) {
+        const existingOrder = existingMap.get(matchedOrderNumber)!;
+        const newOrderedCount = (existingOrder.orderedGlassCount || 0) + quantity;
+        const delivered = existingOrder.deliveredGlassCount || 0;
+
+        // Oblicz status uwzględniając istniejące dostawy
+        let newStatus = 'ordered';
+        if (delivered > 0 && delivered < newOrderedCount) {
+          newStatus = 'partially_delivered';
+        } else if (delivered > 0 && delivered >= newOrderedCount) {
+          newStatus = delivered > newOrderedCount ? 'over_delivered' : 'delivered';
+        }
+
         // Przygotuj dane do aktualizacji
         const updateData: Record<string, unknown> = {
           orderedGlassCount: { increment: quantity },
-          glassOrderStatus: 'ordered',
+          glassOrderStatus: newStatus,
         };
 
         // Ustaw glassDeliveryDate TYLKO jeśli nowa wartość nie jest null
@@ -291,6 +318,9 @@ export class GlassOrderService {
           where: { orderNumber: matchedOrderNumber },
           data: updateData,
         });
+
+        // Zaktualizuj cache mapy
+        existingOrder.orderedGlassCount = newOrderedCount;
 
         // Emit realtime update
         emitOrderUpdated({ id: updatedOrder.id });
@@ -514,6 +544,47 @@ export class GlassOrderService {
   }
 
   /**
+   * Aktualizuje datę dostawy zamówienia szyb i powiązanych zleceń produkcyjnych
+   */
+  async updateExpectedDeliveryDate(id: number, expectedDeliveryDate: Date) {
+    const glassOrder = await this.prisma.glassOrder.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!glassOrder) {
+      throw new Error('Zamówienie nie istnieje');
+    }
+
+    // Aktualizuj datę w GlassOrder
+    await this.prisma.glassOrder.update({
+      where: { id },
+      data: { expectedDeliveryDate },
+    });
+
+    // Aktualizuj glassDeliveryDate w powiązanych zleceniach produkcyjnych
+    const orderNumbers = [...new Set(glassOrder.items.map(i => i.orderNumber))];
+    const baseNumbers = orderNumbers.filter(n => n.includes('-')).map(n => n.split('-')[0]);
+    const allNumbers = [...new Set([...orderNumbers, ...baseNumbers])];
+
+    const result = await this.prisma.order.updateMany({
+      where: { orderNumber: { in: allNumbers } },
+      data: { glassDeliveryDate: expectedDeliveryDate },
+    });
+
+    // Emituj aktualizacje
+    const orders = await this.prisma.order.findMany({
+      where: { orderNumber: { in: allNumbers } },
+      select: { id: true },
+    });
+    for (const order of orders) {
+      emitOrderUpdated({ id: order.id });
+    }
+
+    return { updatedOrders: result.count, orderNumbers: allNumbers };
+  }
+
+  /**
    * Re-match all glass orders to production orders.
    * Recalculates orderedGlassCount from scratch for all affected orders.
    */
@@ -622,5 +693,32 @@ export class GlassOrderService {
       ordersNotFound,
       details,
     };
+  }
+
+  /**
+   * Ręcznie oznacza szyby zlecenia jako dostarczone.
+   * Używane gdy szyby przyszły bez sufiksu i nie zostały automatycznie dopasowane.
+   */
+  async markOrderGlassDelivered(orderId: number): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, orderedGlassCount: true, totalGlasses: true },
+    });
+
+    if (!order) {
+      throw new Error('Zlecenie nie istnieje');
+    }
+
+    const glassCount = Math.max(order.orderedGlassCount || 0, order.totalGlasses || 0);
+
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        deliveredGlassCount: glassCount,
+        glassOrderStatus: 'delivered',
+      },
+    });
+
+    emitOrderUpdated({ id: orderId });
   }
 }

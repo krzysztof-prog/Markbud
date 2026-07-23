@@ -48,6 +48,16 @@ export const deliveryRoutes: FastifyPluginAsync = async (fastify) => {
     preHandler: verifyAuth,
   }, handler.previewDeliveryNumber.bind(handler));
 
+  // GET /api/deliveries/weekly-plan - tygodniówka (plan szkleń Pon-Pt)
+  fastify.get<{ Querystring: { weekStart: string } }>('/weekly-plan', {
+    preHandler: verifyAuth,
+  }, handler.getWeeklyPlan.bind(handler));
+
+  // GET /api/deliveries/first-in-progress-week - tydzień z pierwszą dostawą in_progress
+  fastify.get('/first-in-progress-week', {
+    preHandler: verifyAuth,
+  }, handler.getFirstInProgressWeek.bind(handler));
+
   // GET /api/deliveries/readiness/batch - batch readiness dla wielu dostaw (QW-1)
   // Optymalizacja: 1 request zamiast N requestów z frontendu
   fastify.get<{ Querystring: { ids: string; refresh?: string } }>('/readiness/batch', {

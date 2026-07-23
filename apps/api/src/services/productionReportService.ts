@@ -201,9 +201,9 @@ export class ProductionReportService {
       // Dla AKROBUD: valuePln (z PDF, przeliczone przez użytkownika)
       // Dla innych: windowsNetValue (z CSV materiałówki) jako fallback
       const isAkrobud = (order.client ?? '').toUpperCase().includes('AKROBUD');
-      const valueGrosze = override?.overrideValuePln
+      const valueGrosze = Number(override?.overrideValuePln
         ?? order.valuePln
-        ?? (isAkrobud ? 0 : (order.windowsNetValue ?? 0));
+        ?? (isAkrobud ? 0 : (order.windowsNetValue ?? 0)));
       const valuePln = groszeToPln(valueGrosze as Grosze);
 
       // Wartość EUR w centach - konwersja na EUR (używaj override jeśli istnieje)
@@ -232,7 +232,7 @@ export class ProductionReportService {
 
       // === NOWE KOLUMNY ===
       // Wartość materiału w PLN (z groszy) — override ma priorytet
-      const materialValueGrosze = override?.overrideMaterialValue ?? order.windowsMaterial ?? 0;
+      const materialValueGrosze = Number(override?.overrideMaterialValue ?? order.windowsMaterial ?? 0);
       const materialValue = groszeToPln(materialValueGrosze as Grosze);
 
       // Suma ilości szkła z materiałówki

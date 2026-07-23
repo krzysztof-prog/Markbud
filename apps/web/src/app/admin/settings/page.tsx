@@ -17,6 +17,7 @@ import {
   OkucLocationsTab,
   GmailSettingsTab,
   DocumentAuthorMappingsTab,
+  NavigationSettingsTab,
   PalletDialog,
   ColorDialog,
   ProfileDialog,
@@ -639,6 +640,7 @@ export default function UstawieniaPage() {
             <TabsTrigger value="author-mappings">Autorzy dokumentów</TabsTrigger>
             <TabsTrigger value="okuc-locations">Magazyny OKUC</TabsTrigger>
             <TabsTrigger value="gmail">Gmail IMAP</TabsTrigger>
+            <TabsTrigger value="navigation">Nawigacja</TabsTrigger>
           </TabsList>
 
           <TabsContent value="general">
@@ -778,6 +780,10 @@ export default function UstawieniaPage() {
               onSave={handleSave}
               isUpdatePending={updateSettingsMutation.isPending}
             />
+          </TabsContent>
+
+          <TabsContent value="navigation">
+            <NavigationSettingsTab />
           </TabsContent>
         </Tabs>
       </div>

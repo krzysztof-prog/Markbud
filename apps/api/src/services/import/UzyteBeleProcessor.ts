@@ -16,7 +16,7 @@ import { ImportRepository } from '../../repositories/ImportRepository.js';
 import { CsvParser } from '../parsers/csv-parser.js';
 import { ValidationError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
-import { emitDeliveryCreated, emitOrderUpdated } from '../event-emitter.js';
+import { emitDeliveryCreated, emitOrderUpdated, emitOrderCreated } from '../event-emitter.js';
 import type { VariantResolutionAction } from '../orderVariantService.js';
 import { formatDateWarsaw } from '../../utils/date-helpers.js';
 
@@ -170,7 +170,11 @@ export class UzyteBeleProcessor {
 
     // Emit event outside transaction
     if (result.orderId) {
-      emitOrderUpdated({ id: result.orderId });
+      if (result.isNewOrder) {
+        emitOrderCreated({ id: result.orderId });
+      } else {
+        emitOrderUpdated({ id: result.orderId });
+      }
     }
 
     return result;
@@ -442,7 +446,11 @@ export class UzyteBeleProcessor {
       if (!existingDeliveryOrder) {
         const maxPosition = await this.repository.getMaxDeliveryOrderPosition(delivery.id);
         await this.repository.addOrderToDelivery(delivery.id, result.orderId, maxPosition + 1);
-        emitOrderUpdated({ id: result.orderId });
+        if (result.isNewOrder) {
+          emitOrderCreated({ id: result.orderId });
+        } else {
+          emitOrderUpdated({ id: result.orderId });
+        }
       }
 
       // Include validation info if there were any failed rows

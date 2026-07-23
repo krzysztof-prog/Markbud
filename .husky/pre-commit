@@ -25,3 +25,45 @@ fi
 git add FUNCTION_INDEX.md
 
 echo "Reindex completed and FUNCTION_INDEX.md staged."
+
+# TypeScript typecheck API (wyłapuje błędy kompilacji przed commitem)
+echo "Running API typecheck..."
+(cd apps/api && npx tsc --noEmit 2>&1)
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "============================================"
+  echo "  TYPECHECK FAILED - popraw bledy TypeScript"
+  echo "============================================"
+  exit 1
+fi
+echo "API typecheck passed."
+
+# Unit tests API (szybki smoke test)
+echo "Running API unit tests..."
+(cd apps/api && npx vitest run --reporter=verbose 2>&1)
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "========================================"
+  echo "  TESTS FAILED - popraw testy przed commitem"
+  echo "========================================"
+  exit 1
+fi
+echo "API tests passed."
+
+# Regenerate API reference (non-blocking - warnings only)
+echo "Regenerating API reference..."
+node scripts/regen-api-reference.js
+if [ $? -ne 0 ]; then echo "Warning: API reference regen failed"; fi
+git add API_REFERENCE.md 2>/dev/null
+
+# Regenerate Enums reference (non-blocking - warnings only)
+echo "Regenerating Enums reference..."
+node scripts/regen-enums-reference.js
+if [ $? -ne 0 ]; then echo "Warning: Enums reference regen failed"; fi
+git add ENUMS_REFERENCE.md 2>/dev/null
+
+# Regenerate Schema reference (non-blocking - warnings only)
+echo "Regenerating Schema reference..."
+node scripts/regen-schema-reference.js
+if [ $? -ne 0 ]; then echo "Warning: Schema reference regen failed"; fi
+git add SCHEMA_REFERENCE.md 2>/dev/null

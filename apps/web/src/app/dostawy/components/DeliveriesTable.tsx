@@ -175,9 +175,9 @@ export default function DeliveriesTable({
   isRemovingOrder,
   readinessMap,
 }: DeliveriesTableProps) {
-  // Sorting state: default by date ascending (oldest first)
+  // Sorting state: default by date descending (newest first)
   const [sorting, setSorting] = useState<SortingState>([
-    { id: 'deliveryDate', desc: false }
+    { id: 'deliveryDate', desc: true }
   ]);
 
   // Static columns - no dependencies on expandedRows

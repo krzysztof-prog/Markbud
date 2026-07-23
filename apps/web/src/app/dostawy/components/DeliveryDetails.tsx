@@ -20,6 +20,7 @@ import {
   aggregateSchucoStatus,
   getSchucoStatusColor,
 } from '@/features/orders/helpers/orderHelpers';
+import { getGlassStatusDisplay } from './utils/glassStatusHelpers';
 import type { SchucoDeliveryLink } from '@/types';
 
 // Typy statusów okuć
@@ -45,47 +46,7 @@ function getOkucStatusDisplay(status: OkucDemandStatus | null | undefined): { la
   }
 }
 
-// Helper do renderowania statusu szyb - używa tej samej logiki co OrderTableRow
-function getGlassStatusDisplay(
-  totalGlasses: number | null | undefined,
-  orderedGlassCount: number | null | undefined,
-  deliveredGlassCount: number | null | undefined,
-  glassDeliveryDate: string | Date | null | undefined
-): { label: string; colorClass: string } {
-  const ordered = orderedGlassCount || 0;
-  const delivered = deliveredGlassCount || 0;
-  const total = totalGlasses || 0;
-
-  // Brak szyb w zleceniu
-  if (total === 0) {
-    return { label: '-', colorClass: 'text-slate-400' };
-  }
-
-  // Wszystkie dostarczone (porównuj z totalGlasses - ile szyb potrzebuje zlecenie)
-  if (delivered >= total) {
-    return { label: 'OK', colorClass: 'bg-green-100 text-green-700' };
-  }
-
-  // Częściowo dostarczone (porównuj z totalGlasses)
-  if (delivered > 0 && delivered < total) {
-    return { label: `${delivered}/${total}`, colorClass: 'bg-yellow-100 text-yellow-700' };
-  }
-
-  // Zamówione ale nie dostarczone - pokazujemy "Zam." + datę dostawy jeśli jest
-  if (ordered > 0 && glassDeliveryDate) {
-    const date = new Date(glassDeliveryDate);
-    const formatted = date.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' });
-    return { label: `Zam. ${formatted}`, colorClass: 'bg-blue-100 text-blue-700' };
-  }
-
-  // Zamówione ale brak daty dostawy - pokazuj "Zam." zamiast mylącego X/Y
-  if (ordered > 0) {
-    return { label: 'Zam.', colorClass: 'bg-orange-100 text-orange-700' };
-  }
-
-  // Nie zamówione
-  return { label: 'Brak zam.', colorClass: 'bg-red-100 text-red-700' };
-}
+// getGlassStatusDisplay — wyekstrahowany do ./utils/glassStatusHelpers.ts
 
 // Helper do renderowania statusu profili (Schuco) - używa aggregateSchucoStatus z orderHelpers
 function getProfileStatusDisplay(schucoLinks: SchucoDeliveryLink[] | undefined): { label: string; colorClass: string } {
@@ -246,7 +207,8 @@ export default function DeliveryDetails({
                 order.totalGlasses,
                 order.orderedGlassCount,
                 order.deliveredGlassCount,
-                order.glassDeliveryDate
+                order.glassDeliveryDate,
+                (order as unknown as { hasSuffixMatchedGlass?: boolean }).hasSuffixMatchedGlass
               );
               const profileStatus = getProfileStatusDisplay(order.schucoLinks);
               // Ostatni wynik weryfikacji etykiet (jeśli istnieje)
@@ -282,6 +244,9 @@ export default function DeliveryDetails({
                       <span className="text-[10px] text-slate-400 uppercase">Szyby</span>
                       <span className={`inline-flex items-center justify-center w-full px-1.5 py-0.5 rounded text-xs font-medium ${glassStatus.colorClass}`}>
                         {glassStatus.label}
+                        {glassStatus.suffixBadge && (
+                          <span className="ml-0.5 text-[9px] text-cyan-600" title="Szyby dopasowane do zlecenia z suffixem">~s</span>
+                        )}
                       </span>
                     </div>
 

@@ -4,6 +4,7 @@ import {
   glassOrderFiltersSchema,
   glassOrderIdParamsSchema,
   glassOrderStatusUpdateSchema,
+  glassOrderDeliveryDateUpdateSchema,
 } from '../validators/glass.js';
 import { ConflictError, NotFoundError, ValidationError } from '../utils/errors.js';
 
@@ -80,6 +81,20 @@ export class GlassOrderHandler {
     return reply.send(order);
   }
 
+  async updateDeliveryDate(
+    request: FastifyRequest<{ Params: { id: string }; Body: { expectedDeliveryDate: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = glassOrderIdParamsSchema.parse(request.params);
+    const { expectedDeliveryDate } = glassOrderDeliveryDateUpdateSchema.parse(request.body);
+    const result = await this.service.updateExpectedDeliveryDate(id, expectedDeliveryDate);
+    return reply.send({
+      success: true,
+      message: `Data dostawy zmieniona. Zaktualizowano ${result.updatedOrders} zleceń.`,
+      data: result,
+    });
+  }
+
   async rematchAll(request: FastifyRequest, reply: FastifyReply) {
     const result = await this.service.rematchAllGlassOrders();
     return reply.send({
@@ -87,5 +102,15 @@ export class GlassOrderHandler {
       message: `Rematch zakończony: ${result.ordersUpdated} zleceń zaktualizowanych, ${result.ordersNotFound.length} nie znaleziono`,
       data: result,
     });
+  }
+
+  async markOrderGlassDelivered(
+    request: FastifyRequest<{ Params: { orderId: string } }>,
+    reply: FastifyReply
+  ) {
+    const orderId = parseInt(request.params.orderId, 10);
+    if (isNaN(orderId)) throw new ValidationError('Nieprawidłowe ID zlecenia');
+    await this.service.markOrderGlassDelivered(orderId);
+    return reply.send({ success: true });
   }
 }

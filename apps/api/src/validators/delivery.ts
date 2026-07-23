@@ -102,5 +102,12 @@ export const bulkAssignOrdersSchema = z.object({
   { message: 'Musisz podać deliveryId (istniejąca dostawa) lub deliveryDate (nowa dostawa)' }
 );
 
+// === WEEKLY PLAN (Tygodniówka) ===
+
+export const weeklyPlanQuerySchema = z.object({
+  weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format daty: YYYY-MM-DD'),
+});
+
+export type WeeklyPlanQuery = z.infer<typeof weeklyPlanQuerySchema>;
 export type ValidateOrderNumbersInput = z.infer<typeof validateOrderNumbersSchema>;
 export type BulkAssignOrdersInput = z.infer<typeof bulkAssignOrdersSchema>;

@@ -174,6 +174,7 @@ export class CsvImportService implements ICsvImportService {
         let order = await tx.order.findUnique({
           where: { orderNumber: targetOrderNumber },
         });
+        const isNewOrder = !order;
 
         if (order && action === 'overwrite') {
           // Atomowo usun istniejace requirements i okna
@@ -248,6 +249,7 @@ export class CsvImportService implements ICsvImportService {
           orderId: order.id,
           requirementsCount: parsed.requirements.length,
           windowsCount: parsed.windows.length,
+          isNewOrder,
         };
       },
       { timeout: 30000 } // 30s dla duzych importow
@@ -357,16 +359,24 @@ export class CsvImportService implements ICsvImportService {
     if (exact) return exact;
 
     // Strategia 2: Prefix match - zlecenie "53526-a" -> pending "53526"
+    // Stosujemy TYLKO gdy zlecenie bazowe ("53526") nie istnieje w bazie.
+    // Jeśli bazowe istnieje, jego pending price należy do niego — nie do wariantu.
     const baseNumber = orderNumber.split('-')[0];
     if (baseNumber !== orderNumber) {
-      const prefixMatch = await tx.pendingOrderPrice.findFirst({
-        where: {
-          orderNumber: baseNumber,
-          status: 'pending',
-        },
-        orderBy: { createdAt: 'desc' },
+      const baseOrderExists = await tx.order.findFirst({
+        where: { orderNumber: baseNumber, deletedAt: null, archivedAt: null },
+        select: { id: true },
       });
-      if (prefixMatch) return prefixMatch;
+      if (!baseOrderExists) {
+        const prefixMatch = await tx.pendingOrderPrice.findFirst({
+          where: {
+            orderNumber: baseNumber,
+            status: 'pending',
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (prefixMatch) return prefixMatch;
+      }
     }
 
     // Strategia 3: Match po projekcie (reference) gdy PDF miał UNKNOWN orderNumber

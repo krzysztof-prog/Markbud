@@ -4,3 +4,4 @@ export { useOrderGrouping, getWeekNumber, getMonthKey, getDayKey, getGroupKey, g
 export { useOrdersStats } from './useOrdersStats';
 export { useOrderEdit } from './useOrderEdit';
 export type { EditableField, EditingCell } from './useOrderEdit';
+export { useDeliveryAssignment } from './useDeliveryAssignment';

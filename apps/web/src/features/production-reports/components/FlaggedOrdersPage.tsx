@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, AlertTriangle, Paintbrush, CheckCircle2, Edit3 } from 'lucide-react';
+import { Loader2, AlertTriangle, Paintbrush, CheckCircle2, Edit3, ArrowRightLeft } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -471,8 +471,8 @@ const FlaggedOrderRow: React.FC<FlaggedOrderRowProps> = ({
         </div>
       </TableCell>
 
-      {/* Materiał (edytowalny) + badge */}
-      <TableCell className={`w-[110px] pr-2 ${isMissingMaterial ? 'text-red-500' : ''}`}>
+      {/* Materiał (edytowalny) + badge + przycisk przelicz na EUR */}
+      <TableCell className={`w-[130px] pr-2 ${isMissingMaterial ? 'text-red-500' : ''}`}>
         <div className="flex items-center justify-end gap-1">
           <EditableCell
             value={displayMaterialGrosze}
@@ -489,6 +489,19 @@ const FlaggedOrderRow: React.FC<FlaggedOrderRowProps> = ({
             <span title="Materiał ręcznie edytowany">
               <Edit3 className="h-3 w-3 text-blue-600 flex-shrink-0" />
             </span>
+          )}
+          {displayMaterialGrosze && displayMaterialGrosze > 0 && !isEditDisabled && (
+            <button
+              type="button"
+              title="Przelicz materiał na EUR (materiał / 4)"
+              className="p-0.5 rounded hover:bg-blue-100 text-blue-600 transition-colors flex-shrink-0"
+              onClick={() => {
+                const newMaterialGrosze = Math.round(displayMaterialGrosze / 4);
+                onUpdateItem(order.id, { overrideMaterialValue: newMaterialGrosze });
+              }}
+            >
+              <ArrowRightLeft className="h-3.5 w-3.5" />
+            </button>
           )}
         </div>
       </TableCell>

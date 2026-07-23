@@ -18,6 +18,7 @@ export interface GlassDeliveryFilters {
  */
 export interface MatchStatusStats {
   matched: number;
+  suffix_matched: number;
   conflict: number;
   unmatched: number;
   pending: number;

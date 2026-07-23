@@ -48,8 +48,8 @@ export class GlassDeliveryImportService {
   /**
    * Import glass delivery from CSV file content
    * Akceptuje string (UTF-8) lub Buffer (CP1250 - automatycznie konwertowany)
-   * @throws Error jeśli dostawa z tym samym rackNumber już istnieje
-   * UWAGA: Duplicate check przeniesiony do transakcji dla unikniecia race conditions
+   * @throws Error jeśli dostawa z tego samego pliku CSV już istnieje
+   * Stojaki (rackNumber) mogą się powtarzać - są zwracane i używane ponownie
    */
   async importFromCsv(
     fileContent: string | Buffer,
@@ -60,21 +60,23 @@ export class GlassDeliveryImportService {
     const rackNumber = parsed.metadata.rackNumber || filename;
 
     // Use transaction with extended timeout for large imports (60s instead of default 5s)
-    // WAZNE: Duplicate check MUSI byc w transakcji aby uniknac race condition
     return this.prisma.$transaction(
       async (tx) => {
-        // Sprawdź czy dostawa z tym rackNumber już istnieje (W TRANSAKCJI!)
-        // To zapobiega race condition przy równoczesnym imporcie tego samego pliku
-        const existingDelivery = await tx.glassDelivery.findFirst({
-          where: { rackNumber },
+        // Sprawdź duplikat po nazwie pliku CSV (nie po rackNumber - stojaki się powtarzają)
+        const existingImport = await tx.fileImport.findFirst({
+          where: {
+            filename,
+            fileType: 'glass_delivery',
+            status: 'completed',
+          },
           select: { id: true, createdAt: true }
         });
 
-        if (existingDelivery) {
-          const importDate = existingDelivery.createdAt.toLocaleDateString('pl-PL');
+        if (existingImport) {
+          const importDate = existingImport.createdAt.toLocaleDateString('pl-PL');
           throw new Error(
-            `Dostawa z numerem racka "${rackNumber}" została już zaimportowana (${importDate}). ` +
-            `Jeśli chcesz ponownie zaimportować, najpierw usuń poprzednią dostawę.`
+            `Plik "${filename}" został już zaimportowany (${importDate}). ` +
+            `Jeśli chcesz ponownie zaimportować, najpierw usuń poprzedni import.`
           );
         }
 

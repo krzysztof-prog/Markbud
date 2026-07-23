@@ -148,24 +148,25 @@ function parseOrderReference(reference: string): {
 } {
   const trimmed = reference.trim();
 
-  // Pattern: "3      53407 poz.3" lub "53407-a poz.3"
+  // Pattern: "3      53407 poz.3" lub "53407-a poz.3" lub "54208 A AKR 31 MARZEC"
   // First number is position, second is order number
-  const match = trimmed.match(/\d*\s*(\d+)(?:-([a-zA-Z]+))?\s*(?:poz\.(\d+))?/);
+  // Suffix może być oddzielony myślnikiem ("53407-a") lub spacją ("54208 A") - max 2 litery
+  const match = trimmed.match(/\d*\s*(\d+)(?:[- ]([a-zA-Z]{1,2}))?\s*(?:poz\.(\d+))?/);
 
   if (match) {
     return {
       orderNumber: match[1],
-      orderSuffix: match[2] || null,
+      orderSuffix: match[2]?.toLowerCase() || null,
       fullReference: trimmed,
     };
   }
 
   // Fallback - just extract numbers
-  const simpleMatch = trimmed.match(/(\d+)(?:-([a-zA-Z]+))?/);
+  const simpleMatch = trimmed.match(/(\d+)(?:[- ]([a-zA-Z]{1,2}))?/);
   if (simpleMatch) {
     return {
       orderNumber: simpleMatch[1],
-      orderSuffix: simpleMatch[2] || null,
+      orderSuffix: simpleMatch[2]?.toLowerCase() || null,
       fullReference: trimmed,
     };
   }

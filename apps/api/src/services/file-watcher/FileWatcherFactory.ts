@@ -3,7 +3,7 @@ import { fileURLToPath } from 'url';
 import type { PrismaClient } from '@prisma/client';
 import type { FSWatcher } from 'chokidar';
 import type { IFileWatcher, WatcherPaths } from './types.js';
-import { getSetting } from './utils.js';
+import { getSetting, recoverStaleProcessingImports } from './utils.js';
 import { GlassWatcher } from './GlassWatcher.js';
 import { UzyteBeleWatcher } from './UzyteBeleWatcher.js';
 import { UzyteBelePrywatneWatcher } from './UzyteBelePrywatneWatcher.js';
@@ -47,6 +47,14 @@ export class FileWatcherFactory implements IFileWatcher {
     console.log(`   📁 Folder "zamówienia szyb": ${paths.watchFolderGlassOrders}`);
     console.log(`   📁 Folder "dostawy szyb": ${paths.watchFolderGlassDeliveries}`);
     console.log(`   📁 Folder "okuc zapotrzebowanie": ${paths.watchFolderOkucZapotrzebowanie}`);
+
+    // Odzyskiwanie po restarcie: wpisy które utknęły w statusie "processing"
+    // (import przerwany przez awarię/restart) oznacz jako "failed", zanim
+    // ponownie zeskanujemy foldery. Bez tego takie wpisy wisiałyby w nieskończoność.
+    const recovered = await recoverStaleProcessingImports(this.prisma);
+    if (recovered > 0) {
+      console.log(`   🧹 Odzyskano ${recovered} zawieszonych importów (processing → failed)`);
+    }
 
     // Najpierw zeskanuj istniejące foldery użyte bele
     await this.uzyteBeleWatcher.scanExistingFolders(paths.watchFolderUzyteBele);

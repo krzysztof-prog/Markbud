@@ -68,6 +68,7 @@ export interface CsvProcessResult {
   orderId: number;
   requirementsCount: number;
   windowsCount: number;
+  isNewOrder: boolean;
 }
 
 /**

@@ -303,6 +303,7 @@ export class UzyteBeleParser {
     windowsCount: number;
     glassesCount: number;
     materialsCount: number;
+    isNewOrder: boolean;
     skipped?: boolean;
     skippedReason?: string;
   }> {
@@ -327,6 +328,7 @@ export class UzyteBeleParser {
     // Całość w transakcji dla atomicity
     return prisma.$transaction(async (tx) => {
       // Znajdź lub utwórz zlecenie
+      let isNewOrder = false;
       let order = await tx.order.findUnique({
         where: { orderNumber: targetOrderNumber },
       });
@@ -342,6 +344,7 @@ export class UzyteBeleParser {
             windowsCount: 0,
             glassesCount: 0,
             materialsCount: 0,
+            isNewOrder: false,
             skipped: true,
             skippedReason: 'verified',
           };
@@ -403,6 +406,7 @@ export class UzyteBeleParser {
           logger.info(`Zmieniono numer zlecenia: ${targetOrderNumber} → ${newOrderNumber}`);
         }
       } else if (!order) {
+        isNewOrder = true;
         // Try to get EUR value from linked Schuco delivery if available
         const schucoLink = await tx.orderSchucoLink.findFirst({
           where: {
@@ -481,6 +485,20 @@ export class UzyteBeleParser {
           logger.info(`Applied pending price to order ${targetOrderNumber} (ID: ${order.id})`);
         }
       } else if (action === 'add_new') {
+        // Usuń istniejące dane przed ponownym dodaniem (zapobieganie duplikatom)
+        await tx.orderRequirement.deleteMany({
+          where: { orderId: order.id },
+        });
+        await tx.orderWindow.deleteMany({
+          where: { orderId: order.id },
+        });
+        await tx.orderGlass.deleteMany({
+          where: { orderId: order.id },
+        });
+        await tx.orderMaterial.deleteMany({
+          where: { orderId: order.id },
+        });
+
         // Zaktualizuj istniejące zlecenie o nowe dane z CSV
         order = await tx.order.update({
           where: { id: order.id },
@@ -816,6 +834,7 @@ export class UzyteBeleParser {
         windowsCount: parsed.windows.length,
         glassesCount: parsed.glasses.length,
         materialsCount: parsed.materials.length,
+        isNewOrder,
       };
     }, {
       timeout: 60000, // 60s dla dużych importów (zwiększone z 30s - fix timeout issues)
@@ -1320,18 +1339,18 @@ export class UzyteBeleParser {
       }
     }
 
-    // Policz pozycje szyb wykluczając panele i wypełnienia (to nie są prawdziwe szyby)
-    // Liczymy liczbę POZYCJI (rekordów), nie sumę quantity (fizycznych sztuk)
+    // Policz szyby wykluczając panele i wypełnienia (to nie są prawdziwe szyby)
+    // Sumujemy quantity (fizyczne sztuki), nie liczbę pozycji/rekordów
     if (glasses.length > 0) {
       let realGlassCount = 0;
       for (const glass of glasses) {
         const packageTypeLower = (glass.packageType || '').toLowerCase();
         // Jeśli packageType NIE zawiera "panel" ani "wypełnienie"/"wypelnienie", to jest to prawdziwa szyba
         if (!packageTypeLower.includes('panel') && !packageTypeLower.includes('wypełnienie') && !packageTypeLower.includes('wypelnienie')) {
-          realGlassCount += 1;
+          realGlassCount += glass.quantity;
         }
       }
-      // Nadpisz totals.glasses liczbą pozycji szyb (bez paneli/wypełnień)
+      // Nadpisz totals.glasses sumą sztuk szyb (bez paneli/wypełnień)
       totals.glasses = realGlassCount;
     }
 

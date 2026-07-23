@@ -31,7 +31,17 @@
     "bd:list": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe list",
     "bd:ready": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe ready",
     "bd:info": "C:\\Users\\krzys\\AppData\\Local\\bd\\bd.exe info",
-    "reindex": "node scripts/reindex.js"
+    "reindex": "node scripts/reindex.js",
+    "new:endpoint": "node scripts/new-endpoint.js",
+    "new:feature": "node scripts/new-feature.js",
+    "regen:api": "node scripts/regen-api-reference.js",
+    "regen:enums": "node scripts/regen-enums-reference.js",
+    "regen:schema": "node scripts/regen-schema-reference.js",
+    "regen:all": "node scripts/reindex.js && node scripts/regen-api-reference.js && node scripts/regen-enums-reference.js && node scripts/regen-schema-reference.js",
+    "recent": "node scripts/recent-changes.js",
+    "test": "pnpm --filter @markbud/api test",
+    "test:quick": "pnpm --filter @markbud/api typecheck && pnpm --filter @markbud/api test",
+    "typecheck": "pnpm --filter @markbud/api typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

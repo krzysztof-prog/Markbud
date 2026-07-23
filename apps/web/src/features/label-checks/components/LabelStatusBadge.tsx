@@ -1,12 +1,14 @@
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, XCircle, AlertTriangle, FolderX, FileX } from 'lucide-react';
 import { RESULT_STATUS_CONFIG, type LabelCheckResultStatus } from '../types';
+import { format } from 'date-fns';
 
 interface Props {
   status: LabelCheckResultStatus;
+  expectedDate?: string; // ISO date - wyświetlana obok "Błędna data" dla MISMATCH
 }
 
-export function LabelStatusBadge({ status }: Props) {
+export function LabelStatusBadge({ status, expectedDate }: Props) {
   const config = RESULT_STATUS_CONFIG[status];
 
   const icons = {
@@ -26,10 +28,17 @@ export function LabelStatusBadge({ status }: Props) {
     gray: 'bg-gray-100 text-gray-800 border-gray-200',
   };
 
+  // Dla MISMATCH pokaż "Błędna data (oczekiwana: DD.MM.YYYY)"
+  let label = config.label;
+  if (status === 'MISMATCH' && expectedDate) {
+    const formatted = format(new Date(expectedDate), 'dd.MM.yyyy');
+    label = `${config.label} (powinna: ${formatted})`;
+  }
+
   return (
     <Badge variant="outline" className={colorClasses[config.color]}>
       <Icon className="w-3 h-3 mr-1" />
-      {config.label}
+      {label}
     </Badge>
   );
 }

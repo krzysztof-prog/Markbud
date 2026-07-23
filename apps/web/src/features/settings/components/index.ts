@@ -10,6 +10,7 @@ export { OkucLocationsTab } from './OkucLocationsTab';
 export { DocumentAuthorMappingsTab } from './DocumentAuthorMappingsTab';
 export { SteelTab } from './SteelTab';
 export { GmailSettingsTab } from './GmailSettingsTab';
+export { NavigationSettingsTab } from './NavigationSettingsTab';
 
 // Settings Dialog Components
 export {

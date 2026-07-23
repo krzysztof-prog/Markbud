@@ -19,6 +19,14 @@ const COMPARABLE_FIELDS: (keyof SchucoOrderItemRow)[] = [
 // Schuco CSV ma zawsze shippedQty=0, więc dla tych statusów ustawiamy shippedQty=orderedQty
 const DELIVERED_STATUSES = ['Całkowicie dostarczone', 'Potwierdzona dostawa'];
 
+// Ile dni wstecz szukać zamówień Schuco (starsze nie są już widoczne w panelu)
+const SCHUCO_LOOKBACK_DAYS = 30;
+
+/** Oblicza datę graniczną - tylko zamówienia z ostatnich N dni */
+function getMinOrderDate(): Date {
+  return new Date(Date.now() - SCHUCO_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+}
+
 // Typ dla delivery z opcjonalnym shippingStatus
 interface DeliveryToFetch {
   id: number;
@@ -101,7 +109,7 @@ export class SchucoItemService {
     // CRITICAL: Ustaw flagę PRZED jakimikolwiek operacjami async
     this.isRunning = true;
 
-    const minDate = new Date('2025-10-01');
+    const minDate = getMinOrderDate();
     const now = new Date();
 
     logger.info('[SchucoItemService] Starting auto-fetch for changed items...');
@@ -226,14 +234,13 @@ export class SchucoItemService {
 
     try {
       // Pobierz zamówienia bez pobranych pozycji, posortowane od najnowszych
-      // Tylko zamówienia od 10.2025 (starsze nie mają sensu)
-      const minDate = new Date('2025-10-01');
+      const minDate = getMinOrderDate();
 
       const deliveriesWithoutItems = await this.prisma.schucoDelivery.findMany({
         where: {
           itemsFetchedAt: null,
           archivedAt: null, // Pomiń zarchiwizowane
-          orderDateParsed: { gte: minDate }, // Tylko od 10.2025
+          orderDateParsed: { gte: minDate },
         },
         orderBy: {
           orderDateParsed: 'desc',
@@ -326,8 +333,7 @@ export class SchucoItemService {
     const startTime = Date.now();
 
     try {
-      // Pobierz wszystkie aktywne zamówienia od 10.2025
-      const minDate = new Date('2025-10-01');
+      const minDate = getMinOrderDate();
 
       const allDeliveries = await this.prisma.schucoDelivery.findMany({
         where: {
@@ -780,8 +786,7 @@ export class SchucoItemService {
       const cutoffDate = new Date(Date.now() - staleDays * 24 * 60 * 60 * 1000);
 
       // Pobierz zamówienia ze starymi pozycjami
-      // Tylko aktywne (niearchiwizowane) i z datą zamówienia od 10.2025
-      const minDate = new Date('2025-10-01');
+      const minDate = getMinOrderDate();
 
       const staleDeliveries = await this.prisma.schucoDelivery.findMany({
         where: {
@@ -836,7 +841,7 @@ export class SchucoItemService {
    */
   async getStaleItemsCount(staleDays = 1): Promise<number> {
     const cutoffDate = new Date(Date.now() - staleDays * 24 * 60 * 60 * 1000);
-    const minDate = new Date('2025-10-01');
+    const minDate = getMinOrderDate();
 
     return this.prisma.schucoDelivery.count({
       where: {

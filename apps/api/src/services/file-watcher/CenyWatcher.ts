@@ -3,7 +3,8 @@ import path from 'path';
 import type { PrismaClient } from '@prisma/client';
 import type { FSWatcher } from 'chokidar';
 import { logger } from '../../utils/logger.js';
-import { archiveFile, moveToSkipped, shouldSkipImport } from './utils.js';
+import { archiveFile, moveToSkipped, shouldSkipImport, isUncParentStatError } from './utils.js';
+import { notifyCriticalError } from '../notifications/criticalErrorNotifier.js';
 import type { IFileWatcher, WatcherConfig } from './types.js';
 import { DEFAULT_WATCHER_CONFIG } from './types.js';
 import { ImportRepository } from '../../repositories/ImportRepository.js';
@@ -125,7 +126,13 @@ export class CenyWatcher implements IFileWatcher {
         this.enqueueToGlobalQueue(filePath);
       })
       .on('error', (error) => {
+        if (isUncParentStatError(error)) return;
         logger.error(`Błąd File Watcher dla cen ${basePath}: ${error}`);
+        notifyCriticalError(this.prisma, {
+          source: 'File Watcher - Ceny (PDF)',
+          errorMessage: error instanceof Error ? error.message : String(error),
+          context: { folder: basePath },
+        });
       });
 
     this.watchers.push(watcher);

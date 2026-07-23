@@ -586,18 +586,96 @@ export class MojaPracaService {
   }
 
   /**
+   * Pobiera zamówienia szyb bez daty dostawy (aktywne, nie anulowane/dostarczone)
+   */
+  async getGlassOrdersWithoutDeliveryDate() {
+    const glassOrders = await this.prisma.glassOrder.findMany({
+      where: {
+        deletedAt: null,
+        expectedDeliveryDate: null,
+        status: { notIn: ['cancelled', 'delivered'] },
+      },
+      select: {
+        id: true,
+        glassOrderNumber: true,
+        orderDate: true,
+        supplier: true,
+        status: true,
+        _count: { select: { items: true } },
+      },
+      orderBy: { orderDate: 'desc' },
+    });
+
+    return glassOrders.map((go) => ({
+      id: go.id,
+      glassOrderNumber: go.glassOrderNumber,
+      orderDate: go.orderDate.toISOString(),
+      supplier: go.supplier,
+      status: go.status,
+      itemsCount: go._count.items,
+    }));
+  }
+
+  /**
+   * Pobiera zlecenia z sufiksem gdzie szyby zamówione ale niedostarczone
+   * (potencjalny konflikt: szyby przyszły bez sufiksu i nie zostały automatycznie dopasowane)
+   */
+  async getGlassSuffixConflicts() {
+    const orders = await this.prisma.order.findMany({
+      where: {
+        orderNumber: { contains: '-' },
+        orderedGlassCount: { gt: 0 },
+        deletedAt: null,
+        archivedAt: null,
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        project: true,
+        client: true,
+        orderedGlassCount: true,
+        deliveredGlassCount: true,
+        totalGlasses: true,
+        glassDeliveryDate: true,
+      },
+      orderBy: { glassDeliveryDate: 'asc' },
+    });
+
+    // Tylko te gdzie szyby faktycznie nie zostały dostarczone
+    return orders
+      .filter((o) => (o.deliveredGlassCount || 0) < (o.orderedGlassCount || 0))
+      .map((o) => {
+        // Wyznacz numer bazowy (np. "53975-a" -> "53975")
+        const baseNumber = o.orderNumber.replace(/-[^-]+$/, '');
+        return {
+          orderId: o.id,
+          orderNumber: o.orderNumber,
+          baseOrderNumber: baseNumber,
+          project: o.project,
+          client: o.client,
+          orderedGlassCount: o.orderedGlassCount || 0,
+          deliveredGlassCount: o.deliveredGlassCount || 0,
+          totalGlasses: o.totalGlasses || 0,
+          glassDeliveryDate: o.glassDeliveryDate?.toISOString() ?? null,
+        };
+      });
+  }
+
+  /**
    * Pobiera wszystkie alerty dla użytkownika (do wyświetlenia na górze strony)
    */
   async getAlerts(userId: number) {
-    const [ordersWithoutPrice, deliveriesWithLabelIssues] = await Promise.all([
+    const [ordersWithoutPrice, deliveriesWithLabelIssues, glassOrdersWithoutDeliveryDate] = await Promise.all([
       this.getAkrobudOrdersWithoutPrice(userId),
       this.getDeliveriesWithLabelIssues(userId),
+      this.getGlassOrdersWithoutDeliveryDate(),
     ]);
 
     return {
       ordersWithoutPrice,
       deliveriesWithLabelIssues,
-      hasAlerts: ordersWithoutPrice.length > 0 || deliveriesWithLabelIssues.length > 0,
+      glassOrdersWithoutDeliveryDate,
+      hasAlerts: ordersWithoutPrice.length > 0 || deliveriesWithLabelIssues.length > 0 || glassOrdersWithoutDeliveryDate.length > 0,
     };
   }
 }

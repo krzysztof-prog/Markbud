@@ -23,9 +23,8 @@ import { CollapsibleSection } from './CollapsibleSection';
 import { managerApi } from '../api/managerApi';
 import { useProductionSelection } from '../hooks/useProductionSelection';
 import { getTodayISOString } from '../helpers/dateHelpers';
-import { UPCOMING_ORDERS_LABEL } from '../helpers/constants';
 import type { ForProductionData } from '@/types/manager';
-import { Loader2, AlertCircle, CheckCircle2, Calendar, Package, Clock } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle2, Calendar, Package } from 'lucide-react';
 
 /**
  * Zakładka "Dodaj do produkcji" - Panel Kierownika
@@ -140,6 +139,7 @@ export const AddToProductionTab: React.FC = () => {
     bulkUpdateMutation.mutate({
       orderIds: Array.from(selectedOrderIds),
       deliveryIds: selectedDeliveryIds.size > 0 ? Array.from(selectedDeliveryIds) : undefined,
+      skipWarehouseValidation: true,
     });
   }, [selectedOrderIds, selectedDeliveryIds, bulkUpdateMutation]);
 
@@ -243,77 +243,44 @@ export const AddToProductionTab: React.FC = () => {
             </div>
           </CollapsibleSection>
 
-          {/* Sekcja 2: Zlecenia przeterminowane */}
-          <CollapsibleSection
-            title="Zlecenia przeterminowane"
-            icon={AlertCircle}
-            iconColor="text-red-600"
-            titleColor="text-red-700"
-            count={data?.overdueOrders.length || 0}
-            countLabel="zleceń"
-            badgeVariant="destructive"
-            emptyMessage="Brak przeterminowanych zleceń"
-            isEmpty={!data?.overdueOrders.length}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {data?.overdueOrders.map((order) => (
-                <OrderCheckbox
-                  key={order.id}
-                  order={order}
-                  checked={selectedOrderIds.has(order.id)}
-                  onChange={handleOrderToggle}
-                />
-              ))}
-            </div>
-          </CollapsibleSection>
+          {/* Sekcja 2: Wszystkie zlecenia (posortowane po terminie) */}
+          {(() => {
+            const allOrders = [
+              ...(data?.overdueOrders || []).map(o => ({ ...o, _category: 'overdue' as const })),
+              ...(data?.upcomingOrders || []).map(o => ({ ...o, _category: 'upcoming' as const })),
+              ...(data?.privateOrders || []).map(o => ({ ...o, _category: 'private' as const })),
+            ].sort((a, b) => {
+              if (!a.deadline && !b.deadline) return 0;
+              if (!a.deadline) return 1;
+              if (!b.deadline) return -1;
+              return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+            });
 
-          {/* Sekcja 3: Zlecenia na najbliższe 2 tygodnie */}
-          <CollapsibleSection
-            title={UPCOMING_ORDERS_LABEL}
-            icon={Calendar}
-            iconColor="text-orange-600"
-            count={data?.upcomingOrders.length || 0}
-            countLabel="zleceń"
-            badgeVariant="outline"
-            badgeClassName="bg-orange-50 text-orange-700 border-orange-200"
-            emptyMessage="Brak zleceń w najbliższym czasie"
-            isEmpty={!data?.upcomingOrders.length}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {data?.upcomingOrders.map((order) => (
-                <OrderCheckbox
-                  key={order.id}
-                  order={order}
-                  checked={selectedOrderIds.has(order.id)}
-                  onChange={handleOrderToggle}
-                />
-              ))}
-            </div>
-          </CollapsibleSection>
+            const totalCount = allOrders.length;
 
-          {/* Sekcja 4: Zlecenia prywatne */}
-          <CollapsibleSection
-            title="Zlecenia prywatne"
-            icon={Clock}
-            iconColor="text-purple-600"
-            count={data?.privateOrders.length || 0}
-            countLabel="zleceń"
-            badgeVariant="outline"
-            badgeClassName="bg-purple-50 text-purple-700 border-purple-200"
-            emptyMessage="Brak zleceń prywatnych"
-            isEmpty={!data?.privateOrders.length}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {data?.privateOrders.map((order) => (
-                <OrderCheckbox
-                  key={order.id}
-                  order={order}
-                  checked={selectedOrderIds.has(order.id)}
-                  onChange={handleOrderToggle}
-                />
-              ))}
-            </div>
-          </CollapsibleSection>
+            return totalCount > 0 ? (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Calendar className="h-5 w-5 text-gray-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">Zlecenia</h3>
+                  <Badge variant="outline">{totalCount} zleceń</Badge>
+                </div>
+                <div className="space-y-1">
+                  {allOrders.map((order) => (
+                    <OrderCheckbox
+                      key={order.id}
+                      order={order}
+                      checked={selectedOrderIds.has(order.id)}
+                      onChange={handleOrderToggle}
+                      category={order._category}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">Brak zleceń</p>
+            );
+          })()}
         </>
       )}
 

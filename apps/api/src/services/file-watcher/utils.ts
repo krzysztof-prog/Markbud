@@ -6,6 +6,26 @@ import { logger } from '../../utils/logger.js';
 import type { DeliveryNumber } from './types.js';
 
 /**
+ * Po jakim czasie wpis FileImport w statusie "processing" uznajemy za "zawieszony"
+ * (import przerwany przez restart/awarię procesu). Analogicznie do ImportLock.expiresAt.
+ * Transakcja importu ma timeout 60s, więc 15 min to bezpieczny margines.
+ */
+const STALE_PROCESSING_IMPORT_MS = 15 * 60 * 1000;
+
+/**
+ * Bezpieczne parsowanie pola metadata (JSON) - nigdy nie rzuca wyjątku.
+ */
+function safeParseMetadata(metadata: string | null): Record<string, unknown> {
+  if (!metadata) return {};
+  try {
+    const parsed = JSON.parse(metadata);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Pobiera ustawienie z bazy danych
  */
 export async function getSetting(prisma: PrismaClient, key: string): Promise<string | null> {
@@ -221,7 +241,37 @@ export async function shouldSkipImport(
     return false;
   }
 
-  // Plik był importowany ale został usunięty z archiwum - pozwól na ponowny import
+  // Wpis "processing" oznacza import w toku LUB import przerwany przez awarię/restart.
+  // Bez wygaśnięcia taki wpis "wisiałby" w nieskończoność (analogicznie do braku
+  // ImportLock.expiresAt). Gdy jest przeterminowany - oznacz jako "failed" (nie
+  // "reprocessed") i pozwól przetworzyć plik ponownie od zera. Świeży wpis
+  // (trwający import) zostawiamy nietknięty.
+  if (existingImport.status === 'processing') {
+    const ageMs = Date.now() - existingImport.createdAt.getTime();
+
+    if (ageMs > STALE_PROCESSING_IMPORT_MS) {
+      logger.warn(
+        `   ⚠️ Zawieszony import "${filename}" (status "processing" od ${Math.round(ageMs / 60000)} min) - prawdopodobnie restart/awaria. Oznaczam jako "failed" i importuję ponownie`
+      );
+      await prisma.fileImport.update({
+        where: { id: existingImport.id },
+        data: {
+          status: 'failed',
+          errorMessage: `Import utknął w statusie "processing" przez ${Math.round(ageMs / 60000)} min (restart/awaria procesu) - automatyczne ponowne przetwarzanie`,
+          metadata: JSON.stringify({
+            ...safeParseMetadata(existingImport.metadata),
+            staleRecoveredAt: new Date().toISOString(),
+            staleAgeMs: ageMs,
+          }),
+        },
+      });
+    }
+
+    // Plik fizycznie nie jest w archiwum (sprawdzone wyżej), więc pozwalamy na ponowny import.
+    return false;
+  }
+
+  // status === 'completed': plik był importowany, ale został usunięty z archiwum - pozwól na ponowny import
   logger.info(`   🔄 Plik ${filename} był wcześniej importowany, ale usunięty z archiwum - importuję ponownie`);
 
   // Oznacz poprzedni import jako "reprocessed" żeby zachować historię
@@ -230,7 +280,7 @@ export async function shouldSkipImport(
     data: {
       status: 'reprocessed',
       metadata: JSON.stringify({
-        ...JSON.parse(existingImport.metadata || '{}'),
+        ...safeParseMetadata(existingImport.metadata),
         reprocessedAt: new Date().toISOString(),
         reprocessReason: 'file_deleted_from_archive'
       })
@@ -238,6 +288,59 @@ export async function shouldSkipImport(
   });
 
   return false;
+}
+
+/**
+ * Odzyskiwanie po restarcie: oznacza wpisy FileImport, które utknęły w statusie
+ * "processing" dłużej niż limit, jako "failed". Chroni przed sytuacją, w której
+ * awaria/restart procesu w trakcie importu zostawia rekord na zawsze w "processing"
+ * (zaśmieca historię i maskuje nieudane importy).
+ *
+ * Wołane raz przy starcie File Watchera.
+ * @returns liczba odzyskanych (oznaczonych jako "failed") wpisów
+ */
+export async function recoverStaleProcessingImports(
+  prisma: PrismaClient,
+  maxAgeMs: number = STALE_PROCESSING_IMPORT_MS
+): Promise<number> {
+  const cutoff = new Date(Date.now() - maxAgeMs);
+
+  const stale = await prisma.fileImport.findMany({
+    where: {
+      status: 'processing',
+      createdAt: { lt: cutoff },
+    },
+    select: { id: true, filename: true },
+  });
+
+  if (stale.length === 0) {
+    return 0;
+  }
+
+  await prisma.fileImport.updateMany({
+    where: { id: { in: stale.map((s) => s.id) } },
+    data: {
+      status: 'failed',
+      errorMessage: 'Import przerwany (restart/awaria procesu) - wpis odzyskany przy starcie File Watchera',
+    },
+  });
+
+  const sample = stale.slice(0, 10).map((s) => s.filename).join(', ');
+  logger.warn(
+    `   🧹 Odzyskano ${stale.length} zawieszonych importów (processing → failed)${stale.length > 10 ? ` (pierwsze 10: ${sample}…)` : `: ${sample}`}`
+  );
+
+  return stale.length;
+}
+
+/**
+ * Sprawdza czy błąd chokidara to znany problem z UNC paths na Windows
+ * Chokidar przy pollingu próbuje stat na katalogach nadrzędnych UNC (np. \\192.168.1.6\Public\),
+ * co powoduje błędy "UNKNOWN: unknown error, stat" - ale nie wpływa na działanie watchera
+ */
+export function isUncParentStatError(error: Error | string): boolean {
+  const msg = typeof error === 'string' ? error : error.message || String(error);
+  return msg.includes('UNKNOWN') && msg.includes('stat') && msg.includes('\\\\');
 }
 
 /**

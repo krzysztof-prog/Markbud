@@ -143,6 +143,15 @@ export const deliveriesApi = {
     }),
 
   /**
+   * Pobierz tygodniowy plan szkleń (Pon-Pt)
+   */
+  getWeeklyPlan: (weekStart: string) =>
+    fetchApi<WeeklyPlanResponse>(`/api/deliveries/weekly-plan?weekStart=${encodeURIComponent(weekStart)}`),
+
+  getFirstInProgressWeek: () =>
+    fetchApi<{ weekStart: string }>('/api/deliveries/first-in-progress-week'),
+
+  /**
    * Pobierz dostawy na określoną datę (do wyboru w UI)
    */
   getDeliveriesForDate: (date: string) =>
@@ -153,6 +162,35 @@ export const deliveriesApi = {
    */
   previewDeliveryNumber: (date: string) =>
     fetchApi<{ deliveryNumber: string }>(`/api/deliveries/preview-number?date=${encodeURIComponent(date)}`),
+
+  // === Production Actions ===
+
+  /**
+   * Rozpocznij produkcję dla wybranych zleceń
+   */
+  startProduction: (orderIds: number[], deliveryIds: number[]) =>
+    fetchApi<void>('/api/orders/bulk-update-status', {
+      method: 'POST',
+      body: JSON.stringify({ orderIds, deliveryIds, status: 'in_progress', skipWarehouseValidation: true }),
+    }),
+
+  /**
+   * Zakończ wszystkie zlecenia w dostawie
+   */
+  completeAllOrders: (deliveryId: number, productionDate: string) =>
+    fetchApi<void>(`/api/deliveries/${deliveryId}/complete-all-orders`, {
+      method: 'POST',
+      body: JSON.stringify({ productionDate }),
+    }),
+
+  /**
+   * Zakończ wybrane zlecenia (bulk)
+   */
+  completeSelectedOrders: (orderIds: number[], productionDate: string) =>
+    fetchApi<void>('/api/orders/bulk-update-status', {
+      method: 'POST',
+      body: JSON.stringify({ orderIds, status: 'completed', productionDate }),
+    }),
 };
 
 // === Typy dla Quick Delivery ===
@@ -201,4 +239,70 @@ export interface DeliveryForDate {
   id: number;
   deliveryNumber: string | null;
   ordersCount: number;
+}
+
+// === WEEKLY PLAN (Tygodniówka) ===
+
+export interface WeeklyPlanOrder {
+  orderId: number;
+  orderNumber: string;
+  totalGlasses: number;
+  totalWindows: number;
+  totalSashes: number;
+  orderedGlassCount: number;
+  deliveredGlassCount: number;
+  glassDeliveryDate: string | null;
+  glassOrderStatus: string | null;
+  glassOrderNote: string | null;
+  client: string | null;
+  project: string | null;
+  orderStatus: string | null;
+  hasSuffixMatchedGlass?: boolean;
+}
+
+export interface WeeklyPlanNietypowka {
+  id: number;
+  description: string;
+  quantity: number;
+}
+
+export interface WeeklyPlanPrivateOrder {
+  id: number;
+  description: string;
+  quantity: number;
+}
+
+export interface WeeklyPlanNote {
+  id: number;
+  description: string;
+}
+
+export interface WeeklyPlanDelivery {
+  id: number;
+  deliveryNumber: string | null;
+  status: string;
+  orders: WeeklyPlanOrder[];
+  notes: WeeklyPlanNote[];
+  nietypowki: WeeklyPlanNietypowka[];
+  prywatne: WeeklyPlanPrivateOrder[];
+  totalGlassCount: number;
+  totalWindows: number;
+  totalSashes: number;
+}
+
+export interface WeeklyPlanDay {
+  date: string;
+  dayName: string;
+  deliveries: WeeklyPlanDelivery[];
+  dayTotalGlass: number;
+  dayTotalWindows: number;
+  dayTotalSashes: number;
+}
+
+export interface WeeklyPlanResponse {
+  weekStart: string;
+  days: WeeklyPlanDay[];
+  weekTotalGlass: number;
+  weekTotalWindows: number;
+  weekTotalSashes: number;
 }

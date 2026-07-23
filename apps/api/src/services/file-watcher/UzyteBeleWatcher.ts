@@ -17,9 +17,11 @@ import {
   ensureDirectoryExists,
   generateSafeFilename,
   shouldSkipImport,
+  isUncParentStatError,
 } from './utils.js';
 import { MojaPracaRepository } from '../../repositories/MojaPracaRepository.js';
 import { importQueue, type ImportJobResult } from '../import/ImportQueueService.js';
+import { notifyCriticalError } from '../notifications/criticalErrorNotifier.js';
 
 // ESM compatibility: __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -218,7 +220,13 @@ export class UzyteBeleWatcher implements IFileWatcher {
         });
       })
       .on('error', (error) => {
+        if (isUncParentStatError(error)) return;
         logger.error(`❌ Błąd File Watcher dla plików CSV ${basePath}: ${error}`);
+        notifyCriticalError(this.prisma, {
+          source: 'File Watcher - Użyte bele (CSV pliki)',
+          errorMessage: error instanceof Error ? error.message : String(error),
+          context: { folder: basePath },
+        });
       });
 
     this.watchers.push(watcher);
@@ -440,7 +448,13 @@ export class UzyteBeleWatcher implements IFileWatcher {
         await this.handleNewFolder(folderPath);
       })
       .on('error', (error) => {
+        if (isUncParentStatError(error)) return;
         logger.error(`❌ Błąd File Watcher dla podfolderów ${basePath}: ${error}`);
+        notifyCriticalError(this.prisma, {
+          source: 'File Watcher - Użyte bele (podfoldery)',
+          errorMessage: error instanceof Error ? error.message : String(error),
+          context: { folder: basePath },
+        });
       });
 
     this.watchers.push(watcher);

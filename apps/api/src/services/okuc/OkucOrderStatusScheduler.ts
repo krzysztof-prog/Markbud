@@ -11,6 +11,7 @@ import cron, { ScheduledTask } from 'node-cron';
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../../utils/logger.js';
 import { emitOkucOrderUpdated, emitOkucStockUpdated } from '../event-emitter.js';
+import { notifyCriticalError } from '../notifications/criticalErrorNotifier.js';
 
 export class OkucOrderStatusScheduler {
   private prisma: PrismaClient;
@@ -186,6 +187,18 @@ export class OkucOrderStatusScheduler {
       const errMsg = `Błąd ogólny schedulera: ${error instanceof Error ? error.message : String(error)}`;
       logger.error(`[OkucOrderStatusScheduler] ${errMsg}`);
       errors.push(errMsg);
+    }
+
+    // Powiadom o krytycznych błędach (ogólny fail lub błędy per-zamówienie)
+    if (errors.length > 0) {
+      notifyCriticalError(this.prisma, {
+        source: 'Okuc - auto-receive zamówień',
+        errorMessage: errors.join('\n'),
+        context: {
+          updatedCount,
+          errorCount: errors.length,
+        },
+      });
     }
 
     return { updatedCount, errors };

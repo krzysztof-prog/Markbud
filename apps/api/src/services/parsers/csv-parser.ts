@@ -95,7 +95,7 @@ export class CsvParser {
     action: 'overwrite' | 'add_new',
     replaceBase?: boolean,
     options?: { isPrivateImport?: boolean }
-  ): Promise<{ orderId: number; requirementsCount: number; windowsCount: number; glassesCount: number }> {
+  ): Promise<{ orderId: number; requirementsCount: number; windowsCount: number; glassesCount: number; isNewOrder: boolean }> {
     return this.uzyteBeleParser.processUzyteBele(filepath, action, replaceBase, options);
   }
 }

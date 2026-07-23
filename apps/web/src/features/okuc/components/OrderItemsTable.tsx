@@ -4,7 +4,7 @@
  * Read-only wyświetlanie pozycji zamówienia.
  * Kolumny: Artykuł (articleId + nazwa), Ilość, Jednostka, Cena szacowana (PLN!), Tydzień dostawy
  *
- * KRYTYCZNE: Używa groszeToPln() dla wyświetlania ceny!
+ * KRYTYCZNE: Ceny w eurocentach - dzielimy przez 100 dla wyświetlania w EUR!
  */
 
 'use client';
@@ -18,8 +18,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { OkucOrderItem } from '@/types/okuc';
-import { groszeToPln } from '@/lib/money';
-import type { Grosze } from '@/lib/money';
 
 interface OrderItemsTableProps {
   items: OkucOrderItem[];
@@ -60,7 +58,7 @@ export function OrderItemsTable({
             <TableHead className="text-right">Ilość zamówiona</TableHead>
             <TableHead className="text-right">Ilość odebrana</TableHead>
             <TableHead>Jednostka</TableHead>
-            <TableHead className="text-right">Cena szacowana (PLN)</TableHead>
+            <TableHead className="text-right">Cena jedn. (EUR)</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -73,9 +71,9 @@ export function OrderItemsTable({
             // Jednostka (jeśli relacja załadowana)
             const unit = item.article?.orderUnit === 'pack' ? 'Paczka' : 'Sztuka';
 
-            // Cena w PLN (konwersja z groszy)
-            const priceInPln = item.unitPrice
-              ? groszeToPln(item.unitPrice as Grosze)
+            // Cena w EUR (konwersja z eurocentów)
+            const priceInEur = item.unitPrice
+              ? item.unitPrice / 100
               : 0;
 
             return (
@@ -95,7 +93,7 @@ export function OrderItemsTable({
                   {unit}
                 </TableCell>
                 <TableCell className="text-right">
-                  {priceInPln > 0 ? `${priceInPln.toFixed(2)} zł` : '-'}
+                  {priceInEur > 0 ? `${priceInEur.toFixed(2)} €` : '-'}
                 </TableCell>
               </TableRow>
             );
@@ -127,13 +125,12 @@ export function OrderItemsTable({
           <span>Łączna wartość szacowana:</span>
           <span>
             {(() => {
-              const totalGrosze = items.reduce(
-                (sum, item) => sum + (item.unitPrice || 0),
+              const totalCents = items.reduce(
+                (sum, item) => sum + (item.orderedQty || 0) * (item.unitPrice || 0),
                 0
               );
-              if (totalGrosze === 0) return '-';
-              const totalPln = groszeToPln(totalGrosze as Grosze);
-              return `${totalPln.toFixed(2)} zł`;
+              if (totalCents === 0) return '-';
+              return `${(totalCents / 100).toFixed(2)} €`;
             })()}
           </span>
         </div>

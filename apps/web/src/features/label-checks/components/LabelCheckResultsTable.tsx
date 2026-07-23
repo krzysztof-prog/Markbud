@@ -17,7 +17,7 @@ interface Props {
 export function LabelCheckResultsTable({ results }: Props) {
   if (results.length === 0) {
     return (
-      <div className="text-center py-8 text-muted-foreground">Brak wynikow do wyswietlenia</div>
+      <div className="text-center py-8 text-muted-foreground">Brak wyników do wyświetlenia</div>
     );
   }
 
@@ -30,7 +30,7 @@ export function LabelCheckResultsTable({ results }: Props) {
           <TableHead>Oczekiwana data</TableHead>
           <TableHead>Wykryta data</TableHead>
           <TableHead>Wykryty tekst</TableHead>
-          <TableHead>Blad</TableHead>
+          <TableHead>Błąd</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -38,7 +38,10 @@ export function LabelCheckResultsTable({ results }: Props) {
           <TableRow key={result.id}>
             <TableCell className="font-medium">{result.orderNumber}</TableCell>
             <TableCell>
-              <LabelStatusBadge status={result.status} />
+              <LabelStatusBadge
+                status={result.status}
+                expectedDate={result.status === 'MISMATCH' ? result.expectedDate : undefined}
+              />
             </TableCell>
             <TableCell>{format(new Date(result.expectedDate), 'dd.MM.yyyy')}</TableCell>
             <TableCell>

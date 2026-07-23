@@ -38,7 +38,7 @@ export function LabelCheckSummary({ data }: Props) {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Niezgodne</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Błędna data</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-2">
@@ -50,7 +50,7 @@ export function LabelCheckSummary({ data }: Props) {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Bledy</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Błędy</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-2">

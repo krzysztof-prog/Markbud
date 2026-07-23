@@ -450,6 +450,12 @@ class LogisticsMailService {
         id: number;
         orderNumber: string;
         deliveryDate: Date | null;
+        deliveryOrders?: Array<{
+          delivery: {
+            deliveryDate: Date;
+            deletedAt: Date | null;
+          };
+        }>;
       } | null;
     }>;
   }): Array<{
@@ -475,18 +481,27 @@ class LogisticsMailService {
     }> = [];
 
     for (const item of list.items) {
-      // Tylko pozycje z matchowanym zleceniem ale BEZ daty dostawy
-      if (item.order && !item.order.deliveryDate) {
-        missing.push({
-          itemId: item.id,
-          projectNumber: item.projectNumber,
-          orderId: item.order.id,
-          orderNumber: item.order.orderNumber,
-          suggestedDate: listDateStr,
-          suggestedDateISO: listDateISO,
-          reason: `Brak daty dostawy - ustaw ${listDateStr}`,
-        });
-      }
+      if (!item.order) continue;
+
+      // Sprawdź deliveryDate bezpośrednio na zleceniu
+      if (item.order.deliveryDate) continue;
+
+      // Fallback: sprawdź czy zlecenie jest przypisane do aktywnej dostawy
+      const hasDeliveryAssignment = item.order.deliveryOrders?.some(
+        (dOrder) => dOrder.delivery && !dOrder.delivery.deletedAt
+      );
+      if (hasDeliveryAssignment) continue;
+
+      // Brak daty dostawy i brak przypisania do dostawy
+      missing.push({
+        itemId: item.id,
+        projectNumber: item.projectNumber,
+        orderId: item.order.id,
+        orderNumber: item.order.orderNumber,
+        suggestedDate: listDateStr,
+        suggestedDateISO: listDateISO,
+        reason: `Brak daty dostawy - ustaw ${listDateStr}`,
+      });
     }
 
     return missing;

@@ -96,7 +96,7 @@ export default function GlassStatisticsPage() {
 
     for (const delivery of glassDeliveries) {
       for (const item of delivery.items || []) {
-        if (item.matchStatus === 'matched' && item.glassOrderId) {
+        if ((item.matchStatus === 'matched' || item.matchStatus === 'suffix_matched') && item.glassOrderId) {
           const current = map.get(item.glassOrderId) || 0;
           map.set(item.glassOrderId, current + item.quantity);
         }
@@ -110,7 +110,7 @@ export default function GlassStatisticsPage() {
     if (!glassDeliveries) return 0;
     return glassDeliveries.reduce((sum, delivery) => {
       const matchedQuantity = delivery.items?.reduce((itemSum, item) => {
-        return item.matchStatus === 'matched' ? itemSum + item.quantity : itemSum;
+        return (item.matchStatus === 'matched' || item.matchStatus === 'suffix_matched') ? itemSum + item.quantity : itemSum;
       }, 0) || 0;
       return sum + matchedQuantity;
     }, 0);

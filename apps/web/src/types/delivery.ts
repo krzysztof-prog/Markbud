@@ -27,6 +27,8 @@ export interface Delivery {
     order: {
       id: number;
       orderNumber: string;
+      client?: string | null;
+      system?: string | null;
       totalWindows?: number | null;
       totalSashes?: number | null;
       totalGlasses?: number | null;
